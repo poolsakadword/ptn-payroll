@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ระบบบริหารจัดการเงินเดือน - บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</title>
+
+  <!-- Google Fonts: Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ==================== 1. LOGIN SCREEN ==================== -->
+  <div id="loginSection">
+    <div class="login-card">
+      <div class="login-logo-box"><i class="fa-solid fa-hospital-user"></i></div>
+      <h1 class="login-title">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h1>
+      <p class="login-sub">ระบบบริหารจัดการเงินเดือน (PTN Payroll V3.0)</p>
+
+      <div id="loginMessage" class="login-msg"></div>
+
+      <div class="form-group">
+        <label><i class="fa-solid fa-user"></i> ชื่อผู้ใช้งาน (Username)</label>
+        <input type="text" id="loginUsername" placeholder="กรอกชื่อผู้ใช้งาน หรือ อีเมล" autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label><i class="fa-solid fa-lock"></i> รหัสผ่าน (Password)</label>
+        <input type="password" id="loginPassword" placeholder="กรอกรหัสผ่าน" autocomplete="current-password">
+      </div>
+
+      <button type="button" class="btn-login" id="btnLoginBtn">
+        <i class="fa-solid fa-right-to-bracket"></i> เข้าสู่ระบบ
+      </button>
+
+      <div>
+        <button type="button" class="api-badge-btn" onclick="openApiConfigModal()">
+          <i class="fa-solid fa-link"></i> ตั้งค่า API เชื่อมต่อ Google Sheets
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 2. MAIN APPLICATION ==================== -->
+  <div id="appSection">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-icon"><i class="fa-solid fa-hospital-user"></i></div>
+          <div class="brand-text">
+            <h1 id="topNavCompanyName">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h1>
+            <span>ระบบบริหารจัดการเงินเดือน (PTN Payroll V3.0)</span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="user-tag" id="navUserInfo"><i class="fa-solid fa-user-shield"></i> ผู้ดูแลระบบ (Admin)</span>
+          <button type="button" class="btn-sm btn-slate" onclick="openApiConfigModal()">
+            <i class="fa-solid fa-link"></i> ตั้งค่า API
+          </button>
+          <button type="button" class="btn-sm btn-yellow" onclick="initSheets()">
+            <i class="fa-solid fa-gear"></i> ตั้งค่า Sheet
+          </button>
+          <button type="button" class="btn-sm btn-red" onclick="logout()">
+            <i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <div class="nav-tabs-wrap">
+      <div class="nav-tabs">
+        <button type="button" class="tab-btn active" onclick="switchTab('dashboard')" id="tabBtn-dashboard">
+          <i class="fa-solid fa-chart-pie"></i> ภาพรวม (Dashboard)
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('payroll')" id="tabBtn-payroll">
+          <i class="fa-solid fa-calculator"></i> คำนวณเงินเดือน &amp; สลิป
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('employees')" id="tabBtn-employees">
+          <i class="fa-solid fa-users"></i> ทะเบียนพนักงาน
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('input')" id="tabBtn-input">
+          <i class="fa-solid fa-calendar-days"></i> บันทึกข้อมูลประจำงวด
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('company')" id="tabBtn-company">
+          <i class="fa-solid fa-building"></i> ข้อมูลบริษัท
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('users')" id="tabBtn-users">
+          <i class="fa-solid fa-user-gear"></i> ผู้ใช้งาน
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('downloads')" id="tabBtn-downloads">
+          <i class="fa-solid fa-download"></i> ดาวน์โหลด
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="app-main">
+
+      <!-- PERIOD SELECTOR BAR & CLOSE PERIOD CONTROLS -->
+      <div class="period-bar">
+        <div class="period-title">
+          <i class="fa-solid fa-calendar-check" style="color:#2563eb;font-size:16px"></i>
+          <span>งวดประจำเดือน:</span>
+          <span class="period-badge open" id="currentPeriodDisplayLabel">-</span>
+          <span id="periodLockStatusBadge"></span>
+        </div>
+        <div class="period-controls">
+          <label style="font-size:11px;font-weight:600;color:#64748b">เลือกงวด:</label>
+          <select id="selPeriodMonth" class="period-select" onchange="onPeriodDropdownChanged()">
+            <option value="มกราคม">มกราคม</option>
+            <option value="กุมภาพันธ์">กุมภาพันธ์</option>
+            <option value="มีนาคม">มีนาคม</option>
+            <option value="เมษายน">เมษายน</option>
+            <option value="พฤษภาคม">พฤษภาคม</option>
+            <option value="มิถุนายน">มิถุนายน</option>
+            <option value="กรกฎาคม">กรกฎาคม</option>
+            <option value="สิงหาคม">สิงหาคม</option>
+            <option value="กันยายน">กันยายน</option>
+            <option value="ตุลาคม">ตุลาคม</option>
+            <option value="พฤศจิกายน">พฤศจิกายน</option>
+            <option value="ธันวาคม">ธันวาคม</option>
+          </select>
+          <select id="selPeriodYear" class="period-select" onchange="onPeriodDropdownChanged()">
+            <option value="2567">2567</option>
+            <option value="2568">2568</option>
+            <option value="2569" selected>2569</option>
+            <option value="2570">2570</option>
+            <option value="2571">2571</option>
+          </select>
+          <button type="button" class="btn-sm btn-primary" onclick="loadAllData()">
+            <i class="fa-solid fa-rotate-right"></i> ดึงข้อมูล
+          </button>
+          <span id="periodCloseBtnContainer">
+            <button type="button" class="btn-sm btn-red" onclick="handleClosePeriod()">
+              <i class="fa-solid fa-lock"></i> ปิดงวดนี้
+            </button>
+          </span>
+        </div>
+      </div>
+
+      <!-- 1. DASHBOARD -->
+      <div class="tab-section show" id="tab-dashboard">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title" id="dashHeaderTitle">แดชบอร์ดสรุปยอดเงินเดือน</div>
+              <div class="card-sub" id="dashHeaderSub">สรุปภาพรวมยอดจ่าย OT ยอดหัก และสุทธิประจำงวด</div>
+            </div>
+            <div class="toolbar">
+              <button type="button" class="btn btn-slate" onclick="loadAllData()">
+                <i class="fa-solid fa-rotate-right"></i> รีเฟรช
+              </button>
+              <button type="button" class="btn btn-success" onclick="runPayrollProcess()" id="btnDashProcess">
+                <i class="fa-solid fa-bolt"></i> ประมวลผลคำนวณเงินเดือน
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div>
+              <div class="label">พนักงานทั้งหมด</div>
+              <div class="value" id="statTotalEmployees">0</div>
+              <div class="sub">คน ในงวดนี้</div>
+            </div>
+            <div class="stat-icon" style="background:#eff6ff;color:#2563eb"><i class="fa-solid fa-users"></i></div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="label">เงินได้รวม (Gross)</div>
+              <div class="value text-blue" id="statGrossPay">฿0.00</div>
+              <div class="sub">เงินเดือน+OT+เบี้ยเลี้ยง</div>
+            </div>
+            <div class="stat-icon" style="background:#eff6ff;color:#2563eb"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="label">ยอดหักรวม</div>
+              <div class="value text-red" id="statTotalDeductions">฿0.00</div>
+              <div class="sub">SSO+PF+ภาษี+หักเบิก</div>
+            </div>
+            <div class="stat-icon" style="background:#fff1f2;color:#dc2626"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="label">ยอดจ่ายสุทธิ (Net)</div>
+              <div class="value text-green" id="statNetPay">฿0.00</div>
+              <div class="sub">ยอดโอนสุทธิ</div>
+            </div>
+            <div class="stat-icon" style="background:#f0fdf4;color:#059669"><i class="fa-solid fa-money-bill-wave"></i></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">สรุปผลเงินเดือนประจำงวด</div>
+            <button type="button" class="btn btn-slate" onclick="switchTab('payroll')">
+              ดูตารางเต็ม &amp; พิมพ์สลิป <i class="fa-solid fa-arrow-right"></i>
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>งวด</th>
+                  <th>รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th class="right">เงินเดือนฐาน</th>
+                  <th class="right bg-blue">เงินได้รวม</th>
+                  <th class="right bg-red">ยอดหัก</th>
+                  <th class="right bg-green">สุทธิ (Net)</th>
+                  <th class="center">สลิป</th>
+                </tr>
+              </thead>
+              <tbody id="dashboardMiniTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. PAYROLL -->
+      <div class="tab-section" id="tab-payroll">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">ตารางคำนวณเงินเดือน &amp; พิมพ์สลิป</div>
+              <div class="card-sub" id="payrollSubTitle">ผลการคำนวณ OT เบี้ยเลี้ยง กองทุน PF ประกันสังคม ภาษี หักเงินเบิก</div>
+            </div>
+            <div class="toolbar">
+              <input type="text" class="search-input" id="searchPayrollInput" placeholder="🔍 ค้นหาชื่อ/รหัส..." oninput="filterPayrollTable()">
+              <button type="button" class="btn btn-slate" onclick="exportTableToCSV('payroll')">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button type="button" class="btn btn-success" onclick="runPayrollProcess()" id="btnPayrollProcess">
+                <i class="fa-solid fa-bolt"></i> คำนวณงวดนี้ใหม่
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>งวด</th>
+                  <th>รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th class="right">เงินเดือนฐาน</th>
+                  <th class="right">OT Pay</th>
+                  <th class="right">หักขาด/ลา</th>
+                  <th class="right bg-blue">Gross</th>
+                  <th class="right">ประกันสังคม</th>
+                  <th class="right">กองทุน PF</th>
+                  <th class="right">ภาษี</th>
+                  <th class="right bg-red">หักเงินเบิก</th>
+                  <th class="right bg-red">หักรวม</th>
+                  <th class="right bg-green">สุทธิ (Net)</th>
+                  <th class="center">สลิป</th>
+                </tr>
+              </thead>
+              <tbody id="payrollTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. EMPLOYEES -->
+      <div class="tab-section" id="tab-employees">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">ทะเบียนประวัติพนักงาน (Employee Master)</div>
+              <div class="card-sub">ข้อมูลพนักงาน เลขบัตรประชาชน เบอร์โทร ที่อยู่ ธนาคาร เงินเดือนฐาน ค่าเริ่มต้นประกันสังคม/ภาษี</div>
+            </div>
+            <div class="toolbar">
+              <input type="text" class="search-input" id="searchEmpInput" placeholder="🔍 ค้นหาพนักงาน..." oninput="filterEmpTable()">
+              <button type="button" class="btn btn-slate" onclick="exportTableToCSV('employees')">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button type="button" class="btn btn-primary" onclick="openEmployeeModal()">
+                <i class="fa-solid fa-user-plus"></i> เพิ่มพนักงาน
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th>บัตรประชาชน</th>
+                  <th>เบอร์โทร</th>
+                  <th>ที่อยู่</th>
+                  <th>แผนก / ตำแหน่ง</th>
+                  <th class="right">เงินเดือนฐาน</th>
+                  <th>ธนาคาร / เลขบัญชี</th>
+                  <th class="right">PF %</th>
+                  <th class="right text-red">SSO (Default)</th>
+                  <th class="right text-red">ภาษี (Default)</th>
+                  <th class="center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="employeesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. MONTHLY INPUT -->
+      <div class="tab-section" id="tab-input">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title" id="inputTabTitle">บันทึกข้อมูลประจำงวด (Monthly Input)</div>
+              <div class="card-sub" id="inputTabSub">ดึงค่าตั้งต้น รหัส ชื่อ-นามสกุล เงินเดือนฐาน กองทุน PF ประกันสังคม และภาษี อัตโนมัติ</div>
+            </div>
+            <div class="toolbar">
+              <input type="text" class="search-input" id="searchInputRecord" placeholder="🔍 ค้นหาในงวดนี้..." oninput="filterInputTable()">
+              <button type="button" class="btn btn-yellow" onclick="batchPopulateEmployees()" id="btnBatchPopulate">
+                <i class="fa-solid fa-users-gear"></i> ดึงพนักงานทุกคนเข้างวดนี้
+              </button>
+              <button type="button" class="btn btn-slate" onclick="exportTableToCSV('input')">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button type="button" class="btn btn-primary" onclick="openInputModal()" id="btnAddInputRecord">
+                <i class="fa-solid fa-plus"></i> บันทึกข้อมูลรายคน
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>งวด</th>
+                  <th>#</th>
+                  <th>รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th class="right" style="color:#1e3a8a">เงินเดือนฐาน</th>
+                  <th class="right">PF %</th>
+                  <th class="right text-blue" style="font-weight:700">กองทุน PF (บาท)</th>
+                  <th class="right">วันลา</th>
+                  <th class="right text-blue">OT ชม.</th>
+                  <th class="right">อัตรา OT</th>
+                  <th class="right">เบี้ยเลี้ยง</th>
+                  <th class="right">โบนัส</th>
+                  <th class="right text-red bg-red">หักเงินเบิก</th>
+                  <th class="right">SSO</th>
+                  <th class="right">ภาษี</th>
+                  <th class="center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="inputTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. COMPANY -->
+      <div class="tab-section" id="tab-company">
+        <div class="card" style="max-width:680px">
+          <div class="card-title">ตั้งค่าข้อมูลบริษัท (Company Profile)</div>
+          <div class="card-sub" style="margin-bottom:20px">ข้อมูลนี้จะแสดงบนหัวเอกสารและสลิปเงินเดือนของพนักงาน</div>
+          <div class="field">
+            <label>ชื่อบริษัท *</label>
+            <input type="text" id="cfgCompanyName" value="บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด">
+          </div>
+          <div class="field">
+            <label>ที่อยู่บริษัท</label>
+            <textarea id="cfgCompanyAddress" rows="2" placeholder="เลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>เบอร์โทรศัพท์</label>
+              <input type="text" id="cfgCompanyPhone" placeholder="เช่น 02-123-4567">
+            </div>
+            <div class="field">
+              <label>เลขประจำตัวผู้เสียภาษี</label>
+              <input type="text" id="cfgCompanyTaxId" placeholder="เช่น 0105559876543">
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="saveCompanyProfileForm()">
+            <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลบริษัท
+          </button>
+        </div>
+      </div>
+
+      <!-- 6. USERS -->
+      <div class="tab-section" id="tab-users">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">จัดการผู้ใช้งานระบบ (Users)</div>
+              <div class="card-sub">เพิ่ม ลบ แก้ไขสิทธิ์ผู้ใช้งาน</div>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openUserModal()">
+              <i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ชื่อผู้ใช้งาน</th>
+                  <th>รหัสผ่าน</th>
+                  <th>ระดับสิทธิ์</th>
+                  <th class="center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7. DOWNLOADS -->
+      <div class="tab-section" id="tab-downloads">
+        <div class="card">
+          <div class="card-title">ดาวน์โหลดและส่งออกข้อมูล</div>
+          <div class="card-sub" style="margin-bottom:16px">ดาวน์โหลด Google Sheet เป็น Excel หรือ CSV รายตาราง</div>
+          <div class="dl-grid">
+            <div class="dl-card">
+              <div class="dl-icon-box" style="background:#ecfdf5;color:#059669">
+                <i class="fa-solid fa-file-excel"></i>
+              </div>
+              <h3>ดาวน์โหลด Excel (.xlsx)</h3>
+              <p>ดาวน์โหลดข้อมูลทุกชีตเป็นไฟล์ Microsoft Excel</p>
+              <div style="margin-top:16px">
+                <button type="button" class="btn btn-success" style="width:100%" onclick="downloadEntireExcel()">
+                  <i class="fa-solid fa-download"></i> ดาวน์โหลด Excel
+                </button>
+              </div>
+            </div>
+            <div class="dl-card">
+              <div class="dl-icon-box" style="background:#eff6ff;color:#2563eb">
+                <i class="fa-solid fa-file-csv"></i>
+              </div>
+              <h3>ส่งออก CSV รายตาราง</h3>
+              <p>เลือกตารางที่ต้องการส่งออกเป็นไฟล์ CSV</p>
+              <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button type="button" class="btn btn-slate" onclick="exportTableToCSV('payroll')">
+                  <i class="fa-solid fa-file-csv"></i> Payroll CSV
+                </button>
+                <button type="button" class="btn btn-slate" onclick="exportTableToCSV('employees')">
+                  <i class="fa-solid fa-file-csv"></i> Employee CSV
+                </button>
+                <button type="button" class="btn btn-slate" onclick="exportTableToCSV('input')">
+                  <i class="fa-solid fa-file-csv"></i> Input CSV
+                </button>
+                <button type="button" class="btn btn-slate" onclick="exportTableToCSV('users')">
+                  <i class="fa-solid fa-file-csv"></i> Users CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      <span id="footerCompanyName">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</span> &copy; 2026 &mdash; ระบบบริหารจัดการเงินเดือน (PTN Payroll V3.0)
+    </footer>
+
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- API CONFIG MODAL -->
+  <div class="modal-backdrop" id="apiConfigModal">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-link"></i> ตั้งค่าการเชื่อมต่อ API Google Sheets</h3>
+        <button type="button" class="modal-close" onclick="closeModal('apiConfigModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:#64748b;margin-bottom:14px;line-height:1.5">
+          นำ <strong>Web App URL</strong> ที่ได้จาก Google Apps Script (ตอนกด Deploy &gt; เลือก Who has access เป็น <strong>Anyone</strong>) มาวางที่ช่องด้านล่างนี้
+        </p>
+        <div class="field">
+          <label>Google Apps Script Web App URL</label>
+          <input type="url" id="cfgApiUrlInput" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+        </div>
+        <div style="margin-bottom:12px">
+          <button type="button" class="btn-sm btn-slate" style="width:100%;padding:8px" onclick="testApiConnection()">
+            <i class="fa-solid fa-vial-circle-check"></i> กดเพื่อทดสอบการเชื่อมต่อ API ทันที
+          </button>
+        </div>
+        <div id="apiTestResultMsg"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-slate" onclick="closeModal('apiConfigModal')">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" onclick="saveApiConfig()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึก URL
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAYSLIP MODAL -->
+  <div class="modal-backdrop" id="payslipModal">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-invoice"></i> ตัวอย่างสลิปเงินเดือน</h3>
+        <div class="toolbar">
+          <button type="button" class="btn btn-primary" onclick="printCurrentPayslip()">
+            <i class="fa-solid fa-print"></i> พิมพ์สลิป / PDF
+          </button>
+          <button type="button" class="modal-close" onclick="closeModal('payslipModal')">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body" id="payslipContentArea">
+        <div class="payslip-container">
+          <div class="payslip-header">
+            <h2 id="psSlipCompanyName">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>
+            <p id="psSlipCompanyDetails"></p>
+            <div class="payslip-badge">ใบแจ้งยอดเงินเดือน (PAY SLIP)</div>
+            <p>งวดประจำเดือน: <strong id="psPeriodText">-</strong></p>
+          </div>
+          <div class="payslip-info-grid">
+            <div><div class="ilabel">รหัสพนักงาน:</div><strong id="psEmpId">-</strong></div>
+            <div><div class="ilabel">ชื่อ-นามสกุล:</div><strong id="psFullName">-</strong></div>
+            <div><div class="ilabel">แผนก / ตำแหน่ง:</div><strong id="psDeptPos">-</strong></div>
+            <div><div class="ilabel">ธนาคาร / บัญชี:</div><strong id="psBank">-</strong></div>
+          </div>
+          <div class="payslip-grid">
+            <div class="payslip-section">
+              <div class="payslip-section-header" style="background:#eff6ff;color:#1d4ed8">
+                <span>รายการได้ (Earnings)</span><span>จำนวนเงิน (บาท)</span>
+              </div>
+              <div class="payslip-section-body">
+                <div class="payslip-row"><span>เงินเดือนฐาน</span><span id="psBaseSalary" style="font-family:monospace;font-weight:600">0.00</span></div>
+                <div class="payslip-row"><span id="psOtLabel">ค่าล่วงเวลา (OT)</span><span id="psOtPay" style="font-family:monospace;font-weight:600;color:#1d4ed8">0.00</span></div>
+                <div class="payslip-row"><span>เบี้ยเลี้ยง</span><span id="psAllowance" style="font-family:monospace;font-weight:600">0.00</span></div>
+                <div class="payslip-row"><span>โบนัส / อื่นๆ</span><span id="psBonus" style="font-family:monospace;font-weight:600">0.00</span></div>
+              </div>
+              <div class="payslip-section-footer" style="background:#eff6ff;color:#1d4ed8">
+                <span>รวมเงินได้</span><span id="psGrossPay" style="font-family:monospace;font-size:14px">0.00</span>
+              </div>
+            </div>
+            <div class="payslip-section">
+              <div class="payslip-section-header" style="background:#fff1f2;color:#be123c">
+                <span>รายการหัก (Deductions)</span><span>จำนวนเงิน (บาท)</span>
+              </div>
+              <div class="payslip-section-body">
+                <div class="payslip-row"><span>หักขาด/ลา</span><span id="psLeaveDed" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row"><span>ประกันสังคม</span><span id="psSso" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row"><span id="psPfLabel">กองทุนสำรองเลี้ยงชีพ (PF)</span><span id="psPf" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row"><span>ภาษีหัก ณ ที่จ่าย</span><span id="psTax" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row" style="font-weight:700;color:#be123c"><span>หักเงินเบิก</span><span id="psAdvanceDed" style="font-family:monospace">0.00</span></div>
+                <div class="payslip-row"><span>หักอื่นๆ</span><span id="psOtherDed" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+              </div>
+              <div class="payslip-section-footer" style="background:#fff1f2;color:#be123c">
+                <span>รวมรายการหัก</span><span id="psTotalDed" style="font-family:monospace;font-size:14px">0.00</span>
+              </div>
+            </div>
+          </div>
+          <div class="payslip-net">
+            <div>
+              <div style="font-size:11px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:0.05em">เงินเดือนสุทธิ (NET PAY)</div>
+              <div id="psThaiBahtText" style="font-size:11px;color:#047857;margin-top:2px">-</div>
+            </div>
+            <div id="psNetPay" style="font-size:24px;font-weight:700;font-family:monospace;color:#059669">฿0.00</div>
+          </div>
+          <div class="sig-row">
+            <div>
+              <div style="height:36px"></div>
+              <div style="border-top:1px solid #94a3b8;padding-top:6px">ลงชื่อผู้มีอำนาจจ่ายเงิน</div>
+              <div style="font-size:10px;color:#94a3b8">( ................................................... )</div>
+            </div>
+            <div>
+              <div style="height:36px"></div>
+              <div style="border-top:1px solid #94a3b8;padding-top:6px">ลงชื่อพนักงานผู้รับเงิน</div>
+              <div style="font-size:10px;color:#94a3b8">( ................................................... )</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMPLOYEE MODAL -->
+  <div class="modal-backdrop" id="empModal">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <h3 id="empModalTitle"><i class="fa-solid fa-user-plus"></i> เพิ่มข้อมูลพนักงาน</h3>
+        <button type="button" class="modal-close" onclick="closeModal('empModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="empOriginalId">
+        <div class="form-row">
+          <div class="field"><label>รหัสพนักงาน *</label><input type="text" id="mEmpId" placeholder="เช่น EMP001"></div>
+          <div class="field"><label>ชื่อ-นามสกุล *</label><input type="text" id="mFullName" placeholder="ชื่อ-นามสกุล"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>เลขบัตรประชาชน (13 หลัก)</label><input type="text" id="mCitizenId" maxlength="13" placeholder="x-xxxx-xxxxx-xx-x"></div>
+          <div class="field"><label>เบอร์โทรศัพท์</label><input type="text" id="mPhone" placeholder="08x-xxx-xxxx"></div>
+        </div>
+        <div class="field"><label>ที่อยู่</label><input type="text" id="mAddress" placeholder="ที่อยู่ตามทะเบียนบ้านหรือปัจจุบัน"></div>
+        <div class="form-row">
+          <div class="field"><label>แผนก</label><input type="text" id="mDepartment" placeholder="เช่น IT เภสัชกรรม ขาย"></div>
+          <div class="field"><label>ตำแหน่ง</label><input type="text" id="mPosition" placeholder="เช่น เภสัชกร พนักงานขาย"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>เงินเดือนฐาน (บาท) *</label><input type="number" id="mBaseSalary" placeholder="เช่น 35000"></div>
+          <div class="field"><label>อัตรา PF (เช่น 0.05 = 5%)</label><input type="number" id="mPfRate" step="0.01" value="0.05"></div>
+        </div>
+
+        <div class="field-indigo">
+          <div style="font-weight:700;color:#3730a3;font-size:12px;margin-bottom:8px">
+            <i class="fa-solid fa-sliders"></i> ค่าเริ่มต้นสำหรับการคำนวณเงินเดือนรายงวด
+          </div>
+          <div class="form-row">
+            <div class="field" style="margin-bottom:0">
+              <label style="color:#4338ca">ประกันสังคม (ค่าเริ่มต้น)</label>
+              <input type="number" id="mDefaultSso" value="750" placeholder="750">
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label style="color:#4338ca">ภาษีหัก ณ ที่จ่าย (ค่าเริ่มต้น)</label>
+              <input type="number" id="mDefaultTax" value="0" placeholder="0">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>ธนาคาร</label>
+            <input list="bankList" id="mBankName" placeholder="เลือกหรือพิมพ์ชื่อธนาคาร">
+            <datalist id="bankList">
+              <option value="กสิกรไทย (KBANK)"><option value="ไทยพาณิชย์ (SCB)"><option value="กรุงเทพ (BBL)"><option value="กรุงไทย (KTB)"><option value="กรุงศรีอยุธยา (BAY)"><option value="ทหารไทยธนชาต (TTB)"><option value="ออมสิน (GSB)"><option value="ธ.ก.ส. (BAAC)">
+            </datalist>
+          </div>
+          <div class="field"><label>เลขที่บัญชีธนาคาร</label><input type="text" id="mBankAccount" placeholder="xxx-x-xxxxx-x"></div>
+        </div>
+        <div class="field"><label>วันเริ่มงาน</label><input type="date" id="mJoinDate"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-slate" onclick="closeModal('empModal')">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" onclick="saveEmployeeForm()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลพนักงาน
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- INPUT MODAL -->
+  <div class="modal-backdrop" id="inputModal">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <h3 id="inputModalTitle"><i class="fa-solid fa-calendar-plus"></i> บันทึกข้อมูลประจำงวด</h3>
+        <button type="button" class="modal-close" onclick="closeModal('inputModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="inputOriginalEmpId">
+        <div class="field" style="background:#f8fafc;padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:14px">
+          <label style="color:#64748b">งวดประจำเดือน</label>
+          <div id="miPeriodDisplay" style="font-weight:700;color:#1e3a8a;font-size:13px">-</div>
+        </div>
+
+        <div class="form-row">
+          <div class="field"><label>รหัสพนักงาน *</label><select id="miEmpId" onchange="onInputEmpChanged()"></select></div>
+          <div class="field"><label>ชื่อ-นามสกุล</label><input type="text" id="miEmpName" readonly style="background:#f1f5f9;font-weight:600"></div>
+        </div>
+
+        <!-- Base Salary & PF Rate & Computed PF Amount -->
+        <div class="form-row three">
+          <div class="field">
+            <label style="color:#1d4ed8"><i class="fa-solid fa-wallet"></i> เงินเดือนฐาน (บาท) *</label>
+            <input type="number" id="miBaseSalary" placeholder="เงินเดือนฐาน" oninput="onInputSalaryChanged()">
+          </div>
+          <div class="field">
+            <label style="color:#1d4ed8"><i class="fa-solid fa-percent"></i> อัตรา PF (เช่น 0.05)</label>
+            <input type="number" id="miPfRate" step="0.01" value="0.05" oninput="onInputSalaryChanged()">
+          </div>
+          <div class="field">
+            <label style="color:#1d4ed8"><i class="fa-solid fa-piggy-bank"></i> กองทุน PF (บาท)</label>
+            <input type="number" id="miPfAmount" placeholder="ยอดเงินสะสม" step="0.01" style="background:#eff6ff;font-weight:700;color:#1d4ed8">
+          </div>
+        </div>
+
+        <div class="field-highlight">
+          <div style="font-weight:700;color:#1d4ed8;margin-bottom:8px"><i class="fa-solid fa-clock"></i> ค่าล่วงเวลา (OT)</div>
+          <div class="form-row">
+            <div class="field" style="margin-bottom:0"><label>จำนวนชั่วโมง OT</label><input type="number" id="miOtHours" value="0" step="0.5"></div>
+            <div class="field" style="margin-bottom:0"><label>อัตรา OT (บาท/ชม.)</label><input type="number" id="miOtRate" value="0" step="0.01"></div>
+          </div>
+        </div>
+
+        <div class="form-row three">
+          <div class="field"><label>วันลา (วัน)</label><input type="number" id="miLeaveDays" value="0" step="0.5"></div>
+          <div class="field"><label>เบี้ยเลี้ยง (บาท)</label><input type="number" id="miAllowance" value="0" step="0.01"></div>
+          <div class="field"><label>โบนัส (บาท)</label><input type="number" id="miBonus" value="0" step="0.01"></div>
+        </div>
+
+        <div class="field-red">
+          <label>หักเงินเบิก (บาท)</label>
+          <input type="number" id="miAdvanceDeduct" value="0" step="0.01">
+        </div>
+        <div class="field"><label>หักอื่นๆ (บาท)</label><input type="number" id="miOtherDed" value="0" step="0.01"></div>
+
+        <div class="field-indigo">
+          <div style="font-weight:700;color:#3730a3;font-size:11px;margin-bottom:6px">ประกันสังคม &amp; ภาษี (ดึงค่าเริ่มต้นจากทะเบียนพนักงาน)</div>
+          <div class="form-row">
+            <div class="field" style="margin-bottom:0"><label>ประกันสังคม (SSO)</label><input type="number" id="miSso" value="750" step="0.01"></div>
+            <div class="field" style="margin-bottom:0"><label>ภาษีหัก ณ ที่จ่าย</label><input type="number" id="miTax" value="0" step="0.01"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-slate" onclick="closeModal('inputModal')">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" onclick="saveInputForm()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลประจำงวด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- USER MODAL -->
+  <div class="modal-backdrop" id="userModal">
+    <div class="modal-box" style="max-width:400px">
+      <div class="modal-header">
+        <h3 id="userModalTitle"><i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน</h3>
+        <button type="button" class="modal-close" onclick="closeModal('userModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="userOriginalUsername">
+        <div class="field"><label>ชื่อผู้ใช้งาน *</label><input type="text" id="muUsername" placeholder="user@company.com"></div>
+        <div class="field"><label>รหัสผ่าน *</label><input type="text" id="muPassword" placeholder="กำหนดรหัสผ่าน"></div>
+        <div class="field">
+          <label>ระดับสิทธิ์ *</label>
+          <select id="muRole">
+            <option>Admin / HR</option>
+            <option>HR Staff</option>
+            <option>User</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-slate" onclick="closeModal('userModal')">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" onclick="saveUserForm()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
