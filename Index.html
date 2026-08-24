@@ -1756,38 +1756,51 @@ function callApi(action, data) {
       return;
     }
 
-    // 2. Standalone mode (Cloudflare Pages / GitHub Pages)
+    // 2. Standalone mode (Cloudflare Pages with Server-Side Proxy /api)
     var apiUrl = CONFIG.getApiUrl();
     if (!apiUrl) {
-      console.warn('No API URL configured. Running in local demo mode.');
+      console.warn('No API URL configured. Running in demo mode.');
       resolve(handleLocalFallback(action, payload));
       return;
     }
 
-    // Attempt 1: Fetch POST
-    fetch(apiUrl, {
+    // Priority 1: Cloudflare Server-Side Proxy /api (100% CORS-Bypass)
+    fetch('/api', {
       method: 'POST',
-      mode: 'cors',
-      redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ apiUrl: apiUrl, payload: payload })
     })
-    .then(function(res) {
-      if (!res.ok && res.status !== 200 && res.status !== 302) {
-        throw new Error('HTTP status ' + res.status);
+    .then(function(res) { return res.json(); })
+    .then(function(resData) {
+      if (resData && resData.success) {
+        resolve(resData);
+      } else if (resData && resData.message && resData.message.indexOf('Proxy Error') === -1) {
+        resolve(resData);
+      } else {
+        throw new Error((resData && resData.message) || 'Proxy failed');
       }
-      return res.json();
     })
-    .then(resolve)
-    .catch(function(fetchErr) {
-      console.warn('Fetch POST failed, attempting JSONP fallback...', fetchErr);
-      // Attempt 2: Bulletproof JSONP Fallback (Bypasses CORS completely)
-      callJsonp(apiUrl, action, payload)
-        .then(resolve)
-        .catch(function(jsonpErr) {
-          console.error('JSONP fallback also failed:', jsonpErr);
-          reject(new Error('ไม่สามารถเชื่อมต่อ Google Apps Script ได้ (กรุณาตรวจสอบว่า Deploy เป็น Anyone และ URL ถูกต้อง)'));
-        });
+    .catch(function(proxyErr) {
+      console.warn('Proxy /api failed, attempting direct fetch...', proxyErr);
+      // Priority 2: Direct Fetch with redirect follow
+      fetch(apiUrl, {
+        method: 'POST',
+        mode: 'cors',
+        redirect: 'follow',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      })
+      .then(function(res) { return res.json(); })
+      .then(resolve)
+      .catch(function(fetchErr) {
+        console.warn('Direct fetch failed, attempting JSONP...', fetchErr);
+        // Priority 3: JSONP Fallback
+        callJsonp(apiUrl, action, payload)
+          .then(resolve)
+          .catch(function(jsonpErr) {
+            reject(new Error('ไม่สามารถเชื่อมต่อ Google Apps Script ได้ (กรุณาตรวจสอบว่าเลือก Who has access เป็น Anyone และนำ URL ที่ลงท้ายด้วย /exec มาวาง)'));
+          });
+      });
     });
   });
 }
