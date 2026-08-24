@@ -8,9 +8,29 @@
  */
 
 function doGet(e) {
-  // Check if request is an API request (JSON)
-  if (e && e.parameter && e.parameter.action) {
-    return handleApiRequest(e.parameter.action, e.parameter);
+  // Check if request is an API request (JSON or JSONP)
+  var action = (e && e.parameter && e.parameter.action);
+  var callback = (e && e.parameter && e.parameter.callback);
+  var payloadStr = (e && e.parameter && e.parameter.payload);
+
+  if (action) {
+    var params = e.parameter || {};
+    if (payloadStr) {
+      try {
+        var parsed = JSON.parse(payloadStr);
+        params = Object.assign({}, params, parsed);
+      } catch (err) {}
+    }
+    var res = handleApiRequest(action, params);
+
+    // If JSONP callback requested
+    if (callback) {
+      return ContentService.createTextOutput(callback + '(' + JSON.stringify(res) + ')')
+        .setMimeType(ContentService.MimeType.JAVASCRIPT);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify(res))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 
   // Otherwise render Web App UI
@@ -24,21 +44,23 @@ function doPost(e) {
   try {
     var params = {};
     if (e && e.postData && e.postData.contents) {
-      params = JSON.parse(e.postData.contents);
+      try {
+        params = JSON.parse(e.postData.contents);
+      } catch(ex) {
+        params = e.parameter || {};
+      }
     } else if (e && e.parameter) {
       params = e.parameter;
     }
 
     var action = params.action || (e && e.parameter && e.parameter.action) || 'getAppInitialData';
-    return handleApiRequest(action, params);
+    var res = handleApiRequest(action, params);
+    return ContentService.createTextOutput(JSON.stringify(res))
+      .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return createJsonResponse({ success: false, message: 'Invalid JSON request: ' + err.message });
+    return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Invalid request: ' + err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-}
-
-function createJsonResponse(data) {
-  return ContentService.createTextOutput(JSON.stringify(data))
-    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function handleApiRequest(action, params) {

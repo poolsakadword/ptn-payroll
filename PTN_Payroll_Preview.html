@@ -1354,13 +1354,19 @@ td {
         <button type="button" class="modal-close" onclick="closeModal('apiConfigModal')"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
-        <p style="font-size:12px;color:#64748b;margin-bottom:14px">
-          คัดลอก Web App URL จาก Google Apps Script (Deploy &gt; Manage Deployments &gt; Web app URL) มาวางที่ช่องด้านล่างนี้
+        <p style="font-size:12px;color:#64748b;margin-bottom:14px;line-height:1.5">
+          นำ <strong>Web App URL</strong> ที่ได้จาก Google Apps Script (ตอนกด Deploy &gt; เลือก Who has access เป็น <strong>Anyone</strong>) มาวางที่ช่องด้านล่างนี้
         </p>
         <div class="field">
           <label>Google Apps Script Web App URL</label>
           <input type="url" id="cfgApiUrlInput" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
         </div>
+        <div style="margin-bottom:12px">
+          <button type="button" class="btn-sm btn-slate" style="width:100%;padding:8px" onclick="testApiConnection()">
+            <i class="fa-solid fa-vial-circle-check"></i> กดเพื่อทดสอบการเชื่อมต่อ API ทันที
+          </button>
+        </div>
+        <div id="apiTestResultMsg"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-slate" onclick="closeModal('apiConfigModal')">ยกเลิก</button>
@@ -1671,6 +1677,45 @@ var currentUsername = 'Admin';
 /**
  * Universal API Client (Supports both Cloudflare/GitHub fetch and Google Apps Script container)
  */
+/**
+ * Universal Bulletproof API Client
+ * Supports GAS Container, Fetch (CORS), and JSONP Fallback
+ */
+var jsonpCounter = 0;
+
+function callJsonp(apiUrl, action, payload) {
+  return new Promise(function(resolve, reject) {
+    var cbName = '__ptn_jsonp_cb_' + (++jsonpCounter) + '_' + Date.now();
+    var script = document.createElement('script');
+    var timer = setTimeout(function() {
+      cleanup();
+      reject(new Error('JSONP Timeout (ไม่สามารถเชื่อมต่อ Google Apps Script ได้ทันเวลา)'));
+    }, 20000);
+
+    function cleanup() {
+      clearTimeout(timer);
+      if (window[cbName]) delete window[cbName];
+      if (script && script.parentNode) script.parentNode.removeChild(script);
+    }
+
+    window[cbName] = function(data) {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = function() {
+      cleanup();
+      reject(new Error('JSONP Script Error: ไม่สามารถโหลดข้อมูลจาก Google Apps Script ได้ กรุณาตรวจสอบว่าเลือก Who has access เป็น Anyone หรือไม่'));
+    };
+
+    var cleanUrl = apiUrl.replace(/\/+$/, '');
+    var sep = cleanUrl.indexOf('?') >= 0 ? '&' : '?';
+    var payloadParam = encodeURIComponent(JSON.stringify(payload || {}));
+    script.src = cleanUrl + sep + 'action=' + encodeURIComponent(action) + '&callback=' + cbName + '&payload=' + payloadParam + '&_t=' + Date.now();
+    document.head.appendChild(script);
+  });
+}
+
 function callApi(action, data) {
   return new Promise(function(resolve, reject) {
     var payload = Object.assign({ action: action }, data || {});
@@ -1678,104 +1723,71 @@ function callApi(action, data) {
     // 1. If running inside Google Apps Script iframe
     if (typeof google !== 'undefined' && google.script && google.script.run) {
       if (action === 'getAppInitialData') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .getAppInitialData(payload.period);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getAppInitialData(payload.period);
       } else if (action === 'checkLogin') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .checkLogin(payload.username, payload.password);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).checkLogin(payload.username, payload.password);
       } else if (action === 'saveEmployee') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .saveEmployee(payload.employee, payload.origId);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).saveEmployee(payload.employee, payload.origId);
       } else if (action === 'deleteEmployee') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .deleteEmployee(payload.empId);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).deleteEmployee(payload.empId);
       } else if (action === 'saveInputRecord') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .saveInputRecord(payload.record, payload.origEmpId, payload.period);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).saveInputRecord(payload.record, payload.origEmpId, payload.period);
       } else if (action === 'deleteInputRecord') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .deleteInputRecord(payload.empId, payload.period);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).deleteInputRecord(payload.empId, payload.period);
       } else if (action === 'populateEmployeesToPeriod') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .populateEmployeesToPeriod(payload.period);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).populateEmployeesToPeriod(payload.period);
       } else if (action === 'processPayroll') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .processPayrollWeb(payload.period);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).processPayrollWeb(payload.period);
       } else if (action === 'saveCompanyInfo') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .saveCompanyInfo(payload.settings);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).saveCompanyInfo(payload.settings);
       } else if (action === 'closePeriod') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .closePeriod(payload.period, payload.username);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).closePeriod(payload.period, payload.username);
       } else if (action === 'reopenPeriod') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .reopenPeriod(payload.period);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).reopenPeriod(payload.period);
       } else if (action === 'saveUser') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .saveUser(payload.user, payload.origUser);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).saveUser(payload.user, payload.origUser);
       } else if (action === 'deleteUser') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .deleteUser(payload.username);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).deleteUser(payload.username);
       } else if (action === 'setupInitialSheets') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .setupInitialSheets(payload.period);
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).setupInitialSheets(payload.period);
       } else if (action === 'getSpreadsheetDownloadLinks') {
-        google.script.run
-          .withSuccessHandler(resolve)
-          .withFailureHandler(reject)
-          .getSpreadsheetDownloadLinks();
+        google.script.run.withSuccessHandler(resolve).withFailureHandler(reject).getSpreadsheetDownloadLinks();
       }
       return;
     }
 
-    // 2. If running standalone on Cloudflare Pages / GitHub Pages
+    // 2. Standalone mode (Cloudflare Pages / GitHub Pages)
     var apiUrl = CONFIG.getApiUrl();
     if (!apiUrl) {
-      // Offline fallback mode
-      console.warn('No API URL configured. Running in local simulation mode.');
+      console.warn('No API URL configured. Running in local demo mode.');
       resolve(handleLocalFallback(action, payload));
       return;
     }
 
+    // Attempt 1: Fetch POST
     fetch(apiUrl, {
       method: 'POST',
       mode: 'cors',
+      redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     })
-    .then(function(res) { return res.json(); })
+    .then(function(res) {
+      if (!res.ok && res.status !== 200 && res.status !== 302) {
+        throw new Error('HTTP status ' + res.status);
+      }
+      return res.json();
+    })
     .then(resolve)
-    .catch(function(err) {
-      console.error('Fetch error:', err);
-      reject(err);
+    .catch(function(fetchErr) {
+      console.warn('Fetch POST failed, attempting JSONP fallback...', fetchErr);
+      // Attempt 2: Bulletproof JSONP Fallback (Bypasses CORS completely)
+      callJsonp(apiUrl, action, payload)
+        .then(resolve)
+        .catch(function(jsonpErr) {
+          console.error('JSONP fallback also failed:', jsonpErr);
+          reject(new Error('ไม่สามารถเชื่อมต่อ Google Apps Script ได้ (กรุณาตรวจสอบว่า Deploy เป็น Anyone และ URL ถูกต้อง)'));
+        });
     });
   });
 }
@@ -2707,6 +2719,43 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+function testApiConnection() {
+  var url = document.getElementById('cfgApiUrlInput').value.trim();
+  var msgEl = document.getElementById('apiTestResultMsg');
+  if (!url) {
+    if (msgEl) msgEl.innerHTML = '<div style="color:#dc2626;background:#fef2f2;padding:10px;border-radius:8px;border:1px solid #fecaca">⚠️ กรุณากรอก Web App URL ก่อนทดสอบ</div>';
+    return;
+  }
+
+  if (url.indexOf('/exec') === -1) {
+    if (msgEl) msgEl.innerHTML = '<div style="color:#dc2626;background:#fef2f2;padding:10px;border-radius:8px;border:1px solid #fecaca">⚠️ URL ต้องลงท้ายด้วย <strong>/exec</strong> (ไม่ใช่ /edit หรือ /dev)</div>';
+    return;
+  }
+
+  CONFIG.setApiUrl(url);
+  if (msgEl) msgEl.innerHTML = '<div style="color:#2563eb;background:#eff6ff;padding:10px;border-radius:8px;border:1px solid #bfdbfe"><i class="fa-solid fa-spinner fa-spin"></i> กำลังทดสอบเชื่อมต่อ Google Apps Script...</div>';
+
+  callApi('getAppInitialData', { period: currentSelectedPeriod || 'สิงหาคม 2569' })
+    .then(function(data) {
+      if (data && data.success) {
+        if (msgEl) msgEl.innerHTML = '<div style="color:#059669;background:#f0fdf4;padding:12px;border-radius:8px;border:1.5px solid #86efac">✅ <strong>เชื่อมต่อสำเร็จ 100%!</strong> สามารถดึงข้อมูลจาก Google Sheets ได้เรียบร้อยแล้ว</div>';
+        renderUnifiedData(data);
+      } else {
+        if (msgEl) msgEl.innerHTML = '<div style="color:#dc2626;background:#fef2f2;padding:10px;border-radius:8px;border:1px solid #fecaca">⚠️ เชื่อมต่อได้ แต่ Google Sheet แจ้ง: ' + (data ? data.message : '') + '</div>';
+      }
+    })
+    .catch(function(err) {
+      if (msgEl) {
+        msgEl.innerHTML = '<div style="color:#b91c1c;background:#fef2f2;padding:14px;border-radius:10px;border:1.5px solid #fca5a5;font-size:11px;line-height:1.6">' +
+          '<div style="font-weight:700;font-size:12px;margin-bottom:6px">❌ ไม่สามารถเชื่อมต่อได้: ' + err.message + '</div>' +
+          '<strong>สาเหตุที่พบบ่อยและวิธีแก้ไข:</strong><br>' +
+          '1. ใน Google Apps Script ตอนกด <strong>Deploy</strong> &rarr; <strong>New deployment</strong><br>' +
+          '&nbsp;&nbsp;&bull; ต้องเลือก <strong>Who has access</strong> เป็น <strong>"Anyone"</strong> เท่านั้น<br>' +
+          '2. ต้องอัปเดตโค้ดใน <code>Code.gs</code> เป็นเวอร์ชันล่าสุดที่มีฟังก์ชัน <code>doGet</code> และ <code>doPost</code> แล้วกด Deploy ใหม่' +
+          '</div>';
+      }
+    });
+}
 </script>
 </body>
 </html>

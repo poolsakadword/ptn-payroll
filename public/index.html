@@ -484,13 +484,19 @@
         <button type="button" class="modal-close" onclick="closeModal('apiConfigModal')"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body">
-        <p style="font-size:12px;color:#64748b;margin-bottom:14px">
-          คัดลอก Web App URL จาก Google Apps Script (Deploy &gt; Manage Deployments &gt; Web app URL) มาวางที่ช่องด้านล่างนี้
+        <p style="font-size:12px;color:#64748b;margin-bottom:14px;line-height:1.5">
+          นำ <strong>Web App URL</strong> ที่ได้จาก Google Apps Script (ตอนกด Deploy &gt; เลือก Who has access เป็น <strong>Anyone</strong>) มาวางที่ช่องด้านล่างนี้
         </p>
         <div class="field">
           <label>Google Apps Script Web App URL</label>
           <input type="url" id="cfgApiUrlInput" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
         </div>
+        <div style="margin-bottom:12px">
+          <button type="button" class="btn-sm btn-slate" style="width:100%;padding:8px" onclick="testApiConnection()">
+            <i class="fa-solid fa-vial-circle-check"></i> กดเพื่อทดสอบการเชื่อมต่อ API ทันที
+          </button>
+        </div>
+        <div id="apiTestResultMsg"></div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-slate" onclick="closeModal('apiConfigModal')">ยกเลิก</button>
