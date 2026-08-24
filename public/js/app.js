@@ -103,51 +103,27 @@ function callApi(action, data) {
       return;
     }
 
-    // 2. Standalone mode (Cloudflare Pages with Server-Side Proxy /api)
-    var apiUrl = CONFIG.getApiUrl();
-    if (!apiUrl) {
-      console.warn('No API URL configured. Running in demo mode.');
-      resolve(handleLocalFallback(action, payload));
-      return;
-    }
-
-    // Priority 1: Cloudflare Server-Side Proxy /api (100% CORS-Bypass)
+    // 2. Native Cloudflare Pages & D1 Database API (/api)
     fetch('/api', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ apiUrl: apiUrl, payload: payload })
+      body: JSON.stringify(payload)
     })
-    .then(function(res) { return res.json(); })
+    .then(function(res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
     .then(function(resData) {
       if (resData && resData.success) {
         resolve(resData);
-      } else if (resData && resData.message && resData.message.indexOf('Proxy Error') === -1) {
-        resolve(resData);
       } else {
-        throw new Error((resData && resData.message) || 'Proxy failed');
+        throw new Error((resData && resData.message) || 'API returned error');
       }
     })
-    .catch(function(proxyErr) {
-      console.warn('Proxy /api failed, attempting direct fetch...', proxyErr);
-      // Priority 2: Direct Fetch with redirect follow
-      fetch(apiUrl, {
-        method: 'POST',
-        mode: 'cors',
-        redirect: 'follow',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(payload)
-      })
-      .then(function(res) { return res.json(); })
-      .then(resolve)
-      .catch(function(fetchErr) {
-        console.warn('Direct fetch failed, attempting JSONP...', fetchErr);
-        // Priority 3: JSONP Fallback
-        callJsonp(apiUrl, action, payload)
-          .then(resolve)
-          .catch(function(jsonpErr) {
-            reject(new Error('ไม่สามารถเชื่อมต่อ Google Apps Script ได้ (กรุณาตรวจสอบว่าเลือก Who has access เป็น Anyone และนำ URL ที่ลงท้ายด้วย /exec มาวาง)'));
-          });
-      });
+    .catch(function(err) {
+      console.warn('Native D1 API request failed:', err);
+      // Fallback demo
+      resolve(handleLocalFallback(action, payload));
     });
   });
 }
