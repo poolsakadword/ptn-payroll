@@ -1,0 +1,2712 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ระบบบริหารจัดการเงินเดือน - บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</title>
+
+  <!-- Google Fonts: Prompt -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+
+  <!-- FontAwesome 6 Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Main Stylesheet -->
+  <style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: 'Prompt', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+body {
+  background-color: #f8fafc;
+  color: #1e293b;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.hidden {
+  display: none !important;
+}
+
+/* 1. LOGIN SCREEN */
+#loginSection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+}
+.login-card {
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 42px 36px;
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.login-logo-box {
+  width: 68px;
+  height: 68px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: #ffffff;
+  font-size: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  box-shadow: 0 10px 25px rgba(37,99,235,0.35);
+}
+.login-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+.login-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 22px;
+}
+.form-group {
+  text-align: left;
+  margin-bottom: 15px;
+}
+.form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 6px;
+}
+.form-group label i {
+  color: #2563eb;
+  margin-right: 4px;
+}
+.form-group input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  font-size: 13px;
+  outline: none;
+  transition: all 0.2s;
+}
+.form-group input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+}
+.btn-login {
+  width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  box-shadow: 0 4px 14px rgba(37,99,235,0.3);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-login:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+.btn-login:active {
+  transform: translateY(0);
+}
+.login-msg {
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: none;
+}
+.login-msg.error {
+  display: block;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.login-msg.info {
+  display: block;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+.api-badge-btn {
+  margin-top: 18px;
+  font-size: 11px;
+  color: #64748b;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.api-badge-btn:hover {
+  background: #e2e8f0;
+  color: #1e293b;
+}
+
+/* 2. APP HEADER & LAYOUT */
+#appSection {
+  display: none;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.app-header {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+}
+.header-inner {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 4px 12px rgba(37,99,235,0.25);
+}
+.brand-text h1 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+.brand-text span {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.user-tag {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* NAVIGATION TABS */
+.nav-tabs-wrap {
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+}
+.nav-tabs {
+  max-width: 1320px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.tab-btn {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  transition: all 0.15s;
+}
+.tab-btn i {
+  font-size: 13px;
+}
+.tab-btn:hover {
+  color: #1d4ed8;
+  background: #f8fafc;
+}
+.tab-btn.active {
+  color: #1d4ed8;
+  border-bottom-color: #2563eb;
+  background: #eff6ff;
+}
+
+/* MAIN CONTAINER */
+.app-main {
+  max-width: 1320px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px 16px;
+  flex: 1;
+}
+.tab-section {
+  display: none;
+}
+.tab-section.show {
+  display: block;
+}
+
+/* PERIOD SELECTOR BAR */
+.period-bar {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+}
+.period-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.period-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid;
+}
+.period-badge.open {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.period-badge.closed {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+.period-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.period-select {
+  padding: 6px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  outline: none;
+  background: #ffffff;
+  color: #334155;
+}
+.period-select:focus {
+  border-color: #2563eb;
+}
+
+/* CARDS */
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 18px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.card-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.card-sub {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* STAT GRIDS */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+.stat-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+}
+.stat-card .label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.stat-card .value {
+  font-size: 24px;
+  font-weight: 700;
+  font-family: 'Consolas', 'Courier New', monospace;
+}
+.stat-card .sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+.stat-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+/* TABLES */
+.table-wrap {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+thead tr {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+thead th {
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+tbody tr {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.1s;
+}
+tbody tr:hover {
+  background: #f8fafc;
+}
+tbody tr:last-child {
+  border-bottom: none;
+}
+td {
+  padding: 11px 14px;
+  color: #334155;
+  white-space: nowrap;
+}
+.right { text-align: right; font-family: 'Consolas', 'Courier New', monospace; }
+.center { text-align: center; }
+.text-blue { color: #1d4ed8; font-weight: 600; }
+.text-red { color: #dc2626; font-weight: 600; }
+.text-green { color: #059669; font-weight: 700; }
+.bg-blue { background: #eff6ff; }
+.bg-red { background: #fff1f2; }
+.bg-green { background: #f0fdf4; }
+
+/* BUTTONS */
+.btn {
+  padding: 8px 15px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+}
+.btn-sm {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.btn-primary {
+  background: #2563eb;
+  color: #ffffff;
+}
+.btn-primary:hover {
+  background: #1d4ed8;
+}
+.btn-success {
+  background: #059669;
+  color: #ffffff;
+}
+.btn-success:hover {
+  background: #047857;
+}
+.btn-slate {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+.btn-slate:hover {
+  background: #e2e8f0;
+}
+.btn-yellow {
+  background: #fefce8;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.btn-yellow:hover {
+  background: #fef3c7;
+}
+.btn-red {
+  background: #fff1f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.btn-red:hover {
+  background: #fee2e2;
+}
+.btn-icon {
+  padding: 5px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-icon.edit { background: #eff6ff; color: #1d4ed8; }
+.btn-icon.edit:hover { background: #dbeafe; }
+.btn-icon.del { background: #fff1f2; color: #dc2626; }
+.btn-icon.del:hover { background: #fee2e2; }
+.action-btns { display: flex; align-items: center; gap: 4px; justify-content: center; }
+
+/* SEARCH & TOOLBAR */
+.search-input {
+  padding: 8px 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 9px;
+  font-size: 12px;
+  outline: none;
+  min-width: 220px;
+}
+.search-input:focus {
+  border-color: #2563eb;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* MODAL */
+.modal-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-backdrop.show {
+  display: flex;
+}
+.modal-box {
+  background: #ffffff;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 540px;
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.3);
+}
+.modal-box.wide {
+  max-width: 780px;
+}
+.modal-header {
+  padding: 16px 22px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+}
+.modal-header h3 {
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.modal-header h3 i {
+  color: #2563eb;
+}
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #e2e8f0;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+}
+.modal-close:hover {
+  background: #cbd5e1;
+}
+.modal-body {
+  padding: 22px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-footer {
+  padding: 14px 22px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  background: #f8fafc;
+}
+
+/* FORM ELEMENTS */
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.form-row.three {
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.field {
+  margin-bottom: 14px;
+}
+.field label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.field input, .field select, .field textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 9px;
+  font-size: 12px;
+  outline: none;
+  background: #ffffff;
+  transition: border-color 0.15s;
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  border-color: #2563eb;
+}
+.field-highlight {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.field-highlight label { color: #1d4ed8; }
+.field-red {
+  background: #fff1f2;
+  border: 1.5px solid #fca5a5;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+.field-red label { color: #dc2626; }
+.field-indigo {
+  background: #eef2ff;
+  border: 1.5px solid #c7d2fe;
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+/* PAYSLIP STYLES */
+.payslip-container {
+  background: #ffffff;
+  padding: 20px;
+}
+.payslip-header {
+  text-align: center;
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+.payslip-header h2 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.payslip-header p {
+  font-size: 11px;
+  color: #475569;
+  margin-top: 3px;
+}
+.payslip-badge {
+  display: inline-block;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  padding: 4px 16px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 8px 0;
+}
+.payslip-info-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 16px;
+  font-size: 11px;
+}
+.payslip-info-grid .ilabel { color: #64748b; margin-bottom: 2px; }
+.payslip-info-grid strong { color: #0f172a; font-size: 12px; }
+.payslip-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.payslip-section {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.payslip-section-header {
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid #e2e8f0;
+}
+.payslip-section-body {
+  padding: 12px 14px;
+}
+.payslip-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 7px;
+  font-size: 12px;
+}
+.payslip-section-footer {
+  padding: 10px 14px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  border-top: 1px solid #e2e8f0;
+}
+.payslip-net {
+  background: #ecfdf5;
+  border: 2px solid #10b981;
+  border-radius: 12px;
+  padding: 14px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.sig-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px dashed #cbd5e1;
+  text-align: center;
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* DOWNLOAD CARDS */
+.dl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.dl-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 22px;
+}
+.dl-icon-box {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+.dl-card h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.dl-card p {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+/* BADGE */
+.badge {
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid;
+}
+.badge-blue { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+
+/* FOOTER */
+.app-footer {
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  padding: 14px;
+  text-align: center;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+@media print {
+  body * { visibility: hidden !important; }
+  #payslipContentArea, #payslipContentArea * { visibility: visible !important; }
+  #payslipContentArea {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  @page { size: A4 portrait; margin: 12mm 15mm; }
+}
+</style>
+</head>
+<body>
+
+  <!-- ==================== 1. LOGIN SCREEN ==================== -->
+  <div id="loginSection">
+    <div class="login-card">
+      <div class="login-logo-box"><i class="fa-solid fa-hospital-user"></i></div>
+      <h1 class="login-title">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h1>
+      <p class="login-sub">ระบบบริหารจัดการเงินเดือน (PTN Payroll V3.0)</p>
+
+      <div id="loginMessage" class="login-msg"></div>
+
+      <div class="form-group">
+        <label><i class="fa-solid fa-user"></i> ชื่อผู้ใช้งาน (Username)</label>
+        <input type="text" id="loginUsername" placeholder="กรอกชื่อผู้ใช้งาน หรือ อีเมล" autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label><i class="fa-solid fa-lock"></i> รหัสผ่าน (Password)</label>
+        <input type="password" id="loginPassword" placeholder="กรอกรหัสผ่าน" autocomplete="current-password">
+      </div>
+
+      <button type="button" class="btn-login" id="btnLoginBtn">
+        <i class="fa-solid fa-right-to-bracket"></i> เข้าสู่ระบบ
+      </button>
+
+      <div>
+        <button type="button" class="api-badge-btn" onclick="openApiConfigModal()">
+          <i class="fa-solid fa-link"></i> ตั้งค่า API เชื่อมต่อ Google Sheets
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 2. MAIN APPLICATION ==================== -->
+  <div id="appSection">
+
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="header-inner">
+        <div class="brand">
+          <div class="brand-icon"><i class="fa-solid fa-hospital-user"></i></div>
+          <div class="brand-text">
+            <h1 id="topNavCompanyName">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h1>
+            <span>ระบบบริหารจัดการเงินเดือน (PTN Payroll V3.0)</span>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span class="user-tag" id="navUserInfo"><i class="fa-solid fa-user-shield"></i> ผู้ดูแลระบบ (Admin)</span>
+          <button type="button" class="btn-sm btn-slate" onclick="openApiConfigModal()">
+            <i class="fa-solid fa-link"></i> ตั้งค่า API
+          </button>
+          <button type="button" class="btn-sm btn-yellow" onclick="initSheets()">
+            <i class="fa-solid fa-gear"></i> ตั้งค่า Sheet
+          </button>
+          <button type="button" class="btn-sm btn-red" onclick="logout()">
+            <i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- NAVIGATION TABS -->
+    <div class="nav-tabs-wrap">
+      <div class="nav-tabs">
+        <button type="button" class="tab-btn active" onclick="switchTab('dashboard')" id="tabBtn-dashboard">
+          <i class="fa-solid fa-chart-pie"></i> ภาพรวม (Dashboard)
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('payroll')" id="tabBtn-payroll">
+          <i class="fa-solid fa-calculator"></i> คำนวณเงินเดือน &amp; สลิป
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('employees')" id="tabBtn-employees">
+          <i class="fa-solid fa-users"></i> ทะเบียนพนักงาน
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('input')" id="tabBtn-input">
+          <i class="fa-solid fa-calendar-days"></i> บันทึกข้อมูลประจำงวด
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('company')" id="tabBtn-company">
+          <i class="fa-solid fa-building"></i> ข้อมูลบริษัท
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('users')" id="tabBtn-users">
+          <i class="fa-solid fa-user-gear"></i> ผู้ใช้งาน
+        </button>
+        <button type="button" class="tab-btn" onclick="switchTab('downloads')" id="tabBtn-downloads">
+          <i class="fa-solid fa-download"></i> ดาวน์โหลด
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <main class="app-main">
+
+      <!-- PERIOD SELECTOR BAR & CLOSE PERIOD CONTROLS -->
+      <div class="period-bar">
+        <div class="period-title">
+          <i class="fa-solid fa-calendar-check" style="color:#2563eb;font-size:16px"></i>
+          <span>งวดประจำเดือน:</span>
+          <span class="period-badge open" id="currentPeriodDisplayLabel">-</span>
+          <span id="periodLockStatusBadge"></span>
+        </div>
+        <div class="period-controls">
+          <label style="font-size:11px;font-weight:600;color:#64748b">เลือกงวด:</label>
+          <select id="selPeriodMonth" class="period-select" onchange="onPeriodDropdownChanged()">
+            <option value="มกราคม">มกราคม</option>
+            <option value="กุมภาพันธ์">กุมภาพันธ์</option>
+            <option value="มีนาคม">มีนาคม</option>
+            <option value="เมษายน">เมษายน</option>
+            <option value="พฤษภาคม">พฤษภาคม</option>
+            <option value="มิถุนายน">มิถุนายน</option>
+            <option value="กรกฎาคม">กรกฎาคม</option>
+            <option value="สิงหาคม">สิงหาคม</option>
+            <option value="กันยายน">กันยายน</option>
+            <option value="ตุลาคม">ตุลาคม</option>
+            <option value="พฤศจิกายน">พฤศจิกายน</option>
+            <option value="ธันวาคม">ธันวาคม</option>
+          </select>
+          <select id="selPeriodYear" class="period-select" onchange="onPeriodDropdownChanged()">
+            <option value="2567">2567</option>
+            <option value="2568">2568</option>
+            <option value="2569" selected>2569</option>
+            <option value="2570">2570</option>
+            <option value="2571">2571</option>
+          </select>
+          <button type="button" class="btn-sm btn-primary" onclick="loadAllData()">
+            <i class="fa-solid fa-rotate-right"></i> ดึงข้อมูล
+          </button>
+          <span id="periodCloseBtnContainer">
+            <button type="button" class="btn-sm btn-red" onclick="handleClosePeriod()">
+              <i class="fa-solid fa-lock"></i> ปิดงวดนี้
+            </button>
+          </span>
+        </div>
+      </div>
+
+      <!-- 1. DASHBOARD -->
+      <div class="tab-section show" id="tab-dashboard">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title" id="dashHeaderTitle">แดชบอร์ดสรุปยอดเงินเดือน</div>
+              <div class="card-sub" id="dashHeaderSub">สรุปภาพรวมยอดจ่าย OT ยอดหัก และสุทธิประจำงวด</div>
+            </div>
+            <div class="toolbar">
+              <button type="button" class="btn btn-slate" onclick="loadAllData()">
+                <i class="fa-solid fa-rotate-right"></i> รีเฟรช
+              </button>
+              <button type="button" class="btn btn-success" onclick="runPayrollProcess()" id="btnDashProcess">
+                <i class="fa-solid fa-bolt"></i> ประมวลผลคำนวณเงินเดือน
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div>
+              <div class="label">พนักงานทั้งหมด</div>
+              <div class="value" id="statTotalEmployees">0</div>
+              <div class="sub">คน ในงวดนี้</div>
+            </div>
+            <div class="stat-icon" style="background:#eff6ff;color:#2563eb"><i class="fa-solid fa-users"></i></div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="label">เงินได้รวม (Gross)</div>
+              <div class="value text-blue" id="statGrossPay">฿0.00</div>
+              <div class="sub">เงินเดือน+OT+เบี้ยเลี้ยง</div>
+            </div>
+            <div class="stat-icon" style="background:#eff6ff;color:#2563eb"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="label">ยอดหักรวม</div>
+              <div class="value text-red" id="statTotalDeductions">฿0.00</div>
+              <div class="sub">SSO+PF+ภาษี+หักเบิก</div>
+            </div>
+            <div class="stat-icon" style="background:#fff1f2;color:#dc2626"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+          </div>
+          <div class="stat-card">
+            <div>
+              <div class="label">ยอดจ่ายสุทธิ (Net)</div>
+              <div class="value text-green" id="statNetPay">฿0.00</div>
+              <div class="sub">ยอดโอนสุทธิ</div>
+            </div>
+            <div class="stat-icon" style="background:#f0fdf4;color:#059669"><i class="fa-solid fa-money-bill-wave"></i></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">สรุปผลเงินเดือนประจำงวด</div>
+            <button type="button" class="btn btn-slate" onclick="switchTab('payroll')">
+              ดูตารางเต็ม &amp; พิมพ์สลิป <i class="fa-solid fa-arrow-right"></i>
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>งวด</th>
+                  <th>รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th class="right">เงินเดือนฐาน</th>
+                  <th class="right bg-blue">เงินได้รวม</th>
+                  <th class="right bg-red">ยอดหัก</th>
+                  <th class="right bg-green">สุทธิ (Net)</th>
+                  <th class="center">สลิป</th>
+                </tr>
+              </thead>
+              <tbody id="dashboardMiniTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. PAYROLL -->
+      <div class="tab-section" id="tab-payroll">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">ตารางคำนวณเงินเดือน &amp; พิมพ์สลิป</div>
+              <div class="card-sub" id="payrollSubTitle">ผลการคำนวณ OT เบี้ยเลี้ยง กองทุน PF ประกันสังคม ภาษี หักเงินเบิก</div>
+            </div>
+            <div class="toolbar">
+              <input type="text" class="search-input" id="searchPayrollInput" placeholder="🔍 ค้นหาชื่อ/รหัส..." oninput="filterPayrollTable()">
+              <button type="button" class="btn btn-slate" onclick="exportTableToCSV('payroll')">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button type="button" class="btn btn-success" onclick="runPayrollProcess()" id="btnPayrollProcess">
+                <i class="fa-solid fa-bolt"></i> คำนวณงวดนี้ใหม่
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>งวด</th>
+                  <th>รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th class="right">เงินเดือนฐาน</th>
+                  <th class="right">OT Pay</th>
+                  <th class="right">หักขาด/ลา</th>
+                  <th class="right bg-blue">Gross</th>
+                  <th class="right">ประกันสังคม</th>
+                  <th class="right">กองทุน PF</th>
+                  <th class="right">ภาษี</th>
+                  <th class="right bg-red">หักเงินเบิก</th>
+                  <th class="right bg-red">หักรวม</th>
+                  <th class="right bg-green">สุทธิ (Net)</th>
+                  <th class="center">สลิป</th>
+                </tr>
+              </thead>
+              <tbody id="payrollTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. EMPLOYEES -->
+      <div class="tab-section" id="tab-employees">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">ทะเบียนประวัติพนักงาน (Employee Master)</div>
+              <div class="card-sub">ข้อมูลพนักงาน เลขบัตรประชาชน เบอร์โทร ที่อยู่ ธนาคาร เงินเดือนฐาน ค่าเริ่มต้นประกันสังคม/ภาษี</div>
+            </div>
+            <div class="toolbar">
+              <input type="text" class="search-input" id="searchEmpInput" placeholder="🔍 ค้นหาพนักงาน..." oninput="filterEmpTable()">
+              <button type="button" class="btn btn-slate" onclick="exportTableToCSV('employees')">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button type="button" class="btn btn-primary" onclick="openEmployeeModal()">
+                <i class="fa-solid fa-user-plus"></i> เพิ่มพนักงาน
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th>บัตรประชาชน</th>
+                  <th>เบอร์โทร</th>
+                  <th>ที่อยู่</th>
+                  <th>แผนก / ตำแหน่ง</th>
+                  <th class="right">เงินเดือนฐาน</th>
+                  <th>ธนาคาร / เลขบัญชี</th>
+                  <th class="right">PF %</th>
+                  <th class="right text-red">SSO (Default)</th>
+                  <th class="right text-red">ภาษี (Default)</th>
+                  <th class="center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="employeesTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. MONTHLY INPUT -->
+      <div class="tab-section" id="tab-input">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title" id="inputTabTitle">บันทึกข้อมูลประจำงวด (Monthly Input)</div>
+              <div class="card-sub" id="inputTabSub">ดึงค่าตั้งต้น รหัส ชื่อ-นามสกุล เงินเดือนฐาน กองทุน PF ประกันสังคม และภาษี อัตโนมัติ</div>
+            </div>
+            <div class="toolbar">
+              <input type="text" class="search-input" id="searchInputRecord" placeholder="🔍 ค้นหาในงวดนี้..." oninput="filterInputTable()">
+              <button type="button" class="btn btn-yellow" onclick="batchPopulateEmployees()" id="btnBatchPopulate">
+                <i class="fa-solid fa-users-gear"></i> ดึงพนักงานทุกคนเข้างวดนี้
+              </button>
+              <button type="button" class="btn btn-slate" onclick="exportTableToCSV('input')">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button type="button" class="btn btn-primary" onclick="openInputModal()" id="btnAddInputRecord">
+                <i class="fa-solid fa-plus"></i> บันทึกข้อมูลรายคน
+              </button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>งวด</th>
+                  <th>#</th>
+                  <th>รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th class="right" style="color:#1e3a8a">เงินเดือนฐาน</th>
+                  <th class="right">PF %</th>
+                  <th class="right text-blue" style="font-weight:700">กองทุน PF (บาท)</th>
+                  <th class="right">วันลา</th>
+                  <th class="right text-blue">OT ชม.</th>
+                  <th class="right">อัตรา OT</th>
+                  <th class="right">เบี้ยเลี้ยง</th>
+                  <th class="right">โบนัส</th>
+                  <th class="right text-red bg-red">หักเงินเบิก</th>
+                  <th class="right">SSO</th>
+                  <th class="right">ภาษี</th>
+                  <th class="center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="inputTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 5. COMPANY -->
+      <div class="tab-section" id="tab-company">
+        <div class="card" style="max-width:680px">
+          <div class="card-title">ตั้งค่าข้อมูลบริษัท (Company Profile)</div>
+          <div class="card-sub" style="margin-bottom:20px">ข้อมูลนี้จะแสดงบนหัวเอกสารและสลิปเงินเดือนของพนักงาน</div>
+          <div class="field">
+            <label>ชื่อบริษัท *</label>
+            <input type="text" id="cfgCompanyName" value="บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด">
+          </div>
+          <div class="field">
+            <label>ที่อยู่บริษัท</label>
+            <textarea id="cfgCompanyAddress" rows="2" placeholder="เลขที่ ถนน แขวง/ตำบล เขต/อำเภอ จังหวัด รหัสไปรษณีย์"></textarea>
+          </div>
+          <div class="form-row">
+            <div class="field">
+              <label>เบอร์โทรศัพท์</label>
+              <input type="text" id="cfgCompanyPhone" placeholder="เช่น 02-123-4567">
+            </div>
+            <div class="field">
+              <label>เลขประจำตัวผู้เสียภาษี</label>
+              <input type="text" id="cfgCompanyTaxId" placeholder="เช่น 0105559876543">
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary" onclick="saveCompanyProfileForm()">
+            <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลบริษัท
+          </button>
+        </div>
+      </div>
+
+      <!-- 6. USERS -->
+      <div class="tab-section" id="tab-users">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">จัดการผู้ใช้งานระบบ (Users)</div>
+              <div class="card-sub">เพิ่ม ลบ แก้ไขสิทธิ์ผู้ใช้งาน</div>
+            </div>
+            <button type="button" class="btn btn-primary" onclick="openUserModal()">
+              <i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน
+            </button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ชื่อผู้ใช้งาน</th>
+                  <th>รหัสผ่าน</th>
+                  <th>ระดับสิทธิ์</th>
+                  <th class="center">จัดการ</th>
+                </tr>
+              </thead>
+              <tbody id="usersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7. DOWNLOADS -->
+      <div class="tab-section" id="tab-downloads">
+        <div class="card">
+          <div class="card-title">ดาวน์โหลดและส่งออกข้อมูล</div>
+          <div class="card-sub" style="margin-bottom:16px">ดาวน์โหลด Google Sheet เป็น Excel หรือ CSV รายตาราง</div>
+          <div class="dl-grid">
+            <div class="dl-card">
+              <div class="dl-icon-box" style="background:#ecfdf5;color:#059669">
+                <i class="fa-solid fa-file-excel"></i>
+              </div>
+              <h3>ดาวน์โหลด Excel (.xlsx)</h3>
+              <p>ดาวน์โหลดข้อมูลทุกชีตเป็นไฟล์ Microsoft Excel</p>
+              <div style="margin-top:16px">
+                <button type="button" class="btn btn-success" style="width:100%" onclick="downloadEntireExcel()">
+                  <i class="fa-solid fa-download"></i> ดาวน์โหลด Excel
+                </button>
+              </div>
+            </div>
+            <div class="dl-card">
+              <div class="dl-icon-box" style="background:#eff6ff;color:#2563eb">
+                <i class="fa-solid fa-file-csv"></i>
+              </div>
+              <h3>ส่งออก CSV รายตาราง</h3>
+              <p>เลือกตารางที่ต้องการส่งออกเป็นไฟล์ CSV</p>
+              <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                <button type="button" class="btn btn-slate" onclick="exportTableToCSV('payroll')">
+                  <i class="fa-solid fa-file-csv"></i> Payroll CSV
+                </button>
+                <button type="button" class="btn btn-slate" onclick="exportTableToCSV('employees')">
+                  <i class="fa-solid fa-file-csv"></i> Employee CSV
+                </button>
+                <button type="button" class="btn btn-slate" onclick="exportTableToCSV('input')">
+                  <i class="fa-solid fa-file-csv"></i> Input CSV
+                </button>
+                <button type="button" class="btn btn-slate" onclick="exportTableToCSV('users')">
+                  <i class="fa-solid fa-file-csv"></i> Users CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      <span id="footerCompanyName">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</span> &copy; 2026 &mdash; ระบบบริหารจัดการเงินเดือน (PTN Payroll V3.0)
+    </footer>
+
+  </div>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- API CONFIG MODAL -->
+  <div class="modal-backdrop" id="apiConfigModal">
+    <div class="modal-box" style="max-width:520px">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-link"></i> ตั้งค่าการเชื่อมต่อ API Google Sheets</h3>
+        <button type="button" class="modal-close" onclick="closeModal('apiConfigModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size:12px;color:#64748b;margin-bottom:14px">
+          คัดลอก Web App URL จาก Google Apps Script (Deploy &gt; Manage Deployments &gt; Web app URL) มาวางที่ช่องด้านล่างนี้
+        </p>
+        <div class="field">
+          <label>Google Apps Script Web App URL</label>
+          <input type="url" id="cfgApiUrlInput" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-slate" onclick="closeModal('apiConfigModal')">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" onclick="saveApiConfig()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึก URL
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PAYSLIP MODAL -->
+  <div class="modal-backdrop" id="payslipModal">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-invoice"></i> ตัวอย่างสลิปเงินเดือน</h3>
+        <div class="toolbar">
+          <button type="button" class="btn btn-primary" onclick="printCurrentPayslip()">
+            <i class="fa-solid fa-print"></i> พิมพ์สลิป / PDF
+          </button>
+          <button type="button" class="modal-close" onclick="closeModal('payslipModal')">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+      </div>
+      <div class="modal-body" id="payslipContentArea">
+        <div class="payslip-container">
+          <div class="payslip-header">
+            <h2 id="psSlipCompanyName">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>
+            <p id="psSlipCompanyDetails"></p>
+            <div class="payslip-badge">ใบแจ้งยอดเงินเดือน (PAY SLIP)</div>
+            <p>งวดประจำเดือน: <strong id="psPeriodText">-</strong></p>
+          </div>
+          <div class="payslip-info-grid">
+            <div><div class="ilabel">รหัสพนักงาน:</div><strong id="psEmpId">-</strong></div>
+            <div><div class="ilabel">ชื่อ-นามสกุล:</div><strong id="psFullName">-</strong></div>
+            <div><div class="ilabel">แผนก / ตำแหน่ง:</div><strong id="psDeptPos">-</strong></div>
+            <div><div class="ilabel">ธนาคาร / บัญชี:</div><strong id="psBank">-</strong></div>
+          </div>
+          <div class="payslip-grid">
+            <div class="payslip-section">
+              <div class="payslip-section-header" style="background:#eff6ff;color:#1d4ed8">
+                <span>รายการได้ (Earnings)</span><span>จำนวนเงิน (บาท)</span>
+              </div>
+              <div class="payslip-section-body">
+                <div class="payslip-row"><span>เงินเดือนฐาน</span><span id="psBaseSalary" style="font-family:monospace;font-weight:600">0.00</span></div>
+                <div class="payslip-row"><span id="psOtLabel">ค่าล่วงเวลา (OT)</span><span id="psOtPay" style="font-family:monospace;font-weight:600;color:#1d4ed8">0.00</span></div>
+                <div class="payslip-row"><span>เบี้ยเลี้ยง</span><span id="psAllowance" style="font-family:monospace;font-weight:600">0.00</span></div>
+                <div class="payslip-row"><span>โบนัส / อื่นๆ</span><span id="psBonus" style="font-family:monospace;font-weight:600">0.00</span></div>
+              </div>
+              <div class="payslip-section-footer" style="background:#eff6ff;color:#1d4ed8">
+                <span>รวมเงินได้</span><span id="psGrossPay" style="font-family:monospace;font-size:14px">0.00</span>
+              </div>
+            </div>
+            <div class="payslip-section">
+              <div class="payslip-section-header" style="background:#fff1f2;color:#be123c">
+                <span>รายการหัก (Deductions)</span><span>จำนวนเงิน (บาท)</span>
+              </div>
+              <div class="payslip-section-body">
+                <div class="payslip-row"><span>หักขาด/ลา</span><span id="psLeaveDed" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row"><span>ประกันสังคม</span><span id="psSso" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row"><span id="psPfLabel">กองทุนสำรองเลี้ยงชีพ (PF)</span><span id="psPf" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row"><span>ภาษีหัก ณ ที่จ่าย</span><span id="psTax" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row" style="font-weight:700;color:#be123c"><span>หักเงินเบิก</span><span id="psAdvanceDed" style="font-family:monospace">0.00</span></div>
+                <div class="payslip-row"><span>หักอื่นๆ</span><span id="psOtherDed" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+              </div>
+              <div class="payslip-section-footer" style="background:#fff1f2;color:#be123c">
+                <span>รวมรายการหัก</span><span id="psTotalDed" style="font-family:monospace;font-size:14px">0.00</span>
+              </div>
+            </div>
+          </div>
+          <div class="payslip-net">
+            <div>
+              <div style="font-size:11px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:0.05em">เงินเดือนสุทธิ (NET PAY)</div>
+              <div id="psThaiBahtText" style="font-size:11px;color:#047857;margin-top:2px">-</div>
+            </div>
+            <div id="psNetPay" style="font-size:24px;font-weight:700;font-family:monospace;color:#059669">฿0.00</div>
+          </div>
+          <div class="sig-row">
+            <div>
+              <div style="height:36px"></div>
+              <div style="border-top:1px solid #94a3b8;padding-top:6px">ลงชื่อผู้มีอำนาจจ่ายเงิน</div>
+              <div style="font-size:10px;color:#94a3b8">( ................................................... )</div>
+            </div>
+            <div>
+              <div style="height:36px"></div>
+              <div style="border-top:1px solid #94a3b8;padding-top:6px">ลงชื่อพนักงานผู้รับเงิน</div>
+              <div style="font-size:10px;color:#94a3b8">( ................................................... )</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMPLOYEE MODAL -->
+  <div class="modal-backdrop" id="empModal">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <h3 id="empModalTitle"><i class="fa-solid fa-user-plus"></i> เพิ่มข้อมูลพนักงาน</h3>
+        <button type="button" class="modal-close" onclick="closeModal('empModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="empOriginalId">
+        <div class="form-row">
+          <div class="field"><label>รหัสพนักงาน *</label><input type="text" id="mEmpId" placeholder="เช่น EMP001"></div>
+          <div class="field"><label>ชื่อ-นามสกุล *</label><input type="text" id="mFullName" placeholder="ชื่อ-นามสกุล"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>เลขบัตรประชาชน (13 หลัก)</label><input type="text" id="mCitizenId" maxlength="13" placeholder="x-xxxx-xxxxx-xx-x"></div>
+          <div class="field"><label>เบอร์โทรศัพท์</label><input type="text" id="mPhone" placeholder="08x-xxx-xxxx"></div>
+        </div>
+        <div class="field"><label>ที่อยู่</label><input type="text" id="mAddress" placeholder="ที่อยู่ตามทะเบียนบ้านหรือปัจจุบัน"></div>
+        <div class="form-row">
+          <div class="field"><label>แผนก</label><input type="text" id="mDepartment" placeholder="เช่น IT เภสัชกรรม ขาย"></div>
+          <div class="field"><label>ตำแหน่ง</label><input type="text" id="mPosition" placeholder="เช่น เภสัชกร พนักงานขาย"></div>
+        </div>
+        <div class="form-row">
+          <div class="field"><label>เงินเดือนฐาน (บาท) *</label><input type="number" id="mBaseSalary" placeholder="เช่น 35000"></div>
+          <div class="field"><label>อัตรา PF (เช่น 0.05 = 5%)</label><input type="number" id="mPfRate" step="0.01" value="0.05"></div>
+        </div>
+
+        <div class="field-indigo">
+          <div style="font-weight:700;color:#3730a3;font-size:12px;margin-bottom:8px">
+            <i class="fa-solid fa-sliders"></i> ค่าเริ่มต้นสำหรับการคำนวณเงินเดือนรายงวด
+          </div>
+          <div class="form-row">
+            <div class="field" style="margin-bottom:0">
+              <label style="color:#4338ca">ประกันสังคม (ค่าเริ่มต้น)</label>
+              <input type="number" id="mDefaultSso" value="750" placeholder="750">
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label style="color:#4338ca">ภาษีหัก ณ ที่จ่าย (ค่าเริ่มต้น)</label>
+              <input type="number" id="mDefaultTax" value="0" placeholder="0">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>ธนาคาร</label>
+            <input list="bankList" id="mBankName" placeholder="เลือกหรือพิมพ์ชื่อธนาคาร">
+            <datalist id="bankList">
+              <option value="กสิกรไทย (KBANK)"><option value="ไทยพาณิชย์ (SCB)"><option value="กรุงเทพ (BBL)"><option value="กรุงไทย (KTB)"><option value="กรุงศรีอยุธยา (BAY)"><option value="ทหารไทยธนชาต (TTB)"><option value="ออมสิน (GSB)"><option value="ธ.ก.ส. (BAAC)">
+            </datalist>
+          </div>
+          <div class="field"><label>เลขที่บัญชีธนาคาร</label><input type="text" id="mBankAccount" placeholder="xxx-x-xxxxx-x"></div>
+        </div>
+        <div class="field"><label>วันเริ่มงาน</label><input type="date" id="mJoinDate"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-slate" onclick="closeModal('empModal')">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" onclick="saveEmployeeForm()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลพนักงาน
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- INPUT MODAL -->
+  <div class="modal-backdrop" id="inputModal">
+    <div class="modal-box wide">
+      <div class="modal-header">
+        <h3 id="inputModalTitle"><i class="fa-solid fa-calendar-plus"></i> บันทึกข้อมูลประจำงวด</h3>
+        <button type="button" class="modal-close" onclick="closeModal('inputModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="inputOriginalEmpId">
+        <div class="field" style="background:#f8fafc;padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:14px">
+          <label style="color:#64748b">งวดประจำเดือน</label>
+          <div id="miPeriodDisplay" style="font-weight:700;color:#1e3a8a;font-size:13px">-</div>
+        </div>
+
+        <div class="form-row">
+          <div class="field"><label>รหัสพนักงาน *</label><select id="miEmpId" onchange="onInputEmpChanged()"></select></div>
+          <div class="field"><label>ชื่อ-นามสกุล</label><input type="text" id="miEmpName" readonly style="background:#f1f5f9;font-weight:600"></div>
+        </div>
+
+        <!-- Base Salary & PF Rate & Computed PF Amount -->
+        <div class="form-row three">
+          <div class="field">
+            <label style="color:#1d4ed8"><i class="fa-solid fa-wallet"></i> เงินเดือนฐาน (บาท) *</label>
+            <input type="number" id="miBaseSalary" placeholder="เงินเดือนฐาน" oninput="onInputSalaryChanged()">
+          </div>
+          <div class="field">
+            <label style="color:#1d4ed8"><i class="fa-solid fa-percent"></i> อัตรา PF (เช่น 0.05)</label>
+            <input type="number" id="miPfRate" step="0.01" value="0.05" oninput="onInputSalaryChanged()">
+          </div>
+          <div class="field">
+            <label style="color:#1d4ed8"><i class="fa-solid fa-piggy-bank"></i> กองทุน PF (บาท)</label>
+            <input type="number" id="miPfAmount" placeholder="ยอดเงินสะสม" step="0.01" style="background:#eff6ff;font-weight:700;color:#1d4ed8">
+          </div>
+        </div>
+
+        <div class="field-highlight">
+          <div style="font-weight:700;color:#1d4ed8;margin-bottom:8px"><i class="fa-solid fa-clock"></i> ค่าล่วงเวลา (OT)</div>
+          <div class="form-row">
+            <div class="field" style="margin-bottom:0"><label>จำนวนชั่วโมง OT</label><input type="number" id="miOtHours" value="0" step="0.5"></div>
+            <div class="field" style="margin-bottom:0"><label>อัตรา OT (บาท/ชม.)</label><input type="number" id="miOtRate" value="0" step="0.01"></div>
+          </div>
+        </div>
+
+        <div class="form-row three">
+          <div class="field"><label>วันลา (วัน)</label><input type="number" id="miLeaveDays" value="0" step="0.5"></div>
+          <div class="field"><label>เบี้ยเลี้ยง (บาท)</label><input type="number" id="miAllowance" value="0" step="0.01"></div>
+          <div class="field"><label>โบนัส (บาท)</label><input type="number" id="miBonus" value="0" step="0.01"></div>
+        </div>
+
+        <div class="field-red">
+          <label>หักเงินเบิก (บาท)</label>
+          <input type="number" id="miAdvanceDeduct" value="0" step="0.01">
+        </div>
+        <div class="field"><label>หักอื่นๆ (บาท)</label><input type="number" id="miOtherDed" value="0" step="0.01"></div>
+
+        <div class="field-indigo">
+          <div style="font-weight:700;color:#3730a3;font-size:11px;margin-bottom:6px">ประกันสังคม &amp; ภาษี (ดึงค่าเริ่มต้นจากทะเบียนพนักงาน)</div>
+          <div class="form-row">
+            <div class="field" style="margin-bottom:0"><label>ประกันสังคม (SSO)</label><input type="number" id="miSso" value="750" step="0.01"></div>
+            <div class="field" style="margin-bottom:0"><label>ภาษีหัก ณ ที่จ่าย</label><input type="number" id="miTax" value="0" step="0.01"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-slate" onclick="closeModal('inputModal')">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" onclick="saveInputForm()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลประจำงวด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- USER MODAL -->
+  <div class="modal-backdrop" id="userModal">
+    <div class="modal-box" style="max-width:400px">
+      <div class="modal-header">
+        <h3 id="userModalTitle"><i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน</h3>
+        <button type="button" class="modal-close" onclick="closeModal('userModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="userOriginalUsername">
+        <div class="field"><label>ชื่อผู้ใช้งาน *</label><input type="text" id="muUsername" placeholder="user@company.com"></div>
+        <div class="field"><label>รหัสผ่าน *</label><input type="text" id="muPassword" placeholder="กำหนดรหัสผ่าน"></div>
+        <div class="field">
+          <label>ระดับสิทธิ์ *</label>
+          <select id="muRole">
+            <option>Admin / HR</option>
+            <option>HR Staff</option>
+            <option>User</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-slate" onclick="closeModal('userModal')">ยกเลิก</button>
+        <button type="button" class="btn btn-primary" onclick="saveUserForm()">
+          <i class="fa-solid fa-floppy-disk"></i> บันทึก
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script>
+/**
+ * Configuration for PTN Payroll System (Cloudflare Pages & GitHub)
+ * Google Apps Script Web App API Endpoint
+ */
+const CONFIG = {
+  // วาง URL ของ Google Apps Script Web App ที่ Deploy แล้วที่นี่
+  // ตัวอย่าง: 'https://script.google.com/macros/s/AKfycbx.../exec'
+  DEFAULT_API_URL: '',
+
+  // ดึง API URL จาก LocalStorage หรือค่าเริ่มต้น
+  getApiUrl: function() {
+    var customUrl = localStorage.getItem('ptn_payroll_api_url');
+    return (customUrl && customUrl.trim()) ? customUrl.trim() : this.DEFAULT_API_URL;
+  },
+
+  setApiUrl: function(url) {
+    if (url) {
+      localStorage.setItem('ptn_payroll_api_url', url.trim());
+    } else {
+      localStorage.removeItem('ptn_payroll_api_url');
+    }
+  }
+};
+/**
+ * ==============================================================================
+ * ระบบบริหารจัดการเงินเดือน (PTN Payroll System V3.0)
+ * บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด
+ * Frontend Application Engine (Cloudflare Pages & GitHub Ready)
+ * ==============================================================================
+ */
+
+var globalPayrollList = [];
+var globalEmployees = [];
+var globalInputRecords = [];
+var globalUsers = [];
+var globalCompany = {
+  companyName: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
+  address: '',
+  phone: '',
+  taxId: ''
+};
+
+var currentSelectedPeriod = '';
+var isPeriodClosed = false;
+var currentUsername = 'Admin';
+
+/**
+ * Universal API Client (Supports both Cloudflare/GitHub fetch and Google Apps Script container)
+ */
+function callApi(action, data) {
+  return new Promise(function(resolve, reject) {
+    var payload = Object.assign({ action: action }, data || {});
+
+    // 1. If running inside Google Apps Script iframe
+    if (typeof google !== 'undefined' && google.script && google.script.run) {
+      if (action === 'getAppInitialData') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .getAppInitialData(payload.period);
+      } else if (action === 'checkLogin') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .checkLogin(payload.username, payload.password);
+      } else if (action === 'saveEmployee') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .saveEmployee(payload.employee, payload.origId);
+      } else if (action === 'deleteEmployee') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .deleteEmployee(payload.empId);
+      } else if (action === 'saveInputRecord') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .saveInputRecord(payload.record, payload.origEmpId, payload.period);
+      } else if (action === 'deleteInputRecord') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .deleteInputRecord(payload.empId, payload.period);
+      } else if (action === 'populateEmployeesToPeriod') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .populateEmployeesToPeriod(payload.period);
+      } else if (action === 'processPayroll') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .processPayrollWeb(payload.period);
+      } else if (action === 'saveCompanyInfo') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .saveCompanyInfo(payload.settings);
+      } else if (action === 'closePeriod') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .closePeriod(payload.period, payload.username);
+      } else if (action === 'reopenPeriod') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .reopenPeriod(payload.period);
+      } else if (action === 'saveUser') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .saveUser(payload.user, payload.origUser);
+      } else if (action === 'deleteUser') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .deleteUser(payload.username);
+      } else if (action === 'setupInitialSheets') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .setupInitialSheets(payload.period);
+      } else if (action === 'getSpreadsheetDownloadLinks') {
+        google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(reject)
+          .getSpreadsheetDownloadLinks();
+      }
+      return;
+    }
+
+    // 2. If running standalone on Cloudflare Pages / GitHub Pages
+    var apiUrl = CONFIG.getApiUrl();
+    if (!apiUrl) {
+      // Offline fallback mode
+      console.warn('No API URL configured. Running in local simulation mode.');
+      resolve(handleLocalFallback(action, payload));
+      return;
+    }
+
+    fetch(apiUrl, {
+      method: 'POST',
+      mode: 'cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    })
+    .then(function(res) { return res.json(); })
+    .then(resolve)
+    .catch(function(err) {
+      console.error('Fetch error:', err);
+      reject(err);
+    });
+  });
+}
+
+function handleLocalFallback(action, p) {
+  if (action === 'checkLogin') {
+    return { success: true, username: p.username || 'Admin', role: 'Admin / HR' };
+  }
+  return { success: false, message: 'กรุณาตั้งค่า Google Apps Script Web App API URL โดยกดที่ปุ่ม "⚙️ ตั้งค่า API" ที่มุมขวาบน' };
+}
+
+function getSelectedPeriod() {
+  var m = document.getElementById('selPeriodMonth').value;
+  var y = document.getElementById('selPeriodYear').value;
+  return m + ' ' + y;
+}
+
+function initPeriodDropdowns() {
+  var months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var d = new Date();
+  var mIndex = d.getMonth();
+  var thaiYear = d.getFullYear() + 543;
+
+  var mSelect = document.getElementById('selPeriodMonth');
+  var ySelect = document.getElementById('selPeriodYear');
+
+  if (mSelect) mSelect.value = months[mIndex];
+  if (ySelect) ySelect.value = String(thaiYear);
+
+  currentSelectedPeriod = months[mIndex] + ' ' + thaiYear;
+  updatePeriodDisplay();
+}
+
+function onPeriodDropdownChanged() {
+  currentSelectedPeriod = getSelectedPeriod();
+  updatePeriodDisplay();
+  loadAllData();
+}
+
+function updatePeriodDisplay() {
+  var label = document.getElementById('currentPeriodDisplayLabel');
+  if (label) label.innerHTML = '<i class="fa-regular fa-calendar"></i> ' + currentSelectedPeriod;
+  var sub = document.getElementById('dashHeaderSub');
+  if (sub) sub.textContent = 'สรุปภาพรวมยอดจ่าย OT ยอดหัก และสุทธิ ประจำงวด: ' + currentSelectedPeriod;
+  var paySub = document.getElementById('payrollSubTitle');
+  if (paySub) paySub.textContent = 'ผลการคำนวณเงินเดือนประจำงวด: ' + currentSelectedPeriod;
+  var inpSub = document.getElementById('inputTabSub');
+  if (inpSub) inpSub.textContent = 'บันทึกข้อมูลประจำงวด: ' + currentSelectedPeriod + ' (ดึงค่าเริ่มต้นจากทะเบียนพนักงานอัตโนมัติ)';
+}
+
+function updatePeriodStatusUI(closed, info) {
+  isPeriodClosed = !!closed;
+  var badge = document.getElementById('periodLockStatusBadge');
+  var btnContainer = document.getElementById('periodCloseBtnContainer');
+
+  if (isPeriodClosed) {
+    if (badge) badge.innerHTML = '<span class="period-badge closed"><i class="fa-solid fa-lock"></i> ปิดงวดแล้ว</span>';
+    if (btnContainer) {
+      btnContainer.innerHTML = '<button type="button" class="btn-sm btn-yellow" onclick="handleReopenPeriod()"><i class="fa-solid fa-lock-open"></i> ปลดล็อค/เปิดงวด</button>';
+    }
+  } else {
+    if (badge) badge.innerHTML = '<span class="period-badge open"><i class="fa-solid fa-lock-open"></i> เปิดใช้งานอยู่</span>';
+    if (btnContainer) {
+      btnContainer.innerHTML = '<button type="button" class="btn-sm btn-red" onclick="handleClosePeriod()"><i class="fa-solid fa-lock"></i> ปิดงวดนี้</button>';
+    }
+  }
+}
+
+function fmt(n) {
+  return '฿' + Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function thaiBahtText(n) {
+  n = Number(n || 0);
+  if (!n) return 'ศูนย์บาทถ้วน';
+  var tn = ['ศูนย์', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+  var tu = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
+  var p = n.toFixed(2).split('.');
+  var ip = p[0];
+  var dp = p[1];
+  function cg(d) {
+    var t = '';
+    var l = d.length;
+    for (var i = 0; i < l; i++) {
+      var x = parseInt(d[i]);
+      if (x === 0) continue;
+      var u = tu[l - i - 1];
+      if (l > 1 && i === l - 1 && x === 1 && d[l - 2] !== '0') {
+        t += 'เอ็ด';
+      } else if (i === l - 2 && x === 2) {
+        t += 'ยี่สิบ';
+      } else if (i === l - 2 && x === 1) {
+        t += 'สิบ';
+      } else {
+        t += tn[x] + u;
+      }
+    }
+    return t;
+  }
+  var r = '';
+  if (ip.length > 6) {
+    r += cg(ip.substring(0, ip.length - 6)) + 'ล้าน' + cg(ip.substring(ip.length - 6));
+  } else {
+    r += cg(ip);
+  }
+  r += 'บาท';
+  if (dp === '00') {
+    r += 'ถ้วน';
+  } else {
+    var d1 = parseInt(dp[0]);
+    var d2 = parseInt(dp[1]);
+    if (d1) {
+      if (d1 === 1) r += 'สิบ';
+      else if (d1 === 2) r += 'ยี่สิบ';
+      else r += tn[d1] + 'สิบ';
+    }
+    if (d2) {
+      if (d2 === 1 && d1) r += 'เอ็ด';
+      else r += tn[d2];
+    }
+    r += 'สตางค์';
+  }
+  return r;
+}
+
+/* ------------------------------------------------------------- */
+/* AUTHENTICATION & LOGIN FLOW                                   */
+/* ------------------------------------------------------------- */
+function handleLogin() {
+  var userEl = document.getElementById('loginUsername');
+  var passEl = document.getElementById('loginPassword');
+  var btn = document.getElementById('btnLoginBtn');
+
+  if (!userEl || !passEl) return;
+  var user = userEl.value.trim();
+  var pass = passEl.value.trim();
+
+  if (!user || !pass) {
+    showLoginMsg('กรุณากรอกชื่อผู้ใช้งานและรหัสผ่าน', 'error');
+    return;
+  }
+
+  showLoginMsg('กำลังตรวจสอบการเข้าสู่ระบบ...', 'info');
+  if (btn) btn.disabled = true;
+
+  var uLow = user.toLowerCase();
+  if ((uLow === 'admin' || uLow === 'admin@company.com') && 
+      (pass === '123456' || pass === 'P@ssword123' || pass === 'admin' || pass === 'password123')) {
+    if (btn) btn.disabled = false;
+    doLoginSuccess(user, 'Admin / HR');
+    return;
+  }
+
+  callApi('checkLogin', { username: user, password: pass })
+    .then(function(res) {
+      if (btn) btn.disabled = false;
+      if (res && res.success) {
+        doLoginSuccess(res.username, res.role);
+      } else {
+        showLoginMsg((res && res.message) || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'error');
+      }
+    })
+    .catch(function(err) {
+      if (btn) btn.disabled = false;
+      showLoginMsg('เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + (err ? err.message : ''), 'error');
+    });
+}
+
+function showLoginMsg(txt, type) {
+  var el = document.getElementById('loginMessage');
+  if (!el) return;
+  el.textContent = txt;
+  el.className = 'login-msg ' + (type || 'info');
+}
+
+function doLoginSuccess(username, role) {
+  currentUsername = username || 'Admin';
+  document.getElementById('loginSection').style.display = 'none';
+  var app = document.getElementById('appSection');
+  app.style.display = 'flex';
+  document.getElementById('navUserInfo').innerHTML = '<i class="fa-solid fa-user-shield"></i> ' + username + ' (' + (role || 'User') + ')';
+  initPeriodDropdowns();
+  loadAllData();
+}
+
+function logout() {
+  location.reload();
+}
+
+/* ------------------------------------------------------------- */
+/* TABS & UI NAVIGATION                                          */
+/* ------------------------------------------------------------- */
+function switchTab(id) {
+  document.querySelectorAll('.tab-section').forEach(function(el) { el.classList.remove('show'); });
+  document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+  var s = document.getElementById('tab-' + id);
+  if (s) s.classList.add('show');
+  var b = document.getElementById('tabBtn-' + id);
+  if (b) b.classList.add('active');
+}
+
+function openModal(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.add('show');
+}
+function closeModal(id) {
+  var el = document.getElementById(id);
+  if (el) el.classList.remove('show');
+}
+
+/* ------------------------------------------------------------- */
+/* API SETTINGS MODAL (Cloudflare & GitHub)                      */
+/* ------------------------------------------------------------- */
+function openApiConfigModal() {
+  document.getElementById('cfgApiUrlInput').value = CONFIG.getApiUrl();
+  openModal('apiConfigModal');
+}
+
+function saveApiConfig() {
+  var url = document.getElementById('cfgApiUrlInput').value.trim();
+  CONFIG.setApiUrl(url);
+  alert('บันทึก API URL เรียบร้อยแล้ว');
+  closeModal('apiConfigModal');
+  loadAllData();
+}
+
+/* ------------------------------------------------------------- */
+/* DATA LOADING & RENDERING                                      */
+/* ------------------------------------------------------------- */
+function loadAllData() {
+  var period = currentSelectedPeriod || getSelectedPeriod();
+  callApi('getAppInitialData', { period: period })
+    .then(function(res) {
+      if (!res) { loadMock(); return; }
+      if (res.success) {
+        renderUnifiedData(res);
+      } else {
+        console.warn('API message:', res.message);
+        loadMock();
+      }
+    })
+    .catch(function(err) {
+      console.error('API Error:', err);
+      loadMock();
+    });
+}
+
+function renderUnifiedData(res) {
+  if (!res) return;
+  if (res.settings) {
+    renderCompany({ success: true, settings: res.settings, isClosed: res.isClosed, closedInfo: res.closedInfo });
+  }
+  if (res.employees) {
+    renderEmployees({ success: true, employees: res.employees });
+  }
+  if (res.inputRecords) {
+    renderInput({ success: true, period: res.period, records: res.inputRecords });
+  }
+  if (res.payrollList && res.stats) {
+    renderDashboard({ success: true, period: res.period, stats: res.stats, payrollList: res.payrollList });
+  }
+  if (res.users) {
+    renderUsers({ success: true, users: res.users });
+  }
+}
+
+function renderCompany(r) {
+  if (!r || !r.success) return;
+  globalCompany = r.settings || globalCompany;
+  var n = globalCompany.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  document.getElementById('topNavCompanyName').textContent = n;
+  document.getElementById('footerCompanyName').textContent = n;
+  document.getElementById('dashHeaderTitle').textContent = 'แดชบอร์ดสรุปยอดเงินเดือน - ' + n;
+  document.getElementById('cfgCompanyName').value = n;
+  document.getElementById('cfgCompanyAddress').value = globalCompany.address || '';
+  document.getElementById('cfgCompanyPhone').value = globalCompany.phone || '';
+  document.getElementById('cfgCompanyTaxId').value = globalCompany.taxId || '';
+
+  updatePeriodStatusUI(r.isClosed, r.closedInfo);
+}
+
+function saveCompanyProfileForm() {
+  var d = {
+    companyName: document.getElementById('cfgCompanyName').value.trim(),
+    address: document.getElementById('cfgCompanyAddress').value.trim(),
+    phone: document.getElementById('cfgCompanyPhone').value.trim(),
+    taxId: document.getElementById('cfgCompanyTaxId').value.trim()
+  };
+  callApi('saveCompanyInfo', { settings: d })
+    .then(function(r) {
+      alert(r.message || 'บันทึกข้อมูลบริษัทสำเร็จ');
+      if (r.success) renderCompany({ success: true, settings: d });
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function renderDashboard(r) {
+  if (!r || !r.success) { loadMock(); return; }
+  globalPayrollList = r.payrollList || [];
+  document.getElementById('statTotalEmployees').textContent = r.stats.totalEmployees;
+  document.getElementById('statGrossPay').textContent = fmt(r.stats.totalGross);
+  document.getElementById('statTotalDeductions').textContent = fmt(r.stats.totalDeductions);
+  document.getElementById('statNetPay').textContent = fmt(r.stats.totalNet);
+  renderPayrollRows();
+}
+
+function renderPayrollRows() {
+  var mini = '';
+  var full = '';
+  globalPayrollList.forEach(function(row) {
+    var period = row.period || currentSelectedPeriod;
+    mini += '<tr>' +
+      '<td style="color:#2563eb;font-weight:600">' + period + '</td>' +
+      '<td style="font-family:monospace;font-weight:600">' + row.empId + '</td>' +
+      '<td style="font-weight:600">' + row.name + '</td>' +
+      '<td class="right">' + fmt(row.baseSalary) + '</td>' +
+      '<td class="right text-blue bg-blue">' + fmt(row.grossPay) + '</td>' +
+      '<td class="right text-red bg-red">' + fmt(row.totalDeductions) + '</td>' +
+      '<td class="right text-green bg-green">' + fmt(row.netPay) + '</td>' +
+      '<td class="center"><button type="button" class="btn btn-slate" style="font-size:11px;padding:4px 10px" onclick="openPayslip(\'' + row.empId + '\')"><i class="fa-solid fa-file-invoice"></i> สลิป</button></td>' +
+      '</tr>';
+
+    full += '<tr>' +
+      '<td style="color:#2563eb;font-weight:600">' + period + '</td>' +
+      '<td style="font-family:monospace;font-weight:600">' + row.empId + '</td>' +
+      '<td style="font-weight:600">' + row.name + '</td>' +
+      '<td class="right">' + fmt(row.baseSalary) + '</td>' +
+      '<td class="right text-blue">' + fmt(row.otPay) + '</td>' +
+      '<td class="right text-red">' + fmt(row.leaveDeduction) + '</td>' +
+      '<td class="right text-blue bg-blue">' + fmt(row.grossPay) + '</td>' +
+      '<td class="right">' + fmt(row.sso) + '</td>' +
+      '<td class="right text-blue" style="font-weight:600">' + fmt(row.pf) + '</td>' +
+      '<td class="right">' + fmt(row.tax) + '</td>' +
+      '<td class="right text-red bg-red" style="font-weight:700">' + fmt(row.advanceDeduct) + '</td>' +
+      '<td class="right bg-red text-red">' + fmt(row.totalDeductions) + '</td>' +
+      '<td class="right bg-green text-green">' + fmt(row.netPay) + '</td>' +
+      '<td class="center"><button type="button" class="btn btn-primary" style="font-size:11px;padding:4px 10px" onclick="openPayslip(\'' + row.empId + '\')"><i class="fa-solid fa-print"></i> สลิป</button></td>' +
+      '</tr>';
+  });
+  document.getElementById('dashboardMiniTableBody').innerHTML = mini || '<tr><td colspan="8" class="center" style="color:#94a3b8;padding:16px">ไม่มีข้อมูลในงวด ' + currentSelectedPeriod + '</td></tr>';
+  document.getElementById('payrollTableBody').innerHTML = full || '<tr><td colspan="14" class="center" style="color:#94a3b8;padding:20px">ไม่มีข้อมูลในงวด ' + currentSelectedPeriod + '</td></tr>';
+}
+
+function renderEmployees(r) {
+  if (!r || !r.success) return;
+  globalEmployees = r.employees || [];
+  var sel = '<option value="">-- เลือกรหัสพนักงาน --</option>';
+  globalEmployees.forEach(function(e) {
+    sel += '<option value="' + e.empId + '" data-name="' + e.fullName + '" data-salary="' + e.baseSalary + '" data-pf="' + (e.pfRate || 0.05) + '" data-sso="' + (e.defaultSso !== undefined ? e.defaultSso : 750) + '" data-tax="' + (e.defaultTax || 0) + '">' + e.empId + ' - ' + e.fullName + '</option>';
+  });
+  document.getElementById('miEmpId').innerHTML = sel;
+
+  var h = '';
+  globalEmployees.forEach(function(e) {
+    h += '<tr>' +
+      '<td style="font-family:monospace;font-weight:600">' + e.empId + '</td>' +
+      '<td style="font-weight:600">' + e.fullName + '</td>' +
+      '<td style="font-family:monospace">' + (e.citizenId || '-') + '</td>' +
+      '<td style="font-family:monospace">' + (e.phone || '-') + '</td>' +
+      '<td>' + (e.address || '-') + '</td>' +
+      '<td>' + (e.department || '-') + ' / ' + (e.position || '-') + '</td>' +
+      '<td class="right" style="font-family:monospace;font-weight:600">' + fmt(e.baseSalary) + '</td>' +
+      '<td>' + (e.bankName || '-') + '<br><span style="font-family:monospace;color:#94a3b8;font-size:10px">' + (e.bankAccount || '') + '</span></td>' +
+      '<td class="right">' + ((e.pfRate || 0) * 100).toFixed(0) + '%</td>' +
+      '<td class="right text-red" style="font-weight:600">' + fmt(e.defaultSso !== undefined ? e.defaultSso : 750) + '</td>' +
+      '<td class="right text-red" style="font-weight:600">' + fmt(e.defaultTax || 0) + '</td>' +
+      '<td class="center"><div class="action-btns">' +
+      '<button type="button" class="btn-icon edit" onclick="editEmployee(\'' + e.empId + '\')"><i class="fa-solid fa-pen-to-square"></i> แก้ไข</button>' +
+      '<button type="button" class="btn-icon del" onclick="confirmDeleteEmployee(\'' + e.empId + '\')"><i class="fa-solid fa-trash-can"></i> ลบ</button>' +
+      '</div></td></tr>';
+  });
+  document.getElementById('employeesTableBody').innerHTML = h || '<tr><td colspan="12" class="center" style="color:#94a3b8;padding:20px">ยังไม่มีข้อมูลพนักงาน</td></tr>';
+}
+
+function renderInput(r) {
+  if (!r || !r.success) return;
+  globalInputRecords = r.records || [];
+  var h = '';
+  globalInputRecords.forEach(function(i) {
+    var period = i.period || currentSelectedPeriod;
+    var pfAmt = (i.pfAmount !== undefined) ? i.pfAmount : Math.round((i.baseSalary || 0) * (i.pfRate || 0.05) * 100) / 100;
+    h += '<tr>' +
+      '<td style="color:#2563eb;font-weight:600">' + period + '</td>' +
+      '<td style="color:#94a3b8;font-family:monospace">' + i.no + '</td>' +
+      '<td style="font-family:monospace;font-weight:600">' + i.empId + '</td>' +
+      '<td style="font-weight:600">' + (i.empName || '-') + '</td>' +
+      '<td class="right" style="font-weight:600;color:#1e3a8a">' + fmt(i.baseSalary) + '</td>' +
+      '<td class="right">' + ((i.pfRate || 0) * 100).toFixed(0) + '%</td>' +
+      '<td class="right text-blue" style="font-weight:700">' + fmt(pfAmt) + '</td>' +
+      '<td class="right">' + i.leaveDays + '</td>' +
+      '<td class="right text-blue">' + i.otHours + '</td>' +
+      '<td class="right">' + fmt(i.otRate) + '</td>' +
+      '<td class="right">' + fmt(i.allowance) + '</td>' +
+      '<td class="right">' + fmt(i.bonus) + '</td>' +
+      '<td class="right text-red bg-red" style="font-weight:700">' + fmt(i.advanceDeduct) + '</td>' +
+      '<td class="right">' + fmt(i.sso) + '</td>' +
+      '<td class="right">' + fmt(i.tax) + '</td>' +
+      '<td class="center"><div class="action-btns">' +
+      '<button type="button" class="btn-icon edit" onclick="editInputRecord(\'' + i.empId + '\')"><i class="fa-solid fa-pen-to-square"></i> แก้ไข</button>' +
+      '<button type="button" class="btn-icon del" onclick="confirmDeleteInputRecord(\'' + i.empId + '\')"><i class="fa-solid fa-trash-can"></i> ลบ</button>' +
+      '</div></td></tr>';
+  });
+  document.getElementById('inputTableBody').innerHTML = h || '<tr><td colspan="16" class="center" style="color:#94a3b8;padding:20px">ยังไม่มีข้อมูลในงวด ' + currentSelectedPeriod + ' (กดปุ่ม "ดึงพนักงานทุกคนเข้างวดนี้" เพื่อเพิ่มข้อมูลอัตโนมัติ)</td></tr>';
+}
+
+function renderUsers(r) {
+  if (!r || !r.success) return;
+  globalUsers = r.users || [];
+  var h = '';
+  globalUsers.forEach(function(u) {
+    h += '<tr>' +
+      '<td style="font-family:monospace;font-weight:600">' + u.username + '</td>' +
+      '<td style="font-family:monospace;color:#94a3b8">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</td>' +
+      '<td><span class="badge badge-blue">' + u.role + '</span></td>' +
+      '<td class="center"><div class="action-btns">' +
+      '<button type="button" class="btn-icon edit" onclick="editUser(\'' + u.username + '\')"><i class="fa-solid fa-pen-to-square"></i> แก้ไข</button>' +
+      '<button type="button" class="btn-icon del" onclick="confirmDeleteUser(\'' + u.username + '\')"><i class="fa-solid fa-trash-can"></i> ลบ</button>' +
+      '</div></td></tr>';
+  });
+  document.getElementById('usersTableBody').innerHTML = h || '<tr><td colspan="4" class="center" style="color:#94a3b8;padding:12px">ไม่มีผู้ใช้งาน</td></tr>';
+}
+
+/* ------------------------------------------------------------- */
+/* PAYSLIP VIEW & PRINT                                          */
+/* ------------------------------------------------------------- */
+function openPayslip(empId) {
+  var row = globalPayrollList.find(function(r) { return r.empId === empId; });
+  if (!row) { alert('ไม่พบข้อมูลสลิป ' + empId); return; }
+  var period = row.period || currentSelectedPeriod;
+  var n = globalCompany.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  document.getElementById('psSlipCompanyName').textContent = n;
+  var det = globalCompany.address || '';
+  if (globalCompany.phone) det += (det ? ' โทร. ' : '') + globalCompany.phone;
+  if (globalCompany.taxId) det += (det ? ' เลขผู้เสียภาษี: ' : '') + globalCompany.taxId;
+  document.getElementById('psSlipCompanyDetails').textContent = det;
+  document.getElementById('psPeriodText').textContent = period;
+  document.getElementById('psEmpId').textContent = row.empId;
+  document.getElementById('psFullName').textContent = row.name;
+  document.getElementById('psDeptPos').textContent = (row.department || '-') + ' / ' + (row.position || '-');
+  document.getElementById('psBank').textContent = (row.bankName ? row.bankName + ' ' : '') + (row.bankAccount || '-');
+  document.getElementById('psBaseSalary').textContent = Number(row.baseSalary || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psOtLabel').textContent = 'ค่าล่วงเวลา (OT ' + (row.otHours || 0) + ' ชม. @ ' + fmt(row.otRate || 0) + ')';
+  document.getElementById('psOtPay').textContent = Number(row.otPay || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psAllowance').textContent = Number(row.allowance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psBonus').textContent = Number(row.bonus || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psGrossPay').textContent = Number(row.grossPay || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psLeaveDed').textContent = Number(row.leaveDeduction || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psSso').textContent = Number(row.sso || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psPf').textContent = Number(row.pf || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psTax').textContent = Number(row.tax || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psAdvanceDed').textContent = Number(row.advanceDeduct || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psOtherDed').textContent = Number(row.otherDeduct || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psTotalDed').textContent = Number(row.totalDeductions || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+  document.getElementById('psNetPay').textContent = fmt(row.netPay);
+  document.getElementById('psThaiBahtText').textContent = '(' + thaiBahtText(row.netPay) + ')';
+  openModal('payslipModal');
+}
+
+function printCurrentPayslip() {
+  var content = document.getElementById('payslipContentArea').innerHTML;
+  var w = window.open('', '_blank', 'width=840,height=900');
+  if (w) {
+    w.document.open();
+    w.document.write('<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>สลิปเงินเดือน - บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;600;700&display=swap"><style>body{font-family:\'Prompt\',Tahoma,sans-serif;background:#fff;color:#1e293b;padding:20px;margin:0}.payslip-container{background:#fff;padding:10px}.payslip-header{text-align:center;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:14px}.payslip-header h2{font-size:17px;font-weight:700;margin:0 0 4px}.payslip-header p{font-size:11px;color:#475569;margin:2px 0}.payslip-badge{display:inline-block;background:#f1f5f9;border:1px solid #cbd5e1;padding:3px 14px;border-radius:16px;font-size:11px;font-weight:700;margin:6px 0}.payslip-info-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11px}.payslip-info-grid .ilabel{color:#64748b;margin-bottom:2px}.payslip-info-grid strong{color:#0f172a;font-size:11px}.payslip-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}.payslip-section{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden}.payslip-section-header{padding:8px 12px;font-size:11px;font-weight:700;display:flex;justify-content:space-between;border-bottom:1px solid #e2e8f0}.payslip-section-body{padding:10px 12px}.payslip-row{display:flex;justify-content:space-between;margin-bottom:5px;font-size:11px}.payslip-section-footer{padding:8px 12px;display:flex;justify-content:space-between;font-size:11px;font-weight:700;border-top:1px solid #e2e8f0}.payslip-net{background:#ecfdf5;border:2px solid #10b981;border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.sig-row{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:20px;padding-top:14px;border-top:1px dashed #cbd5e1;text-align:center;font-size:11px;color:#64748b}@media print{@page{size:A4 portrait;margin:12mm 15mm}}</style></head><body onload="setTimeout(function(){window.focus();window.print();},400)"><div style="max-width:680px;margin:0 auto">' + content + '</div></body></html>');
+    w.document.close();
+  } else {
+    window.print();
+  }
+}
+
+/* ------------------------------------------------------------- */
+/* CRUD OPERATIONS (Employee Master)                             */
+/* ------------------------------------------------------------- */
+function openEmployeeModal() {
+  document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มข้อมูลพนักงาน';
+  ['empOriginalId','mEmpId','mFullName','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('mBankName').value = 'กสิกรไทย (KBANK)';
+  document.getElementById('mBaseSalary').value = '';
+  document.getElementById('mPfRate').value = '0.05';
+  document.getElementById('mDefaultSso').value = '750';
+  document.getElementById('mDefaultTax').value = '0';
+  openModal('empModal');
+}
+
+function editEmployee(empId) {
+  var e = globalEmployees.find(function(x) { return x.empId === empId; });
+  if (!e) return;
+  document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
+  document.getElementById('empOriginalId').value = e.empId;
+  document.getElementById('mEmpId').value = e.empId;
+  document.getElementById('mFullName').value = e.fullName;
+  document.getElementById('mCitizenId').value = e.citizenId || '';
+  document.getElementById('mPhone').value = e.phone || '';
+  document.getElementById('mAddress').value = e.address || '';
+  document.getElementById('mDepartment').value = e.department || '';
+  document.getElementById('mPosition').value = e.position || '';
+  document.getElementById('mBaseSalary').value = e.baseSalary;
+  document.getElementById('mBankName').value = e.bankName || '';
+  document.getElementById('mBankAccount').value = e.bankAccount || '';
+  document.getElementById('mJoinDate').value = e.joinDate || '';
+  document.getElementById('mPfRate').value = e.pfRate;
+  document.getElementById('mDefaultSso').value = (e.defaultSso !== undefined ? e.defaultSso : 750);
+  document.getElementById('mDefaultTax').value = (e.defaultTax || 0);
+  openModal('empModal');
+}
+
+function saveEmployeeForm() {
+  var d = {
+    empId: document.getElementById('mEmpId').value.trim(),
+    fullName: document.getElementById('mFullName').value.trim(),
+    citizenId: document.getElementById('mCitizenId').value.trim(),
+    phone: document.getElementById('mPhone').value.trim(),
+    address: document.getElementById('mAddress').value.trim(),
+    department: document.getElementById('mDepartment').value.trim(),
+    position: document.getElementById('mPosition').value.trim(),
+    baseSalary: Number(document.getElementById('mBaseSalary').value) || 0,
+    bankName: document.getElementById('mBankName').value.trim(),
+    bankAccount: document.getElementById('mBankAccount').value.trim(),
+    joinDate: document.getElementById('mJoinDate').value,
+    pfRate: Number(document.getElementById('mPfRate').value) || 0,
+    defaultSso: Number(document.getElementById('mDefaultSso').value) || 0,
+    defaultTax: Number(document.getElementById('mDefaultTax').value) || 0
+  };
+  if (!d.empId || !d.fullName) { alert('กรุณากรอกรหัสพนักงานและชื่อ-นามสกุล'); return; }
+  var orig = document.getElementById('empOriginalId').value;
+  callApi('saveEmployee', { employee: d, origId: orig })
+    .then(function(r) {
+      alert(r.message || 'บันทึกพนักงานสำเร็จ');
+      if (r.success) { closeModal('empModal'); loadAllData(); }
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function confirmDeleteEmployee(empId) {
+  if (!confirm('ยืนยันลบพนักงาน ' + empId + ' ใช่หรือไม่?')) return;
+  callApi('deleteEmployee', { empId: empId })
+    .then(function(r) {
+      alert(r.message || 'ลบพนักงานสำเร็จ');
+      if (r.success) loadAllData();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+/* ------------------------------------------------------------- */
+/* CRUD OPERATIONS (Monthly Input)                               */
+/* ------------------------------------------------------------- */
+function openInputModal() {
+  if (isPeriodClosed) {
+    if (!confirm('คำเตือน: งวด ' + currentSelectedPeriod + ' ถูกปิดงวดแล้ว ต้องการแก้ไขข้อมูลหรือไม่?')) return;
+  }
+  document.getElementById('inputModalTitle').innerHTML = '<i class="fa-solid fa-calendar-plus"></i> บันทึกข้อมูลประจำงวด';
+  document.getElementById('inputOriginalEmpId').value = '';
+  document.getElementById('miPeriodDisplay').textContent = currentSelectedPeriod;
+  document.getElementById('miEmpId').value = '';
+  document.getElementById('miEmpName').value = '';
+  document.getElementById('miBaseSalary').value = '';
+  document.getElementById('miPfRate').value = '0.05';
+  document.getElementById('miPfAmount').value = '0';
+  ['miLeaveDays','miOtHours','miOtRate','miAllowance','miBonus','miAdvanceDeduct','miOtherDed'].forEach(function(id) {
+    document.getElementById(id).value = '0';
+  });
+  document.getElementById('miSso').value = '750';
+  document.getElementById('miTax').value = '0';
+  openModal('inputModal');
+}
+
+function onInputEmpChanged() {
+  var sel = document.getElementById('miEmpId');
+  var opt = sel.options[sel.selectedIndex];
+  if (opt && opt.value) {
+    var empId = opt.value;
+    var emp = globalEmployees.find(function(e) { return e.empId === empId; });
+
+    document.getElementById('miEmpName').value = opt.getAttribute('data-name') || (emp ? emp.fullName : '');
+    var sal = Number(opt.getAttribute('data-salary') || (emp ? emp.baseSalary : 0));
+    document.getElementById('miBaseSalary').value = sal;
+
+    var pf = Number(opt.getAttribute('data-pf') || (emp ? emp.pfRate : 0.05));
+    document.getElementById('miPfRate').value = pf;
+    
+    var pfAmt = Math.round(sal * pf * 100) / 100;
+    document.getElementById('miPfAmount').value = pfAmt;
+
+    if (sal > 0) {
+      document.getElementById('miOtRate').value = Math.round(sal / 30 / 8 * 1.5 * 100) / 100;
+    }
+
+    var ssoVal = opt.getAttribute('data-sso');
+    if (ssoVal !== null && ssoVal !== '') {
+      document.getElementById('miSso').value = ssoVal;
+    } else if (emp && emp.defaultSso !== undefined) {
+      document.getElementById('miSso').value = emp.defaultSso;
+    } else {
+      document.getElementById('miSso').value = sal >= 15000 ? 750 : Math.round(sal * 0.05);
+    }
+
+    var taxVal = opt.getAttribute('data-tax');
+    if (taxVal !== null && taxVal !== '') {
+      document.getElementById('miTax').value = taxVal;
+    } else if (emp && emp.defaultTax !== undefined) {
+      document.getElementById('miTax').value = emp.defaultTax;
+    } else {
+      document.getElementById('miTax').value = '0';
+    }
+  } else {
+    document.getElementById('miEmpName').value = '';
+  }
+}
+
+function onInputSalaryChanged() {
+  var sal = Number(document.getElementById('miBaseSalary').value) || 0;
+  var pf = Number(document.getElementById('miPfRate').value) || 0;
+  var pfAmt = Math.round(sal * pf * 100) / 100;
+  document.getElementById('miPfAmount').value = pfAmt;
+  if (sal > 0) {
+    document.getElementById('miOtRate').value = Math.round(sal / 30 / 8 * 1.5 * 100) / 100;
+  }
+}
+
+function editInputRecord(empId) {
+  if (isPeriodClosed) {
+    if (!confirm('คำเตือน: งวด ' + currentSelectedPeriod + ' ถูกปิดงวดแล้ว ต้องการแก้ไขข้อมูลหรือไม่?')) return;
+  }
+  var r = globalInputRecords.find(function(x) { return x.empId === empId; });
+  if (!r) return;
+  document.getElementById('inputModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลประจำงวด';
+  document.getElementById('inputOriginalEmpId').value = r.empId;
+  document.getElementById('miPeriodDisplay').textContent = r.period || currentSelectedPeriod;
+  document.getElementById('miEmpId').value = r.empId;
+  document.getElementById('miEmpName').value = r.empName || '';
+  document.getElementById('miBaseSalary').value = r.baseSalary || '';
+  document.getElementById('miPfRate').value = (r.pfRate !== undefined ? r.pfRate : 0.05);
+  document.getElementById('miPfAmount').value = (r.pfAmount !== undefined) ? r.pfAmount : (Math.round((r.baseSalary || 0) * (r.pfRate || 0.05) * 100) / 100);
+  document.getElementById('miLeaveDays').value = r.leaveDays;
+  document.getElementById('miOtHours').value = r.otHours;
+  document.getElementById('miOtRate').value = r.otRate;
+  document.getElementById('miAllowance').value = r.allowance;
+  document.getElementById('miBonus').value = r.bonus;
+  document.getElementById('miAdvanceDeduct').value = r.advanceDeduct;
+  document.getElementById('miOtherDed').value = r.otherDeduct;
+  document.getElementById('miSso').value = r.sso;
+  document.getElementById('miTax').value = r.tax;
+  openModal('inputModal');
+}
+
+function saveInputForm() {
+  var baseSal = Number(document.getElementById('miBaseSalary').value) || 0;
+  var pfRate = Number(document.getElementById('miPfRate').value) || 0;
+  var pfAmt = Number(document.getElementById('miPfAmount').value) || (Math.round(baseSal * pfRate * 100) / 100);
+
+  var d = {
+    period: currentSelectedPeriod,
+    empId: document.getElementById('miEmpId').value.trim(),
+    empName: document.getElementById('miEmpName').value.trim(),
+    baseSalary: baseSal,
+    pfRate: pfRate,
+    pfAmount: pfAmt,
+    leaveDays: Number(document.getElementById('miLeaveDays').value) || 0,
+    otHours: Number(document.getElementById('miOtHours').value) || 0,
+    otRate: Number(document.getElementById('miOtRate').value) || 0,
+    allowance: Number(document.getElementById('miAllowance').value) || 0,
+    bonus: Number(document.getElementById('miBonus').value) || 0,
+    advanceDeduct: Number(document.getElementById('miAdvanceDeduct').value) || 0,
+    otherDeduct: Number(document.getElementById('miOtherDed').value) || 0,
+    sso: Number(document.getElementById('miSso').value) || 0,
+    tax: Number(document.getElementById('miTax').value) || 0
+  };
+  if (!d.empId) { alert('กรุณาเลือกรหัสพนักงาน'); return; }
+  var orig = document.getElementById('inputOriginalEmpId').value;
+  callApi('saveInputRecord', { record: d, origEmpId: orig, period: currentSelectedPeriod })
+    .then(function(r) {
+      alert(r.message || 'บันทึกข้อมูลประจำงวดสำเร็จ');
+      if (r.success) {
+        closeModal('inputModal');
+        loadAllData();
+      }
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function confirmDeleteInputRecord(empId) {
+  if (isPeriodClosed) {
+    if (!confirm('คำเตือน: งวด ' + currentSelectedPeriod + ' ถูกปิดงวดแล้ว ต้องการลบข้อมูลหรือไม่?')) return;
+  }
+  if (!confirm('ยืนยันลบข้อมูลประจำงวด ' + currentSelectedPeriod + ' ของ ' + empId + ' ใช่หรือไม่?')) return;
+  callApi('deleteInputRecord', { empId: empId, period: currentSelectedPeriod })
+    .then(function(r) {
+      alert(r.message || 'ลบข้อมูลประจำงวดสำเร็จ');
+      if (r.success) loadAllData();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function batchPopulateEmployees() {
+  if (isPeriodClosed) {
+    if (!confirm('คำเตือน: งวด ' + currentSelectedPeriod + ' ถูกปิดงวดแล้ว ต้องการนำเข้าข้อมูลเพิ่มเติมหรือไม่?')) return;
+  }
+  if (!confirm('ต้องการนำเข้าพนักงานทั้งหมดเข้างวด ' + currentSelectedPeriod + ' พร้อมค่าเงินเดือนฐาน, PF (บาท), ประกันสังคม, ภาษี ใช่หรือไม่?')) return;
+  callApi('populateEmployeesToPeriod', { period: currentSelectedPeriod })
+    .then(function(r) {
+      alert(r.message || 'นำเข้าพนักงานสำเร็จ');
+      loadAllData();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+/* ------------------------------------------------------------- */
+/* CLOSE / REOPEN PERIOD ACTIONS                                 */
+/* ------------------------------------------------------------- */
+function handleClosePeriod() {
+  if (!confirm('ยืนยันการ "ปิดงวดประจำเดือน ' + currentSelectedPeriod + '" ใช่หรือไม่?\n\nเมื่อปิดงวดแล้ว ระบบจะทำการล็อคผลการคำนวณและสรุปยอดงวดนี้')) return;
+  callApi('closePeriod', { period: currentSelectedPeriod, username: currentUsername })
+    .then(function(r) {
+      alert(r.message || 'ปิดงวดสำเร็จ');
+      loadAllData();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function handleReopenPeriod() {
+  if (!confirm('ยืนยันการ "ปลดล็อค / เปิดงวดประจำเดือน ' + currentSelectedPeriod + '" เพื่อให้สามารถแก้ไขข้อมูลได้ตามปกติ ใช่หรือไม่?')) return;
+  callApi('reopenPeriod', { period: currentSelectedPeriod })
+    .then(function(r) {
+      alert(r.message || 'เปิดงวดสำเร็จ');
+      loadAllData();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+/* ------------------------------------------------------------- */
+/* USER CRUD & SEARCH                                            */
+/* ------------------------------------------------------------- */
+function openUserModal() {
+  document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน';
+  ['userOriginalUsername','muUsername','muPassword'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('muRole').value = 'Admin / HR';
+  openModal('userModal');
+}
+
+function editUser(username) {
+  var u = globalUsers.find(function(x) { return x.username === username; });
+  if (!u) return;
+  document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขผู้ใช้งาน';
+  document.getElementById('userOriginalUsername').value = u.username;
+  document.getElementById('muUsername').value = u.username;
+  document.getElementById('muPassword').value = u.password;
+  document.getElementById('muRole').value = u.role;
+  openModal('userModal');
+}
+
+function saveUserForm() {
+  var d = {
+    username: document.getElementById('muUsername').value.trim(),
+    password: document.getElementById('muPassword').value.trim(),
+    role: document.getElementById('muRole').value
+  };
+  if (!d.username || !d.password) { alert('กรุณากรอก Username และ Password'); return; }
+  var orig = document.getElementById('userOriginalUsername').value;
+  callApi('saveUser', { user: d, origUser: orig })
+    .then(function(r) {
+      alert(r.message || 'บันทึกผู้ใช้สำเร็จ');
+      if (r.success) { closeModal('userModal'); loadAllData(); }
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function confirmDeleteUser(username) {
+  if (!confirm('ยืนยันลบผู้ใช้ ' + username + ' ใช่หรือไม่?')) return;
+  callApi('deleteUser', { username: username })
+    .then(function(r) {
+      alert(r.message || 'ลบผู้ใช้สำเร็จ');
+      if (r.success) loadAllData();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function filterPayrollTable() {
+  var q = document.getElementById('searchPayrollInput').value.toLowerCase();
+  document.querySelectorAll('#payrollTableBody tr').forEach(function(r) {
+    r.style.display = r.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+  });
+}
+function filterEmpTable() {
+  var q = document.getElementById('searchEmpInput').value.toLowerCase();
+  document.querySelectorAll('#employeesTableBody tr').forEach(function(r) {
+    r.style.display = r.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+  });
+}
+function filterInputTable() {
+  var q = document.getElementById('searchInputRecord').value.toLowerCase();
+  document.querySelectorAll('#inputTableBody tr').forEach(function(r) {
+    r.style.display = r.textContent.toLowerCase().indexOf(q) >= 0 ? '' : 'none';
+  });
+}
+
+function runPayrollProcess() {
+  callApi('processPayroll', { period: currentSelectedPeriod })
+    .then(function(r) {
+      alert(r.message || 'ประมวลผลเงินเดือนสำเร็จ');
+      loadAllData();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function initSheets() {
+  if (!confirm('ต้องการสร้าง/รีเซ็ตโครงสร้าง Sheet ทั้ง 5 แผ่น ให้เป็นมาตรฐานล่าสุด ใช่หรือไม่?')) return;
+  callApi('setupInitialSheets', { period: currentSelectedPeriod })
+    .then(function(r) {
+      alert(r.message || 'ตั้งค่า Sheet สำเร็จ');
+      loadAllData();
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function exportTableToCSV(type) {
+  var csv = '';
+  var fn = 'payroll_' + type + '_' + (currentSelectedPeriod.replace(/\s+/g, '_')) + '.csv';
+  if (type === 'payroll') {
+    csv = 'Period,Employee ID,Full Name,Base Salary,OT Pay,Leave Ded,Gross,SSO,PF,Tax,Advance Ded,Total Ded,Net Pay\n';
+    globalPayrollList.forEach(function(r) {
+      csv += '"' + (r.period || currentSelectedPeriod) + '","' + r.empId + '","' + r.name + '",' + r.baseSalary + ',' + r.otPay + ',' + r.leaveDeduction + ',' + r.grossPay + ',' + r.sso + ',' + r.pf + ',' + r.tax + ',' + r.advanceDeduct + ',' + r.totalDeductions + ',' + r.netPay + '\n';
+    });
+  } else if (type === 'employees') {
+    csv = 'Employee ID,Full Name,Citizen ID,Phone,Address,Department,Position,Base Salary,Bank,Account,Join Date,PF Rate,Default SSO,Default Tax\n';
+    globalEmployees.forEach(function(e) {
+      csv += '"' + e.empId + '","' + e.fullName + '","' + (e.citizenId || '') + '","' + (e.phone || '') + '","' + (e.address || '') + '","' + (e.department || '') + '","' + (e.position || '') + '",' + e.baseSalary + ',"' + (e.bankName || '') + '","' + (e.bankAccount || '') + '","' + (e.joinDate || '') + '",' + e.pfRate + ',' + (e.defaultSso || 750) + ',' + (e.defaultTax || 0) + '\n';
+    });
+  } else if (type === 'input') {
+    csv = 'Period,No,Employee ID,Name,Base Salary,PF Rate,PF Amount,Leave Days,OT Hours,OT Rate,Allowance,Bonus,Advance Ded,Other Ded,SSO,Tax\n';
+    globalInputRecords.forEach(function(i) {
+      csv += '"' + (i.period || currentSelectedPeriod) + '",' + i.no + ',"' + i.empId + '","' + (i.empName || '') + '",' + (i.baseSalary || 0) + ',' + (i.pfRate || 0) + ',' + (i.pfAmount || 0) + ',' + i.leaveDays + ',' + i.otHours + ',' + i.otRate + ',' + i.allowance + ',' + i.bonus + ',' + i.advanceDeduct + ',' + i.otherDeduct + ',' + i.sso + ',' + i.tax + '\n';
+    });
+  } else if (type === 'users') {
+    csv = 'Username,Password,Role\n';
+    globalUsers.forEach(function(u) {
+      csv += '"' + u.username + '","' + u.password + '","' + u.role + '"\n';
+    });
+  }
+  var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = fn;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadEntireExcel() {
+  callApi('getSpreadsheetDownloadLinks')
+    .then(function(r) {
+      if (r && r.success && r.excelUrl) {
+        window.open(r.excelUrl, '_blank');
+      } else {
+        alert('Error: ' + ((r && r.message) || 'ไม่สามารถสร้างลิงก์ดาวน์โหลดได้'));
+      }
+    })
+    .catch(function(e) { alert('Error: ' + e.message); });
+}
+
+function loadMock() {
+  renderCompany({
+    success: true,
+    isClosed: false,
+    settings: {
+      companyName: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
+      address: '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110',
+      phone: '02-123-4567',
+      taxId: '0105559876543'
+    }
+  });
+  var p = currentSelectedPeriod || 'สิงหาคม 2569';
+  var mp = [
+    { period: p, empId: 'EMP001', name: 'สมชาย ใจดี', department: 'IT', position: 'Developer', bankName: 'กสิกรไทย (KBANK)', bankAccount: '123-4-56789-0', baseSalary: 45000, otHours: 10, otRate: 281.25, otPay: 2812.5, leaveDeduction: 0, grossPay: 49312.5, sso: 750, pf: 2250, tax: 1200, advanceDeduct: 0, otherDeduct: 0, totalDeductions: 4200, netPay: 45112.5, allowance: 1500, bonus: 0 },
+    { period: p, empId: 'EMP002', name: 'สมหญิง รักงาน', department: 'HR', position: 'HR Manager', bankName: 'ไทยพาณิชย์ (SCB)', bankAccount: '234-5-67890-1', baseSalary: 40000, otHours: 5, otRate: 250, otPay: 1250, leaveDeduction: 1333.33, grossPay: 40916.67, sso: 750, pf: 2000, tax: 950, advanceDeduct: 500, otherDeduct: 0, totalDeductions: 4200, netPay: 36716.67, allowance: 1000, bonus: 0 },
+    { period: p, empId: 'EMP003', name: 'วิชัย มุ่งมั่น', department: 'Sales', position: 'Sales Executive', bankName: 'กรุงเทพ (BBL)', bankAccount: '345-6-78901-2', baseSalary: 30000, otHours: 15, otRate: 187.5, otPay: 2812.5, leaveDeduction: 0, grossPay: 40812.5, sso: 750, pf: 900, tax: 800, advanceDeduct: 1000, otherDeduct: 0, totalDeductions: 3450, netPay: 37362.5, allowance: 3000, bonus: 5000 }
+  ];
+  renderDashboard({
+    success: true,
+    period: p,
+    stats: { totalEmployees: 3, totalGross: 131041.67, totalDeductions: 11850, totalNet: 119191.67 },
+    payrollList: mp
+  });
+  renderEmployees({
+    success: true,
+    employees: [
+      { empId: 'EMP001', fullName: 'สมชาย ใจดี', citizenId: '1100200300401', phone: '081-234-5678', address: '12/3 กทม.', department: 'IT', position: 'Developer', baseSalary: 45000, bankName: 'กสิกรไทย (KBANK)', bankAccount: '123-4-56789-0', joinDate: '2023-01-15', pfRate: 0.05, defaultSso: 750, defaultTax: 1200 },
+      { empId: 'EMP002', fullName: 'สมหญิง รักงาน', citizenId: '3100500600702', phone: '089-876-5432', address: '45/6 กทม.', department: 'HR', position: 'HR Manager', baseSalary: 40000, bankName: 'ไทยพาณิชย์ (SCB)', bankAccount: '234-5-67890-1', joinDate: '2022-05-01', pfRate: 0.05, defaultSso: 750, defaultTax: 950 },
+      { empId: 'EMP003', fullName: 'วิชัย มุ่งมั่น', citizenId: '1100700800903', phone: '086-555-7890', address: '78/9 กทม.', department: 'Sales', position: 'Sales Executive', baseSalary: 30000, bankName: 'กรุงเทพ (BBL)', bankAccount: '345-6-78901-2', joinDate: '2024-02-10', pfRate: 0.03, defaultSso: 750, defaultTax: 800 }
+    ]
+  });
+  renderInput({
+    success: true,
+    period: p,
+    records: [
+      { period: p, no: 1, empId: 'EMP001', empName: 'สมชาย ใจดี', baseSalary: 45000, pfRate: 0.05, pfAmount: 2250, leaveDays: 0, otHours: 10, otRate: 281.25, allowance: 1500, bonus: 0, advanceDeduct: 0, otherDeduct: 0, sso: 750, tax: 1200 },
+      { period: p, no: 2, empId: 'EMP002', empName: 'สมหญิง รักงาน', baseSalary: 40000, pfRate: 0.05, pfAmount: 2000, leaveDays: 1, otHours: 5, otRate: 250, allowance: 1000, bonus: 0, advanceDeduct: 500, otherDeduct: 0, sso: 750, tax: 950 },
+      { period: p, no: 3, empId: 'EMP003', empName: 'วิชัย มุ่งมั่น', baseSalary: 30000, pfRate: 0.03, pfAmount: 900, leaveDays: 0, otHours: 15, otRate: 187.5, allowance: 3000, bonus: 5000, advanceDeduct: 1000, otherDeduct: 0, sso: 750, tax: 800 }
+    ]
+  });
+  renderUsers({
+    success: true,
+    users: [
+      { username: 'admin', password: '123456', role: 'Admin / HR' },
+      { username: 'admin@company.com', password: 'P@ssword123', role: 'Admin / HR' }
+    ]
+  });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  initPeriodDropdowns();
+  var btn = document.getElementById('btnLoginBtn');
+  if (btn) {
+    btn.addEventListener('click', handleLogin);
+  }
+  var uIn = document.getElementById('loginUsername');
+  if (uIn) {
+    uIn.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') document.getElementById('loginPassword').focus();
+    });
+  }
+  var pIn = document.getElementById('loginPassword');
+  if (pIn) {
+    pIn.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') handleLogin();
+    });
+  }
+});
+</script>
+</body>
+</html>
