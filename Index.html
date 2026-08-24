@@ -911,10 +911,10 @@ td {
         <i class="fa-solid fa-right-to-bracket"></i> เข้าสู่ระบบ
       </button>
 
-      <div>
-        <button type="button" class="api-badge-btn" onclick="openApiConfigModal()">
-          <i class="fa-solid fa-link"></i> ตั้งค่า API เชื่อมต่อ Google Sheets
-        </button>
+      <div style="margin-top: 18px; display: inline-flex; align-items: center; gap: 7px; font-size: 11px; color: #047857; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 6px 14px; border-radius: 20px; font-weight: 600;">
+        <i class="fa-solid fa-cloud" style="color:#f38020"></i>
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981"></span>
+        Cloudflare D1 Database พร้อมใช้งาน
       </div>
     </div>
   </div>
@@ -934,12 +934,11 @@ td {
         </div>
         <div class="header-actions">
           <span class="user-tag" id="navUserInfo"><i class="fa-solid fa-user-shield"></i> ผู้ดูแลระบบ (Admin)</span>
-          <button type="button" class="btn-sm btn-slate" onclick="openApiConfigModal()">
-            <i class="fa-solid fa-link"></i> ตั้งค่า API
-          </button>
-          <button type="button" class="btn-sm btn-yellow" onclick="initSheets()">
-            <i class="fa-solid fa-gear"></i> ตั้งค่า Sheet
-          </button>
+          <span class="user-tag" style="background:#f0fdf4;border-color:#bbf7d0;color:#047857" id="cfStatusTag">
+            <i class="fa-solid fa-cloud" style="color:#f38020"></i>
+            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981"></span>
+            Cloudflare D1: เชื่อมต่อแล้ว
+          </span>
           <button type="button" class="btn-sm btn-red" onclick="logout()">
             <i class="fa-solid fa-right-from-bracket"></i> ออกจากระบบ
           </button>
@@ -1346,36 +1345,7 @@ td {
 
   <!-- ==================== MODALS ==================== -->
 
-  <!-- API CONFIG MODAL -->
-  <div class="modal-backdrop" id="apiConfigModal">
-    <div class="modal-box" style="max-width:520px">
-      <div class="modal-header">
-        <h3><i class="fa-solid fa-link"></i> ตั้งค่าการเชื่อมต่อ API Google Sheets</h3>
-        <button type="button" class="modal-close" onclick="closeModal('apiConfigModal')"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size:12px;color:#64748b;margin-bottom:14px;line-height:1.5">
-          นำ <strong>Web App URL</strong> ที่ได้จาก Google Apps Script (ตอนกด Deploy &gt; เลือก Who has access เป็น <strong>Anyone</strong>) มาวางที่ช่องด้านล่างนี้
-        </p>
-        <div class="field">
-          <label>Google Apps Script Web App URL</label>
-          <input type="url" id="cfgApiUrlInput" placeholder="https://script.google.com/macros/s/AKfycb.../exec">
-        </div>
-        <div style="margin-bottom:12px">
-          <button type="button" class="btn-sm btn-slate" style="width:100%;padding:8px" onclick="testApiConnection()">
-            <i class="fa-solid fa-vial-circle-check"></i> กดเพื่อทดสอบการเชื่อมต่อ API ทันที
-          </button>
-        </div>
-        <div id="apiTestResultMsg"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-slate" onclick="closeModal('apiConfigModal')">ยกเลิก</button>
-        <button type="button" class="btn btn-primary" onclick="saveApiConfig()">
-          <i class="fa-solid fa-floppy-disk"></i> บันทึก URL
-        </button>
-      </div>
-    </div>
-  </div>
+
 
   <!-- PAYSLIP MODAL -->
   <div class="modal-backdrop" id="payslipModal">
