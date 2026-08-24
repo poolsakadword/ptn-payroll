@@ -8,8 +8,7 @@
  */
 
 function doGet(e) {
-  // Check if request is an API request (JSON or JSONP)
-  var action = (e && e.parameter && e.parameter.action);
+  var action = (e && e.parameter && (e.parameter.action || (e.parameter.api ? 'getAppInitialData' : '')));
   var callback = (e && e.parameter && e.parameter.callback);
   var payloadStr = (e && e.parameter && e.parameter.payload);
 
@@ -23,7 +22,6 @@ function doGet(e) {
     }
     var res = handleApiRequest(action, params);
 
-    // If JSONP callback requested
     if (callback) {
       return ContentService.createTextOutput(callback + '(' + JSON.stringify(res) + ')')
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
@@ -33,7 +31,6 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
   }
 
-  // Otherwise render Web App UI
   return HtmlService.createHtmlOutputFromFile('Index')
     .setTitle('ระบบบริหารจัดการเงินเดือน - บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no')
@@ -46,7 +43,7 @@ function doPost(e) {
     if (e && e.postData && e.postData.contents) {
       try {
         params = JSON.parse(e.postData.contents);
-      } catch(ex) {
+      } catch (ex) {
         params = e.parameter || {};
       }
     } else if (e && e.parameter) {
