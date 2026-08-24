@@ -87,7 +87,7 @@ async function handleD1Action(db, action, params) {
     }
 
     case 'getAppInitialData': {
-      // 1. Settings & Period status
+      // 1. Settings, Period status & Work Days
       const settingsRows = await db.prepare('SELECT key, value FROM settings').all();
       const settingsMap = {
         companyName: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
@@ -97,6 +97,7 @@ async function handleD1Action(db, action, params) {
       };
       let isClosed = false;
       let closedInfo = '';
+      let workingDays = 30;
 
       for (const row of settingsRows.results || []) {
         if (row.key === 'CompanyName' && row.value) settingsMap.companyName = row.value;
@@ -107,6 +108,11 @@ async function handleD1Action(db, action, params) {
           if (row.value && row.value.startsWith('CLOSED')) {
             isClosed = true;
             closedInfo = row.value;
+          }
+        }
+        if (row.key === `Period_WorkDays_${period}`) {
+          if (row.value && !isNaN(Number(row.value))) {
+            workingDays = Number(row.value);
           }
         }
       }
@@ -154,8 +160,7 @@ async function handleD1Action(db, action, params) {
       // 4. Payroll Calcs
       let calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
       if (!calcQuery.results || calcQuery.results.length === 0) {
-        // Auto calculate
-        await calculateAndSavePayroll(db, period);
+        await calculateAndSavePayroll(db, period, workingDays);
         calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
       }
 
@@ -208,6 +213,7 @@ async function handleD1Action(db, action, params) {
       return {
         success: true,
         period: period,
+        workingDays: workingDays,
         settings: settingsMap,
         isClosed: isClosed,
         closedInfo: closedInfo,
@@ -222,6 +228,13 @@ async function handleD1Action(db, action, params) {
         },
         users: users
       };
+    }
+
+    case 'savePeriodWorkDays': {
+      const days = Number(params.workingDays) || 30;
+      await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_WorkDays_${period}`, String(days)).run();
+      await calculateAndSavePayroll(db, period, days);
+      return { success: true, period: period, workingDays: days, message: `บันทึกจำนวนวันทำงานประจำงวด ${period} เป็น ${days} วัน เรียบร้อยแล้ว` };
     }
 
     case 'saveEmployee': {
@@ -387,53 +400,18 @@ async function handleD1Action(db, action, params) {
       return { success: true, message: `ลบผู้ใช้ ${username} เรียบร้อยแล้ว` };
     }
 
-    case 'setupInitialSheets': {
-      // Re-seed DB
-      await db.prepare('DELETE FROM settings').run();
-      await db.prepare('DELETE FROM users').run();
-      await db.prepare('DELETE FROM employees').run();
-      await db.prepare('DELETE FROM monthly_inputs').run();
-      await db.prepare('DELETE FROM payroll_calcs').run();
-
-      await db.prepare(`
-        INSERT INTO settings (key, value) VALUES
-        ('CompanyName', 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด'),
-        ('Address', '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110'),
-        ('Phone', '02-123-4567'),
-        ('TaxId', '0105559876543'),
-        (?, 'OPEN')
-      `).bind(`Period_Status_${period}`).run();
-
-      await db.prepare(`
-        INSERT INTO users (username, password, role) VALUES
-        ('admin', '123456', 'Admin / HR'),
-        ('admin@company.com', 'P@ssword123', 'Admin / HR')
-      `).run();
-
-      await db.prepare(`
-        INSERT INTO employees (emp_id, full_name, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, join_date, pf_rate, default_sso, default_tax) VALUES
-        ('EMP001', 'สมชาย ใจดี', '1100200300401', '081-234-5678', 'กรุงเทพมหานคร', 'IT', 'Programmer', 45000, 'กสิกรไทย (KBANK)', '123-4-56789-0', '2023-01-15', 0.05, 750, 1200),
-        ('EMP002', 'สมหญิง รักงาน', '3100500600702', '089-876-5432', 'นนทบุรี', 'HR', 'HR Manager', 40000, 'ไทยพาณิชย์ (SCB)', '234-5-67890-1', '2022-05-01', 0.05, 750, 950),
-        ('EMP003', 'วิชัย มุ่งมั่น', '1100700800903', '086-555-7890', 'ปทุมธานี', 'Sales', 'Sales Executive', 30000, 'กรุงเทพ (BBL)', '345-6-78901-2', '2024-02-10', 0.03, 750, 800)
-      `).run();
-
-      await db.prepare(`
-        INSERT INTO monthly_inputs (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, leave_days, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax) VALUES
-        (?, 1, 'EMP001', 'สมชาย ใจดี', 45000, 0.05, 2250, 0, 10, 281.25, 1500, 0, 0, 0, 750, 1200),
-        (?, 2, 'EMP002', 'สมหญิง รักงาน', 40000, 0.05, 2000, 1, 5, 250, 1000, 0, 500, 0, 750, 950),
-        (?, 3, 'EMP003', 'วิชัย มุ่งมั่น', 30000, 0.03, 900, 0, 15, 187.5, 3000, 5000, 1000, 0, 750, 800)
-      `).bind(period, period, period).run();
-
-      await calculateAndSavePayroll(db, period);
-      return { success: true, message: 'รีเซ็ตและสร้างฐานข้อมูล D1 ใหม่เรียบร้อยแล้ว' };
-    }
-
     default:
       return { success: false, message: `Unknown action: ${action}` };
   }
 }
 
-async function calculateAndSavePayroll(db, period) {
+async function calculateAndSavePayroll(db, period, explicitWorkDays) {
+  let workDays = explicitWorkDays;
+  if (!workDays) {
+    const wdRow = await db.prepare('SELECT value FROM settings WHERE key = ?').bind(`Period_WorkDays_${period}`).first();
+    workDays = (wdRow && wdRow.value && !isNaN(Number(wdRow.value))) ? Number(wdRow.value) : 30;
+  }
+
   const empQuery = await db.prepare('SELECT * FROM employees').all();
   const inputQuery = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
 
@@ -455,9 +433,14 @@ async function calculateAndSavePayroll(db, period) {
     const pfRate = Number(inp.pf_rate !== undefined ? inp.pf_rate : (emp.pf_rate || 0.05));
     const pfAmt = Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100);
 
+    // OT Rate is standard (baseSal / 30 / 8 * 1.5)
     const otRate = Number(inp.ot_rate > 0 ? inp.ot_rate : (baseSal > 0 ? Math.round(baseSal / 30 / 8 * 1.5 * 100) / 100 : 0));
     const otPay = Math.round((Number(inp.ot_hours) || 0) * otRate * 100) / 100;
-    const leaveDed = Math.round((Number(inp.leave_days) || 0) * (baseSal / 30) * 100) / 100;
+
+    // Leave deduction calculated with working days of this period
+    const dailyRate = workDays > 0 ? (baseSal / workDays) : (baseSal / 30);
+    const leaveDed = Math.round((Number(inp.leave_days) || 0) * dailyRate * 100) / 100;
+
     const grossPay = Math.round((baseSal + otPay + (Number(inp.allowance) || 0) + (Number(inp.bonus) || 0) - leaveDed) * 100) / 100;
 
     const sso = Number(inp.sso !== undefined ? inp.sso : (emp.default_sso !== undefined ? emp.default_sso : (baseSal >= 15000 ? 750 : Math.round(baseSal * 0.05))));

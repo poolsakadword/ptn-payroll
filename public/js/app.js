@@ -18,6 +18,7 @@ var globalCompany = {
 };
 
 var currentSelectedPeriod = '';
+var currentPeriodWorkingDays = 30;
 var isPeriodClosed = false;
 var currentUsername = 'Admin';
 
@@ -155,6 +156,19 @@ function initPeriodDropdowns() {
 
   currentSelectedPeriod = months[mIndex] + ' ' + thaiYear;
   updatePeriodDisplay();
+}
+
+
+function onPeriodWorkDaysChanged() {
+  var days = Number(document.getElementById('periodWorkingDaysInput').value) || 30;
+  currentPeriodWorkingDays = days;
+  callApi('savePeriodWorkDays', { period: currentSelectedPeriod, workingDays: days })
+    .then(function(r) {
+      loadAllData();
+    })
+    .catch(function(e) {
+      console.warn('savePeriodWorkDays error:', e);
+    });
 }
 
 function onPeriodDropdownChanged() {
@@ -679,6 +693,7 @@ function openInputModal() {
   document.getElementById('inputModalTitle').innerHTML = '<i class="fa-solid fa-calendar-plus"></i> บันทึกข้อมูลประจำงวด';
   document.getElementById('inputOriginalEmpId').value = '';
   document.getElementById('miPeriodDisplay').textContent = currentSelectedPeriod;
+  updateModalDailyRate(Number(document.getElementById('miBaseSalary').value) || 0);
   document.getElementById('miEmpId').value = '';
   document.getElementById('miEmpName').value = '';
   document.getElementById('miBaseSalary').value = '';
@@ -743,6 +758,16 @@ function onInputSalaryChanged() {
   if (sal > 0) {
     document.getElementById('miOtRate').value = Math.round(sal / 30 / 8 * 1.5 * 100) / 100;
   }
+  updateModalDailyRate(sal);
+}
+
+function updateModalDailyRate(sal) {
+  var days = currentPeriodWorkingDays > 0 ? currentPeriodWorkingDays : 30;
+  var daily = days > 0 ? Math.round(sal / days * 100) / 100 : 0;
+  var dEl = document.getElementById('miDailyRateDisplay');
+  if (dEl) dEl.textContent = fmt(daily);
+  var wEl = document.getElementById('miWorkingDaysDisplay');
+  if (wEl) wEl.textContent = days;
 }
 
 function editInputRecord(empId) {
