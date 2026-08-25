@@ -450,14 +450,36 @@ table.data-table tr:hover td { background: #f8fafc; }
   border-radius: var(--radius-xl);
   width: 100%;
   max-width: 560px;
-  max-height: 90vh;
+  max-height: 94vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-xl);
   animation: modalPop 0.2s ease-out;
 }
-.modal-card.wide { max-width: 800px; }
+.modal-card.wide {
+  max-width: 920px;
+  width: 95%;
+}
+.modal-body {
+  padding: 18px 24px;
+  overflow-y: auto;
+  flex: 1;
+  max-height: calc(94vh - 130px);
+}
+.modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.modal-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
 @keyframes modalPop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 .modal-header {
@@ -1013,6 +1035,7 @@ footer {
   <!-- ======================================================= -->
 
   <!-- 1. MONTHLY INPUT MODAL -->
+    <!-- 1. MONTHLY INPUT MODAL -->
   <div class="modal-overlay" id="inputModal">
     <div class="modal-card wide">
       <div class="modal-header">
@@ -1023,64 +1046,84 @@ footer {
         <div class="modal-body">
           <input type="hidden" id="inputOrigEmpId">
 
-          <!-- Working Days Info Box -->
-          <div style="background:var(--slate-50);border:1.5px solid var(--slate-200);border-radius:var(--radius-md);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
-            <span style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-business-time"></i> วันทำงานในงวด: <strong id="miModalWorkingDays">30</strong> วัน</span>
-            <span style="font-size:12px;color:#64748b">อัตราค่าจ้างวันละ: <strong id="miModalDailyRate" class="text-blue font-mono font-bold">฿0.00</strong></span>
+          <!-- Working Days & Rate Banner -->
+          <div style="background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);border:1.5px solid #bfdbfe;border-radius:var(--radius-md);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+            <span style="font-size:12.5px;font-weight:700;color:#1e40af"><i class="fa-solid fa-business-time"></i> วันทำงานในงวด: <strong id="miModalWorkingDays" style="color:#1d4ed8">30</strong> วัน</span>
+            <span style="font-size:12.5px;color:#1e40af">อัตราค่าจ้างวันละ: <strong id="miModalDailyRate" class="font-mono font-bold" style="color:#1d4ed8;font-size:14px">฿0.00</strong></span>
           </div>
 
           <div class="form-grid">
+            <!-- 1. Employee Selector -->
             <div class="form-row-2">
               <div class="form-group">
-                <label>รหัสพนักงาน *</label>
-                <select id="miEmpId" onchange="onInputEmpSelectChanged()" required></select>
+                <label style="font-weight:700;color:#0f172a">รหัสพนักงาน *</label>
+                <select id="miEmpId" onchange="onInputEmpSelectChanged()" required style="font-weight:600"></select>
               </div>
               <div class="form-group">
-                <label>ชื่อ-นามสกุล</label>
-                <input type="text" id="miEmpName" readonly>
+                <label style="font-weight:700;color:#0f172a">ชื่อ-นามสกุล</label>
+                <input type="text" id="miEmpName" readonly style="font-weight:700;color:#1e3a8a;background:#f8fafc">
               </div>
             </div>
 
+            <!-- 2. Base Salary & PF Rate & Amount -->
             <div class="form-row-3">
               <div class="form-group">
-                <label style="color:#1d4ed8"><i class="fa-solid fa-wallet"></i> เงินเดือนฐาน (บาท) *</label>
-                <input type="number" id="miBaseSalary" oninput="onInputSalaryChanged()" required>
+                <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-wallet"></i> เงินเดือนฐาน (บาท) *</label>
+                <input type="number" id="miBaseSalary" oninput="onInputSalaryChanged()" required style="font-weight:700">
               </div>
               <div class="form-group">
-                <label style="color:#1d4ed8"><i class="fa-solid fa-percent"></i> อัตรา PF (เช่น 0.05)</label>
+                <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-percent"></i> อัตรา PF (เช่น 0.05)</label>
                 <input type="number" id="miPfRate" step="0.01" value="0.05" oninput="onInputSalaryChanged()">
               </div>
               <div class="form-group">
-                <label style="color:#1d4ed8"><i class="fa-solid fa-piggy-bank"></i> กองทุน PF (บาท) [คำนวณอัตโนมัติ]</label>
+                <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-piggy-bank"></i> กองทุน PF (บาท)</label>
                 <input type="number" id="miPfAmount" readonly style="background:#eff6ff;color:#1d4ed8;font-weight:700">
               </div>
             </div>
 
-            <!-- Overtime Block (Default 40 Baht) -->
-            <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:var(--radius-md);padding:12px 14px">
-              <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:8px"><i class="fa-solid fa-clock"></i> ค่าล่วงเวลา (OT)</div>
-              <div class="form-row-2">
-                <div class="form-group">
-                  <label>จำนวนชั่วโมง OT</label>
-                  <input type="number" id="miOtHours" value="0" step="0.5">
+            <!-- 3. OT & Allowances in 2-column card layout -->
+            <div class="form-row-2">
+              <!-- Overtime Box -->
+              <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:var(--radius-md);padding:12px 14px">
+                <div style="font-size:12px;font-weight:700;color:#1e40af;margin-bottom:8px"><i class="fa-solid fa-clock"></i> ค่าล่วงเวลา (OT)</div>
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label>จำนวนชั่วโมง OT</label>
+                    <input type="number" id="miOtHours" value="0" step="0.5">
+                  </div>
+                  <div class="form-group">
+                    <label>อัตรา OT (บาท/ชม.)</label>
+                    <input type="number" id="miOtRate" value="40" step="0.01">
+                  </div>
                 </div>
-                <div class="form-group">
-                  <label>อัตรา OT (บาท/ชม.) [ค่าเริ่มต้น 40 บาท]</label>
-                  <input type="number" id="miOtRate" value="40" step="0.01">
+              </div>
+
+              <!-- Allowance & Bonus Box -->
+              <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:var(--radius-md);padding:12px 14px">
+                <div style="font-size:12px;font-weight:700;color:#166534;margin-bottom:8px"><i class="fa-solid fa-gift"></i> เบี้ยขยัน &amp; โบนัส</div>
+                <div class="form-row-2">
+                  <div class="form-group">
+                    <label style="color:#166534;font-weight:700">เบี้ยขยัน (บาท)</label>
+                    <input type="number" id="miAllowance" value="0" step="0.01">
+                  </div>
+                  <div class="form-group">
+                    <label>โบนัส / พิเศษ (บาท)</label>
+                    <input type="number" id="miBonus" value="0" step="0.01">
+                  </div>
                 </div>
               </div>
             </div>
 
-            <!-- Leave & Absent Block -->
+            <!-- 4. Leave & Absent Deductions Block -->
             <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:var(--radius-md);padding:12px 14px">
-              <div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:8px;display:flex;justify-content:space-between">
-                <span><i class="fa-solid fa-calendar-xmark"></i> ขาด / ลา / มาสาย</span>
+              <div style="font-size:12px;font-weight:700;color:#b45309;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+                <span><i class="fa-solid fa-calendar-xmark"></i> รายการหัก ขาด / ลา / มาสาย</span>
                 <span style="font-size:11px;font-weight:normal;color:#92400e">ขาดหัก 1.5 เท่า | ลากิจ/ป่วยหัก 1.0 เท่า</span>
               </div>
               <div class="form-row-4">
                 <div class="form-group">
-                  <label style="color:#b91c1c;font-weight:700">ขาด (1.5x วัน)</label>
-                  <input type="number" id="miAbsentDays" value="0" step="0.5" style="border-color:#fca5a5">
+                  <label style="color:#b91c1c;font-weight:700">ขาดงาน (1.5x วัน)</label>
+                  <input type="number" id="miAbsentDays" value="0" step="0.5" style="border-color:#fca5a5;background:#fff5f5">
                 </div>
                 <div class="form-group">
                   <label style="color:#92400e;font-weight:700">ลากิจ (1.0x วัน)</label>
@@ -1091,55 +1134,49 @@ footer {
                   <input type="number" id="miSickLeaveDays" value="0" step="0.5">
                 </div>
                 <div class="form-group">
-                  <label style="color:#b91c1c;font-weight:700">หักสาย (บาท)</label>
+                  <label style="color:#b91c1c;font-weight:700">หักมาสาย (บาท)</label>
                   <input type="number" id="miLateDeduct" value="0" step="0.01">
                 </div>
               </div>
             </div>
 
+            <!-- 5. Advance & Other Deductions -->
             <div class="form-row-2">
               <div class="form-group">
-                <label style="color:#047857;font-weight:700"><i class="fa-solid fa-award"></i> เบี้ยขยัน (บาท)</label>
-                <input type="number" id="miAllowance" value="0" step="0.01">
-              </div>
-              <div class="form-group">
-                <label><i class="fa-solid fa-gift"></i> โบนัส / พิเศษ (บาท)</label>
-                <input type="number" id="miBonus" value="0" step="0.01">
-              </div>
-            </div>
-
-            <div class="form-row-2">
-              <div class="form-group">
-                <label style="color:#dc2626"><i class="fa-solid fa-hand-holding-dollar"></i> หักเงินเบิกล่วงหน้า (บาท)</label>
+                <label style="color:#dc2626;font-weight:700"><i class="fa-solid fa-hand-holding-dollar"></i> หักเงินเบิกล่วงหน้า (บาท)</label>
                 <input type="number" id="miAdvanceDeduct" value="0" step="0.01">
               </div>
               <div class="form-group">
-                <label style="color:#dc2626"><i class="fa-solid fa-receipt"></i> หักอื่นๆ (กู้, เช่า, น้ำ, ไฟ) (บาท)</label>
+                <label style="color:#dc2626;font-weight:700"><i class="fa-solid fa-receipt"></i> หักอื่นๆ (เงินกู้, ค่าเช่า, น้ำ, ไฟ) (บาท)</label>
                 <input type="number" id="miOtherDeduct" value="0" step="0.01">
               </div>
             </div>
 
-            <div class="form-row-2">
-              <div class="form-group">
-                <label>ประกันสังคม (SSO)</label>
-                <input type="number" id="miSso" value="750" step="0.01">
-              </div>
-              <div class="form-group">
-                <label>ภาษีหัก ณ ที่จ่าย</label>
-                <input type="number" id="miTax" value="0" step="0.01">
+            <!-- 6. SSO & Tax -->
+            <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:var(--radius-md);padding:12px 14px">
+              <div style="font-size:11.5px;font-weight:700;color:#475569;margin-bottom:6px">ประกันสังคม &amp; ภาษีหัก ณ ที่จ่าย (ดึงค่าเริ่มต้นจากทะเบียนพนักงาน)</div>
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label>ประกันสังคม (SSO)</label>
+                  <input type="number" id="miSso" value="750" step="0.01">
+                </div>
+                <div class="form-group">
+                  <label>ภาษีหัก ณ ที่จ่าย</label>
+                  <input type="number" id="miTax" value="0" step="0.01">
+                </div>
               </div>
             </div>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-slate" onclick="closeModal('inputModal')">ยกเลิก</button>
-          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูล</button>
+          <button type="submit" class="btn btn-primary" style="padding:8px 20px"><i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลประจำงวด</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- 2. EMPLOYEE MASTER MODAL -->
+<!-- 2. EMPLOYEE MASTER MODAL -->
   <div class="modal-overlay" id="empModal">
     <div class="modal-card wide">
       <div class="modal-header">

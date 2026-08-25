@@ -439,14 +439,36 @@ table.data-table tr:hover td { background: #f8fafc; }
   border-radius: var(--radius-xl);
   width: 100%;
   max-width: 560px;
-  max-height: 90vh;
+  max-height: 94vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-xl);
   animation: modalPop 0.2s ease-out;
 }
-.modal-card.wide { max-width: 800px; }
+.modal-card.wide {
+  max-width: 920px;
+  width: 95%;
+}
+.modal-body {
+  padding: 18px 24px;
+  overflow-y: auto;
+  flex: 1;
+  max-height: calc(94vh - 130px);
+}
+.modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+.modal-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+.modal-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
 @keyframes modalPop { from { transform: scale(0.96); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
 .modal-header {
