@@ -1510,7 +1510,7 @@ function initPeriodDropdowns() {
   });
 
   ySel.innerHTML = '';
-  for (var y = curY - 2; y <= curY + 2; y++) {
+  for (var y = curY - 5; y <= curY + 20; y++) {
     ySel.innerHTML += '<option value="' + y + '" ' + (y === curY ? 'selected' : '') + '>' + y + '</option>';
   }
 
