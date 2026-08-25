@@ -729,8 +729,9 @@ function openInputModal() {
   document.getElementById('miBaseSalary').value = '';
   document.getElementById('miPfRate').value = '0.05';
   document.getElementById('miPfAmount').value = '0';
-  ['miLeaveDays','miOtHours','miOtRate','miAllowance','miBonus','miAdvanceDeduct','miOtherDed'].forEach(function(id) {
-    document.getElementById(id).value = '0';
+  ['miAbsentDays','miLeaveDays','miSickLeaveDays','miLateDeduct','miOtHours','miOtRate','miAllowance','miBonus','miAdvanceDeduct','miOtherDed'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '0';
   });
   document.getElementById('miSso').value = '750';
   document.getElementById('miTax').value = '0';
@@ -809,20 +810,30 @@ function editInputRecord(empId) {
   document.getElementById('inputModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลประจำงวด';
   document.getElementById('inputOriginalEmpId').value = r.empId;
   document.getElementById('miPeriodDisplay').textContent = r.period || currentSelectedPeriod;
+  updateModalDailyRate(Number(r.baseSalary) || 0);
   document.getElementById('miEmpId').value = r.empId;
   document.getElementById('miEmpName').value = r.empName || '';
   document.getElementById('miBaseSalary').value = r.baseSalary || '';
   document.getElementById('miPfRate').value = (r.pfRate !== undefined ? r.pfRate : 0.05);
   document.getElementById('miPfAmount').value = (r.pfAmount !== undefined) ? r.pfAmount : (Math.round((r.baseSalary || 0) * (r.pfRate || 0.05) * 100) / 100);
-  document.getElementById('miLeaveDays').value = r.leaveDays;
-  document.getElementById('miOtHours').value = r.otHours;
-  document.getElementById('miOtRate').value = r.otRate;
-  document.getElementById('miAllowance').value = r.allowance;
-  document.getElementById('miBonus').value = r.bonus;
-  document.getElementById('miAdvanceDeduct').value = r.advanceDeduct;
-  document.getElementById('miOtherDed').value = r.otherDeduct;
-  document.getElementById('miSso').value = r.sso;
-  document.getElementById('miTax').value = r.tax;
+  
+  var elAbsent = document.getElementById('miAbsentDays');
+  if (elAbsent) elAbsent.value = r.absentDays || 0;
+  var elLeave = document.getElementById('miLeaveDays');
+  if (elLeave) elLeave.value = r.leaveDays || 0;
+  var elSick = document.getElementById('miSickLeaveDays');
+  if (elSick) elSick.value = r.sickLeaveDays || 0;
+  var elLate = document.getElementById('miLateDeduct');
+  if (elLate) elLate.value = r.lateDeduct || 0;
+
+  document.getElementById('miOtHours').value = r.otHours || 0;
+  document.getElementById('miOtRate').value = r.otRate || 0;
+  document.getElementById('miAllowance').value = r.allowance || 0;
+  document.getElementById('miBonus').value = r.bonus || 0;
+  document.getElementById('miAdvanceDeduct').value = r.advanceDeduct || 0;
+  document.getElementById('miOtherDed').value = r.otherDeduct || 0;
+  document.getElementById('miSso').value = (r.sso !== undefined ? r.sso : 750);
+  document.getElementById('miTax').value = r.tax || 0;
   openModal('inputModal');
 }
 
@@ -831,6 +842,11 @@ function saveInputForm() {
   var pfRate = Number(document.getElementById('miPfRate').value) || 0;
   var pfAmt = Number(document.getElementById('miPfAmount').value) || (Math.round(baseSal * pfRate * 100) / 100);
 
+  var elAbsent = document.getElementById('miAbsentDays');
+  var elLeave = document.getElementById('miLeaveDays');
+  var elSick = document.getElementById('miSickLeaveDays');
+  var elLate = document.getElementById('miLateDeduct');
+
   var d = {
     period: currentSelectedPeriod,
     empId: document.getElementById('miEmpId').value.trim(),
@@ -838,7 +854,10 @@ function saveInputForm() {
     baseSalary: baseSal,
     pfRate: pfRate,
     pfAmount: pfAmt,
-    leaveDays: Number(document.getElementById('miLeaveDays').value) || 0,
+    absentDays: elAbsent ? (Number(elAbsent.value) || 0) : 0,
+    leaveDays: elLeave ? (Number(elLeave.value) || 0) : 0,
+    sickLeaveDays: elSick ? (Number(elSick.value) || 0) : 0,
+    lateDeduct: elLate ? (Number(elLate.value) || 0) : 0,
     otHours: Number(document.getElementById('miOtHours').value) || 0,
     otRate: Number(document.getElementById('miOtRate').value) || 0,
     allowance: Number(document.getElementById('miAllowance').value) || 0,
