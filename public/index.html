@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=3.2">
 </head>
 <body>
 
@@ -243,7 +243,7 @@
           <div class="card-header">
             <div>
               <div class="card-title">ตารางคำนวณเงินเดือน &amp; พิมพ์สลิป</div>
-              <div class="card-sub" id="payrollSubTitle">ผลการคำนวณ OT เบี้ยเลี้ยง กองทุน PF ประกันสังคม ภาษี หักเงินเบิก</div>
+              <div class="card-sub" id="payrollSubTitle">ผลการคำนวณเงินเดือน OT เบี้ยขยัน กองทุน PF ประกันสังคม ภาษี หักขาด/ลา/สาย</div>
             </div>
             <div class="toolbar">
               <input type="text" class="search-input" id="searchPayrollInput" placeholder="🔍 ค้นหาชื่อ/รหัส..." oninput="filterPayrollTable()">
@@ -259,19 +259,25 @@
             <table>
               <thead>
                 <tr>
-                  <th>งวด</th>
                   <th>รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
+                  <th>แผนก / ตำแหน่ง</th>
+                  <th>ธนาคาร / เลขบัญชี</th>
                   <th class="right">เงินเดือนฐาน</th>
-                  <th class="right">OT Pay</th>
-                  <th class="right">หักขาด/ลา</th>
-                  <th class="right bg-blue">Gross</th>
+                  <th class="right text-blue" style="background:#eff6ff">ค่าจ้าง/วัน</th>
+                  <th class="right">OT (ชม.)</th>
+                  <th class="right text-blue">เงิน OT</th>
+                  <th class="right text-green">เบี้ยขยัน</th>
+                  <th class="right">โบนัส</th>
+                  <th class="right text-red">หักขาด/ลา/สาย</th>
+                  <th class="right font-bold text-blue bg-blue">Gross</th>
                   <th class="right">ประกันสังคม</th>
                   <th class="right">กองทุน PF</th>
                   <th class="right">ภาษี</th>
-                  <th class="right bg-red">หักเงินเบิก</th>
-                  <th class="right bg-red">หักรวม</th>
-                  <th class="right bg-green">สุทธิ (Net)</th>
+                  <th class="right text-red">หักเงินเบิก</th>
+                  <th class="right text-red">หักอื่นๆ</th>
+                  <th class="right font-bold text-red bg-red">รวมหัก</th>
+                  <th class="right font-bold text-green bg-green">สุทธิ (Net)</th>
                   <th class="center">สลิป</th>
                 </tr>
               </thead>
@@ -337,10 +343,6 @@
                 <i class="fa-solid fa-users-gear"></i> ดึงพนักงานทุกคนเข้างวดนี้
               </button>
               <button type="button" class="btn btn-slate" onclick="exportTableToCSV('input')">
-                  <i class="fa-solid fa-file-csv"></i> Input CSV
-                </button>
-                <button type="button" class="btn btn-slate" onclick="exportEmployeeHistoryExcel()">
-                  <i class="fa-solid fa-file-excel"></i> History Excel
                 <i class="fa-solid fa-file-csv"></i> Export CSV
               </button>
               <button type="button" class="btn btn-primary" onclick="openInputModal()" id="btnAddInputRecord">
@@ -352,21 +354,24 @@
             <table>
               <thead>
                 <tr>
-                  <th>งวด</th>
                   <th>#</th>
                   <th>รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
-                  <th class="right" style="color:#1e3a8a">เงินเดือนฐาน</th>
-                  <th class="right">PF %</th>
-                  <th class="right text-blue" style="font-weight:700">กองทุน PF (บาท)</th>
-                  <th class="right">วันลา</th>
-                  <th class="right text-blue">OT ชม.</th>
+                  <th class="right font-bold">เงินเดือนฐาน</th>
+                  <th class="right text-blue font-bold" style="background:#eff6ff">ค่าจ้าง/วัน</th>
+                  <th class="right text-red">ขาดงาน (1.5x)</th>
+                  <th class="right">ลากิจ (1.0x)</th>
+                  <th class="right text-red">ลาป่วย (1.0x)</th>
+                  <th class="right text-red">หักสาย (บาท)</th>
+                  <th class="right">OT (ชม.)</th>
                   <th class="right">อัตรา OT</th>
-                  <th class="right">เบี้ยขยัน</th>
+                  <th class="right text-green font-bold">เบี้ยขยัน</th>
                   <th class="right">โบนัส</th>
-                  <th class="right text-red bg-red">หักเงินเบิก</th>
-                  <th class="right">SSO</th>
+                  <th class="right text-blue font-bold">กองทุน PF</th>
+                  <th class="right">ประกันสังคม</th>
                   <th class="right">ภาษี</th>
+                  <th class="right text-red">หักเงินเบิก</th>
+                  <th class="right text-red">หักอื่นๆ (กู้/เช่า/น้ำ/ไฟ)</th>
                   <th class="center">จัดการ</th>
                 </tr>
               </thead>
@@ -376,8 +381,7 @@
         </div>
       </div>
 
-      <!-- 5. COMPANY -->
-            <!-- 5. EMPLOYEE WORK HISTORY -->
+      <!-- 5. EMPLOYEE WORK HISTORY -->
       <div class="tab-section" id="tab-history">
         <div class="card">
           <div class="card-header">
@@ -889,7 +893,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="js/config.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/config.js?v=3.2"></script>
+  <script src="js/app.js?v=3.2"></script>
 </body>
 </html>
