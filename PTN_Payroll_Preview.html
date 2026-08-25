@@ -2284,28 +2284,50 @@ function exportToCSV(type) {
       csv += [i.no, i.empId, '"' + i.empName + '"', i.baseSalary, i.absentDays, i.leaveDays, i.sickLeaveDays, i.lateDeduct, i.otHours, i.otRate, i.allowance, i.bonus, i.pfAmount, i.sso, i.tax, i.advanceDeduct, i.otherDeduct].join(',') + '\n';
     });
   } else if (type === 'employees') {
-    csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร\n';
-    State.employees.forEach(function(e) {
-      csv += [
-        e.empId,
-        '"' + (e.fullName || '').replace(/"/g, '""') + '"',
-        '"' + (e.nickname || '').replace(/"/g, '""') + '"',
-        '"' + (e.address || '').replace(/"/g, '""') + '"',
-        '"' + (e.department || '').replace(/"/g, '""') + '"',
-        '"' + (e.position || '').replace(/"/g, '""') + '"',
-        e.baseSalary || 0,
-        e.pfRate || 0.05,
-        e.defaultSso !== undefined ? e.defaultSso : 750,
-        e.defaultTax || 0,
-        '"' + (e.bankName || '').replace(/"/g, '""') + '"',
-        '"' + (e.bankAccount || '').replace(/"/g, '""') + '"',
-        e.birthDate || '',
-        e.age || 0,
-        e.joinDate || '',
-        '"' + (e.citizenId || '').replace(/"/g, '""') + '"',
-        '"' + (e.phone || '').replace(/"/g, '""') + '"'
-      ].join(',') + '\n';
-    });
+    var isUserRole = (State.currentUser && State.currentUser.role === 'User');
+    if (isUserRole) {
+      csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,วันเกิด,อายุ,บัตรประชาชน,เบอร์โทร,ที่อยู่,แผนก,ตำแหน่ง,ธนาคาร,เลขบัญชี,วันเริ่มงาน\n';
+      State.employees.forEach(function(e) {
+        csv += [
+          e.empId,
+          '"' + (e.fullName || '').replace(/"/g, '""') + '"',
+          '"' + (e.nickname || '').replace(/"/g, '""') + '"',
+          e.birthDate || '',
+          e.age || 0,
+          '"' + (e.citizenId || '').replace(/"/g, '""') + '"',
+          '"' + (e.phone || '').replace(/"/g, '""') + '"',
+          '"' + (e.address || '').replace(/"/g, '""') + '"',
+          '"' + (e.department || '').replace(/"/g, '""') + '"',
+          '"' + (e.position || '').replace(/"/g, '""') + '"',
+          '"' + (e.bankName || '').replace(/"/g, '""') + '"',
+          '"' + (e.bankAccount || '').replace(/"/g, '""') + '"',
+          e.joinDate || ''
+        ].join(',') + '\n';
+      });
+    } else {
+      csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร\n';
+      State.employees.forEach(function(e) {
+        csv += [
+          e.empId,
+          '"' + (e.fullName || '').replace(/"/g, '""') + '"',
+          '"' + (e.nickname || '').replace(/"/g, '""') + '"',
+          '"' + (e.address || '').replace(/"/g, '""') + '"',
+          '"' + (e.department || '').replace(/"/g, '""') + '"',
+          '"' + (e.position || '').replace(/"/g, '""') + '"',
+          e.baseSalary || 0,
+          e.pfRate || 0.05,
+          e.defaultSso !== undefined ? e.defaultSso : 750,
+          e.defaultTax || 0,
+          '"' + (e.bankName || '').replace(/"/g, '""') + '"',
+          '"' + (e.bankAccount || '').replace(/"/g, '""') + '"',
+          e.birthDate || '',
+          e.age || 0,
+          e.joinDate || '',
+          '"' + (e.citizenId || '').replace(/"/g, '""') + '"',
+          '"' + (e.phone || '').replace(/"/g, '""') + '"'
+        ].join(',') + '\n';
+      });
+    }
   }
 
   var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
