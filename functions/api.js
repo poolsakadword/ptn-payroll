@@ -250,6 +250,40 @@ async function handleAction(db, action, params) {
     }
 
     // 4. EMPLOYEE MASTER CRUD
+        case 'batchImportEmployees': {
+      const list = params.employees || [];
+      if (!Array.isArray(list) || list.length === 0) {
+        return { success: false, message: 'ไม่พบรายการข้อมูลพนักงานที่จะนำเข้า' };
+      }
+
+      let count = 0;
+      for (const emp of list) {
+        if (!emp.empId || !emp.fullName) continue;
+        count++;
+        let pfRate = Number(emp.pfRate);
+        if (isNaN(pfRate) || pfRate <= 0) pfRate = 0.05;
+        if (pfRate > 1) pfRate = pfRate / 100; // e.g. 5 -> 0.05
+
+        await db.prepare(`
+          INSERT OR REPLACE INTO employees 
+          (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          String(emp.empId).trim(), String(emp.fullName).trim(), String(emp.nickname || '').trim(),
+          String(emp.citizenId || '').trim(), String(emp.phone || '').trim(), String(emp.address || '').trim(),
+          String(emp.department || '').trim(), String(emp.position || '').trim(),
+          Number(emp.baseSalary) || 0,
+          String(emp.bankName || 'กสิกรไทย (KBANK)').trim(), String(emp.bankAccount || '').trim(),
+          String(emp.birthDate || '').trim(), Number(emp.age) || 0, String(emp.joinDate || '').trim(),
+          pfRate, Number(emp.defaultSso !== undefined ? emp.defaultSso : 750),
+          Number(emp.defaultTax) || 0
+        ).run();
+      }
+
+      await calculateAndSavePayroll(db, period);
+      return { success: true, count: count, message: `นำเข้าข้อมูลพนักงานสำเร็จทั้งหมด ${count} คน` };
+    }
+
     case 'saveEmployee': {
       const emp = params.employee || {};
       const origId = params.origId;

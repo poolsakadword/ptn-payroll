@@ -868,6 +868,10 @@ footer {
               <button type="button" class="btn btn-slate" onclick="exportToCSV('employees')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
               </button>
+              <button type="button" class="btn btn-yellow" onclick="triggerImportEmployees()">
+                <i class="fa-solid fa-file-import"></i> Import CSV
+              </button>
+              <input type="file" id="importEmployeesFileInput" accept=".csv,text/csv" style="display:none" onchange="handleImportEmployeesFile(event)">
               <button type="button" class="btn btn-primary" onclick="openAddEmployeeModal()">
                 <i class="fa-solid fa-user-plus"></i> เพิ่มพนักงาน
               </button>
@@ -2229,9 +2233,27 @@ function exportToCSV(type) {
       csv += [i.no, i.empId, '"' + i.empName + '"', i.baseSalary, i.absentDays, i.leaveDays, i.sickLeaveDays, i.lateDeduct, i.otHours, i.otRate, i.allowance, i.bonus, i.pfAmount, i.sso, i.tax, i.advanceDeduct, i.otherDeduct].join(',') + '\n';
     });
   } else if (type === 'employees') {
-    csv += 'รหัส,ชื่อ-นามสกุล,บัตรประชาชน,เบอร์โทร,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,ธนาคาร,เลขบัญชี,วันเริ่มงาน,PFRate,SSODefault,TaxDefault\n';
+    csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร\n';
     State.employees.forEach(function(e) {
-      csv += [e.empId, '"' + e.fullName + '"', '"' + e.citizenId + '"', '"' + e.phone + '"', '"' + e.address + '"', '"' + e.department + '"', '"' + e.position + '"', e.baseSalary, '"' + e.bankName + '"', '"' + e.bankAccount + '"', e.joinDate, e.pfRate, e.defaultSso, e.defaultTax].join(',') + '\n';
+      csv += [
+        e.empId,
+        '"' + (e.fullName || '').replace(/"/g, '""') + '"',
+        '"' + (e.nickname || '').replace(/"/g, '""') + '"',
+        '"' + (e.address || '').replace(/"/g, '""') + '"',
+        '"' + (e.department || '').replace(/"/g, '""') + '"',
+        '"' + (e.position || '').replace(/"/g, '""') + '"',
+        e.baseSalary || 0,
+        e.pfRate || 0.05,
+        e.defaultSso !== undefined ? e.defaultSso : 750,
+        e.defaultTax || 0,
+        '"' + (e.bankName || '').replace(/"/g, '""') + '"',
+        '"' + (e.bankAccount || '').replace(/"/g, '""') + '"',
+        e.birthDate || '',
+        e.age || 0,
+        e.joinDate || '',
+        '"' + (e.citizenId || '').replace(/"/g, '""') + '"',
+        '"' + (e.phone || '').replace(/"/g, '""') + '"'
+      ].join(',') + '\n';
     });
   }
 
@@ -2257,6 +2279,127 @@ function onBirthDateChanged() {
   if (age >= 0) {
     document.getElementById('mAge').value = age;
   }
+}
+
+// IMPORT EMPLOYEES CSV
+function triggerImportEmployees() {
+  var fileInput = document.getElementById('importEmployeesFileInput');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
+function handleImportEmployeesFile(event) {
+  var file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    parseAndImportEmployeesCSV(text);
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function parseCSVLine(line) {
+  var result = [];
+  var cur = '';
+  var inQuotes = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (c === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === ',' && !inQuotes) {
+      result.push(cur.trim());
+      cur = '';
+    } else {
+      cur += c;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function parseAndImportEmployeesCSV(csvText) {
+  if (!csvText || !csvText.trim()) {
+    showToast('ไฟล์ CSV ว่างเปล่า', 'error');
+    return;
+  }
+
+  // Remove BOM if present
+  if (csvText.charCodeAt(0) === 0xFEFF) {
+    csvText = csvText.substring(1);
+  }
+
+  var lines = csvText.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+  if (lines.length <= 1) {
+    showToast('ไม่พบแถวข้อมูลพนักงานในไฟล์ CSV', 'error');
+    return;
+  }
+
+  // Header row
+  var header = parseCSVLine(lines[0]);
+  var employees = [];
+
+  for (var i = 1; i < lines.length; i++) {
+    var cols = parseCSVLine(lines[i]);
+    if (cols.length < 2) continue;
+
+    // Map columns:
+    // รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร
+    var empId = cols[0];
+    var fullName = cols[1];
+    if (!empId || !fullName) continue;
+
+    var emp = {
+      empId: empId,
+      fullName: fullName,
+      nickname: cols[2] || '',
+      address: cols[3] || '',
+      department: cols[4] || '',
+      position: cols[5] || '',
+      baseSalary: Number(cols[6]) || 0,
+      pfRate: Number(cols[7]) || 0.05,
+      defaultSso: cols[8] !== undefined && cols[8] !== '' ? Number(cols[8]) : 750,
+      defaultTax: Number(cols[9]) || 0,
+      bankName: cols[10] || 'กสิกรไทย (KBANK)',
+      bankAccount: cols[11] || '',
+      birthDate: cols[12] || '',
+      age: Number(cols[13]) || 0,
+      joinDate: cols[14] || '',
+      citizenId: cols[15] || '',
+      phone: cols[16] || ''
+    };
+    employees.push(emp);
+  }
+
+  if (employees.length === 0) {
+    showToast('ไม่สามารถแปลงข้อมูลพนักงานจากไฟล์ได้ กรุณาตรวจสอบรูปแบบคอลัมน์', 'error');
+    return;
+  }
+
+  if (!confirm('พบข้อมูลพนักงานทั้งหมด ' + employees.length + ' คน ต้องการนำเข้าสู่ระบบใช่หรือไม่?')) {
+    return;
+  }
+
+  callApi('batchImportEmployees', { employees: employees })
+    .then(function(res) {
+      if (res.success) {
+        showToast(res.message || 'นำเข้าข้อมูลพนักงานสำเร็จ');
+        loadAppData();
+      } else {
+        showToast(res.message || 'เกิดข้อผิดพลาดในการนำเข้า', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
 }
 
 </script>

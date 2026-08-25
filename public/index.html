@@ -293,6 +293,10 @@
               <button type="button" class="btn btn-slate" onclick="exportToCSV('employees')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
               </button>
+              <button type="button" class="btn btn-yellow" onclick="triggerImportEmployees()">
+                <i class="fa-solid fa-file-import"></i> Import CSV
+              </button>
+              <input type="file" id="importEmployeesFileInput" accept=".csv,text/csv" style="display:none" onchange="handleImportEmployeesFile(event)">
               <button type="button" class="btn btn-primary" onclick="openAddEmployeeModal()">
                 <i class="fa-solid fa-user-plus"></i> เพิ่มพนักงาน
               </button>
