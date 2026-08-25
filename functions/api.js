@@ -161,50 +161,54 @@ async function handleD1Action(db, action, params) {
         tax: Number(i.tax) || 0
       }));
 
-      // 4. Payroll Calcs
-      let calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
-      if (!calcQuery.results || calcQuery.results.length === 0) {
-        await calculateAndSavePayroll(db, period, workingDays);
-        calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
-      }
-
+      // 4. Payroll Calcs (Only if input records exist)
+      let payrollList = [];
       let totalGross = 0;
       let totalDeductions = 0;
       let totalNet = 0;
 
-      const payrollList = (calcQuery.results || []).map(c => {
-        const gross = Number(c.gross_pay) || 0;
-        const ded = Number(c.total_deductions) || 0;
-        const net = Number(c.net_pay) || 0;
-        totalGross += gross;
-        totalDeductions += ded;
-        totalNet += net;
+      if (inputRecords.length === 0) {
+        // If NO monthly inputs, clean any orphaned calculations for this period
+        await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
+      } else {
+        // Auto calculate and sync
+        await calculateAndSavePayroll(db, period, workingDays);
+        const calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
 
-        return {
-          period: c.period,
-          empId: c.emp_id,
-          name: c.full_name || '',
-          department: c.department || '',
-          position: c.position || '',
-          bankName: c.bank_name || '',
-          bankAccount: c.bank_account || '',
-          baseSalary: Number(c.base_salary) || 0,
-          otHours: Number(c.ot_hours) || 0,
-          otRate: Number(c.ot_rate) || 0,
-          otPay: Number(c.ot_pay) || 0,
-          allowance: Number(c.allowance) || 0, // เบี้ยขยัน
-          bonus: Number(c.bonus) || 0,
-          leaveDeduction: Number(c.leave_deduction) || 0,
-          grossPay: gross,
-          sso: Number(c.sso) || 0,
-          pf: Number(c.pf) || 0,
-          tax: Number(c.tax) || 0,
-          advanceDeduct: Number(c.advance_deduct) || 0,
-          otherDeduct: Number(c.other_deduct) || 0, // หักอื่นๆ (เงินกู้,ค่าเช่า,น้ำ,ไฟ)
-          totalDeductions: ded,
-          netPay: net
-        };
-      });
+        payrollList = (calcQuery.results || []).map(c => {
+          const gross = Number(c.gross_pay) || 0;
+          const ded = Number(c.total_deductions) || 0;
+          const net = Number(c.net_pay) || 0;
+          totalGross += gross;
+          totalDeductions += ded;
+          totalNet += net;
+
+          return {
+            period: c.period,
+            empId: c.emp_id,
+            name: c.full_name || '',
+            department: c.department || '',
+            position: c.position || '',
+            bankName: c.bank_name || '',
+            bankAccount: c.bank_account || '',
+            baseSalary: Number(c.base_salary) || 0,
+            otHours: Number(c.ot_hours) || 0,
+            otRate: Number(c.ot_rate) || 0,
+            otPay: Number(c.ot_pay) || 0,
+            allowance: Number(c.allowance) || 0, // เบี้ยขยัน
+            bonus: Number(c.bonus) || 0,
+            leaveDeduction: Number(c.leave_deduction) || 0,
+            grossPay: gross,
+            sso: Number(c.sso) || 0,
+            pf: Number(c.pf) || 0,
+            tax: Number(c.tax) || 0,
+            advanceDeduct: Number(c.advance_deduct) || 0,
+            otherDeduct: Number(c.other_deduct) || 0, // หักอื่นๆ (เงินกู้,ค่าเช่า,น้ำ,ไฟ)
+            totalDeductions: ded,
+            netPay: net
+          };
+        });
+      }
 
       // 5. Users
       const usersQuery = await db.prepare('SELECT username, password, role FROM users ORDER BY username ASC').all();
@@ -238,7 +242,7 @@ async function handleD1Action(db, action, params) {
       const days = Number(params.workingDays) || 30;
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_WorkDays_${period}`, String(days)).run();
       const count = await calculateAndSavePayroll(db, period, days);
-      return { success: true, period: period, workingDays: days, count: count, message: `ตั้งค่าจำนวนวันทำงานงวด ${period} เป็น ${days} วัน และคำนวณเงินเดือนพนักงานทุกคนสำเร็จ (${count} คน)` };
+      return { success: true, period: period, workingDays: days, count: count, message: `ตั้งค่าจำนวนวันทำงานงวด ${period} เป็น ${days} วัน เรียบร้อยแล้ว` };
     }
 
     case 'saveEmployee': {
@@ -480,6 +484,15 @@ async function handleD1Action(db, action, params) {
 }
 
 async function calculateAndSavePayroll(db, period, explicitWorkDays) {
+  const inputQuery = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
+  const inputList = inputQuery.results || [];
+
+  // IF NO INPUTS EXIST, CLEAR PAYROLL CALCS FOR THIS PERIOD
+  if (inputList.length === 0) {
+    await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
+    return 0;
+  }
+
   let workDays = explicitWorkDays;
   if (!workDays) {
     const wdRow = await db.prepare('SELECT value FROM settings WHERE key = ?').bind(`Period_WorkDays_${period}`).first();
@@ -487,21 +500,17 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   }
 
   const empQuery = await db.prepare('SELECT * FROM employees').all();
-  const inputQuery = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
-
   const empMap = {};
   for (const emp of empQuery.results || []) empMap[emp.emp_id] = emp;
 
-  const inputMap = {};
-  for (const inp of inputQuery.results || []) inputMap[inp.emp_id] = inp;
+  // Clear existing payroll calcs for this period and insert only current active inputs
+  await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
 
-  const allIds = Array.from(new Set([...Object.keys(empMap), ...Object.keys(inputMap)]));
   let count = 0;
-
-  for (const empId of allIds) {
+  for (const inp of inputList) {
     count++;
-    const emp = empMap[empId] || { emp_id: empId, full_name: empId, base_salary: 0, pf_rate: 0.05, default_sso: 750, default_tax: 0 };
-    const inp = inputMap[empId] || { base_salary: emp.base_salary, pf_rate: emp.pf_rate, absent_days: 0, leave_days: 0, sick_leave_days: 0, late_deduct: 0, ot_hours: 0, ot_rate: 0, allowance: 0, bonus: 0, advance_deduct: 0, other_deduct: 0, sso: emp.default_sso, tax: emp.default_tax };
+    const empId = inp.emp_id;
+    const emp = empMap[empId] || { emp_id: empId, full_name: inp.emp_name || empId, base_salary: inp.base_salary || 0, pf_rate: inp.pf_rate || 0.05, default_sso: inp.sso || 750, default_tax: inp.tax || 0 };
 
     const baseSal = Number(inp.base_salary > 0 ? inp.base_salary : (emp.base_salary || 0));
     const pfRate = Number(inp.pf_rate !== undefined ? inp.pf_rate : (emp.pf_rate || 0.05));
