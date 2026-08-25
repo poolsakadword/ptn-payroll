@@ -68,13 +68,17 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function checkAuth() {
-  var savedUser = sessionStorage.getItem('ptn_user');
+  var savedUser = localStorage.getItem('ptn_user') || sessionStorage.getItem('ptn_user');
   if (savedUser) {
-    State.currentUser = JSON.parse(savedUser);
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('appShell').classList.add('active');
-    document.getElementById('topUserBadge').innerHTML = '<i class="fa-solid fa-user-shield"></i> ' + esc(State.currentUser.username) + ' (' + esc(State.currentUser.role) + ')';
-    loadAppData();
+    try {
+      State.currentUser = JSON.parse(savedUser);
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appShell').classList.add('active');
+      document.getElementById('topUserBadge').innerHTML = '<i class="fa-solid fa-user-shield"></i> ' + esc(State.currentUser.username) + ' (' + esc(State.currentUser.role) + ')';
+      loadAppData();
+    } catch(e) {
+      handleLogout();
+    }
   } else {
     document.getElementById('loginScreen').style.display = 'flex';
     document.getElementById('appShell').classList.remove('active');
@@ -91,7 +95,7 @@ function handleLogin(e) {
     .then(function(r) {
       if (r.success) {
         State.currentUser = { username: r.username, role: r.role };
-        sessionStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
+        localStorage.setItem('ptn_user', JSON.stringify(State.currentUser)); sessionStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
         showToast('เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ' + r.username);
         checkAuth();
       } else {
@@ -104,6 +108,7 @@ function handleLogin(e) {
 }
 
 function handleLogout() {
+  localStorage.removeItem('ptn_user');
   sessionStorage.removeItem('ptn_user');
   checkAuth();
 }
@@ -127,6 +132,16 @@ function initPeriodDropdowns() {
     ySel.innerHTML += '<option value="' + y + '" ' + (y === curY ? 'selected' : '') + '>' + y + '</option>';
   }
 
+  var savedPeriod = localStorage.getItem('ptn_last_period');
+  if (savedPeriod && savedPeriod.indexOf(' ') > 0) {
+    var parts = savedPeriod.split(' ');
+    if (parts.length === 2 && months.indexOf(parts[0]) >= 0) {
+      mSel.value = parts[0];
+      ySel.value = parts[1];
+      State.period = savedPeriod;
+      return;
+    }
+  }
   State.period = months[curM] + ' ' + curY;
 }
 
@@ -134,6 +149,7 @@ function onPeriodChanged() {
   var m = document.getElementById('periodMonthSelect').value;
   var y = document.getElementById('periodYearSelect').value;
   State.period = m + ' ' + y;
+  localStorage.setItem('ptn_last_period', State.period);
   loadAppData();
 }
 
