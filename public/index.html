@@ -430,7 +430,12 @@
           <div class="card-header">
             <div>
               <div class="card-title">ผู้ใช้งานระบบ (User Management)</div>
-              <div class="card-sub">จัดการผู้ใช้งานและสิทธิ์การเข้าถึง</div>
+              <div class="card-sub">จัดการผู้ใช้งานและสิทธิ์การเข้าถึง (Admin / HR / User)</div>
+            </div>
+            <div class="toolbar">
+              <button type="button" class="btn btn-primary" onclick="openAddUserModal()">
+                <i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน
+              </button>
             </div>
           </div>
           <div class="table-wrapper">
@@ -795,6 +800,43 @@
         <button type="button" class="btn btn-slate" onclick="closeModal('payslipModal')">ปิด</button>
         <button type="button" class="btn btn-primary" onclick="printPayslip()"><i class="fa-solid fa-print"></i> พิมพ์สลิป (A4)</button>
       </div>
+    </div>
+  </div>
+
+    <!-- 4. USER MANAGEMENT MODAL -->
+  <div class="modal-overlay" id="userModal">
+    <div class="modal-card" style="max-width:480px">
+      <div class="modal-header">
+        <h3 id="userModalTitle"><i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน</h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('userModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="saveUserForm(event)">
+        <div class="modal-body">
+          <input type="hidden" id="userOrigUsername">
+          <div class="form-grid">
+            <div class="form-group">
+              <label><i class="fa-solid fa-user" style="color:#2563eb"></i> ชื่อผู้ใช้งาน (Username) *</label>
+              <input type="text" id="mUsername" placeholder="เช่น hr_staff, manager" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label><i class="fa-solid fa-key" style="color:#2563eb"></i> รหัสผ่าน (Password) *</label>
+              <input type="text" id="mPassword" placeholder="รหัสผ่าน" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label><i class="fa-solid fa-user-shield" style="color:#2563eb"></i> สิทธิ์การใช้งาน (Role) *</label>
+              <select id="mRole" required>
+                <option value="Admin / HR">Admin / HR (ผู้ดูแลระบบ / ฝ่ายบุคคล)</option>
+                <option value="HR">HR (ฝ่ายบุคคล / คิดเงินเดือน)</option>
+                <option value="User">User (ผู้ใช้งานทั่วไป / ดูและพิมพ์สลิป)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-slate" onclick="closeModal('userModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> บันทึกผู้ใช้งาน</button>
+        </div>
+      </form>
     </div>
   </div>
 

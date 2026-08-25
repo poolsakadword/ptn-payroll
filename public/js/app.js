@@ -1015,3 +1015,71 @@ function parseAndImportEmployeesCSV(csvText) {
       showToast('Error: ' + err.message, 'error');
     });
 }
+
+// USER MANAGEMENT HANDLERS
+function openAddUserModal() {
+  document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน';
+  document.getElementById('userOrigUsername').value = '';
+  document.getElementById('mUsername').value = '';
+  document.getElementById('mPassword').value = '';
+  document.getElementById('mRole').value = 'Admin / HR';
+  openModal('userModal');
+}
+
+function openEditUserModal(username) {
+  var u = State.users.find(function(x) { return x.username === username; });
+  if (!u) return;
+  document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-user-pen"></i> แก้ไขผู้ใช้งาน';
+  document.getElementById('userOrigUsername').value = u.username;
+  document.getElementById('mUsername').value = u.username;
+  document.getElementById('mPassword').value = u.password || '';
+  document.getElementById('mRole').value = u.role || 'Admin / HR';
+  openModal('userModal');
+}
+
+function saveUserForm(e) {
+  if (e) e.preventDefault();
+  var u = {
+    username: document.getElementById('mUsername').value.trim(),
+    password: document.getElementById('mPassword').value.trim(),
+    role: document.getElementById('mRole').value
+  };
+  if (!u.username || !u.password) {
+    showToast('กรุณากรอก Username และ Password', 'error');
+    return;
+  }
+  var orig = document.getElementById('userOrigUsername').value;
+  callApi('saveUser', { user: u, origUser: orig })
+    .then(function(r) {
+      if (r.success) {
+        showToast(r.message || 'บันทึกผู้ใช้งานสำเร็จ');
+        closeModal('userModal');
+        loadAppData();
+      } else {
+        showToast(r.message || 'เกิดข้อผิดพลาดในการบันทึกผู้ใช้', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function deleteUser(username) {
+  if (username.toLowerCase() === 'admin') {
+    showToast('ไม่สามารถลบผู้ใช้งาน Admin หลักของระบบได้', 'error');
+    return;
+  }
+  if (!confirm('ยืนยันการลบผู้ใช้งาน ' + username + ' ออกจากระบบ?')) return;
+  callApi('deleteUser', { username: username })
+    .then(function(r) {
+      if (r.success) {
+        showToast(r.message || 'ลบผู้ใช้งานสำเร็จ');
+        loadAppData();
+      } else {
+        showToast(r.message || 'เกิดข้อผิดพลาดในการลบผู้ใช้', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
