@@ -329,33 +329,42 @@ async function handleD1Action(db, action, params) {
         return { success: false, message: 'ไม่พบข้อมูลในทะเบียนพนักงาน กรุณาเพิ่มพนักงานก่อน' };
       }
 
-      const existingInput = await db.prepare('SELECT emp_id FROM monthly_inputs WHERE period = ?').bind(period).all();
+      const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
       const existingMap = {};
-      for (const row of existingInput.results || []) existingMap[row.emp_id] = true;
+      for (const row of existingInput.results || []) existingMap[row.emp_id] = row;
 
       let added = 0;
-      let nextNo = (existingInput.results ? existingInput.results.length : 0);
+      let nextNo = 0;
 
       for (const emp of employees) {
-        if (!existingMap[emp.emp_id]) {
-          nextNo++;
-          added++;
-          const baseSal = Number(emp.base_salary) || 0;
-          const pfRate = Number(emp.pf_rate) || 0.05;
-          const pfAmt = Math.round(baseSal * pfRate * 100) / 100;
-          const otRate = 40; // Default OT rate = 40 Baht/hr
-          const sso = Number(emp.default_sso !== null ? emp.default_sso : (baseSal >= 15000 ? 750 : Math.round(baseSal * 0.05)));
-          const tax = Number(emp.default_tax) || 0;
+        nextNo++;
+        added++;
+        const baseSal = Number(emp.base_salary) || 0;
+        const pfRate = Number(emp.pf_rate) || 0.05;
+        const pfAmt = Math.round(baseSal * pfRate * 100) / 100;
+        const sso = Number(emp.default_sso !== null ? emp.default_sso : (baseSal >= 15000 ? 750 : Math.round(baseSal * 0.05)));
+        const tax = Number(emp.default_tax) || 0;
 
-          await db.prepare(`
-            INSERT OR REPLACE INTO monthly_inputs
-            (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).bind(
-            period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-            0, 0, 0, 0, 0, otRate, 0, 0, 0, 0, sso, tax
-          ).run();
-        }
+        const exist = existingMap[emp.emp_id] || {};
+        const absentDays = Number(exist.absent_days) || 0;
+        const leaveDays = Number(exist.leave_days) || 0;
+        const sickLeaveDays = Number(exist.sick_leave_days) || 0;
+        const lateDeduct = Number(exist.late_deduct) || 0;
+        const otHours = Number(exist.ot_hours) || 0;
+        const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : 40;
+        const allowance = Number(exist.allowance) || 0;
+        const bonus = Number(exist.bonus) || 0;
+        const advDed = Number(exist.advance_deduct) || 0;
+        const othDed = Number(exist.other_deduct) || 0;
+
+        await db.prepare(`
+          INSERT OR REPLACE INTO monthly_inputs
+          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
+          absentDays, leaveDays, sickLeaveDays, lateDeduct, otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
+        ).run();
       }
 
       await calculateAndSavePayroll(db, period);
@@ -363,7 +372,7 @@ async function handleD1Action(db, action, params) {
         success: true,
         period: period,
         count: added,
-        message: added > 0 ? `นำเข้าพนักงานเข้างวด ${period} สำเร็จ (${added} คน) [อัตรา OT เริ่มต้น 40 บาท]` : `พนักงานทุกคนมีข้อมูลในงวด ${period} อยู่แล้ว`
+        message: `ดึงและอัปเดตข้อมูลพนักงานเข้างวด ${period} สำเร็จ (${added} คน) [อัตรา OT เริ่มต้น 40 บาท]`
       };
     }
 
