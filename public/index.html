@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=3.2">
+  <link rel="stylesheet" href="css/style.css?v=3.5">
 </head>
 <body>
 
@@ -351,28 +351,28 @@
             </div>
           </div>
           <div class="table-wrap">
-            <table>
+            <table id="monthlyInputMainTable">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>รหัส</th>
-                  <th>ชื่อ-นามสกุล</th>
-                  <th class="right font-bold">เงินเดือนฐาน</th>
-                  <th class="right text-blue font-bold" style="background:#eff6ff">ค่าจ้าง/วัน</th>
-                  <th class="right text-red">ขาดงาน (1.5x)</th>
-                  <th class="right">ลากิจ (1.0x)</th>
-                  <th class="right text-red">ลาป่วย (1.0x)</th>
-                  <th class="right text-red">หักสาย (บาท)</th>
-                  <th class="right">OT (ชม.)</th>
-                  <th class="right">อัตรา OT</th>
-                  <th class="right text-green font-bold">เบี้ยขยัน</th>
-                  <th class="right">โบนัส</th>
-                  <th class="right text-blue font-bold">กองทุน PF</th>
-                  <th class="right">ประกันสังคม</th>
-                  <th class="right">ภาษี</th>
-                  <th class="right text-red">หักเงินเบิก</th>
-                  <th class="right text-red">หักอื่นๆ (กู้/เช่า/น้ำ/ไฟ)</th>
-                  <th class="center">จัดการ</th>
+                  <th style="width:40px" class="center">#</th>
+                  <th style="min-width:80px">รหัส</th>
+                  <th style="min-width:140px">ชื่อ-นามสกุล</th>
+                  <th class="right" style="min-width:105px;color:#1e3a8a">เงินเดือนฐาน</th>
+                  <th class="right text-blue" style="min-width:95px;background:#eff6ff">ค่าจ้าง/วัน</th>
+                  <th class="right text-red" style="min-width:80px">ขาด (1.5x)</th>
+                  <th class="right text-yellow" style="min-width:80px">ลากิจ</th>
+                  <th class="right text-red" style="min-width:80px">ลาป่วย</th>
+                  <th class="right text-red" style="min-width:85px">หักสาย (฿)</th>
+                  <th class="right" style="min-width:70px">OT (ชม.)</th>
+                  <th class="right" style="min-width:85px">อัตรา OT</th>
+                  <th class="right text-green font-bold" style="min-width:90px">เบี้ยขยัน</th>
+                  <th class="right" style="min-width:80px">โบนัส</th>
+                  <th class="right text-blue font-bold" style="min-width:95px">กองทุน PF</th>
+                  <th class="right" style="min-width:85px">ประกันสังคม</th>
+                  <th class="right" style="min-width:80px">ภาษี</th>
+                  <th class="right text-red" style="min-width:85px">หักเงินเบิก</th>
+                  <th class="right text-red" style="min-width:130px">หักอื่นๆ (กู้/เช่า/น้ำ/ไฟ)</th>
+                  <th class="center" style="min-width:90px">จัดการ</th>
                 </tr>
               </thead>
               <tbody id="inputTableBody"></tbody>
@@ -893,7 +893,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="js/config.js?v=3.2"></script>
-  <script src="js/app.js?v=3.2"></script>
+  <script src="js/config.js?v=3.5"></script>
+  <script src="js/app.js?v=3.5"></script>
 </body>
 </html>
