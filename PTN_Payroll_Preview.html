@@ -1555,27 +1555,23 @@ td {
           </div>
         </div>
 
-        <!-- Working Days & Leave / Late Deductions -->
+        <!-- Leave / Late Deductions -->
         <div style="background:#fffbeb;padding:12px 14px;border-radius:12px;border:1.5px solid #fde68a;margin-bottom:14px">
           <div style="font-weight:700;color:#b45309;font-size:12px;margin-bottom:8px">
-            <i class="fa-solid fa-calendar-check"></i> วันทำงานจริง และรายการหัก ขาด/ลา/สาย
+            <i class="fa-solid fa-calendar-xmark"></i> รายการหัก ขาด / ลา / มาสาย
           </div>
-          <div class="form-row" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+          <div class="form-row" style="grid-template-columns:1fr 1fr 1fr;gap:10px">
             <div class="field" style="margin-bottom:0">
-              <label style="color:#92400e;font-size:11px">วันทำงานจริง (วัน)</label>
-              <input type="number" id="miActualWorkDays" value="30" step="0.5">
+              <label style="color:#92400e;font-size:11px"><i class="fa-solid fa-user-xmark"></i> ขาด / ลากิจ (วัน)</label>
+              <input type="number" id="miLeaveDays" value="0" step="0.5" placeholder="0">
             </div>
             <div class="field" style="margin-bottom:0">
-              <label style="color:#92400e;font-size:11px">ขาด/ลากิจ (วัน)</label>
-              <input type="number" id="miLeaveDays" value="0" step="0.5">
+              <label style="color:#b91c1c;font-size:11px"><i class="fa-solid fa-bed"></i> ลาป่วย (วัน)</label>
+              <input type="number" id="miSickLeaveDays" value="0" step="0.5" placeholder="0">
             </div>
             <div class="field" style="margin-bottom:0">
-              <label style="color:#b91c1c;font-size:11px">ลาป่วย (วัน)</label>
-              <input type="number" id="miSickLeaveDays" value="0" step="0.5">
-            </div>
-            <div class="field" style="margin-bottom:0">
-              <label style="color:#b91c1c;font-size:11px">หักมาสาย (บาท)</label>
-              <input type="number" id="miLateDeduct" value="0" step="0.01">
+              <label style="color:#b91c1c;font-size:11px"><i class="fa-solid fa-clock-rotate-left"></i> หักมาสาย (บาท)</label>
+              <input type="number" id="miLateDeduct" value="0" step="0.01" placeholder="0">
             </div>
           </div>
         </div>
