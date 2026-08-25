@@ -130,6 +130,8 @@ async function handleAction(db, action, params) {
         baseSalary: Number(e.base_salary) || 0,
         bankName: e.bank_name || '',
         bankAccount: e.bank_account || '',
+        birthDate: e.birth_date || '',
+        age: Number(e.age) || 0,
         joinDate: e.join_date || '',
         pfRate: Number(e.pf_rate) || 0.05,
         defaultSso: Number(e.default_sso !== null ? e.default_sso : 750),
@@ -258,12 +260,13 @@ async function handleAction(db, action, params) {
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, join_date, pf_rate, default_sso, default_tax)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', Number(emp.baseSalary) || 0,
-        emp.bankName || '', emp.bankAccount || '', emp.joinDate || '',
+        emp.bankName || '', emp.bankAccount || '', emp.birthDate || '', Number(emp.age) || 0,
+        emp.joinDate || '',
         Number(emp.pfRate) || 0.05, Number(emp.defaultSso !== undefined ? emp.defaultSso : 750),
         Number(emp.defaultTax) || 0
       ).run();
@@ -440,7 +443,9 @@ async function handleAction(db, action, params) {
           baseSalary: Number(emp.base_salary) || 0,
           bankName: emp.bank_name,
           bankAccount: emp.bank_account,
-          joinDate: emp.join_date,
+          birthDate: emp.birth_date || '',
+          age: Number(emp.age) || 0,
+          joinDate: emp.join_date || '',
           pfRate: Number(emp.pf_rate) || 0.05,
           defaultSso: Number(emp.default_sso !== null ? emp.default_sso : 750),
           defaultTax: Number(emp.default_tax) || 0

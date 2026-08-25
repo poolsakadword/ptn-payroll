@@ -410,6 +410,8 @@ function onHistoryEmpChanged() {
       document.getElementById('histContentArea').style.display = 'block';
       document.getElementById('histEmpCardName').textContent = emp.fullName + ' (' + emp.empId + ')';
       document.getElementById('histEmpCardDept').textContent = (emp.department || '-') + ' / ' + (emp.position || '-');
+      var birthAgeStr = (emp.birthDate || '-') + (emp.age ? ' (' + emp.age + ' ปี)' : '');
+      document.getElementById('histEmpCardBirthAge').textContent = birthAgeStr;
       document.getElementById('histEmpCardCitizen').textContent = emp.citizenId || '-';
       document.getElementById('histEmpCardPhone').textContent = emp.phone || '-';
       document.getElementById('histEmpCardBank').textContent = (emp.bankName || '-') + ' ' + (emp.bankAccount || '-');
@@ -674,8 +676,9 @@ function deleteInputRecord(empId) {
 function openAddEmployeeModal() {
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
-  ['mEmpId','mFullName','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
-    document.getElementById(id).value = '';
+  ['mEmpId','mFullName','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
   });
   document.getElementById('mBankName').value = 'กสิกรไทย (KBANK)';
   document.getElementById('mBaseSalary').value = '';
@@ -693,6 +696,8 @@ function openEditEmployeeModal(empId) {
   document.getElementById('empOrigId').value = e.empId;
   document.getElementById('mEmpId').value = e.empId;
   document.getElementById('mFullName').value = e.fullName;
+  document.getElementById('mBirthDate').value = e.birthDate || '';
+  document.getElementById('mAge').value = (e.age && e.age > 0) ? e.age : '';
   document.getElementById('mCitizenId').value = e.citizenId || '';
   document.getElementById('mPhone').value = e.phone || '';
   document.getElementById('mAddress').value = e.address || '';
@@ -713,6 +718,8 @@ function saveEmployeeForm(e) {
   var d = {
     empId: document.getElementById('mEmpId').value.trim(),
     fullName: document.getElementById('mFullName').value.trim(),
+    birthDate: document.getElementById('mBirthDate').value,
+    age: Number(document.getElementById('mAge').value) || 0,
     citizenId: document.getElementById('mCitizenId').value.trim(),
     phone: document.getElementById('mPhone').value.trim(),
     address: document.getElementById('mAddress').value.trim(),
@@ -852,4 +859,19 @@ function exportToCSV(type) {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+function onBirthDateChanged() {
+  var bVal = document.getElementById('mBirthDate').value;
+  if (!bVal) return;
+  var bDate = new Date(bVal);
+  if (isNaN(bDate.getTime())) return;
+  var today = new Date();
+  var age = today.getFullYear() - bDate.getFullYear();
+  var m = today.getMonth() - bDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < bDate.getDate())) {
+    age--;
+  }
+  if (age >= 0) {
+    document.getElementById('mAge').value = age;
+  }
 }

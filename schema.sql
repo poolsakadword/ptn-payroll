@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS employees (
   base_salary REAL DEFAULT 0,
   bank_name TEXT,
   bank_account TEXT,
+  birth_date TEXT,
+  age INTEGER DEFAULT 0,
   join_date TEXT,
   pf_rate REAL DEFAULT 0.05,
   default_sso REAL DEFAULT 750,

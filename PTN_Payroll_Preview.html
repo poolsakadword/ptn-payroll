@@ -879,6 +879,7 @@ footer {
                 <tr>
                   <th>รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
+                  <th>วันเกิด / อายุ</th>
                   <th>บัตรประชาชน</th>
                   <th>เบอร์โทร</th>
                   <th>ที่อยู่</th>
@@ -920,6 +921,7 @@ footer {
                   <p id="histEmpCardDept" style="font-size:12px;color:#64748b">-</p>
                 </div>
                 <div style="display:flex;gap:20px;font-size:11.5px">
+                  <div><span class="text-muted">วันเกิด/อายุ:</span> <strong id="histEmpCardBirthAge">-</strong></div>
                   <div><span class="text-muted">บัตรประชาชน:</span> <strong id="histEmpCardCitizen">-</strong></div>
                   <div><span class="text-muted">เบอร์โทร:</span> <strong id="histEmpCardPhone">-</strong></div>
                   <div><span class="text-muted">ธนาคาร:</span> <strong id="histEmpCardBank">-</strong></div>
@@ -1195,6 +1197,16 @@ footer {
               <div class="form-group">
                 <label>ชื่อ-นามสกุล *</label>
                 <input type="text" id="mFullName" placeholder="ชื่อ-นามสกุล" required>
+              </div>
+            </div>
+            <div class="form-row-2">
+              <div class="form-group">
+                <label><i class="fa-solid fa-cake-candles" style="color:#d97706"></i> วันเกิด</label>
+                <input type="date" id="mBirthDate" onchange="onBirthDateChanged()">
+              </div>
+              <div class="form-group">
+                <label><i class="fa-solid fa-user-clock" style="color:#d97706"></i> อายุ (ปี)</label>
+                <input type="number" id="mAge" placeholder="เช่น 30" min="15" max="100">
               </div>
             </div>
             <div class="form-row-2">
@@ -1779,6 +1791,8 @@ function onHistoryEmpChanged() {
       document.getElementById('histContentArea').style.display = 'block';
       document.getElementById('histEmpCardName').textContent = emp.fullName + ' (' + emp.empId + ')';
       document.getElementById('histEmpCardDept').textContent = (emp.department || '-') + ' / ' + (emp.position || '-');
+      var birthAgeStr = (emp.birthDate || '-') + (emp.age ? ' (' + emp.age + ' ปี)' : '');
+      document.getElementById('histEmpCardBirthAge').textContent = birthAgeStr;
       document.getElementById('histEmpCardCitizen').textContent = emp.citizenId || '-';
       document.getElementById('histEmpCardPhone').textContent = emp.phone || '-';
       document.getElementById('histEmpCardBank').textContent = (emp.bankName || '-') + ' ' + (emp.bankAccount || '-');
@@ -2043,8 +2057,9 @@ function deleteInputRecord(empId) {
 function openAddEmployeeModal() {
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
-  ['mEmpId','mFullName','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
-    document.getElementById(id).value = '';
+  ['mEmpId','mFullName','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.value = '';
   });
   document.getElementById('mBankName').value = 'กสิกรไทย (KBANK)';
   document.getElementById('mBaseSalary').value = '';
@@ -2062,6 +2077,8 @@ function openEditEmployeeModal(empId) {
   document.getElementById('empOrigId').value = e.empId;
   document.getElementById('mEmpId').value = e.empId;
   document.getElementById('mFullName').value = e.fullName;
+  document.getElementById('mBirthDate').value = e.birthDate || '';
+  document.getElementById('mAge').value = (e.age && e.age > 0) ? e.age : '';
   document.getElementById('mCitizenId').value = e.citizenId || '';
   document.getElementById('mPhone').value = e.phone || '';
   document.getElementById('mAddress').value = e.address || '';
@@ -2082,6 +2099,8 @@ function saveEmployeeForm(e) {
   var d = {
     empId: document.getElementById('mEmpId').value.trim(),
     fullName: document.getElementById('mFullName').value.trim(),
+    birthDate: document.getElementById('mBirthDate').value,
+    age: Number(document.getElementById('mAge').value) || 0,
     citizenId: document.getElementById('mCitizenId').value.trim(),
     phone: document.getElementById('mPhone').value.trim(),
     address: document.getElementById('mAddress').value.trim(),
@@ -2222,6 +2241,22 @@ function exportToCSV(type) {
   link.click();
   document.body.removeChild(link);
 }
+function onBirthDateChanged() {
+  var bVal = document.getElementById('mBirthDate').value;
+  if (!bVal) return;
+  var bDate = new Date(bVal);
+  if (isNaN(bDate.getTime())) return;
+  var today = new Date();
+  var age = today.getFullYear() - bDate.getFullYear();
+  var m = today.getMonth() - bDate.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < bDate.getDate())) {
+    age--;
+  }
+  if (age >= 0) {
+    document.getElementById('mAge').value = age;
+  }
+}
+
 </script>
 </body>
 </html>
