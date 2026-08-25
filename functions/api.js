@@ -1,8 +1,7 @@
 /**
  * ==============================================================================
- * PTN Payroll System V3.0 - Cloudflare D1 Native Serverless API Engine
+ * PTN Payroll System V4.0 - Clean Enterprise Cloudflare D1 Backend
  * บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด
- * Streamlined & Optimized Architecture (Zero Redundancy, Default OT Rate = 40)
  * ==============================================================================
  */
 
@@ -44,7 +43,7 @@ export async function onRequest(context) {
       params = Object.fromEntries(url.searchParams.entries());
     }
 
-    const result = await handleD1Action(db, action, params);
+    const result = await handleAction(db, action, params);
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -52,7 +51,7 @@ export async function onRequest(context) {
   } catch (err) {
     return new Response(JSON.stringify({
       success: false,
-      message: 'Database Error: ' + err.message
+      message: 'Server Error: ' + err.message
     }), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }
@@ -66,17 +65,17 @@ function getDefaultPeriod() {
   return months[d.getMonth()] + ' ' + (d.getFullYear() + 543);
 }
 
-async function handleD1Action(db, action, params) {
+async function handleAction(db, action, params) {
   const period = params.period || getDefaultPeriod();
 
   switch (action) {
+    // 1. AUTH
     case 'checkLogin': {
       const u = String(params.username || '').trim().toLowerCase();
       const p = String(params.password || '').trim();
       if (!u || !p) return { success: false, message: 'กรุณากรอกชื่อผู้ใช้งานและรหัสผ่าน' };
 
-      if ((u === 'admin' || u === 'admin@company.com') && 
-          (p === '123456' || p === 'P@ssword123' || p === 'admin' || p === 'password123')) {
+      if ((u === 'admin' || u === 'admin@company.com') && (p === '123456' || p === 'P@ssword123' || p === 'admin')) {
         return { success: true, username: 'admin', role: 'Admin / HR' };
       }
 
@@ -87,8 +86,8 @@ async function handleD1Action(db, action, params) {
       return { success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' };
     }
 
+    // 2. INITIAL DATA LOAD
     case 'getAppInitialData': {
-      // 1. Settings & Period Status
       const settingsRows = await db.prepare('SELECT key, value FROM settings').all();
       const settingsMap = {
         companyName: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
@@ -118,7 +117,7 @@ async function handleD1Action(db, action, params) {
         }
       }
 
-      // 2. Employees Master
+      // Employees
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
       const employees = (empQuery.results || []).map(e => ({
         empId: e.emp_id,
@@ -137,7 +136,7 @@ async function handleD1Action(db, action, params) {
         defaultTax: Number(e.default_tax) || 0
       }));
 
-      // 3. Monthly Inputs
+      // Monthly Inputs
       const inputQuery = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ? ORDER BY no ASC, emp_id ASC').bind(period).all();
       const inputRecords = (inputQuery.results || []).map(i => ({
         period: i.period,
@@ -161,7 +160,7 @@ async function handleD1Action(db, action, params) {
         tax: Number(i.tax) || 0
       }));
 
-      // 4. Payroll Calcs (Read directly, no double calculation)
+      // Payroll Calcs
       let payrollList = [];
       let totalGross = 0;
       let totalDeductions = 0;
@@ -170,7 +169,6 @@ async function handleD1Action(db, action, params) {
       if (inputRecords.length === 0) {
         await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
       } else {
-        // Read existing calcs or calculate once if missing
         let calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
         if (!calcQuery.results || calcQuery.results.length === 0) {
           await calculateAndSavePayroll(db, period, workingDays);
@@ -212,7 +210,7 @@ async function handleD1Action(db, action, params) {
         });
       }
 
-      // 5. Users
+      // Users
       const usersQuery = await db.prepare('SELECT username, password, role FROM users ORDER BY username ASC').all();
       const users = (usersQuery.results || []).map(u => ({
         username: u.username,
@@ -240,6 +238,7 @@ async function handleD1Action(db, action, params) {
       };
     }
 
+    // 3. PERIOD WORK DAYS
     case 'savePeriodWorkDays': {
       const days = Number(params.workingDays) || 30;
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_WorkDays_${period}`, String(days)).run();
@@ -247,6 +246,7 @@ async function handleD1Action(db, action, params) {
       return { success: true, period: period, workingDays: days, count: count, message: `ตั้งค่าจำนวนวันทำงานงวด ${period} เป็น ${days} วัน เรียบร้อยแล้ว` };
     }
 
+    // 4. EMPLOYEE MASTER CRUD
     case 'saveEmployee': {
       const emp = params.employee || {};
       const origId = params.origId;
@@ -281,6 +281,7 @@ async function handleD1Action(db, action, params) {
       return { success: true, message: `ลบพนักงาน ${empId} เรียบร้อยแล้ว` };
     }
 
+    // 5. MONTHLY INPUT CRUD & BATCH POPULATE
     case 'saveInputRecord': {
       const r = params.record || {};
       const origEmpId = params.origEmpId;
@@ -376,11 +377,13 @@ async function handleD1Action(db, action, params) {
       };
     }
 
+    // 6. PROCESS PAYROLL
     case 'processPayroll': {
       const count = await calculateAndSavePayroll(db, period);
       return { success: true, period: period, count: count, message: `ประมวลผลคำนวณเงินเดือนงวด ${period} สำเร็จ (${count} รายการ)` };
     }
 
+    // 7. EMPLOYEE HISTORY
     case 'getEmployeeHistory': {
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
@@ -446,6 +449,7 @@ async function handleD1Action(db, action, params) {
       };
     }
 
+    // 8. COMPANY INFO
     case 'saveCompanyInfo': {
       const cfg = params.settings || {};
       if (cfg.companyName) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CompanyName", ?)').bind(cfg.companyName).run();
@@ -455,6 +459,7 @@ async function handleD1Action(db, action, params) {
       return { success: true, message: 'บันทึกข้อมูลบริษัทเรียบร้อยแล้ว' };
     }
 
+    // 9. PERIOD LOCK / UNLOCK
     case 'closePeriod': {
       await calculateAndSavePayroll(db, period);
       const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
@@ -468,6 +473,7 @@ async function handleD1Action(db, action, params) {
       return { success: true, period: period, isClosed: false, message: `ปลดล็อคและเปิดงวดประจำเดือน ${period} เรียบร้อยแล้ว` };
     }
 
+    // 10. USER MANAGEMENT
     case 'saveUser': {
       const u = params.user || {};
       const origUser = params.origUser;
@@ -522,33 +528,24 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const pfRate = Number(inp.pf_rate !== undefined ? inp.pf_rate : (emp.pf_rate || 0.05));
     const pfAmt = Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100);
 
-    // OT Rate: Default 40 Baht/hr (manual configurable)
     const otRate = (inp.ot_rate !== null && inp.ot_rate !== undefined && !isNaN(Number(inp.ot_rate))) ? Number(inp.ot_rate) : 40;
     const otPay = Math.round((Number(inp.ot_hours) || 0) * otRate * 100) / 100;
 
-    // Daily rate based on period working days
     const dailyRate = workDays > 0 ? (baseSal / workDays) : (baseSal / 30);
 
-    // Formulas:
-    // 1. Absent: Deduct 1.5x of daily rate (ขาดงาน หัก 1.5 เท่าของค่าจ้างต่อวัน)
     const absentDays = Number(inp.absent_days) || 0;
     const absentDed = absentDays * dailyRate * 1.5;
 
-    // 2. Personal leave: Deduct 1.0x of daily rate (ลากิจ หักเท่ากับค่าจ้างต่อวัน)
     const leaveDays = Number(inp.leave_days) || 0;
     const businessLeaveDed = leaveDays * dailyRate * 1.0;
 
-    // 3. Sick leave: Deduct 1.0x of daily rate (ลาป่วย หักเท่ากับค่าจ้างต่อวัน)
     const sickDays = Number(inp.sick_leave_days) || 0;
     const sickLeaveDed = sickDays * dailyRate * 1.0;
 
-    // 4. Late deduction (มาสาย - บาท)
     const lateDed = Number(inp.late_deduct) || 0;
 
-    // Total Leave & Absent Deduction
     const leaveDed = Math.round((absentDed + businessLeaveDed + sickLeaveDed + lateDed) * 100) / 100;
 
-    // Allowance = เบี้ยขยัน
     const allowance = Number(inp.allowance) || 0;
     const bonus = Number(inp.bonus) || 0;
     const grossPay = Math.round((baseSal + otPay + allowance + bonus - leaveDed) * 100) / 100;
