@@ -715,6 +715,15 @@ function openEditEmployeeModal(empId) {
 
 function saveEmployeeForm(e) {
   if (e) e.preventDefault();
+  var orig = document.getElementById('empOrigId').value;
+  var existingEmp = orig ? State.employees.find(function(x) { return x.empId === orig; }) : null;
+  var isUser = (State.currentUser && State.currentUser.role === 'User');
+
+  var baseSal = isUser ? (existingEmp ? existingEmp.baseSalary : 0) : (Number(document.getElementById('mBaseSalary').value) || 0);
+  var pfRate = isUser ? (existingEmp ? existingEmp.pfRate : 0.05) : (Number(document.getElementById('mPfRate').value) || 0.05);
+  var ssoVal = isUser ? (existingEmp ? existingEmp.defaultSso : 750) : (Number(document.getElementById('mDefaultSso').value) || 750);
+  var taxVal = isUser ? (existingEmp ? existingEmp.defaultTax : 0) : (Number(document.getElementById('mDefaultTax').value) || 0);
+
   var d = {
     empId: document.getElementById('mEmpId').value.trim(),
     fullName: document.getElementById('mFullName').value.trim(),
@@ -726,13 +735,13 @@ function saveEmployeeForm(e) {
     address: document.getElementById('mAddress').value.trim(),
     department: document.getElementById('mDepartment').value.trim(),
     position: document.getElementById('mPosition').value.trim(),
-    baseSalary: Number(document.getElementById('mBaseSalary').value) || 0,
+    baseSalary: baseSal,
     bankName: document.getElementById('mBankName').value.trim(),
     bankAccount: document.getElementById('mBankAccount').value.trim(),
     joinDate: document.getElementById('mJoinDate').value,
-    pfRate: Number(document.getElementById('mPfRate').value) || 0.05,
-    defaultSso: Number(document.getElementById('mDefaultSso').value) || 750,
-    defaultTax: Number(document.getElementById('mDefaultTax').value) || 0
+    pfRate: pfRate,
+    defaultSso: ssoVal,
+    defaultTax: taxVal
   };
 
   if (!d.empId || !d.fullName) { showToast('กรุณากรอกรหัสและชื่อพนักงาน', 'error'); return; }
