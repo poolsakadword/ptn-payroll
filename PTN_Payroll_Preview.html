@@ -665,7 +665,7 @@ footer {
     <main class="main-container">
 
       <!-- PERIOD CONTROL BAR -->
-      <div class="period-bar">
+      <div class="period-bar" id="periodBar">
         <div class="period-badge-group">
           <label style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-calendar-check"></i> งวดประจำเดือน:</label>
           <span class="period-pill" id="periodPillDisplay">-</span>
@@ -738,7 +738,7 @@ footer {
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th>งวด</th>
                   <th>รหัส</th>
@@ -775,7 +775,7 @@ footer {
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th>รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
@@ -827,7 +827,7 @@ footer {
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th class="text-center" style="width:40px">#</th>
                   <th>รหัส</th>
@@ -879,7 +879,7 @@ footer {
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th style="width:90px">รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
@@ -1015,7 +1015,7 @@ footer {
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th>ชื่อผู้ใช้งาน (Username)</th>
                   <th>รหัสผ่าน</th>
@@ -1243,24 +1243,26 @@ footer {
                 <input type="text" id="mPosition">
               </div>
             </div>
-            <div class="form-row-2">
-              <div class="form-group">
-                <label>เงินเดือนฐาน (บาท) *</label>
-                <input type="number" id="mBaseSalary" required>
+            <div id="empModalFinancialSection">
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-wallet"></i> เงินเดือนฐาน (บาท) *</label>
+                  <input type="number" id="mBaseSalary">
+                </div>
+                <div class="form-group">
+                  <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-percent"></i> อัตรา PF (เช่น 0.05)</label>
+                  <input type="number" id="mPfRate" step="0.01" value="0.05">
+                </div>
               </div>
-              <div class="form-group">
-                <label>อัตรา PF (เช่น 0.05 = 5%)</label>
-                <input type="number" id="mPfRate" step="0.01" value="0.05">
-              </div>
-            </div>
-            <div class="form-row-2">
-              <div class="form-group">
-                <label>ประกันสังคมเริ่มต้น (SSO Default)</label>
-                <input type="number" id="mDefaultSso" value="750">
-              </div>
-              <div class="form-group">
-                <label>ภาษีเริ่มต้น (Tax Default)</label>
-                <input type="number" id="mDefaultTax" value="0">
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label>ประกันสังคมเริ่มต้น (SSO Default)</label>
+                  <input type="number" id="mDefaultSso" value="750">
+                </div>
+                <div class="form-group">
+                  <label>ภาษีเริ่มต้น (Tax Default)</label>
+                  <input type="number" id="mDefaultTax" value="0">
+                </div>
               </div>
             </div>
             <div class="form-row-2">
@@ -1426,6 +1428,60 @@ var APP_CONFIG = {
     return '/api';
   }
 };
+function applyRolePermissions() {
+  var role = (State.currentUser && State.currentUser.role) ? String(State.currentUser.role).trim() : 'User';
+  var roleLower = role.toLowerCase();
+  var isGeneralUser = (roleLower === 'user');
+  var isHR = (roleLower === 'hr');
+  var isAdmin = (roleLower.indexOf('admin') >= 0);
+
+  // Top user badge
+  var badgeEl = document.getElementById('topUserBadge');
+  if (badgeEl) {
+    var iconClass = isAdmin ? 'fa-crown' : (isHR ? 'fa-user-tie' : 'fa-user');
+    badgeEl.innerHTML = '<i class="fa-solid ' + iconClass + '"></i> ' + esc(State.currentUser.username) + ' (' + esc(role) + ')';
+  }
+
+  // Navigation tabs
+  var tabDash = document.getElementById('navBtn-dashboard');
+  var tabPay = document.getElementById('navBtn-payroll');
+  var tabInp = document.getElementById('navBtn-input');
+  var tabEmp = document.getElementById('navBtn-employees');
+  var tabHist = document.getElementById('navBtn-history');
+  var tabComp = document.getElementById('navBtn-company');
+  var tabUsers = document.getElementById('navBtn-users');
+  var periodBar = document.getElementById('periodBar');
+
+  if (isGeneralUser) {
+    if (tabDash) tabDash.style.display = 'none';
+    if (tabPay) tabPay.style.display = 'none';
+    if (tabInp) tabInp.style.display = 'none';
+    if (tabHist) tabHist.style.display = 'none';
+    if (tabComp) tabComp.style.display = 'none';
+    if (tabUsers) tabUsers.style.display = 'none';
+    if (periodBar) periodBar.style.display = 'none';
+    if (tabEmp) tabEmp.style.display = 'inline-flex';
+
+    // Force active tab to employees immediately
+    switchTab('employees');
+  } else {
+    if (tabDash) tabDash.style.display = 'inline-flex';
+    if (tabPay) tabPay.style.display = 'inline-flex';
+    if (tabInp) tabInp.style.display = 'inline-flex';
+    if (tabEmp) tabEmp.style.display = 'inline-flex';
+    if (tabHist) tabHist.style.display = 'inline-flex';
+    if (periodBar) periodBar.style.display = 'flex';
+
+    if (isAdmin) {
+      if (tabComp) tabComp.style.display = 'inline-flex';
+      if (tabUsers) tabUsers.style.display = 'inline-flex';
+    } else {
+      if (tabComp) tabComp.style.display = 'none';
+      if (tabUsers) tabUsers.style.display = 'none';
+    }
+  }
+}
+
 /**
  * ==============================================================================
  * PTN Payroll System V4.0 - Clean Modular Frontend Engine
@@ -1502,7 +1558,7 @@ function checkAuth() {
       State.currentUser = JSON.parse(savedUser);
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appShell').classList.add('active');
-      document.getElementById('topUserBadge').innerHTML = '<i class="fa-solid fa-user-shield"></i> ' + esc(State.currentUser.username) + ' (' + esc(State.currentUser.role) + ')';
+      applyRolePermissions();
       loadAppData();
     } catch(e) {
       handleLogout();
@@ -1616,6 +1672,7 @@ function loadAppData() {
 }
 
 function renderAllViews() {
+  applyRolePermissions();
   // Update Period Bar
   document.getElementById('periodPillDisplay').textContent = State.period;
   document.getElementById('periodWorkingDaysInput').value = State.workingDays;
@@ -1774,7 +1831,43 @@ function renderInputTable() {
 // 4. EMPLOYEE MASTER RENDERER
 function renderEmployeesTable() {
   var tbody = document.getElementById('employeesTableBody');
+  var thead = document.getElementById('employeesTableHead');
   if (!tbody) return;
+
+  var role = (State.currentUser && State.currentUser.role) ? String(State.currentUser.role).trim().toLowerCase() : 'user';
+  var isGeneralUser = (role === 'user');
+
+  // Adjust table header based on role
+  if (thead) {
+    if (isGeneralUser) {
+      thead.innerHTML = '<tr>' +
+        '<th style="width:90px">รหัส</th>' +
+        '<th>ชื่อ-นามสกุล</th>' +
+        '<th style="width:100px">ชื่อเล่น</th>' +
+        '<th>วันเกิด / อายุ</th>' +
+        '<th>บัตรประชาชน</th>' +
+        '<th>เบอร์โทร</th>' +
+        '<th>ที่อยู่</th>' +
+        '<th>แผนก / ตำแหน่ง</th>' +
+        '<th>ธนาคาร / เลขบัญชี</th>' +
+        '<th>วันเริ่มงาน</th>' +
+        '<th class="text-center" style="width:90px">จัดการ</th>' +
+      '</tr>';
+    } else {
+      thead.innerHTML = '<tr>' +
+        '<th style="width:90px">รหัส</th>' +
+        '<th>ชื่อ-นามสกุล</th>' +
+        '<th style="width:100px">ชื่อเล่น</th>' +
+        '<th>ที่อยู่</th>' +
+        '<th>แผนก / ตำแหน่ง</th>' +
+        '<th class="text-right" style="width:110px">เงินเดือนฐาน</th>' +
+        '<th class="text-right" style="width:70px">PF %</th>' +
+        '<th class="text-right text-red font-bold" style="width:110px">SSO (Default) 🔴</th>' +
+        '<th class="text-right text-red font-bold" style="width:100px">ภาษี (Default) 🔴</th>' +
+        '<th class="text-center" style="width:120px">จัดการ</th>' +
+      '</tr>';
+    }
+  }
 
   // Populate employee select dropdowns
   var sel = '<option value="">-- เลือกรหัสพนักงาน --</option>';
@@ -1788,27 +1881,49 @@ function renderEmployeesTable() {
   if (histSel) histSel.innerHTML = sel;
 
   if (State.employees.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:28px">ยังไม่มีข้อมูลในทะเบียนพนักงาน</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + (isGeneralUser ? '11' : '10') + '" class="text-center text-muted" style="padding:28px">ยังไม่มีข้อมูลในทะเบียนพนักงาน</td></tr>';
     return;
   }
 
   var h = '';
   State.employees.forEach(function(e) {
-    h += '<tr>' +
-      '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
-      '<td class="font-bold">' + esc(e.fullName) + '</td>' +
-      '<td style="color:#2563eb;font-weight:600">' + esc(e.nickname || '-') + '</td>' +
-      '<td>' + esc(e.address || '-') + '</td>' +
-      '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
-      '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
-      '<td class="text-right font-mono">' + ((e.pfRate || 0) * 100).toFixed(0) + '%</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultSso !== undefined ? e.defaultSso : 750) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
-      '<td class="text-center nowrap">' +
-        '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
-        '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' +
-      '</td>' +
-    '</tr>';
+    var birthText = e.birthDate ? (e.birthDate + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
+
+    if (isGeneralUser) {
+      // General User view: 11 columns, NO salary, NO delete button
+      h += '<tr>' +
+        '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
+        '<td class="font-bold">' + esc(e.fullName) + '</td>' +
+        '<td style="color:#2563eb;font-weight:600">' + esc(e.nickname || '-') + '</td>' +
+        '<td>' + esc(birthText) + '</td>' +
+        '<td class="font-mono">' + esc(e.citizenId || '-') + '</td>' +
+        '<td class="font-mono">' + esc(e.phone || '-') + '</td>' +
+        '<td>' + esc(e.address || '-') + '</td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
+        '<td>' + esc(e.bankName || '-') + '<br><span class="text-muted font-mono" style="font-size:11px">' + esc(e.bankAccount || '-') + '</span></td>' +
+        '<td>' + esc(e.joinDate || '-') + '</td>' +
+        '<td class="text-center nowrap">' +
+          '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' +
+        '</td>' +
+      '</tr>';
+    } else {
+      // Admin / HR view: 10 columns with salary, PF, SSO, Tax, and Delete button
+      h += '<tr>' +
+        '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
+        '<td class="font-bold">' + esc(e.fullName) + '</td>' +
+        '<td style="color:#2563eb;font-weight:600">' + esc(e.nickname || '-') + '</td>' +
+        '<td>' + esc(e.address || '-') + '</td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
+        '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
+        '<td class="text-right font-mono">' + ((e.pfRate || 0) * 100).toFixed(0) + '%</td>' +
+        '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultSso !== undefined ? e.defaultSso : 750) + '</td>' +
+        '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
+        '<td class="text-center nowrap">' +
+          '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
+          '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' +
+        '</td>' +
+      '</tr>';
+    }
   });
   tbody.innerHTML = h;
 }
@@ -1923,6 +2038,14 @@ function renderUsersTable() {
 
 // ACTIONS & MODAL CONTROLLERS
 function switchTab(tabId) {
+  var role = (State.currentUser && State.currentUser.role) ? String(State.currentUser.role).trim() : 'User';
+  var isGeneralUser = (role.toLowerCase() === 'user');
+
+  // If General User, force tab to employees only
+  if (isGeneralUser && tabId !== 'employees') {
+    tabId = 'employees';
+  }
+
   document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
   document.querySelectorAll('.nav-tab-btn').forEach(function(el) { el.classList.remove('active'); });
   var target = document.getElementById('tab-' + tabId);
@@ -2101,6 +2224,12 @@ function deleteInputRecord(empId) {
 
 // EMPLOYEE MASTER MODAL
 function openAddEmployeeModal() {
+  var isGeneralUser = (State.currentUser && String(State.currentUser.role).trim().toLowerCase() === 'user');
+  var finSection = document.getElementById('empModalFinancialSection');
+  if (finSection) finSection.style.display = isGeneralUser ? 'none' : 'block';
+  var salInput = document.getElementById('mBaseSalary');
+  if (salInput) salInput.required = !isGeneralUser;
+
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
   ['mEmpId','mFullName','mNickname','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
@@ -2118,6 +2247,12 @@ function openAddEmployeeModal() {
 function openEditEmployeeModal(empId) {
   var e = State.employees.find(function(x) { return x.empId === empId; });
   if (!e) return;
+
+  var isGeneralUser = (State.currentUser && String(State.currentUser.role).trim().toLowerCase() === 'user');
+  var finSection = document.getElementById('empModalFinancialSection');
+  if (finSection) finSection.style.display = isGeneralUser ? 'none' : 'block';
+  var salInput = document.getElementById('mBaseSalary');
+  if (salInput) salInput.required = !isGeneralUser;
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
   document.getElementById('empOrigId').value = e.empId;

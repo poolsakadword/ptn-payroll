@@ -90,7 +90,7 @@
     <main class="main-container">
 
       <!-- PERIOD CONTROL BAR -->
-      <div class="period-bar">
+      <div class="period-bar" id="periodBar">
         <div class="period-badge-group">
           <label style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-calendar-check"></i> งวดประจำเดือน:</label>
           <span class="period-pill" id="periodPillDisplay">-</span>
@@ -163,7 +163,7 @@
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th>งวด</th>
                   <th>รหัส</th>
@@ -200,7 +200,7 @@
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th>รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
@@ -252,7 +252,7 @@
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th class="text-center" style="width:40px">#</th>
                   <th>รหัส</th>
@@ -304,7 +304,7 @@
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th style="width:90px">รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
@@ -440,7 +440,7 @@
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead>
+              <thead id="employeesTableHead">
                 <tr>
                   <th>ชื่อผู้ใช้งาน (Username)</th>
                   <th>รหัสผ่าน</th>
@@ -668,24 +668,26 @@
                 <input type="text" id="mPosition">
               </div>
             </div>
-            <div class="form-row-2">
-              <div class="form-group">
-                <label>เงินเดือนฐาน (บาท) *</label>
-                <input type="number" id="mBaseSalary" required>
+            <div id="empModalFinancialSection">
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-wallet"></i> เงินเดือนฐาน (บาท) *</label>
+                  <input type="number" id="mBaseSalary">
+                </div>
+                <div class="form-group">
+                  <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-percent"></i> อัตรา PF (เช่น 0.05)</label>
+                  <input type="number" id="mPfRate" step="0.01" value="0.05">
+                </div>
               </div>
-              <div class="form-group">
-                <label>อัตรา PF (เช่น 0.05 = 5%)</label>
-                <input type="number" id="mPfRate" step="0.01" value="0.05">
-              </div>
-            </div>
-            <div class="form-row-2">
-              <div class="form-group">
-                <label>ประกันสังคมเริ่มต้น (SSO Default)</label>
-                <input type="number" id="mDefaultSso" value="750">
-              </div>
-              <div class="form-group">
-                <label>ภาษีเริ่มต้น (Tax Default)</label>
-                <input type="number" id="mDefaultTax" value="0">
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label>ประกันสังคมเริ่มต้น (SSO Default)</label>
+                  <input type="number" id="mDefaultSso" value="750">
+                </div>
+                <div class="form-group">
+                  <label>ภาษีเริ่มต้น (Tax Default)</label>
+                  <input type="number" id="mDefaultTax" value="0">
+                </div>
               </div>
             </div>
             <div class="form-row-2">
