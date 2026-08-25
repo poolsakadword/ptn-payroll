@@ -1740,15 +1740,18 @@ function renderEmployeesTable() {
   if (histSel) histSel.innerHTML = sel;
 
   if (State.employees.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted" style="padding:28px">ยังไม่มีข้อมูลในทะเบียนพนักงาน</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted" style="padding:28px">ยังไม่มีข้อมูลในทะเบียนพนักงาน</td></tr>';
     return;
   }
 
   var h = '';
   State.employees.forEach(function(e) {
+    var birthText = e.birthDate ? (e.birthDate + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
+
     h += '<tr>' +
       '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
       '<td class="font-bold">' + esc(e.fullName) + '</td>' +
+      '<td style="color:#b45309;font-weight:600">' + esc(birthText) + '</td>' +
       '<td class="font-mono">' + esc(e.citizenId || '-') + '</td>' +
       '<td class="font-mono">' + esc(e.phone || '-') + '</td>' +
       '<td>' + esc(e.address || '-') + '</td>' +
@@ -1758,7 +1761,7 @@ function renderEmployeesTable() {
       '<td class="text-right font-mono">' + ((e.pfRate || 0) * 100).toFixed(0) + '%</td>' +
       '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultSso !== undefined ? e.defaultSso : 750) + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
-      '<td class="text-center">' +
+      '<td class="text-center nowrap">' +
         '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
         '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' +
       '</td>' +
