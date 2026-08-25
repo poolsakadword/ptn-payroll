@@ -351,7 +351,8 @@ function renderEmployeesTable() {
   // Populate employee select dropdowns
   var sel = '<option value="">-- เลือกรหัสพนักงาน --</option>';
   State.employees.forEach(function(e) {
-    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + (e.pfRate || 0.05) + '" data-sso="' + (e.defaultSso !== undefined ? e.defaultSso : 750) + '" data-tax="' + (e.defaultTax || 0) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + '</option>';
+    var nickDisplay = e.nickname ? ' (' + e.nickname + ')' : '';
+    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + (e.pfRate || 0.05) + '" data-sso="' + (e.defaultSso !== undefined ? e.defaultSso : 750) + '" data-tax="' + (e.defaultTax || 0) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + '</option>';
   });
   var miSel = document.getElementById('miEmpId');
   if (miSel) miSel.innerHTML = sel;
@@ -359,24 +360,19 @@ function renderEmployeesTable() {
   if (histSel) histSel.innerHTML = sel;
 
   if (State.employees.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted" style="padding:28px">ยังไม่มีข้อมูลในทะเบียนพนักงาน</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:28px">ยังไม่มีข้อมูลในทะเบียนพนักงาน</td></tr>';
     return;
   }
 
   var h = '';
   State.employees.forEach(function(e) {
-    var birthText = e.birthDate ? (e.birthDate + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
-
     h += '<tr>' +
       '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
       '<td class="font-bold">' + esc(e.fullName) + '</td>' +
-      '<td style="color:#b45309;font-weight:600">' + esc(birthText) + '</td>' +
-      '<td class="font-mono">' + esc(e.citizenId || '-') + '</td>' +
-      '<td class="font-mono">' + esc(e.phone || '-') + '</td>' +
+      '<td style="color:#2563eb;font-weight:600">' + esc(e.nickname || '-') + '</td>' +
       '<td>' + esc(e.address || '-') + '</td>' +
       '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
       '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
-      '<td>' + esc(e.bankName || '-') + '<br><span class="text-muted font-mono" style="font-size:11px">' + esc(e.bankAccount || '-') + '</span></td>' +
       '<td class="text-right font-mono">' + ((e.pfRate || 0) * 100).toFixed(0) + '%</td>' +
       '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultSso !== undefined ? e.defaultSso : 750) + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
@@ -679,7 +675,7 @@ function deleteInputRecord(empId) {
 function openAddEmployeeModal() {
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
-  ['mEmpId','mFullName','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
+  ['mEmpId','mFullName','mNickname','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -699,6 +695,7 @@ function openEditEmployeeModal(empId) {
   document.getElementById('empOrigId').value = e.empId;
   document.getElementById('mEmpId').value = e.empId;
   document.getElementById('mFullName').value = e.fullName;
+  document.getElementById('mNickname').value = e.nickname || '';
   document.getElementById('mBirthDate').value = e.birthDate || '';
   document.getElementById('mAge').value = (e.age && e.age > 0) ? e.age : '';
   document.getElementById('mCitizenId').value = e.citizenId || '';
@@ -721,6 +718,7 @@ function saveEmployeeForm(e) {
   var d = {
     empId: document.getElementById('mEmpId').value.trim(),
     fullName: document.getElementById('mFullName').value.trim(),
+    nickname: document.getElementById('mNickname').value.trim(),
     birthDate: document.getElementById('mBirthDate').value,
     age: Number(document.getElementById('mAge').value) || 0,
     citizenId: document.getElementById('mCitizenId').value.trim(),

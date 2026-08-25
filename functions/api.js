@@ -122,6 +122,7 @@ async function handleAction(db, action, params) {
       const employees = (empQuery.results || []).map(e => ({
         empId: e.emp_id,
         fullName: e.full_name || '',
+        nickname: e.nickname || '',
         citizenId: e.citizen_id || '',
         phone: e.phone || '',
         address: e.address || '',
@@ -260,10 +261,10 @@ async function handleAction(db, action, params) {
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        emp.empId, emp.fullName, emp.citizenId || '', emp.phone || '', emp.address || '',
+        emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', Number(emp.baseSalary) || 0,
         emp.bankName || '', emp.bankAccount || '', emp.birthDate || '', Number(emp.age) || 0,
         emp.joinDate || '',
@@ -435,6 +436,7 @@ async function handleAction(db, action, params) {
         employee: {
           empId: emp.emp_id,
           fullName: emp.full_name,
+          nickname: emp.nickname || '',
           citizenId: emp.citizen_id,
           phone: emp.phone,
           address: emp.address,

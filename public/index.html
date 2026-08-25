@@ -302,19 +302,16 @@
             <table class="data-table">
               <thead>
                 <tr>
-                  <th>รหัส</th>
+                  <th style="width:90px">รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
-                  <th>วันเกิด / อายุ</th>
-                  <th>บัตรประชาชน</th>
-                  <th>เบอร์โทร</th>
+                  <th style="width:100px">ชื่อเล่น</th>
                   <th>ที่อยู่</th>
                   <th>แผนก / ตำแหน่ง</th>
-                  <th class="text-right">เงินเดือนฐาน</th>
-                  <th>ธนาคาร / เลขบัญชี</th>
-                  <th class="text-right">PF %</th>
-                  <th class="text-right text-red font-bold">SSO (Default)</th>
-                  <th class="text-right text-red font-bold">ภาษี (Default)</th>
-                  <th class="text-center">จัดการ</th>
+                  <th class="text-right" style="width:110px">เงินเดือนฐาน</th>
+                  <th class="text-right" style="width:70px">PF %</th>
+                  <th class="text-right text-red font-bold" style="width:110px">SSO (Default) 🔴</th>
+                  <th class="text-right text-red font-bold" style="width:100px">ภาษี (Default) 🔴</th>
+                  <th class="text-center" style="width:120px">จัดการ</th>
                 </tr>
               </thead>
               <tbody id="employeesTableBody"></tbody>
@@ -614,7 +611,7 @@
         <div class="modal-body">
           <input type="hidden" id="empOrigId">
           <div class="form-grid">
-            <div class="form-row-2">
+            <div class="form-row-3">
               <div class="form-group">
                 <label>รหัสพนักงาน *</label>
                 <input type="text" id="mEmpId" placeholder="เช่น EMP001" required>
@@ -622,6 +619,10 @@
               <div class="form-group">
                 <label>ชื่อ-นามสกุล *</label>
                 <input type="text" id="mFullName" placeholder="ชื่อ-นามสกุล" required>
+              </div>
+              <div class="form-group">
+                <label><i class="fa-solid fa-tag" style="color:#2563eb"></i> ชื่อเล่น</label>
+                <input type="text" id="mNickname" placeholder="เช่น ต้น, พลอย">
               </div>
             </div>
             <div class="form-row-2">
