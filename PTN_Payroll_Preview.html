@@ -1228,7 +1228,7 @@ td {
                   <th class="right">วันลา</th>
                   <th class="right text-blue">OT ชม.</th>
                   <th class="right">อัตรา OT</th>
-                  <th class="right">เบี้ยเลี้ยง</th>
+                  <th class="right">เบี้ยขยัน</th>
                   <th class="right">โบนัส</th>
                   <th class="right text-red bg-red">หักเงินเบิก</th>
                   <th class="right">SSO</th>
@@ -1391,7 +1391,7 @@ td {
               <div class="payslip-section-body">
                 <div class="payslip-row"><span>เงินเดือนฐาน</span><span id="psBaseSalary" style="font-family:monospace;font-weight:600">0.00</span></div>
                 <div class="payslip-row"><span id="psOtLabel">ค่าล่วงเวลา (OT)</span><span id="psOtPay" style="font-family:monospace;font-weight:600;color:#1d4ed8">0.00</span></div>
-                <div class="payslip-row"><span>เบี้ยเลี้ยง</span><span id="psAllowance" style="font-family:monospace;font-weight:600">0.00</span></div>
+                <div class="payslip-row"><span>เบี้ยขยัน</span><span id="psAllowance" style="font-family:monospace;font-weight:600">0.00</span></div>
                 <div class="payslip-row"><span>โบนัส / อื่นๆ</span><span id="psBonus" style="font-family:monospace;font-weight:600">0.00</span></div>
               </div>
               <div class="payslip-section-footer" style="background:#eff6ff;color:#1d4ed8">
@@ -1403,12 +1403,12 @@ td {
                 <span>รายการหัก (Deductions)</span><span>จำนวนเงิน (บาท)</span>
               </div>
               <div class="payslip-section-body">
-                <div class="payslip-row"><span>หักขาด/ลา</span><span id="psLeaveDed" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row"><span>หักขาด/ลา/สาย</span><span id="psLeaveDed" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
                 <div class="payslip-row"><span>ประกันสังคม</span><span id="psSso" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
                 <div class="payslip-row"><span id="psPfLabel">กองทุนสำรองเลี้ยงชีพ (PF)</span><span id="psPf" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
                 <div class="payslip-row"><span>ภาษีหัก ณ ที่จ่าย</span><span id="psTax" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
                 <div class="payslip-row" style="font-weight:700;color:#be123c"><span>หักเงินเบิก</span><span id="psAdvanceDed" style="font-family:monospace">0.00</span></div>
-                <div class="payslip-row"><span>หักอื่นๆ</span><span id="psOtherDed" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
+                <div class="payslip-row"><span>หักอื่นๆ (เงินกู้, ค่าเช่า, น้ำ, ไฟ)</span><span id="psOtherDed" style="font-family:monospace;font-weight:600;color:#dc2626">0.00</span></div>
               </div>
               <div class="payslip-section-footer" style="background:#fff1f2;color:#be123c">
                 <span>รวมรายการหัก</span><span id="psTotalDed" style="font-family:monospace;font-size:14px">0.00</span>
@@ -1555,17 +1555,52 @@ td {
           </div>
         </div>
 
-        <div class="form-row three">
-          <div class="field"><label>วันลา (วัน)</label><input type="number" id="miLeaveDays" value="0" step="0.5"></div>
-          <div class="field"><label>เบี้ยเลี้ยง (บาท)</label><input type="number" id="miAllowance" value="0" step="0.01"></div>
-          <div class="field"><label>โบนัส (บาท)</label><input type="number" id="miBonus" value="0" step="0.01"></div>
+        <!-- Working Days & Leave / Late Deductions -->
+        <div style="background:#fffbeb;padding:12px 14px;border-radius:12px;border:1.5px solid #fde68a;margin-bottom:14px">
+          <div style="font-weight:700;color:#b45309;font-size:12px;margin-bottom:8px">
+            <i class="fa-solid fa-calendar-check"></i> วันทำงานจริง และรายการหัก ขาด/ลา/สาย
+          </div>
+          <div class="form-row" style="grid-template-columns:1fr 1fr 1fr 1fr;gap:8px">
+            <div class="field" style="margin-bottom:0">
+              <label style="color:#92400e;font-size:11px">วันทำงานจริง (วัน)</label>
+              <input type="number" id="miActualWorkDays" value="30" step="0.5">
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label style="color:#92400e;font-size:11px">ขาด/ลากิจ (วัน)</label>
+              <input type="number" id="miLeaveDays" value="0" step="0.5">
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label style="color:#b91c1c;font-size:11px">ลาป่วย (วัน)</label>
+              <input type="number" id="miSickLeaveDays" value="0" step="0.5">
+            </div>
+            <div class="field" style="margin-bottom:0">
+              <label style="color:#b91c1c;font-size:11px">หักมาสาย (บาท)</label>
+              <input type="number" id="miLateDeduct" value="0" step="0.01">
+            </div>
+          </div>
         </div>
 
-        <div class="field-red">
-          <label>หักเงินเบิก (บาท)</label>
-          <input type="number" id="miAdvanceDeduct" value="0" step="0.01">
+        <div class="form-row">
+          <div class="field">
+            <label style="color:#047857;font-weight:700"><i class="fa-solid fa-award"></i> เบี้ยขยัน (บาท)</label>
+            <input type="number" id="miAllowance" value="0" step="0.01" placeholder="เบี้ยขยัน">
+          </div>
+          <div class="field">
+            <label><i class="fa-solid fa-gift"></i> โบนัส / พิเศษ (บาท)</label>
+            <input type="number" id="miBonus" value="0" step="0.01" placeholder="โบนัส">
+          </div>
         </div>
-        <div class="field"><label>หักอื่นๆ (บาท)</label><input type="number" id="miOtherDed" value="0" step="0.01"></div>
+
+        <div class="form-row">
+          <div class="field-red" style="margin-bottom:0">
+            <label><i class="fa-solid fa-hand-holding-dollar"></i> หักเงินเบิกล่วงหน้า (บาท)</label>
+            <input type="number" id="miAdvanceDeduct" value="0" step="0.01">
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label style="color:#be123c;font-weight:700"><i class="fa-solid fa-receipt"></i> หักอื่นๆ (เงินกู้, ค่าเช่า, น้ำ, ไฟ) (บาท)</label>
+            <input type="number" id="miOtherDed" value="0" step="0.01" placeholder="ยอดหักอื่นๆ">
+          </div>
+        </div>
 
         <div class="field-indigo">
           <div style="font-weight:700;color:#3730a3;font-size:11px;margin-bottom:6px">ประกันสังคม &amp; ภาษี (ดึงค่าเริ่มต้นจากทะเบียนพนักงาน)</div>
