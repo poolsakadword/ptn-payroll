@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Main Stylesheet -->
-  <link rel="stylesheet" href="css/style.v3.5.css">
+  <link rel="stylesheet" href="css/style.v4.0.css">
 </head>
 <body>
 
@@ -166,10 +166,7 @@
             </div>
             <div class="toolbar">
               <button type="button" class="btn btn-slate" onclick="loadAllData()">
-                <i class="fa-solid fa-rotate-right"></i> รีเฟรช
-              </button>
-              <button type="button" class="btn btn-success" onclick="runPayrollProcess()" id="btnDashProcess">
-                <i class="fa-solid fa-bolt"></i> ประมวลผลคำนวณเงินเดือน
+                <i class="fa-solid fa-rotate-right"></i> รีเฟรชข้อมูล
               </button>
             </div>
           </div>
@@ -786,15 +783,15 @@
           </div>
           <div class="field">
             <label style="color:#1d4ed8"><i class="fa-solid fa-piggy-bank"></i> กองทุน PF (บาท)</label>
-            <input type="number" id="miPfAmount" placeholder="ยอดเงินสะสม" step="0.01" style="background:#eff6ff;font-weight:700;color:#1d4ed8">
+            <input type="number" id="miPfAmount" placeholder="ยอดเงินสะสม" step="0.01" readonly style="background:#f1f5f9;font-weight:700;color:#1d4ed8;cursor:not-allowed">
           </div>
         </div>
 
         <div class="field-highlight">
           <div style="font-weight:700;color:#1d4ed8;margin-bottom:8px"><i class="fa-solid fa-clock"></i> ค่าล่วงเวลา (OT)</div>
           <div class="form-row">
-            <div class="field" style="margin-bottom:0"><label>จำนวนชั่วโมง OT</label><input type="number" id="miOtHours" value="0" step="0.5"></div>
-            <div class="field" style="margin-bottom:0"><label>อัตรา OT (บาท/ชม.)</label><input type="number" id="miOtRate" value="0" step="0.01"></div>
+            <div class="field" style="margin-bottom:0"><label>จำนวนชั่วโมง OT</label><input type="number" id="miOtHours" value="0" step="0.5" placeholder="0"></div>
+            <div class="field" style="margin-bottom:0"><label>อัตรา OT (บาท/ชม.) [ค่าเริ่มต้น 40 บาท]</label><input type="number" id="miOtRate" value="40" step="0.01" placeholder="40"></div>
           </div>
         </div>
 
@@ -893,7 +890,7 @@
   </div>
 
   <!-- Scripts -->
-  <script src="js/config.v3.5.js"></script>
-  <script src="js/app.v3.5.js"></script>
+  <script src="js/config.v4.0.js"></script>
+  <script src="js/app.v4.0.js"></script>
 </body>
 </html>

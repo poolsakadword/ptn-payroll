@@ -2,6 +2,7 @@
  * ==============================================================================
  * PTN Payroll System V3.0 - Cloudflare D1 Native Serverless API Engine
  * บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด
+ * Streamlined & Optimized Architecture (Zero Redundancy, Default OT Rate = 40)
  * ==============================================================================
  */
 
@@ -87,7 +88,7 @@ async function handleD1Action(db, action, params) {
     }
 
     case 'getAppInitialData': {
-      // 1. Settings, Period status & Work Days
+      // 1. Settings & Period Status
       const settingsRows = await db.prepare('SELECT key, value FROM settings').all();
       const settingsMap = {
         companyName: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
@@ -117,7 +118,7 @@ async function handleD1Action(db, action, params) {
         }
       }
 
-      // 2. Employees
+      // 2. Employees Master
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
       const employees = (empQuery.results || []).map(e => ({
         empId: e.emp_id,
@@ -146,13 +147,12 @@ async function handleD1Action(db, action, params) {
         baseSalary: Number(i.base_salary) || 0,
         pfRate: Number(i.pf_rate) || 0.05,
         pfAmount: Number(i.pf_amount) || 0,
-        actualWorkDays: Number(i.actual_work_days !== undefined && i.actual_work_days !== null ? i.actual_work_days : workingDays),
         absentDays: Number(i.absent_days) || 0,
         leaveDays: Number(i.leave_days) || 0,
         sickLeaveDays: Number(i.sick_leave_days) || 0,
         lateDeduct: Number(i.late_deduct) || 0,
         otHours: Number(i.ot_hours) || 0,
-        otRate: Number(i.ot_rate) || 0,
+        otRate: (i.ot_rate !== null && i.ot_rate !== undefined && !isNaN(Number(i.ot_rate))) ? Number(i.ot_rate) : 40,
         allowance: Number(i.allowance) || 0,
         bonus: Number(i.bonus) || 0,
         advanceDeduct: Number(i.advance_deduct) || 0,
@@ -161,19 +161,21 @@ async function handleD1Action(db, action, params) {
         tax: Number(i.tax) || 0
       }));
 
-      // 4. Payroll Calcs (Only if input records exist)
+      // 4. Payroll Calcs (Read directly, no double calculation)
       let payrollList = [];
       let totalGross = 0;
       let totalDeductions = 0;
       let totalNet = 0;
 
       if (inputRecords.length === 0) {
-        // If NO monthly inputs, clean any orphaned calculations for this period
         await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
       } else {
-        // Auto calculate and sync
-        await calculateAndSavePayroll(db, period, workingDays);
-        const calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
+        // Read existing calcs or calculate once if missing
+        let calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
+        if (!calcQuery.results || calcQuery.results.length === 0) {
+          await calculateAndSavePayroll(db, period, workingDays);
+          calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
+        }
 
         payrollList = (calcQuery.results || []).map(c => {
           const gross = Number(c.gross_pay) || 0;
@@ -193,9 +195,9 @@ async function handleD1Action(db, action, params) {
             bankAccount: c.bank_account || '',
             baseSalary: Number(c.base_salary) || 0,
             otHours: Number(c.ot_hours) || 0,
-            otRate: Number(c.ot_rate) || 0,
+            otRate: Number(c.ot_rate) || 40,
             otPay: Number(c.ot_pay) || 0,
-            allowance: Number(c.allowance) || 0, // เบี้ยขยัน
+            allowance: Number(c.allowance) || 0,
             bonus: Number(c.bonus) || 0,
             leaveDeduction: Number(c.leave_deduction) || 0,
             grossPay: gross,
@@ -203,7 +205,7 @@ async function handleD1Action(db, action, params) {
             pf: Number(c.pf) || 0,
             tax: Number(c.tax) || 0,
             advanceDeduct: Number(c.advance_deduct) || 0,
-            otherDeduct: Number(c.other_deduct) || 0, // หักอื่นๆ (เงินกู้,ค่าเช่า,น้ำ,ไฟ)
+            otherDeduct: Number(c.other_deduct) || 0,
             totalDeductions: ded,
             netPay: net
           };
@@ -287,6 +289,7 @@ async function handleD1Action(db, action, params) {
       const baseSal = Number(r.baseSalary) || 0;
       const pfRate = Number(r.pfRate) || 0.05;
       const pfAmt = Number(r.pfAmount) || Math.round(baseSal * pfRate * 100) / 100;
+      const otRate = (r.otRate !== null && r.otRate !== undefined && !isNaN(Number(r.otRate))) ? Number(r.otRate) : 40;
 
       if (origEmpId && origEmpId !== r.empId) {
         await db.prepare('DELETE FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, origEmpId).run();
@@ -297,12 +300,12 @@ async function handleD1Action(db, action, params) {
 
       await db.prepare(`
         INSERT OR REPLACE INTO monthly_inputs
-        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, actual_work_days, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         period, nextNo, r.empId, r.empName || '', baseSal, pfRate, pfAmt,
-        Number(r.actualWorkDays) || 30, Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
-        Number(r.otHours) || 0, Number(r.otRate) || 0,
+        Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
+        Number(r.otHours) || 0, otRate,
         Number(r.allowance) || 0, Number(r.bonus) || 0, Number(r.advanceDeduct) || 0,
         Number(r.otherDeduct) || 0, Number(r.sso) || 750, Number(r.tax) || 0
       ).run();
@@ -326,10 +329,6 @@ async function handleD1Action(db, action, params) {
         return { success: false, message: 'ไม่พบข้อมูลในทะเบียนพนักงาน กรุณาเพิ่มพนักงานก่อน' };
       }
 
-      let workingDays = 30;
-      const wdRow = await db.prepare('SELECT value FROM settings WHERE key = ?').bind(`Period_WorkDays_${period}`).first();
-      if (wdRow && wdRow.value && !isNaN(Number(wdRow.value))) workingDays = Number(wdRow.value);
-
       const existingInput = await db.prepare('SELECT emp_id FROM monthly_inputs WHERE period = ?').bind(period).all();
       const existingMap = {};
       for (const row of existingInput.results || []) existingMap[row.emp_id] = true;
@@ -344,17 +343,17 @@ async function handleD1Action(db, action, params) {
           const baseSal = Number(emp.base_salary) || 0;
           const pfRate = Number(emp.pf_rate) || 0.05;
           const pfAmt = Math.round(baseSal * pfRate * 100) / 100;
-          const otRate = baseSal > 0 ? Math.round(baseSal / 30 / 8 * 1.5 * 100) / 100 : 0;
+          const otRate = 40; // Default OT rate = 40 Baht/hr
           const sso = Number(emp.default_sso !== null ? emp.default_sso : (baseSal >= 15000 ? 750 : Math.round(baseSal * 0.05)));
           const tax = Number(emp.default_tax) || 0;
 
           await db.prepare(`
             INSERT OR REPLACE INTO monthly_inputs
-            (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, actual_work_days, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-            workingDays, 0, 0, 0, 0, 0, otRate, 0, 0, 0, 0, sso, tax
+            0, 0, 0, 0, 0, otRate, 0, 0, 0, 0, sso, tax
           ).run();
         }
       }
@@ -364,7 +363,7 @@ async function handleD1Action(db, action, params) {
         success: true,
         period: period,
         count: added,
-        message: added > 0 ? `นำเข้าพนักงานเข้างวด ${period} สำเร็จ (${added} คน)` : `พนักงานทุกคนมีข้อมูลในงวด ${period} อยู่แล้ว`
+        message: added > 0 ? `นำเข้าพนักงานเข้างวด ${period} สำเร็จ (${added} คน) [อัตรา OT เริ่มต้น 40 บาท]` : `พนักงานทุกคนมีข้อมูลในงวด ${period} อยู่แล้ว`
       };
     }
 
@@ -380,7 +379,6 @@ async function handleD1Action(db, action, params) {
       const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
       if (!emp) return { success: false, message: `ไม่พบพนักงานรหัส ${empId}` };
 
-      // Get all payroll records for this employee
       const calcs = await db.prepare('SELECT * FROM payroll_calcs WHERE emp_id = ? ORDER BY period DESC').bind(empId).all();
       const inputs = await db.prepare('SELECT * FROM monthly_inputs WHERE emp_id = ? ORDER BY period DESC').bind(empId).all();
 
@@ -401,6 +399,7 @@ async function handleD1Action(db, action, params) {
           sickLeaveDays: Number(inp.sick_leave_days) || 0,
           lateDeduct: Number(inp.late_deduct) || 0,
           otHours: Number(c.ot_hours) || 0,
+          otRate: Number(c.ot_rate) || 40,
           otPay: Number(c.ot_pay) || 0,
           allowance: Number(c.allowance) || 0,
           bonus: Number(c.bonus) || 0,
@@ -487,7 +486,6 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   const inputQuery = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
   const inputList = inputQuery.results || [];
 
-  // IF NO INPUTS EXIST, CLEAR PAYROLL CALCS FOR THIS PERIOD
   if (inputList.length === 0) {
     await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
     return 0;
@@ -503,7 +501,6 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   const empMap = {};
   for (const emp of empQuery.results || []) empMap[emp.emp_id] = emp;
 
-  // Clear existing payroll calcs for this period and insert only current active inputs
   await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
 
   let count = 0;
@@ -516,19 +513,19 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const pfRate = Number(inp.pf_rate !== undefined ? inp.pf_rate : (emp.pf_rate || 0.05));
     const pfAmt = Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100);
 
-    // OT Rate (standard)
-    const otRate = Number(inp.ot_rate > 0 ? inp.ot_rate : (baseSal > 0 ? Math.round(baseSal / 30 / 8 * 1.5 * 100) / 100 : 0));
+    // OT Rate: Default 40 Baht/hr (manual configurable)
+    const otRate = (inp.ot_rate !== null && inp.ot_rate !== undefined && !isNaN(Number(inp.ot_rate))) ? Number(inp.ot_rate) : 40;
     const otPay = Math.round((Number(inp.ot_hours) || 0) * otRate * 100) / 100;
 
     // Daily rate based on period working days
     const dailyRate = workDays > 0 ? (baseSal / workDays) : (baseSal / 30);
 
     // Formulas:
-    // 1. Absent: Deduct 1.5x of daily rate (ขาดงาน หักเพิ่ม 0.5 เท่า = 1.5 เท่าของค่าจ้างต่อวัน)
+    // 1. Absent: Deduct 1.5x of daily rate (ขาดงาน หัก 1.5 เท่าของค่าจ้างต่อวัน)
     const absentDays = Number(inp.absent_days) || 0;
     const absentDed = absentDays * dailyRate * 1.5;
 
-    // 2. Personal/Business leave: Deduct 1.0x of daily rate (ลากิจ หักเท่ากับค่าจ้างต่อวัน)
+    // 2. Personal leave: Deduct 1.0x of daily rate (ลากิจ หักเท่ากับค่าจ้างต่อวัน)
     const leaveDays = Number(inp.leave_days) || 0;
     const businessLeaveDed = leaveDays * dailyRate * 1.0;
 
@@ -551,7 +548,7 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const pf = pfAmt;
     const tax = Number(inp.tax !== undefined ? inp.tax : (emp.default_tax || 0));
     const advDed = Number(inp.advance_deduct) || 0;
-    const othDed = Number(inp.other_deduct) || 0; // หักอื่นๆ (เงินกู้,ค่าเช่า,น้ำ,ไฟ)
+    const othDed = Number(inp.other_deduct) || 0;
     const totalDed = Math.round((sso + pf + tax + advDed + othDed) * 100) / 100;
     const netPay = Math.round((grossPay - totalDed) * 100) / 100;
 
