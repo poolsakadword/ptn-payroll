@@ -534,32 +534,43 @@ function renderEmployees(r) {
 function renderInput(r) {
   if (!r || !r.success) return;
   globalInputRecords = r.records || [];
+  var workDays = currentPeriodWorkingDays > 0 ? currentPeriodWorkingDays : 30;
   var h = '';
-  globalInputRecords.forEach(function(i) {
-    var period = i.period || currentSelectedPeriod;
-    var pfAmt = (i.pfAmount !== undefined) ? i.pfAmount : Math.round((i.baseSalary || 0) * (i.pfRate || 0.05) * 100) / 100;
+
+  globalInputRecords.forEach(function(i, idx) {
+    var baseSal = Number(i.baseSalary) || 0;
+    var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
+    var pfRate = Number(i.pfRate) || 0.05;
+    var pfAmt = (i.pfAmount !== undefined && i.pfAmount > 0) ? i.pfAmount : Math.round(baseSal * pfRate * 100) / 100;
+
     h += '<tr>' +
-      '<td style="color:#2563eb;font-weight:600">' + period + '</td>' +
-      '<td style="color:#94a3b8;font-family:monospace">' + i.no + '</td>' +
-      '<td style="font-family:monospace;font-weight:600">' + i.empId + '</td>' +
-      '<td style="font-weight:600">' + (i.empName || '-') + '</td>' +
-      '<td class="right" style="font-weight:600;color:#1e3a8a">' + fmt(i.baseSalary) + '</td>' +
-      '<td class="right">' + ((i.pfRate || 0) * 100).toFixed(0) + '%</td>' +
-      '<td class="right text-blue" style="font-weight:700">' + fmt(pfAmt) + '</td>' +
-      '<td class="right">' + i.leaveDays + '</td>' +
-      '<td class="right text-blue">' + i.otHours + '</td>' +
-      '<td class="right">' + fmt(i.otRate) + '</td>' +
-      '<td class="right">' + fmt(i.allowance) + '</td>' +
-      '<td class="right">' + fmt(i.bonus) + '</td>' +
-      '<td class="right text-red bg-red" style="font-weight:700">' + fmt(i.advanceDeduct) + '</td>' +
-      '<td class="right">' + fmt(i.sso) + '</td>' +
-      '<td class="right">' + fmt(i.tax) + '</td>' +
-      '<td class="center"><div class="action-btns">' +
-      '<button type="button" class="btn-icon edit" onclick="editInputRecord(\'' + i.empId + '\')"><i class="fa-solid fa-pen-to-square"></i> แก้ไข</button>' +
-      '<button type="button" class="btn-icon del" onclick="confirmDeleteInputRecord(\'' + i.empId + '\')"><i class="fa-solid fa-trash-can"></i> ลบ</button>' +
-      '</div></td></tr>';
+      '<td class="center font-mono">' + (i.no || (idx + 1)) + '</td>' +
+      '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
+      '<td class="font-bold">' + esc(i.empName || '-') + '</td>' +
+      '<td class="right font-mono font-bold" style="color:#1e3a8a">' + fmt(baseSal) + '</td>' +
+      '<td class="right font-mono text-blue font-bold" style="background:#eff6ff">' + fmt(dailyRate) + '</td>' +
+      '<td class="right font-mono text-red font-bold">' + (i.absentDays || 0) + '</td>' +
+      '<td class="right font-mono">' + (i.leaveDays || 0) + '</td>' +
+      '<td class="right font-mono text-red">' + (i.sickLeaveDays || 0) + '</td>' +
+      '<td class="right font-mono text-red">' + fmt(i.lateDeduct || 0) + '</td>' +
+      '<td class="right font-mono">' + (i.otHours || 0) + '</td>' +
+      '<td class="right font-mono">' + fmt(i.otRate || 0) + '</td>' +
+      '<td class="right font-mono text-green font-bold">' + fmt(i.allowance || 0) + '</td>' +
+      '<td class="right font-mono">' + fmt(i.bonus || 0) + '</td>' +
+      '<td class="right font-mono font-bold text-blue">' + fmt(pfAmt) + '</td>' +
+      '<td class="right font-mono">' + fmt(i.sso !== undefined ? i.sso : 750) + '</td>' +
+      '<td class="right font-mono">' + fmt(i.tax || 0) + '</td>' +
+      '<td class="right font-mono text-red font-bold">' + fmt(i.advanceDeduct || 0) + '</td>' +
+      '<td class="right font-mono text-red">' + fmt(i.otherDeduct || 0) + '</td>' +
+      '<td class="center nowrap"><div class="action-btns">' +
+        '<button type="button" class="btn-icon edit" onclick="editInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-pen-to-square"></i> แก้ไข</button>' +
+        '<button type="button" class="btn-icon del" onclick="confirmDeleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash-can"></i> ลบ</button>' +
+      '</div></td>' +
+    '</tr>';
   });
-  document.getElementById('inputTableBody').innerHTML = h || '<tr><td colspan="16" class="center" style="color:#94a3b8;padding:20px">ยังไม่มีข้อมูลในงวด ' + currentSelectedPeriod + ' (กดปุ่ม "ดึงพนักงานทุกคนเข้างวดนี้" เพื่อเพิ่มข้อมูลอัตโนมัติ)</td></tr>';
+
+  var el = document.getElementById('inputTableBody');
+  if (el) el.innerHTML = h || '<tr><td colspan="19" class="center text-muted" style="padding:28px">ยังไม่มีข้อมูลในงวด ' + esc(currentSelectedPeriod) + ' (กดปุ่ม "ดึงพนักงานทุกคนเข้างวดนี้" เพื่อเพิ่มข้อมูลอัตโนมัติ)</td></tr>';
 }
 
 function renderUsers(r) {
