@@ -159,6 +159,21 @@ function initPeriodDropdowns() {
 }
 
 
+
+function setPeriodWorkDays() {
+  var days = Number(document.getElementById('periodWorkingDaysInput').value) || 30;
+  currentPeriodWorkingDays = days;
+  showToast('กำลังตั้งค่างวดเป็น ' + days + ' วัน และคำนวณเงินเดือนพนักงานทุกคน...', 'info');
+  callApi('savePeriodWorkDays', { period: currentSelectedPeriod, workingDays: days })
+    .then(function(r) {
+      showToast(r.message || 'ตั้งค่างวดสำเร็จ', 'success');
+      loadAllData();
+    })
+    .catch(function(e) {
+      showToast('เกิดข้อผิดพลาด: ' + e.message, 'error');
+    });
+}
+
 function onPeriodWorkDaysChanged() {
   var days = Number(document.getElementById('periodWorkingDaysInput').value) || 30;
   currentPeriodWorkingDays = days;
@@ -337,6 +352,10 @@ function switchTab(id) {
   if (s) s.classList.add('show');
   var b = document.getElementById('tabBtn-' + id);
   if (b) b.classList.add('active');
+
+  if (id === 'history') {
+    populateHistoryEmpDropdown();
+  }
 }
 
 function openModal(id) {
@@ -1116,4 +1135,219 @@ function testApiConnection() {
           '</div>';
       }
     });
+}
+
+
+// ==================== 5. EMPLOYEE HISTORY MODULE ====================
+var currentHistoryEmp = null;
+var currentHistoryData = [];
+
+function populateHistoryEmpDropdown() {
+  var sel = document.getElementById('selHistoryEmp');
+  if (!sel) return;
+  var cur = sel.value;
+  sel.innerHTML = '<option value="">-- เลือกรหัสหรือชื่อพนักงาน --</option>';
+  allEmployees.forEach(function(e) {
+    sel.innerHTML += '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + ' (' + esc(e.department || '-') + ')</option>';
+  });
+  if (cur) sel.value = cur;
+  else if (allEmployees.length > 0) {
+    sel.value = allEmployees[0].empId;
+    onHistoryEmpSelected();
+  }
+}
+
+function onHistoryEmpSelected() {
+  var empId = document.getElementById('selHistoryEmp').value;
+  if (!empId) {
+    clearEmployeeHistoryView();
+    return;
+  }
+  callApi('getEmployeeHistory', { empId: empId })
+    .then(function(res) {
+      if (res && res.success) {
+        currentHistoryEmp = res.employee;
+        currentHistoryData = res.history || [];
+        renderEmployeeHistory(res.employee, res.history);
+      } else {
+        showToast((res && res.message) || 'ไม่พบข้อมูลประวัติ', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('Error loading history: ' + err.message, 'error');
+    });
+}
+
+function clearEmployeeHistoryView() {
+  currentHistoryEmp = null;
+  currentHistoryData = [];
+  document.getElementById('histEmpId').textContent = '-';
+  document.getElementById('histFullName').textContent = '-';
+  document.getElementById('histDeptPos').textContent = '-';
+  document.getElementById('histBaseSalary').textContent = '฿0.00';
+  document.getElementById('histCitizenId').textContent = '-';
+  document.getElementById('histPhone').textContent = '-';
+  document.getElementById('histBank').textContent = '-';
+  document.getElementById('histJoinPf').textContent = '-';
+  document.getElementById('empHistoryTableBody').innerHTML = '<tr><td colspan="19" class="center text-muted" style="padding:28px">กรุณาเลือกพนักงานจากกล่องด้านบนเพื่อดูประวัติ</td></tr>';
+}
+
+function renderEmployeeHistory(emp, history) {
+  if (!emp) return;
+  document.getElementById('histEmpId').textContent = emp.empId;
+  document.getElementById('histFullName').textContent = emp.fullName;
+  document.getElementById('histDeptPos').textContent = (emp.department || '-') + ' / ' + (emp.position || '-');
+  document.getElementById('histBaseSalary').textContent = fmt(emp.baseSalary);
+  document.getElementById('histCitizenId').textContent = emp.citizenId || '-';
+  document.getElementById('histPhone').textContent = emp.phone || '-';
+  document.getElementById('histBank').textContent = (emp.bankName || '-') + ' : ' + (emp.bankAccount || '-');
+  document.getElementById('histJoinPf').textContent = (emp.joinDate || '-') + ' | PF ' + ((emp.pfRate || 0.05) * 100).toFixed(0) + '%';
+
+  var tbody = document.getElementById('empHistoryTableBody');
+  if (!tbody) return;
+  if (!history || history.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="19" class="center text-muted" style="padding:28px">ยังไม่มีประวัติการจ่ายเงินเดือนสำหรับพนักงานคนนี้</td></tr>';
+    return;
+  }
+
+  var h = '';
+  history.forEach(function(r) {
+    h += '<tr>' +
+      '<td class="font-bold text-blue nowrap">' + esc(r.period) + '</td>' +
+      '<td class="right font-mono">' + fmt(r.baseSalary) + '</td>' +
+      '<td class="right font-mono text-red">' + (r.absentDays || 0) + '</td>' +
+      '<td class="right font-mono">' + (r.leaveDays || 0) + '</td>' +
+      '<td class="right font-mono text-red">' + (r.sickLeaveDays || 0) + '</td>' +
+      '<td class="right font-mono text-red">' + fmt(r.lateDeduct) + '</td>' +
+      '<td class="right font-mono">' + (r.otHours || 0) + '</td>' +
+      '<td class="right font-mono text-blue">' + fmt(r.otPay) + '</td>' +
+      '<td class="right font-mono text-green font-bold">' + fmt(r.allowance) + '</td>' +
+      '<td class="right font-mono">' + fmt(r.bonus) + '</td>' +
+      '<td class="right font-mono text-red">' + fmt(r.leaveDeduction) + '</td>' +
+      '<td class="right font-mono font-bold text-blue">' + fmt(r.grossPay) + '</td>' +
+      '<td class="right font-mono">' + fmt(r.sso) + '</td>' +
+      '<td class="right font-mono">' + fmt(r.pf) + '</td>' +
+      '<td class="right font-mono">' + fmt(r.tax) + '</td>' +
+      '<td class="right font-mono text-red">' + fmt(r.advanceDeduct) + '</td>' +
+      '<td class="right font-mono text-red">' + fmt(r.otherDeduct) + '</td>' +
+      '<td class="right font-mono font-bold text-red">' + fmt(r.totalDeductions) + '</td>' +
+      '<td class="right font-mono font-bold text-green" style="background:#f0fdf4">' + fmt(r.netPay) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = h;
+}
+
+function printEmployeeHistoryReport() {
+  if (!currentHistoryEmp) {
+    showToast('กรุณาเลือกพนักงานก่อนพิมพ์ประวัติ', 'warning');
+    return;
+  }
+  var printWin = window.open('', '_blank', 'width=900,height=700');
+  var emp = currentHistoryEmp;
+  var list = currentHistoryData || [];
+
+  var rowsHtml = '';
+  list.forEach(function(r) {
+    rowsHtml += '<tr>' +
+      '<td>' + esc(r.period) + '</td>' +
+      '<td style="text-align:right">' + fmt(r.baseSalary) + '</td>' +
+      '<td style="text-align:right;color:#dc2626">' + (r.absentDays || 0) + '</td>' +
+      '<td style="text-align:right">' + (r.leaveDays || 0) + '</td>' +
+      '<td style="text-align:right;color:#dc2626">' + (r.sickLeaveDays || 0) + '</td>' +
+      '<td style="text-align:right;color:#dc2626">' + fmt(r.lateDeduct) + '</td>' +
+      '<td style="text-align:right">' + (r.otHours || 0) + '</td>' +
+      '<td style="text-align:right">' + fmt(r.otPay) + '</td>' +
+      '<td style="text-align:right;color:#059669">' + fmt(r.allowance) + '</td>' +
+      '<td style="text-align:right">' + fmt(r.bonus) + '</td>' +
+      '<td style="text-align:right;font-weight:bold">' + fmt(r.grossPay) + '</td>' +
+      '<td style="text-align:right">' + fmt(r.sso) + '</td>' +
+      '<td style="text-align:right">' + fmt(r.pf) + '</td>' +
+      '<td style="text-align:right">' + fmt(r.tax) + '</td>' +
+      '<td style="text-align:right;color:#dc2626">' + fmt(r.totalDeductions) + '</td>' +
+      '<td style="text-align:right;font-weight:bold;color:#059669">' + fmt(r.netPay) + '</td>' +
+    '</tr>';
+  });
+
+  var printDoc = '<!DOCTYPE html><html><head><title>ประวัติการทำงาน - ' + esc(emp.fullName) + '</title>' +
+    '<style>' +
+    '@page { size: A4 landscape; margin: 12mm; }' +
+    'body { font-family: "Sarabun", Tahoma, sans-serif; font-size: 11px; color: #1e293b; line-height: 1.4; padding: 10px; }' +
+    'h2 { margin: 0 0 4px 0; color: #1e3a8a; font-size: 16px; }' +
+    '.card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px; background: #f8fafc; }' +
+    '.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }' +
+    'table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }' +
+    'th, td { border: 1px solid #cbd5e1; padding: 5px 6px; }' +
+    'th { background: #1e3a8a; color: white; text-align: center; }' +
+    '</style></head><body>' +
+    '<h2>บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>' +
+    '<p style="margin:0 0 10px 0;color:#64748b">รายงานประวัติการทำงานและเงินเดือนพนักงาน (Employee Work & Payroll History)</p>' +
+    '<div class="card"><div class="grid">' +
+      '<div><strong>รหัส:</strong> ' + esc(emp.empId) + '</div>' +
+      '<div><strong>ชื่อ-นามสกุล:</strong> ' + esc(emp.fullName) + '</div>' +
+      '<div><strong>แผนก:</strong> ' + esc(emp.department || '-') + '</div>' +
+      '<div><strong>ตำแหน่ง:</strong> ' + esc(emp.position || '-') + '</div>' +
+      '<div><strong>บัตรประชาชน:</strong> ' + esc(emp.citizenId || '-') + '</div>' +
+      '<div><strong>เบอร์โทร:</strong> ' + esc(emp.phone || '-') + '</div>' +
+      '<div><strong>ธนาคาร:</strong> ' + esc(emp.bankName || '-') + ' ' + esc(emp.bankAccount || '-') + '</div>' +
+      '<div><strong>เงินเดือนฐาน:</strong> ' + fmt(emp.baseSalary) + '</div>' +
+    '</div></div>' +
+    '<table><thead><tr>' +
+      '<th>งวด</th><th>เงินเดือนฐาน</th><th>ขาดงาน</th><th>ลากิจ</th><th>ลาป่วย</th><th>หักสาย</th><th>OT(ชม.)</th><th>เงิน OT</th><th>เบี้ยขยัน</th><th>โบนัส</th><th>Gross</th><th>ประกันสังคม</th><th>PF</th><th>ภาษี</th><th>รวมหัก</th><th>สุทธิ (Net)</th>' +
+    '</tr></thead><tbody>' + (rowsHtml || '<tr><td colspan="16" style="text-align:center">ไม่มีข้อมูล</td></tr>') + '</tbody></table>' +
+    '<script>window.onload = function() { window.print(); };</script>' +
+    '</body></html>';
+
+  printWin.document.open();
+  printWin.document.write(printDoc);
+  printWin.document.close();
+}
+
+function exportEmployeeHistoryExcel() {
+  if (!currentHistoryEmp) {
+    showToast('กรุณาเลือกพนักงานก่อนส่งออกข้อมูล', 'warning');
+    return;
+  }
+  var emp = currentHistoryEmp;
+  var list = currentHistoryData || [];
+
+  var csv = '\uFEFF';
+  csv += 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด\n';
+  csv += 'ประวัติการทำงานและเงินเดือน: ' + emp.empId + ' - ' + emp.fullName + '\n';
+  csv += 'แผนก: ' + (emp.department || '-') + ', ตำแหน่ง: ' + (emp.position || '-') + ', เงินเดือนฐาน: ' + emp.baseSalary + '\n\n';
+
+  csv += 'งวดประจำเดือน,เงินเดือนฐาน,ขาดงาน (วัน),ลากิจ (วัน),ลาป่วย (วัน),หักสาย (บาท),OT (ชม.),เงิน OT,เบี้ยขยัน,โบนัส,หักขาดลา,Gross,ประกันสังคม,PF,ภาษี,หักเงินเบิก,หักอื่นๆ,รวมหัก,สุทธิ (Net)\n';
+
+  list.forEach(function(r) {
+    csv += [
+      '"' + (r.period || '') + '"',
+      r.baseSalary || 0,
+      r.absentDays || 0,
+      r.leaveDays || 0,
+      r.sickLeaveDays || 0,
+      r.lateDeduct || 0,
+      r.otHours || 0,
+      r.otPay || 0,
+      r.allowance || 0,
+      r.bonus || 0,
+      r.leaveDeduction || 0,
+      r.grossPay || 0,
+      r.sso || 0,
+      r.pf || 0,
+      r.tax || 0,
+      r.advanceDeduct || 0,
+      r.otherDeduct || 0,
+      r.totalDeductions || 0,
+      r.netPay || 0
+    ].join(',') + '\n';
+  });
+
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'Employee_History_' + emp.empId + '_' + Date.now() + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('ส่งออกประวัติพนักงาน ' + emp.empId + ' สำเร็จ', 'success');
 }

@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS monthly_inputs (
   pf_rate REAL DEFAULT 0.05,
   pf_amount REAL DEFAULT 0,
   actual_work_days REAL DEFAULT 30,
+  absent_days REAL DEFAULT 0,
   leave_days REAL DEFAULT 0,
   sick_leave_days REAL DEFAULT 0,
   late_deduct REAL DEFAULT 0,

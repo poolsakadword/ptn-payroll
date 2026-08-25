@@ -147,6 +147,7 @@ async function handleD1Action(db, action, params) {
         pfRate: Number(i.pf_rate) || 0.05,
         pfAmount: Number(i.pf_amount) || 0,
         actualWorkDays: Number(i.actual_work_days !== undefined && i.actual_work_days !== null ? i.actual_work_days : workingDays),
+        absentDays: Number(i.absent_days) || 0,
         leaveDays: Number(i.leave_days) || 0,
         sickLeaveDays: Number(i.sick_leave_days) || 0,
         lateDeduct: Number(i.late_deduct) || 0,
@@ -236,8 +237,8 @@ async function handleD1Action(db, action, params) {
     case 'savePeriodWorkDays': {
       const days = Number(params.workingDays) || 30;
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_WorkDays_${period}`, String(days)).run();
-      await calculateAndSavePayroll(db, period, days);
-      return { success: true, period: period, workingDays: days, message: `บันทึกจำนวนวันทำงานประจำงวด ${period} เป็น ${days} วัน เรียบร้อยแล้ว` };
+      const count = await calculateAndSavePayroll(db, period, days);
+      return { success: true, period: period, workingDays: days, count: count, message: `ตั้งค่าจำนวนวันทำงานงวด ${period} เป็น ${days} วัน และคำนวณเงินเดือนพนักงานทุกคนสำเร็จ (${count} คน)` };
     }
 
     case 'saveEmployee': {
@@ -292,11 +293,11 @@ async function handleD1Action(db, action, params) {
 
       await db.prepare(`
         INSERT OR REPLACE INTO monthly_inputs
-        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, actual_work_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, actual_work_days, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         period, nextNo, r.empId, r.empName || '', baseSal, pfRate, pfAmt,
-        Number(r.actualWorkDays) || 30, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
+        Number(r.actualWorkDays) || 30, Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
         Number(r.otHours) || 0, Number(r.otRate) || 0,
         Number(r.allowance) || 0, Number(r.bonus) || 0, Number(r.advanceDeduct) || 0,
         Number(r.otherDeduct) || 0, Number(r.sso) || 750, Number(r.tax) || 0
@@ -345,11 +346,11 @@ async function handleD1Action(db, action, params) {
 
           await db.prepare(`
             INSERT OR REPLACE INTO monthly_inputs
-            (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, actual_work_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, actual_work_days, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-            workingDays, 0, 0, 0, 0, otRate, 0, 0, 0, 0, sso, tax
+            workingDays, 0, 0, 0, 0, 0, otRate, 0, 0, 0, 0, sso, tax
           ).run();
         }
       }
@@ -366,6 +367,71 @@ async function handleD1Action(db, action, params) {
     case 'processPayroll': {
       const count = await calculateAndSavePayroll(db, period);
       return { success: true, period: period, count: count, message: `ประมวลผลคำนวณเงินเดือนงวด ${period} สำเร็จ (${count} รายการ)` };
+    }
+
+    case 'getEmployeeHistory': {
+      const empId = params.empId;
+      if (!empId) return { success: false, message: 'Missing empId' };
+
+      const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
+      if (!emp) return { success: false, message: `ไม่พบพนักงานรหัส ${empId}` };
+
+      // Get all payroll records for this employee
+      const calcs = await db.prepare('SELECT * FROM payroll_calcs WHERE emp_id = ? ORDER BY period DESC').bind(empId).all();
+      const inputs = await db.prepare('SELECT * FROM monthly_inputs WHERE emp_id = ? ORDER BY period DESC').bind(empId).all();
+
+      const inputMap = {};
+      for (const i of inputs.results || []) inputMap[i.period] = i;
+
+      const historyList = (calcs.results || []).map(c => {
+        const inp = inputMap[c.period] || {};
+        return {
+          period: c.period,
+          empId: c.emp_id,
+          name: c.full_name,
+          department: c.department,
+          position: c.position,
+          baseSalary: Number(c.base_salary) || 0,
+          absentDays: Number(inp.absent_days) || 0,
+          leaveDays: Number(inp.leave_days) || 0,
+          sickLeaveDays: Number(inp.sick_leave_days) || 0,
+          lateDeduct: Number(inp.late_deduct) || 0,
+          otHours: Number(c.ot_hours) || 0,
+          otPay: Number(c.ot_pay) || 0,
+          allowance: Number(c.allowance) || 0,
+          bonus: Number(c.bonus) || 0,
+          leaveDeduction: Number(c.leave_deduction) || 0,
+          grossPay: Number(c.gross_pay) || 0,
+          sso: Number(c.sso) || 0,
+          pf: Number(c.pf) || 0,
+          tax: Number(c.tax) || 0,
+          advanceDeduct: Number(c.advance_deduct) || 0,
+          otherDeduct: Number(c.other_deduct) || 0,
+          totalDeductions: Number(c.total_deductions) || 0,
+          netPay: Number(c.net_pay) || 0
+        };
+      });
+
+      return {
+        success: true,
+        employee: {
+          empId: emp.emp_id,
+          fullName: emp.full_name,
+          citizenId: emp.citizen_id,
+          phone: emp.phone,
+          address: emp.address,
+          department: emp.department,
+          position: emp.position,
+          baseSalary: Number(emp.base_salary) || 0,
+          bankName: emp.bank_name,
+          bankAccount: emp.bank_account,
+          joinDate: emp.join_date,
+          pfRate: Number(emp.pf_rate) || 0.05,
+          defaultSso: Number(emp.default_sso !== null ? emp.default_sso : 750),
+          defaultTax: Number(emp.default_tax) || 0
+        },
+        history: historyList
+      };
     }
 
     case 'saveCompanyInfo': {
@@ -435,22 +501,37 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   for (const empId of allIds) {
     count++;
     const emp = empMap[empId] || { emp_id: empId, full_name: empId, base_salary: 0, pf_rate: 0.05, default_sso: 750, default_tax: 0 };
-    const inp = inputMap[empId] || { base_salary: emp.base_salary, pf_rate: emp.pf_rate, leave_days: 0, sick_leave_days: 0, late_deduct: 0, ot_hours: 0, ot_rate: 0, allowance: 0, bonus: 0, advance_deduct: 0, other_deduct: 0, sso: emp.default_sso, tax: emp.default_tax };
+    const inp = inputMap[empId] || { base_salary: emp.base_salary, pf_rate: emp.pf_rate, absent_days: 0, leave_days: 0, sick_leave_days: 0, late_deduct: 0, ot_hours: 0, ot_rate: 0, allowance: 0, bonus: 0, advance_deduct: 0, other_deduct: 0, sso: emp.default_sso, tax: emp.default_tax };
 
     const baseSal = Number(inp.base_salary > 0 ? inp.base_salary : (emp.base_salary || 0));
     const pfRate = Number(inp.pf_rate !== undefined ? inp.pf_rate : (emp.pf_rate || 0.05));
     const pfAmt = Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100);
 
-    // OT Rate
+    // OT Rate (standard)
     const otRate = Number(inp.ot_rate > 0 ? inp.ot_rate : (baseSal > 0 ? Math.round(baseSal / 30 / 8 * 1.5 * 100) / 100 : 0));
     const otPay = Math.round((Number(inp.ot_hours) || 0) * otRate * 100) / 100;
 
-    // Leave & Late deduction calculation
+    // Daily rate based on period working days
     const dailyRate = workDays > 0 ? (baseSal / workDays) : (baseSal / 30);
+
+    // Formulas:
+    // 1. Absent: Deduct 1.5x of daily rate (ขาดงาน หักเพิ่ม 0.5 เท่า = 1.5 เท่าของค่าจ้างต่อวัน)
+    const absentDays = Number(inp.absent_days) || 0;
+    const absentDed = absentDays * dailyRate * 1.5;
+
+    // 2. Personal/Business leave: Deduct 1.0x of daily rate (ลากิจ หักเท่ากับค่าจ้างต่อวัน)
     const leaveDays = Number(inp.leave_days) || 0;
+    const businessLeaveDed = leaveDays * dailyRate * 1.0;
+
+    // 3. Sick leave: Deduct 1.0x of daily rate (ลาป่วย หักเท่ากับค่าจ้างต่อวัน)
     const sickDays = Number(inp.sick_leave_days) || 0;
+    const sickLeaveDed = sickDays * dailyRate * 1.0;
+
+    // 4. Late deduction (มาสาย - บาท)
     const lateDed = Number(inp.late_deduct) || 0;
-    const leaveDed = Math.round(((leaveDays + sickDays) * dailyRate + lateDed) * 100) / 100;
+
+    // Total Leave & Absent Deduction
+    const leaveDed = Math.round((absentDed + businessLeaveDed + sickLeaveDed + lateDed) * 100) / 100;
 
     // Allowance = เบี้ยขยัน
     const allowance = Number(inp.allowance) || 0;
