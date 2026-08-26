@@ -327,8 +327,8 @@ async function handleAction(db, action, params) {
       if (!r.empId) return { success: false, message: 'กรุณาเลือกรหัสพนักงาน' };
 
       const baseSal = Number(r.baseSalary) || 0;
-      const pfRate = Number(r.pfRate) || 0.05;
-      const pfAmt = Number(r.pfAmount) || Math.round(baseSal * pfRate * 100) / 100;
+      const pfRate = (r.pfRate !== null && r.pfRate !== undefined && !isNaN(Number(r.pfRate))) ? Number(r.pfRate) : 0.05;
+      const pfAmt = pfRate > 0 ? (Number(r.pfAmount !== undefined && r.pfAmount !== null ? r.pfAmount : Math.round(baseSal * pfRate * 100) / 100)) : 0;
       const otRate = (r.otRate !== null && r.otRate !== undefined && !isNaN(Number(r.otRate))) ? Number(r.otRate) : 40;
 
       if (origEmpId && origEmpId !== r.empId) {
@@ -568,7 +568,7 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const emp = empMap[empId] || { emp_id: empId, full_name: inp.emp_name || empId, base_salary: inp.base_salary || 0, pf_rate: inp.pf_rate || 0.05, default_sso: inp.sso || 750, default_tax: inp.tax || 0 };
 
     const baseSal = Number(inp.base_salary > 0 ? inp.base_salary : (emp.base_salary || 0));
-    const pfRate = (inp.pf_rate !== null && inp.pf_rate !== undefined && !isNaN(Number(inp.pf_rate))) ? Number(inp.pf_rate) : ((emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05);
+    const pfRate = (inp.pf_rate !== null && inp.pf_rate !== undefined && !isNaN(Number(inp.pf_rate))) ? Number(inp.pf_rate) : ((emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0);
     const pfAmt = (pfRate > 0) ? (Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100)) : 0;
 
     const otRate = (inp.ot_rate !== null && inp.ot_rate !== undefined && !isNaN(Number(inp.ot_rate))) ? Number(inp.ot_rate) : 40;

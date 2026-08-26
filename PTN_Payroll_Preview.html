@@ -1811,8 +1811,8 @@ function renderInputTable() {
   State.inputRecords.forEach(function(i, idx) {
     var baseSal = Number(i.baseSalary) || 0;
     var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
-    var pfRate = Number(i.pfRate) || 0.05;
-    var pfAmt = (i.pfAmount !== undefined && i.pfAmount > 0) ? i.pfAmount : Math.round(baseSal * pfRate * 100) / 100;
+    var pfRate = (i.pfRate !== null && i.pfRate !== undefined && !isNaN(Number(i.pfRate))) ? Number(i.pfRate) : 0;
+    var pfAmt = (pfRate > 0) ? ((i.pfAmount !== undefined && i.pfAmount > 0) ? Number(i.pfAmount) : Math.round(baseSal * pfRate * 100) / 100) : 0;
 
     h += '<tr>' +
       '<td class="text-center font-mono">' + (i.no || (idx + 1)) + '</td>' +
@@ -1887,7 +1887,8 @@ function renderEmployeesTable() {
   var sel = '<option value="">-- เลือกรหัสพนักงาน --</option>';
   State.employees.forEach(function(e) {
     var nickDisplay = e.nickname ? ' (' + e.nickname + ')' : '';
-    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + (e.pfRate || 0.05) + '" data-sso="' + (e.defaultSso !== undefined ? e.defaultSso : 750) + '" data-tax="' + (e.defaultTax || 0) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + '</option>';
+    var empPf = (e.pfRate !== null && e.pfRate !== undefined && !isNaN(Number(e.pfRate))) ? Number(e.pfRate) : 0;
+    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + empPf + '" data-sso="' + (e.defaultSso !== undefined ? e.defaultSso : 750) + '" data-tax="' + (e.defaultTax || 0) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + '</option>';
   });
   var miSel = document.getElementById('miEmpId');
   if (miSel) miSel.innerHTML = sel;
@@ -2131,8 +2132,9 @@ function openEditInputModal(empId) {
   document.getElementById('miEmpId').value = r.empId;
   document.getElementById('miEmpName').value = r.empName || '';
   document.getElementById('miBaseSalary').value = r.baseSalary || '';
-  document.getElementById('miPfRate').value = r.pfRate || 0.05;
-  document.getElementById('miPfAmount').value = r.pfAmount || Math.round((r.baseSalary || 0) * (r.pfRate || 0.05) * 100) / 100;
+  var inpPfRate = (r.pfRate !== null && r.pfRate !== undefined && !isNaN(Number(r.pfRate))) ? Number(r.pfRate) : 0;
+  document.getElementById('miPfRate').value = inpPfRate;
+  document.getElementById('miPfAmount').value = inpPfRate > 0 ? (r.pfAmount !== undefined && r.pfAmount > 0 ? r.pfAmount : Math.round((r.baseSalary || 0) * inpPfRate * 100) / 100) : 0;
   document.getElementById('miAbsentDays').value = r.absentDays || 0;
   document.getElementById('miLeaveDays').value = r.leaveDays || 0;
   document.getElementById('miSickLeaveDays').value = r.sickLeaveDays || 0;
@@ -2158,9 +2160,10 @@ function onInputEmpSelectChanged() {
     document.getElementById('miEmpName').value = opt.getAttribute('data-name') || (emp ? emp.fullName : '');
     var sal = Number(opt.getAttribute('data-salary') || (emp ? emp.baseSalary : 0));
     document.getElementById('miBaseSalary').value = sal;
-    var pf = Number(opt.getAttribute('data-pf') || (emp ? emp.pfRate : 0.05));
+    var pfVal = opt.getAttribute('data-pf');
+    var pf = (pfVal !== null && pfVal !== '' && !isNaN(Number(pfVal))) ? Number(pfVal) : (emp && emp.pfRate !== undefined ? Number(emp.pfRate) : 0);
     document.getElementById('miPfRate').value = pf;
-    document.getElementById('miPfAmount').value = Math.round(sal * pf * 100) / 100;
+    document.getElementById('miPfAmount').value = pf > 0 ? (Math.round(sal * pf * 100) / 100) : 0;
     if (!document.getElementById('miOtRate').value || Number(document.getElementById('miOtRate').value) === 0) {
       document.getElementById('miOtRate').value = '40';
     }
@@ -2176,8 +2179,8 @@ function onInputEmpSelectChanged() {
 
 function onInputSalaryChanged() {
   var sal = Number(document.getElementById('miBaseSalary').value) || 0;
-  var pf = Number(document.getElementById('miPfRate').value) || 0.05;
-  document.getElementById('miPfAmount').value = Math.round(sal * pf * 100) / 100;
+  var pf = Number(document.getElementById('miPfRate').value) || 0;
+  document.getElementById('miPfAmount').value = pf > 0 ? (Math.round(sal * pf * 100) / 100) : 0;
   updateModalDailyRate(sal);
 }
 
@@ -2191,8 +2194,8 @@ function updateModalDailyRate(sal) {
 function saveInputRecordForm(e) {
   if (e) e.preventDefault();
   var baseSal = Number(document.getElementById('miBaseSalary').value) || 0;
-  var pfRate = Number(document.getElementById('miPfRate').value) || 0.05;
-  var pfAmt = Number(document.getElementById('miPfAmount').value) || Math.round(baseSal * pfRate * 100) / 100;
+  var pfRate = (document.getElementById('miPfRate') && document.getElementById('miPfRate').value !== '' && !isNaN(Number(document.getElementById('miPfRate').value))) ? Number(document.getElementById('miPfRate').value) : 0;
+  var pfAmt = pfRate > 0 ? (Number(document.getElementById('miPfAmount').value) || Math.round(baseSal * pfRate * 100) / 100) : 0;
 
   var d = {
     empId: document.getElementById('miEmpId').value.trim(),
