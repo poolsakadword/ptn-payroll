@@ -160,7 +160,7 @@ async function handleAction(db, action, params) {
         bonus: Number(i.bonus) || 0,
         advanceDeduct: Number(i.advance_deduct) || 0,
         otherDeduct: Number(i.other_deduct) || 0,
-        sso: Number(i.sso !== null ? i.sso : 750),
+        sso: (i.sso !== null && i.sso !== undefined && !isNaN(Number(i.sso))) ? Number(i.sso) : 0,
         tax: Number(i.tax) || 0
       }));
 
@@ -565,7 +565,7 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   for (const inp of inputList) {
     count++;
     const empId = inp.emp_id;
-    const emp = empMap[empId] || { emp_id: empId, full_name: inp.emp_name || empId, base_salary: inp.base_salary || 0, pf_rate: inp.pf_rate || 0.05, default_sso: inp.sso || 750, default_tax: inp.tax || 0 };
+    const emp = empMap[empId] || { emp_id: empId, full_name: inp.emp_name || empId, base_salary: inp.base_salary || 0, pf_rate: inp.pf_rate || 0.05, default_sso: (inp.sso !== undefined && inp.sso !== null && !isNaN(Number(inp.sso))) ? Number(inp.sso) : 0, default_tax: inp.tax || 0 };
 
     const baseSal = Number(inp.base_salary > 0 ? inp.base_salary : (emp.base_salary || 0));
     const pfRate = (inp.pf_rate !== null && inp.pf_rate !== undefined && !isNaN(Number(inp.pf_rate))) ? Number(inp.pf_rate) : ((emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0);

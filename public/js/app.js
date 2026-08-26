@@ -401,7 +401,7 @@ function renderInputTable() {
       '<td class="text-right font-mono text-green font-bold">' + fmt(i.allowance || 0) + '</td>' +
       '<td class="text-right font-mono">' + fmt(i.bonus || 0) + '</td>' +
       '<td class="text-right font-mono font-bold text-blue">' + fmt(pfAmt) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(i.sso !== undefined ? i.sso : 750) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(i.sso !== undefined && i.sso !== null ? i.sso : 0) + '</td>' +
       '<td class="text-right font-mono">' + fmt(i.tax || 0) + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + fmt(i.advanceDeduct || 0) + '</td>' +
       '<td class="text-right font-mono text-red">' + fmt(i.otherDeduct || 0) + '</td>' +
@@ -727,7 +727,7 @@ function openEditInputModal(empId) {
   document.getElementById('miBonus').value = r.bonus || 0;
   document.getElementById('miAdvanceDeduct').value = r.advanceDeduct || 0;
   document.getElementById('miOtherDeduct').value = r.otherDeduct || 0;
-  document.getElementById('miSso').value = (r.sso !== undefined ? r.sso : 750);
+  document.getElementById('miSso').value = (r.sso !== undefined && r.sso !== null) ? r.sso : 0;
   document.getElementById('miTax').value = r.tax || 0;
   updateModalDailyRate(r.baseSalary || 0);
   openModal('inputModal');
@@ -750,7 +750,8 @@ function onInputEmpSelectChanged() {
       document.getElementById('miOtRate').value = '40';
     }
     var ssoVal = opt.getAttribute('data-sso');
-    document.getElementById('miSso').value = (ssoVal !== null && ssoVal !== '') ? ssoVal : (emp && emp.defaultSso !== undefined ? emp.defaultSso : 750);
+    var finalSso = (ssoVal !== null && ssoVal !== '' && !isNaN(Number(ssoVal))) ? Number(ssoVal) : (emp && emp.defaultSso !== undefined && emp.defaultSso !== null ? Number(emp.defaultSso) : 0);
+    document.getElementById('miSso').value = finalSso;
     var taxVal = opt.getAttribute('data-tax');
     document.getElementById('miTax').value = (taxVal !== null && taxVal !== '') ? taxVal : '0';
     updateModalDailyRate(sal);
