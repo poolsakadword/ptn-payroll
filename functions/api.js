@@ -136,7 +136,8 @@ async function handleAction(db, action, params) {
         joinDate: e.join_date || '',
         pfRate: Number(e.pf_rate) || 0.05,
         defaultSso: Number(e.default_sso !== null ? e.default_sso : 750),
-        defaultTax: Number(e.default_tax) || 0
+        defaultTax: Number(e.default_tax) || 0,
+        remark: e.remark || ''
       }));
 
       // Monthly Inputs
@@ -266,8 +267,8 @@ async function handleAction(db, action, params) {
 
         await db.prepare(`
           INSERT OR REPLACE INTO employees 
-          (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           String(emp.empId).trim(), String(emp.fullName).trim(), String(emp.nickname || '').trim(),
           String(emp.citizenId || '').trim(), String(emp.phone || '').trim(), String(emp.address || '').trim(),
@@ -295,8 +296,8 @@ async function handleAction(db, action, params) {
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', Number(emp.baseSalary) || 0,
@@ -381,7 +382,7 @@ async function handleAction(db, action, params) {
         const baseSal = Number(emp.base_salary) || 0;
         const pfRate = Number(emp.pf_rate) || 0.05;
         const pfAmt = Math.round(baseSal * pfRate * 100) / 100;
-        const sso = Number(emp.default_sso !== null ? emp.default_sso : (baseSal >= 15000 ? 750 : Math.round(baseSal * 0.05)));
+        const sso = Number(emp.default_sso !== null && emp.default_sso !== undefined ? emp.default_sso : 750);
         const tax = Number(emp.default_tax) || 0;
 
         const exist = existingMap[emp.emp_id] || {};
@@ -484,7 +485,8 @@ async function handleAction(db, action, params) {
           joinDate: emp.join_date || '',
           pfRate: Number(emp.pf_rate) || 0.05,
           defaultSso: Number(emp.default_sso !== null ? emp.default_sso : 750),
-          defaultTax: Number(emp.default_tax) || 0
+          defaultTax: Number(emp.default_tax) || 0,
+          remark: emp.remark || ''
         },
         history: historyList
       };
@@ -591,7 +593,7 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const bonus = Number(inp.bonus) || 0;
     const grossPay = Math.round((baseSal + otPay + allowance + bonus - leaveDed) * 100) / 100;
 
-    const sso = Number(inp.sso !== undefined ? inp.sso : (emp.default_sso !== undefined ? emp.default_sso : (baseSal >= 15000 ? 750 : Math.round(baseSal * 0.05))));
+    const sso = Number(inp.sso !== undefined && inp.sso !== null ? inp.sso : (emp.default_sso !== undefined && emp.default_sso !== null ? emp.default_sso : 750));
     const pf = pfAmt;
     const tax = Number(inp.tax !== undefined ? inp.tax : (emp.default_tax || 0));
     const advDed = Number(inp.advance_deduct) || 0;

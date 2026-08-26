@@ -721,7 +721,7 @@ function onInputEmpSelectChanged() {
       document.getElementById('miOtRate').value = '40';
     }
     var ssoVal = opt.getAttribute('data-sso');
-    document.getElementById('miSso').value = (ssoVal !== null && ssoVal !== '') ? ssoVal : (sal >= 15000 ? 750 : Math.round(sal * 0.05));
+    document.getElementById('miSso').value = (ssoVal !== null && ssoVal !== '') ? ssoVal : (emp && emp.defaultSso !== undefined ? emp.defaultSso : 750);
     var taxVal = opt.getAttribute('data-tax');
     document.getElementById('miTax').value = (taxVal !== null && taxVal !== '') ? taxVal : '0';
     updateModalDailyRate(sal);
@@ -802,7 +802,7 @@ function openAddEmployeeModal() {
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
-  ['mEmpId','mFullName','mNickname','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate'].forEach(function(id) {
+  ['mEmpId','mFullName','mNickname','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate','mRemark'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.value = '';
   });
@@ -840,6 +840,7 @@ function openEditEmployeeModal(empId) {
   document.getElementById('mBankName').value = e.bankName || '';
   document.getElementById('mBankAccount').value = e.bankAccount || '';
   document.getElementById('mJoinDate').value = e.joinDate || '';
+  document.getElementById('mRemark').value = e.remark || '';
   document.getElementById('mPfRate').value = e.pfRate || 0.05;
   document.getElementById('mDefaultSso').value = (e.defaultSso !== undefined ? e.defaultSso : 750);
   document.getElementById('mDefaultTax').value = (e.defaultTax || 0);
@@ -872,6 +873,7 @@ function saveEmployeeForm(e) {
     bankName: document.getElementById('mBankName').value.trim(),
     bankAccount: document.getElementById('mBankAccount').value.trim(),
     joinDate: document.getElementById('mJoinDate').value,
+    remark: document.getElementById('mRemark').value.trim(),
     pfRate: pfRate,
     defaultSso: ssoVal,
     defaultTax: taxVal
@@ -1010,7 +1012,7 @@ function exportToCSV(type) {
         ].join(',') + '\n';
       });
     } else {
-      csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร\n';
+      csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร,หมายเหตุ\n';
       State.employees.forEach(function(e) {
         csv += [
           e.empId,
@@ -1029,7 +1031,8 @@ function exportToCSV(type) {
           e.age || 0,
           e.joinDate || '',
           '"' + (e.citizenId || '').replace(/"/g, '""') + '"',
-          '"' + (e.phone || '').replace(/"/g, '""') + '"'
+          '"' + (e.phone || '').replace(/"/g, '""') + '"',
+          '"' + (e.remark || '').replace(/"/g, '""') + '"'
         ].join(',') + '\n';
       });
     }
@@ -1152,7 +1155,8 @@ function parseAndImportEmployeesCSV(csvText) {
       age: Number(cols[13]) || 0,
       joinDate: cols[14] || '',
       citizenId: cols[15] || '',
-      phone: cols[16] || ''
+      phone: cols[16] || '',
+      remark: cols[17] || ''
     };
     employees.push(emp);
   }

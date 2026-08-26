@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS employees (
   join_date TEXT,
   pf_rate REAL DEFAULT 0.05,
   default_sso REAL DEFAULT 750,
-  default_tax REAL DEFAULT 0
+  default_tax REAL DEFAULT 0,
+  remark TEXT
 );
 
 CREATE TABLE IF NOT EXISTS monthly_inputs (
