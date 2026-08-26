@@ -156,6 +156,10 @@
               <div class="card-sub">สรุปภาพรวมยอดจ่าย OT เบี้ยขยัน ยอดหัก และสุทธิประจำงวด</div>
             </div>
             <div class="toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="dashSearchInput" placeholder="ค้นหา (รหัส, ชื่อ, แผนก)..." oninput="renderDashboard()">
+              </div>
               <button type="button" class="btn btn-slate" onclick="loadAppData()">
                 <i class="fa-solid fa-rotate-right"></i> รีเฟรชข้อมูล
               </button>
@@ -163,16 +167,16 @@
           </div>
           <div class="table-wrapper">
             <table class="data-table">
-              <thead id="employeesTableHead">
+              <thead id="dashboardTableHead">
                 <tr>
-                  <th>งวด</th>
-                  <th>รหัส</th>
+                  <th style="width:110px">งวด</th>
+                  <th style="width:90px">รหัส</th>
                   <th>ชื่อ-นามสกุล</th>
-                  <th class="text-right">เงินเดือนฐาน</th>
-                  <th class="text-right text-blue bg-blue-light">เงินได้รวม (Gross)</th>
-                  <th class="text-right text-red bg-red-light">ยอดหัก</th>
-                  <th class="text-right text-green bg-green-light">สุทธิ (Net)</th>
-                  <th class="text-center">สลิป</th>
+                  <th class="text-right" style="width:120px">เงินเดือนฐาน</th>
+                  <th class="text-right text-blue bg-blue-light" style="width:130px">เงินได้รวม (Gross)</th>
+                  <th class="text-right text-red bg-red-light" style="width:120px">ยอดหัก</th>
+                  <th class="text-right text-green bg-green-light" style="width:130px">สุทธิ (Net)</th>
+                  <th class="text-center" style="width:90px">สลิป</th>
                 </tr>
               </thead>
               <tbody id="dashboardTableBody"></tbody>
@@ -239,6 +243,10 @@
               <div class="card-sub">ดึงค่าตั้งต้น รหัส ชื่อ เงินเดือนฐาน PF ประกันสังคม และภาษีอัตโนมัติ (อัตรา OT 40 บาท)</div>
             </div>
             <div class="toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="inputSearchInput" placeholder="ค้นหาบันทึกงวด (รหัส, ชื่อ)..." oninput="renderInputTable()">
+              </div>
               <button type="button" class="btn btn-yellow" onclick="batchPopulateEmployees()">
                 <i class="fa-solid fa-users-gear"></i> ดึงพนักงานทุกคนเข้างวดนี้
               </button>

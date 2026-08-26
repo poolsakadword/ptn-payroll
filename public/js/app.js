@@ -280,16 +280,25 @@ function renderDashboard() {
   var tbody = document.getElementById('dashboardTableBody');
   if (!tbody) return;
 
-  if (State.payrollList.length === 0) {
+  var q = (document.getElementById('dashSearchInput') ? document.getElementById('dashSearchInput').value : '').trim().toLowerCase();
+  var list = State.payrollList.filter(function(r) {
+    if (!q) return true;
+    return (r.empId && r.empId.toLowerCase().indexOf(q) >= 0) ||
+           (r.name && r.name.toLowerCase().indexOf(q) >= 0) ||
+           (r.department && r.department.toLowerCase().indexOf(q) >= 0) ||
+           (r.position && r.position.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:28px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:4px"><i class="fa-solid fa-chart-pie"></i> ยังไม่มีข้อมูลภาพรวมในงวด ' + esc(State.period) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:4px"><i class="fa-solid fa-chart-pie"></i> ' + (q ? 'ไม่พบข้อมูลที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลภาพรวมในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:11.5px;color:#94a3b8">กรุณาบันทึกข้อมูลประจำงวดในแท็บ <strong>"บันทึกข้อมูลประจำงวด"</strong> ก่อน</div>' +
     '</td></tr>';
     return;
   }
 
   var h = '';
-  State.payrollList.forEach(function(row) {
+  list.forEach(function(row) {
     h += '<tr>' +
       '<td class="text-blue font-bold">' + esc(row.period) + '</td>' +
       '<td class="font-mono font-bold">' + esc(row.empId) + '</td>' +
@@ -354,9 +363,16 @@ function renderInputTable() {
   var tbody = document.getElementById('inputTableBody');
   if (!tbody) return;
 
-  if (State.inputRecords.length === 0) {
+  var q = (document.getElementById('inputSearchInput') ? document.getElementById('inputSearchInput').value : '').trim().toLowerCase();
+  var list = State.inputRecords.filter(function(i) {
+    if (!q) return true;
+    return (i.empId && i.empId.toLowerCase().indexOf(q) >= 0) ||
+           (i.empName && i.empName.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="19" class="text-center text-muted" style="padding:32px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> ยังไม่มีข้อมูลในงวด ' + esc(State.period) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> ' + (q ? 'ไม่พบข้อมูลที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กดปุ่มสีเหลือง <strong>"👥 ดึงพนักงานทุกคนเข้างวดนี้"</strong> ด้านบนเพื่อนำเข้าข้อมูลอัตโนมัติ</div>' +
     '</td></tr>';
     return;
@@ -364,7 +380,7 @@ function renderInputTable() {
 
   var workDays = State.workingDays > 0 ? State.workingDays : 30;
   var h = '';
-  State.inputRecords.forEach(function(i, idx) {
+  list.forEach(function(i, idx) {
     var baseSal = Number(i.baseSalary) || 0;
     var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
     var pfRate = (i.pfRate !== null && i.pfRate !== undefined && !isNaN(Number(i.pfRate))) ? Number(i.pfRate) : 0;
@@ -451,13 +467,23 @@ function renderEmployeesTable() {
   var histSel = document.getElementById('histEmpSelect');
   if (histSel) histSel.innerHTML = sel;
 
-  if (State.employees.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="' + (isGeneralUser ? '11' : '10') + '" class="text-center text-muted" style="padding:28px">ยังไม่มีข้อมูลในทะเบียนพนักงาน</td></tr>';
+  var q = (document.getElementById('empSearchInput') ? document.getElementById('empSearchInput').value : '').trim().toLowerCase();
+  var list = State.employees.filter(function(e) {
+    if (!q) return true;
+    return (e.empId && e.empId.toLowerCase().indexOf(q) >= 0) ||
+           (e.fullName && e.fullName.toLowerCase().indexOf(q) >= 0) ||
+           (e.nickname && e.nickname.toLowerCase().indexOf(q) >= 0) ||
+           (e.department && e.department.toLowerCase().indexOf(q) >= 0) ||
+           (e.position && e.position.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="' + (isGeneralUser ? '11' : '10') + '" class="text-center text-muted" style="padding:28px">' + (q ? 'ไม่พบพนักงานที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลในทะเบียนพนักงาน') + '</td></tr>';
     return;
   }
 
   var h = '';
-  State.employees.forEach(function(e) {
+  list.forEach(function(e) {
     var birthText = e.birthDate ? (e.birthDate + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
 
     if (isGeneralUser) {
@@ -1341,4 +1367,49 @@ function onEmpSsoInputChanged() {
   var label = document.getElementById('mDefaultSsoLabel');
   var val = Number(input.value) || 0;
   label.textContent = '(' + fmt(val) + ')';
+}
+
+// HISTORY TABLE SEARCH FILTER
+var currentHistoryList = [];
+function filterHistoryTable() {
+  var tbody = document.getElementById('historyTableBody');
+  if (!tbody || !currentHistoryList || currentHistoryList.length === 0) return;
+  var q = (document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value : '').trim().toLowerCase();
+  var filtered = currentHistoryList.filter(function(c) {
+    if (!q) return true;
+    return (c.period && c.period.toLowerCase().indexOf(q) >= 0) ||
+           (c.department && c.department.toLowerCase().indexOf(q) >= 0) ||
+           (c.position && c.position.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="19" class="text-center text-muted" style="padding:28px">ไม่พบประวัติที่ตรงกับคำค้นหา "' + esc(q) + '"</td></tr>';
+    return;
+  }
+
+  var h = '';
+  filtered.forEach(function(c) {
+    h += '<tr>' +
+      '<td class="font-bold text-blue">' + esc(c.period) + '</td>' +
+      '<td class="font-mono font-bold">' + fmt(c.baseSalary) + '</td>' +
+      '<td class="text-right font-mono">' + (c.absentDays || 0) + '</td>' +
+      '<td class="text-right font-mono">' + (c.leaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono">' + (c.sickLeaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(c.lateDeduct) + '</td>' +
+      '<td class="text-right font-mono">' + (c.otHours || 0) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(c.otPay) + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + fmt(c.allowance) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(c.bonus) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + fmt(c.leaveDeduction) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(c.grossPay) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(c.sso) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue">' + fmt(c.pf) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(c.tax) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(c.advanceDeduct) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(c.otherDeduct) + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(c.totalDeductions) + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light">' + fmt(c.netPay) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = h;
 }
