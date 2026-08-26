@@ -689,8 +689,16 @@
               </div>
               <div class="form-row-2">
                 <div class="form-group">
-                  <label style="color:#dc2626;font-weight:700">ประกันสังคมเริ่มต้น (บาท) [ระบุตัวเลขเอง]</label>
-                  <input type="number" id="mDefaultSso" value="750">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+                    <label style="color:#dc2626;font-weight:700"><i class="fa-solid fa-hospital-user"></i> ประกันสังคม (SSO)</label>
+                    <label style="font-size:11.5px;cursor:pointer;color:#dc2626;display:inline-flex;align-items:center;gap:5px;font-weight:600">
+                      <input type="checkbox" id="mHasSso" onchange="onEmpHasSsoChanged()" checked style="width:15px;height:15px;cursor:pointer"> หักประกันสังคม (SSO)
+                    </label>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <input type="number" id="mDefaultSso" value="750" oninput="onEmpSsoInputChanged()" style="flex:1" placeholder="เช่น 750">
+                    <span id="mDefaultSsoLabel" style="font-size:12px;font-weight:700;color:#dc2626;min-width:65px">(750฿)</span>
+                  </div>
                 </div>
                 <div class="form-group">
                   <label>ภาษีเริ่มต้น (Tax Default)</label>

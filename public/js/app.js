@@ -487,7 +487,7 @@ function renderEmployeesTable() {
         '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
         '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
         '<td class="text-right font-mono">' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '<span class="text-muted" style="font-size:11px">ไม่หัก (0%)</span>') + '</td>' +
-        '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultSso !== undefined ? e.defaultSso : 750) + '</td>' +
+        '<td class="text-right font-mono text-red font-bold">' + (Number(e.defaultSso) > 0 ? fmt(e.defaultSso) : '<span class="text-muted" style="font-size:11px">ไม่หัก (฿0)</span>') + '</td>' +
         '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
         '<td class="text-center nowrap">' +
           '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
@@ -817,7 +817,12 @@ function openAddEmployeeModal() {
   if (pfRateInput) { pfRateInput.value = '0.05'; pfRateInput.disabled = false; }
   var pfRateLbl = document.getElementById('mPfRateLabel');
   if (pfRateLbl) { pfRateLbl.textContent = '(5%)'; pfRateLbl.style.color = '#1d4ed8'; }
-  document.getElementById('mDefaultSso').value = '750';
+  var hasSsoCheck = document.getElementById('mHasSso');
+  if (hasSsoCheck) hasSsoCheck.checked = true;
+  var ssoInput = document.getElementById('mDefaultSso');
+  if (ssoInput) { ssoInput.value = '750'; ssoInput.disabled = false; }
+  var ssoLbl = document.getElementById('mDefaultSsoLabel');
+  if (ssoLbl) { ssoLbl.textContent = '(750฿)'; ssoLbl.style.color = '#dc2626'; }
   document.getElementById('mDefaultTax').value = '0';
   openModal('empModal');
 }
@@ -862,7 +867,19 @@ function openEditEmployeeModal(empId) {
     pfRateLbl.textContent = hasPf ? ('(' + Math.round(Number(e.pfRate) * 100) + '%)') : '(ไม่หัก PF)';
     pfRateLbl.style.color = hasPf ? '#1d4ed8' : '#94a3b8';
   }
-  document.getElementById('mDefaultSso').value = (e.defaultSso !== undefined ? e.defaultSso : 750);
+  var hasSso = (e.defaultSso !== undefined && e.defaultSso !== null && Number(e.defaultSso) > 0);
+  var hasSsoCheck = document.getElementById('mHasSso');
+  if (hasSsoCheck) hasSsoCheck.checked = hasSso;
+  var ssoInput = document.getElementById('mDefaultSso');
+  if (ssoInput) {
+    ssoInput.value = hasSso ? e.defaultSso : '0';
+    ssoInput.disabled = !hasSso;
+  }
+  var ssoLbl = document.getElementById('mDefaultSsoLabel');
+  if (ssoLbl) {
+    ssoLbl.textContent = hasSso ? ('(' + fmt(e.defaultSso) + ')') : '(ไม่หัก SSO)';
+    ssoLbl.style.color = hasSso ? '#dc2626' : '#94a3b8';
+  }
   document.getElementById('mDefaultTax').value = (e.defaultTax || 0);
   openModal('empModal');
 }
@@ -876,7 +893,8 @@ function saveEmployeeForm(e) {
   var baseSal = isUser ? (existingEmp ? existingEmp.baseSalary : 0) : (Number(document.getElementById('mBaseSalary').value) || 0);
     var hasPf = document.getElementById('mHasPf') ? document.getElementById('mHasPf').checked : true;
   var pfRate = isUser ? (existingEmp ? (existingEmp.pfRate || 0) : 0) : (hasPf ? (Number(document.getElementById('mPfRate').value) || 0.05) : 0);
-  var ssoVal = isUser ? (existingEmp ? existingEmp.defaultSso : 750) : (Number(document.getElementById('mDefaultSso').value) || 750);
+    var hasSso = document.getElementById('mHasSso') ? document.getElementById('mHasSso').checked : true;
+  var ssoVal = isUser ? (existingEmp ? (existingEmp.defaultSso !== undefined ? existingEmp.defaultSso : 0) : 0) : (hasSso ? (Number(document.getElementById('mDefaultSso').value) || 0) : 0);
   var taxVal = isUser ? (existingEmp ? existingEmp.defaultTax : 0) : (Number(document.getElementById('mDefaultTax').value) || 0);
 
   var d = {
@@ -1298,4 +1316,29 @@ function onEmpPfRateInputChanged() {
   var val = Number(input.value) || 0;
   var pct = Math.round(val * 100);
   label.textContent = '(' + pct + '%)';
+}
+
+// EMPLOYEE SSO TOGGLE HANDLERS
+function onEmpHasSsoChanged() {
+  var chk = document.getElementById('mHasSso').checked;
+  var input = document.getElementById('mDefaultSso');
+  var label = document.getElementById('mDefaultSsoLabel');
+  if (chk) {
+    input.disabled = false;
+    if (!input.value || Number(input.value) <= 0) input.value = '750';
+    label.textContent = '(' + fmt(input.value) + ')';
+    label.style.color = '#dc2626';
+  } else {
+    input.value = '0';
+    input.disabled = true;
+    label.textContent = '(ไม่หัก SSO)';
+    label.style.color = '#94a3b8';
+  }
+}
+
+function onEmpSsoInputChanged() {
+  var input = document.getElementById('mDefaultSso');
+  var label = document.getElementById('mDefaultSsoLabel');
+  var val = Number(input.value) || 0;
+  label.textContent = '(' + fmt(val) + ')';
 }
