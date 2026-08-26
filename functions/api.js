@@ -294,17 +294,34 @@ async function handleAction(db, action, params) {
         await db.prepare('DELETE FROM employees WHERE emp_id = ?').bind(origId).run();
       }
 
+      const pfRateVal = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate))) ? Number(emp.pfRate) : 0.05;
+      const baseSalaryVal = Number(emp.baseSalary) || 0;
+      const pfAmtVal = pfRateVal > 0 ? Math.round(baseSalaryVal * pfRateVal * 100) / 100 : 0;
+      const ssoVal = (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750;
+      const taxVal = Number(emp.defaultTax) || 0;
+
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
         (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
-        emp.department || '', emp.position || '', Number(emp.baseSalary) || 0,
+        emp.department || '', emp.position || '', baseSalaryVal,
         emp.bankName || '', emp.bankAccount || '', emp.birthDate || '', Number(emp.age) || 0,
         emp.joinDate || '',
-        (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate))) ? Number(emp.pfRate) : 0.05, (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750,
-        Number(emp.defaultTax) || 0, emp.remark || ''
+        pfRateVal, ssoVal,
+        taxVal, emp.remark || ''
+      ).run();
+
+      // Immediately sync changes to current period monthly_inputs if employee exists in current period
+      const targetEmpId = origId || emp.empId;
+      await db.prepare(`
+        UPDATE monthly_inputs 
+        SET emp_id = ?, emp_name = ?, base_salary = ?, pf_rate = ?, pf_amount = ?, sso = ?, tax = ?
+        WHERE emp_id = ? AND period = ?
+      `).bind(
+        emp.empId, emp.fullName, baseSalaryVal, pfRateVal, pfAmtVal, ssoVal, taxVal,
+        targetEmpId, period
       ).run();
 
       await calculateAndSavePayroll(db, period);
