@@ -277,7 +277,7 @@ async function handleAction(db, action, params) {
           String(emp.bankName || 'กสิกรไทย (KBANK)').trim(), String(emp.bankAccount || '').trim(),
           String(emp.birthDate || '').trim(), Number(emp.age) || 0, String(emp.joinDate || '').trim(),
           pfRate, Number(emp.defaultSso !== undefined ? emp.defaultSso : 750),
-          Number(emp.defaultTax) || 0
+          Number(emp.defaultTax) || 0, String(emp.remark || '').trim()
         ).run();
       }
 
@@ -304,7 +304,7 @@ async function handleAction(db, action, params) {
         emp.bankName || '', emp.bankAccount || '', emp.birthDate || '', Number(emp.age) || 0,
         emp.joinDate || '',
         Number(emp.pfRate) || 0.05, Number(emp.defaultSso !== undefined ? emp.defaultSso : 750),
-        Number(emp.defaultTax) || 0
+        Number(emp.defaultTax) || 0, emp.remark || ''
       ).run();
 
       await calculateAndSavePayroll(db, period);
