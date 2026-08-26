@@ -134,7 +134,7 @@ async function handleAction(db, action, params) {
         birthDate: e.birth_date || '',
         age: Number(e.age) || 0,
         joinDate: e.join_date || '',
-        pfRate: Number(e.pf_rate) || 0.05,
+        pfRate: (e.pf_rate !== null && e.pf_rate !== undefined && !isNaN(Number(e.pf_rate))) ? Number(e.pf_rate) : 0.05,
         defaultSso: Number(e.default_sso !== null ? e.default_sso : 750),
         defaultTax: Number(e.default_tax) || 0,
         remark: e.remark || ''
@@ -148,7 +148,7 @@ async function handleAction(db, action, params) {
         empId: i.emp_id,
         empName: i.emp_name || '',
         baseSalary: Number(i.base_salary) || 0,
-        pfRate: Number(i.pf_rate) || 0.05,
+        pfRate: (i.pf_rate !== null && i.pf_rate !== undefined && !isNaN(Number(i.pf_rate))) ? Number(i.pf_rate) : 0.05,
         pfAmount: Number(i.pf_amount) || 0,
         absentDays: Number(i.absent_days) || 0,
         leaveDays: Number(i.leave_days) || 0,
@@ -303,7 +303,7 @@ async function handleAction(db, action, params) {
         emp.department || '', emp.position || '', Number(emp.baseSalary) || 0,
         emp.bankName || '', emp.bankAccount || '', emp.birthDate || '', Number(emp.age) || 0,
         emp.joinDate || '',
-        Number(emp.pfRate) || 0.05, Number(emp.defaultSso !== undefined ? emp.defaultSso : 750),
+        (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate))) ? Number(emp.pfRate) : 0.05, Number(emp.defaultSso !== undefined ? emp.defaultSso : 750),
         Number(emp.defaultTax) || 0, emp.remark || ''
       ).run();
 
@@ -380,8 +380,8 @@ async function handleAction(db, action, params) {
         nextNo++;
         added++;
         const baseSal = Number(emp.base_salary) || 0;
-        const pfRate = Number(emp.pf_rate) || 0.05;
-        const pfAmt = Math.round(baseSal * pfRate * 100) / 100;
+        const pfRate = (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05;
+        const pfAmt = pfRate > 0 ? Math.round(baseSal * pfRate * 100) / 100 : 0;
         const sso = Number(emp.default_sso !== null && emp.default_sso !== undefined ? emp.default_sso : 750);
         const tax = Number(emp.default_tax) || 0;
 
@@ -483,7 +483,7 @@ async function handleAction(db, action, params) {
           birthDate: emp.birth_date || '',
           age: Number(emp.age) || 0,
           joinDate: emp.join_date || '',
-          pfRate: Number(emp.pf_rate) || 0.05,
+          pfRate: (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05,
           defaultSso: Number(emp.default_sso !== null ? emp.default_sso : 750),
           defaultTax: Number(emp.default_tax) || 0,
           remark: emp.remark || ''
@@ -568,8 +568,8 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const emp = empMap[empId] || { emp_id: empId, full_name: inp.emp_name || empId, base_salary: inp.base_salary || 0, pf_rate: inp.pf_rate || 0.05, default_sso: inp.sso || 750, default_tax: inp.tax || 0 };
 
     const baseSal = Number(inp.base_salary > 0 ? inp.base_salary : (emp.base_salary || 0));
-    const pfRate = Number(inp.pf_rate !== undefined ? inp.pf_rate : (emp.pf_rate || 0.05));
-    const pfAmt = Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100);
+    const pfRate = (inp.pf_rate !== null && inp.pf_rate !== undefined && !isNaN(Number(inp.pf_rate))) ? Number(inp.pf_rate) : ((emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05);
+    const pfAmt = (pfRate > 0) ? (Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100)) : 0;
 
     const otRate = (inp.ot_rate !== null && inp.ot_rate !== undefined && !isNaN(Number(inp.ot_rate))) ? Number(inp.ot_rate) : 40;
     const otPay = Math.round((Number(inp.ot_hours) || 0) * otRate * 100) / 100;

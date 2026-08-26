@@ -1250,8 +1250,16 @@ footer {
                   <input type="number" id="mBaseSalary">
                 </div>
                 <div class="form-group">
-                  <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-percent"></i> อัตรา PF (เช่น 0.05)</label>
-                  <input type="number" id="mPfRate" step="0.01" value="0.05">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+                    <label style="color:#1d4ed8;font-weight:700"><i class="fa-solid fa-piggy-bank"></i> กองทุนสำรองเลี้ยงชีพ (PF)</label>
+                    <label style="font-size:11.5px;cursor:pointer;color:#1e40af;display:inline-flex;align-items:center;gap:5px;font-weight:600">
+                      <input type="checkbox" id="mHasPf" onchange="onEmpHasPfChanged()" checked style="width:15px;height:15px;cursor:pointer"> เข้าร่วมกองทุน (หัก PF)
+                    </label>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <input type="number" id="mPfRate" step="0.01" value="0.05" oninput="onEmpPfRateInputChanged()" style="flex:1" placeholder="เช่น 0.05">
+                    <span id="mPfRateLabel" style="font-size:12px;font-weight:700;color:#1d4ed8;min-width:65px">(5%)</span>
+                  </div>
                 </div>
               </div>
               <div class="form-row-2">
@@ -1921,7 +1929,7 @@ function renderEmployeesTable() {
         '<td>' + esc(e.address || '-') + '</td>' +
         '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
         '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
-        '<td class="text-right font-mono">' + ((e.pfRate || 0) * 100).toFixed(0) + '%</td>' +
+        '<td class="text-right font-mono">' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '<span class="text-muted" style="font-size:11px">ไม่หัก (0%)</span>') + '</td>' +
         '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultSso !== undefined ? e.defaultSso : 750) + '</td>' +
         '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
         '<td class="text-center nowrap">' +
@@ -2244,7 +2252,12 @@ function openAddEmployeeModal() {
   });
   document.getElementById('mBankName').value = 'กสิกรไทย (KBANK)';
   document.getElementById('mBaseSalary').value = '';
-  document.getElementById('mPfRate').value = '0.05';
+  var hasPfCheck = document.getElementById('mHasPf');
+  if (hasPfCheck) hasPfCheck.checked = true;
+  var pfRateInput = document.getElementById('mPfRate');
+  if (pfRateInput) { pfRateInput.value = '0.05'; pfRateInput.disabled = false; }
+  var pfRateLbl = document.getElementById('mPfRateLabel');
+  if (pfRateLbl) { pfRateLbl.textContent = '(5%)'; pfRateLbl.style.color = '#1d4ed8'; }
   document.getElementById('mDefaultSso').value = '750';
   document.getElementById('mDefaultTax').value = '0';
   openModal('empModal');
@@ -2277,7 +2290,19 @@ function openEditEmployeeModal(empId) {
   document.getElementById('mBankAccount').value = e.bankAccount || '';
   document.getElementById('mJoinDate').value = e.joinDate || '';
   document.getElementById('mRemark').value = e.remark || '';
-  document.getElementById('mPfRate').value = e.pfRate || 0.05;
+  var hasPf = (e.pfRate !== undefined && e.pfRate !== null && Number(e.pfRate) > 0);
+  var hasPfCheck = document.getElementById('mHasPf');
+  if (hasPfCheck) hasPfCheck.checked = hasPf;
+  var pfRateInput = document.getElementById('mPfRate');
+  if (pfRateInput) {
+    pfRateInput.value = hasPf ? e.pfRate : '0';
+    pfRateInput.disabled = !hasPf;
+  }
+  var pfRateLbl = document.getElementById('mPfRateLabel');
+  if (pfRateLbl) {
+    pfRateLbl.textContent = hasPf ? ('(' + Math.round(Number(e.pfRate) * 100) + '%)') : '(ไม่หัก PF)';
+    pfRateLbl.style.color = hasPf ? '#1d4ed8' : '#94a3b8';
+  }
   document.getElementById('mDefaultSso').value = (e.defaultSso !== undefined ? e.defaultSso : 750);
   document.getElementById('mDefaultTax').value = (e.defaultTax || 0);
   openModal('empModal');
@@ -2290,7 +2315,8 @@ function saveEmployeeForm(e) {
   var isUser = (State.currentUser && State.currentUser.role === 'User');
 
   var baseSal = isUser ? (existingEmp ? existingEmp.baseSalary : 0) : (Number(document.getElementById('mBaseSalary').value) || 0);
-  var pfRate = isUser ? (existingEmp ? existingEmp.pfRate : 0.05) : (Number(document.getElementById('mPfRate').value) || 0.05);
+    var hasPf = document.getElementById('mHasPf') ? document.getElementById('mHasPf').checked : true;
+  var pfRate = isUser ? (existingEmp ? (existingEmp.pfRate || 0) : 0) : (hasPf ? (Number(document.getElementById('mPfRate').value) || 0.05) : 0);
   var ssoVal = isUser ? (existingEmp ? existingEmp.defaultSso : 750) : (Number(document.getElementById('mDefaultSso').value) || 750);
   var taxVal = isUser ? (existingEmp ? existingEmp.defaultTax : 0) : (Number(document.getElementById('mDefaultTax').value) || 0);
 
@@ -2686,6 +2712,33 @@ function deleteUser(username) {
     .catch(function(err) {
       showToast('Error: ' + err.message, 'error');
     });
+}
+
+// EMPLOYEE PF TOGGLE HANDLERS
+function onEmpHasPfChanged() {
+  var chk = document.getElementById('mHasPf').checked;
+  var input = document.getElementById('mPfRate');
+  var label = document.getElementById('mPfRateLabel');
+  if (chk) {
+    input.disabled = false;
+    if (!input.value || Number(input.value) <= 0) input.value = '0.05';
+    var pct = Math.round(Number(input.value) * 100);
+    label.textContent = '(' + pct + '%)';
+    label.style.color = '#1d4ed8';
+  } else {
+    input.value = '0';
+    input.disabled = true;
+    label.textContent = '(ไม่หัก PF)';
+    label.style.color = '#94a3b8';
+  }
+}
+
+function onEmpPfRateInputChanged() {
+  var input = document.getElementById('mPfRate');
+  var label = document.getElementById('mPfRateLabel');
+  var val = Number(input.value) || 0;
+  var pct = Math.round(val * 100);
+  label.textContent = '(' + pct + '%)';
 }
 
 </script>
