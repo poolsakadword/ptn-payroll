@@ -1446,3 +1446,70 @@ function filterHistoryTable() {
   });
   tbody.innerHTML = h;
 }
+
+// BACKUP & RESTORE HANDLERS
+function backupDatabase() {
+  showToast('กำลังเตรียมไฟล์สำรองข้อมูล...', 'info');
+  callApi('backupDatabase')
+    .then(function(r) {
+      if (!r.success || !r.backup) {
+        showToast(r.message || 'ไม่สามารถสำรองข้อมูลได้', 'error');
+        return;
+      }
+      var jsonStr = JSON.stringify(r.backup, null, 2);
+      var nowStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+      var filename = 'PTN_PAYROLL_BACKUP_' + nowStr + '.json';
+
+      var blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('ดาวน์โหลดไฟล์สำรองข้อมูลสำเร็จ');
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function triggerRestoreBackup() {
+  var fileInput = document.getElementById('restoreBackupFileInput');
+  if (fileInput) {
+    fileInput.value = '';
+    fileInput.click();
+  }
+}
+
+function handleRestoreBackupFile(event) {
+  var file = event.target.files && event.target.files[0];
+  if (!file) return;
+
+  if (!confirm('⚠️ คำเตือนสำคัญ!\n\nการกู้คืนข้อมูลจะเขียนทับข้อมูลพนักงาน ข้อมูลเงินเดือนทุกงวด ผู้ใช้งาน และการตั้งค่าทั้งหมดในระบบด้วยข้อมูลจากไฟล์นี้\n\nคุณแน่ใจหรือไม่ที่จะทำการกู้คืนข้อมูล?')) {
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      var backupData = JSON.parse(e.target.result);
+      showToast('กำลังกู้คืนข้อมูลเข้าสู่ระบบ...', 'info');
+      callApi('restoreDatabase', { backup: backupData })
+        .then(function(r) {
+          if (r.success) {
+            showToast(r.message || 'กู้คืนข้อมูลสำเร็จ');
+            loadAppData();
+          } else {
+            showToast(r.message || 'เกิดข้อผิดพลาดในการกู้คืนข้อมูล', 'error');
+          }
+        })
+        .catch(function(err) {
+          showToast('Error: ' + err.message, 'error');
+        });
+    } catch(err) {
+      showToast('ไฟล์ JSON ไม่ถูกต้อง หรือเสียหาย: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}

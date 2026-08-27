@@ -447,6 +447,39 @@
             </div>
           </form>
         </div>
+        <!-- BACKUP & RESTORE SECTION -->
+        <div class="card" style="max-width:680px;margin:24px auto 0">
+          <div class="card-header">
+            <div>
+              <div class="card-title"><i class="fa-solid fa-database" style="color:#2563eb"></i> สำรองและกู้คืนข้อมูลระบบ (Backup & Restore)</div>
+              <div class="card-sub">ดาวน์โหลดไฟล์สำรองข้อมูลทั้งหมด (.json) เพื่อเก็บรักษา หรือกู้คืนข้อมูลจากไฟล์สำรอง</div>
+            </div>
+          </div>
+          <div style="padding:22px;display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;gap:16px">
+              <div>
+                <div style="font-weight:700;color:#0f172a;margin-bottom:2px"><i class="fa-solid fa-cloud-arrow-down" style="color:#059669"></i> สำรองข้อมูลทั้งหมด (Backup Database)</div>
+                <div style="font-size:12px;color:#64748b">ส่งออกข้อมูล ทะเบียนพนักงาน, เงินเดือน, บันทึกทุกงวด, ผู้ใช้งาน และการตั้งค่า เป็นไฟล์ JSON</div>
+              </div>
+              <button type="button" class="btn btn-primary" onclick="backupDatabase()" style="white-space:nowrap">
+                <i class="fa-solid fa-download"></i> ดาวน์โหลด Backup (.json)
+              </button>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fffbeb;border:1.5px solid #fef3c7;border-radius:10px;gap:16px">
+              <div>
+                <div style="font-weight:700;color:#92400e;margin-bottom:2px"><i class="fa-solid fa-cloud-arrow-up" style="color:#d97706"></i> กู้คืนข้อมูลระบบ (Restore Database)</div>
+                <div style="font-size:12px;color:#b45309">เลือกไฟล์สำรอง (.json) เพื่อกู้คืนข้อมูลทั้งหมดกลับเข้าสู่ระบบ</div>
+              </div>
+              <div>
+                <input type="file" id="restoreBackupFileInput" accept=".json,application/json" style="display:none" onchange="handleRestoreBackupFile(event)">
+                <button type="button" class="btn btn-yellow" onclick="triggerRestoreBackup()" style="white-space:nowrap">
+                  <i class="fa-solid fa-upload"></i> เลือกไฟล์กู้คืน
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 7. USERS TAB -->

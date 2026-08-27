@@ -552,6 +552,130 @@ async function handleAction(db, action, params) {
       return { success: true, message: `ลบผู้ใช้ ${username} เรียบร้อยแล้ว` };
     }
 
+        // 11. BACKUP & RESTORE DATABASE
+    case 'backupDatabase': {
+      const settings = (await db.prepare('SELECT * FROM settings').all()).results || [];
+      const users = (await db.prepare('SELECT * FROM users').all()).results || [];
+      const employees = (await db.prepare('SELECT * FROM employees').all()).results || [];
+      const monthly_inputs = (await db.prepare('SELECT * FROM monthly_inputs').all()).results || [];
+      const payroll_calcs = (await db.prepare('SELECT * FROM payroll_calcs').all()).results || [];
+
+      return {
+        success: true,
+        backup: {
+          app: 'PTN_PAYROLL_SYSTEM',
+          version: '4.0',
+          backupDate: new Date().toISOString(),
+          company: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
+          data: {
+            settings: settings,
+            users: users,
+            employees: employees,
+            monthly_inputs: monthly_inputs,
+            payroll_calcs: payroll_calcs
+          }
+        },
+        message: 'สำรองข้อมูลฐานข้อมูลสำเร็จ'
+      };
+    }
+
+    case 'restoreDatabase': {
+      const backup = params.backup || {};
+      const data = backup.data || backup;
+      if (!data.employees && !data.settings && !data.users && !data.monthly_inputs) {
+        return { success: false, message: 'โครงสร้างไฟล์สำรองไม่ถูกต้อง' };
+      }
+
+      // Restore Settings
+      if (Array.isArray(data.settings)) {
+        await db.prepare('DELETE FROM settings').run();
+        for (const s of data.settings) {
+          if (s.key && s.value !== undefined) {
+            await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(s.key, String(s.value)).run();
+          }
+        }
+      }
+
+      // Restore Users
+      if (Array.isArray(data.users)) {
+        await db.prepare('DELETE FROM users').run();
+        for (const u of data.users) {
+          if (u.username && u.password) {
+            await db.prepare('INSERT OR REPLACE INTO users (username, password, role) VALUES (?, ?, ?)').bind(u.username, u.password, u.role || 'User').run();
+          }
+        }
+      }
+
+      // Restore Employees
+      if (Array.isArray(data.employees)) {
+        await db.prepare('DELETE FROM employees').run();
+        for (const e of data.employees) {
+          if (e.emp_id && e.full_name) {
+            await db.prepare(`
+              INSERT OR REPLACE INTO employees 
+              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              e.emp_id, e.full_name, e.nickname || '', e.citizen_id || '', e.phone || '', e.address || '',
+              e.department || '', e.position || '', Number(e.base_salary) || 0,
+              e.bank_name || '', e.bank_account || '', e.birth_date || '', Number(e.age) || 0,
+              e.join_date || '',
+              (e.pf_rate !== null && e.pf_rate !== undefined && !isNaN(Number(e.pf_rate))) ? Number(e.pf_rate) : 0.05,
+              (e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 750,
+              Number(e.default_tax) || 0, e.remark || ''
+            ).run();
+          }
+        }
+      }
+
+      // Restore Monthly Inputs
+      if (Array.isArray(data.monthly_inputs)) {
+        await db.prepare('DELETE FROM monthly_inputs').run();
+        for (const i of data.monthly_inputs) {
+          if (i.period && i.emp_id) {
+            await db.prepare(`
+              INSERT OR REPLACE INTO monthly_inputs
+              (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              i.period, Number(i.no) || 1, i.emp_id, i.emp_name || '', Number(i.base_salary) || 0,
+              Number(i.pf_rate) || 0, Number(i.pf_amount) || 0,
+              Number(i.absent_days) || 0, Number(i.leave_days) || 0, Number(i.sick_leave_days) || 0, Number(i.late_deduct) || 0,
+              Number(i.ot_hours) || 0, Number(i.ot_rate) || 40, Number(i.allowance) || 0, Number(i.bonus) || 0,
+              Number(i.advance_deduct) || 0, Number(i.other_deduct) || 0, Number(i.sso) || 0, Number(i.tax) || 0
+            ).run();
+          }
+        }
+      }
+
+      // Restore Payroll Calcs
+      if (Array.isArray(data.payroll_calcs) && data.payroll_calcs.length > 0) {
+        await db.prepare('DELETE FROM payroll_calcs').run();
+        for (const p of data.payroll_calcs) {
+          if (p.period && p.emp_id) {
+            await db.prepare(`
+              INSERT OR REPLACE INTO payroll_calcs
+              (period, emp_id, full_name, department, position, bank_name, bank_account, base_salary, ot_hours, ot_rate, ot_pay, allowance, bonus, leave_deduction, gross_pay, sso, pf, tax, advance_deduct, other_deduct, total_deductions, net_pay)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              p.period, p.emp_id, p.full_name || '', p.department || '', p.position || '', p.bank_name || '', p.bank_account || '',
+              Number(p.base_salary) || 0, Number(p.ot_hours) || 0, Number(p.ot_rate) || 40, Number(p.ot_pay) || 0,
+              Number(p.allowance) || 0, Number(p.bonus) || 0, Number(p.leave_deduction) || 0, Number(p.gross_pay) || 0,
+              Number(p.sso) || 0, Number(p.pf) || 0, Number(p.tax) || 0, Number(p.advance_deduct) || 0, Number(p.other_deduct) || 0,
+              Number(p.total_deductions) || 0, Number(p.net_pay) || 0
+            ).run();
+          }
+        }
+      } else {
+        await calculateAndSavePayroll(db, period);
+      }
+
+      return {
+        success: true,
+        message: `กู้คืนข้อมูลสำเร็จเรียบร้อยแล้ว (พนักงาน ${(data.employees||[]).length} คน, บันทึกงวด ${(data.monthly_inputs||[]).length} รายการ)`
+      };
+    }
+
     default:
       return { success: false, message: `Unknown action: ${action}` };
   }
