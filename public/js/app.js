@@ -1038,7 +1038,26 @@ function viewPayslip(empId) {
 }
 
 function printPayslip() {
+  document.body.classList.remove('printing-history');
+  document.body.classList.add('printing-payslip');
   window.print();
+  setTimeout(function() {
+    document.body.classList.remove('printing-payslip');
+  }, 1000);
+}
+
+function printHistoryReport() {
+  var empId = document.getElementById('histEmpSelect') ? document.getElementById('histEmpSelect').value : '';
+  if (!empId) {
+    showToast('กรุณาเลือกพนักงานก่อนพิมพ์รายงานประวัติ', 'warning');
+    return;
+  }
+  document.body.classList.remove('printing-payslip');
+  document.body.classList.add('printing-history');
+  window.print();
+  setTimeout(function() {
+    document.body.classList.remove('printing-history');
+  }, 1000);
 }
 
 // PERIOD CLOSE / REOPEN

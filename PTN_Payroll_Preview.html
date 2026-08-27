@@ -571,17 +571,64 @@ footer {
   margin-top: auto;
 }
 
-/* PAYSLIP PRINT STYLES */
+/* PRINT STYLES (PAYSLIP & EMPLOYEE HISTORY REPORT) */
 @media print {
-  body * { visibility: hidden; }
-  #payslipContentArea, #payslipContentArea * { visibility: visible; }
-  #payslipContentArea {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+  body * {
+    visibility: hidden !important;
   }
-  @page { size: A4 portrait; margin: 12mm 15mm; }
+
+  /* 1. PRINTING PAYSLIP */
+  body.printing-payslip #payslipContentArea,
+  body.printing-payslip #payslipContentArea * {
+    visibility: visible !important;
+  }
+  body.printing-payslip #payslipContentArea {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 2. PRINTING EMPLOYEE HISTORY REPORT */
+  body.printing-history #histContentArea,
+  body.printing-history #histContentArea * {
+    visibility: visible !important;
+  }
+  body.printing-history #histContentArea {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body.printing-history .table-wrapper {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  body.printing-history .data-table {
+    font-size: 8pt !important;
+    width: 100% !important;
+  }
+  body.printing-history .data-table th,
+  body.printing-history .data-table td {
+    padding: 4px 6px !important;
+  }
+
+  /* Fallback if Ctrl+P is pressed directly */
+  body:not(.printing-history):not(.printing-payslip) #payslipContentArea,
+  body:not(.printing-history):not(.printing-payslip) #payslipContentArea * {
+    visibility: visible !important;
+  }
+  body:not(.printing-history):not(.printing-payslip) #payslipContentArea {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+  }
 }
 </style>
 </head>
@@ -930,7 +977,7 @@ footer {
               </div>
               <label style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-user"></i> เลือกพนักงาน:</label>
               <select id="histEmpSelect" class="period-select" style="min-width:260px" onchange="onHistoryEmpChanged()"></select>
-              <button type="button" class="btn btn-slate" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์รายงานประวัติ</button>
+              <button type="button" class="btn btn-slate" onclick="printHistoryReport()"><i class="fa-solid fa-print"></i> พิมพ์รายงานประวัติ</button>
             </div>
           </div>
 
@@ -2548,7 +2595,26 @@ function viewPayslip(empId) {
 }
 
 function printPayslip() {
+  document.body.classList.remove('printing-history');
+  document.body.classList.add('printing-payslip');
   window.print();
+  setTimeout(function() {
+    document.body.classList.remove('printing-payslip');
+  }, 1000);
+}
+
+function printHistoryReport() {
+  var empId = document.getElementById('histEmpSelect') ? document.getElementById('histEmpSelect').value : '';
+  if (!empId) {
+    showToast('กรุณาเลือกพนักงานก่อนพิมพ์รายงานประวัติ', 'warning');
+    return;
+  }
+  document.body.classList.remove('printing-payslip');
+  document.body.classList.add('printing-history');
+  window.print();
+  setTimeout(function() {
+    document.body.classList.remove('printing-history');
+  }, 1000);
 }
 
 // PERIOD CLOSE / REOPEN

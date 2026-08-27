@@ -560,15 +560,62 @@ footer {
   margin-top: auto;
 }
 
-/* PAYSLIP PRINT STYLES */
+/* PRINT STYLES (PAYSLIP & EMPLOYEE HISTORY REPORT) */
 @media print {
-  body * { visibility: hidden; }
-  #payslipContentArea, #payslipContentArea * { visibility: visible; }
-  #payslipContentArea {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
+  body * {
+    visibility: hidden !important;
   }
-  @page { size: A4 portrait; margin: 12mm 15mm; }
+
+  /* 1. PRINTING PAYSLIP */
+  body.printing-payslip #payslipContentArea,
+  body.printing-payslip #payslipContentArea * {
+    visibility: visible !important;
+  }
+  body.printing-payslip #payslipContentArea {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* 2. PRINTING EMPLOYEE HISTORY REPORT */
+  body.printing-history #histContentArea,
+  body.printing-history #histContentArea * {
+    visibility: visible !important;
+  }
+  body.printing-history #histContentArea {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body.printing-history .table-wrapper {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  body.printing-history .data-table {
+    font-size: 8pt !important;
+    width: 100% !important;
+  }
+  body.printing-history .data-table th,
+  body.printing-history .data-table td {
+    padding: 4px 6px !important;
+  }
+
+  /* Fallback if Ctrl+P is pressed directly */
+  body:not(.printing-history):not(.printing-payslip) #payslipContentArea,
+  body:not(.printing-history):not(.printing-payslip) #payslipContentArea * {
+    visibility: visible !important;
+  }
+  body:not(.printing-history):not(.printing-payslip) #payslipContentArea {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+  }
 }
