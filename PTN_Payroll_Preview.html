@@ -977,7 +977,8 @@ footer {
               </div>
               <label style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-user"></i> เลือกพนักงาน:</label>
               <select id="histEmpSelect" class="period-select" style="min-width:260px" onchange="onHistoryEmpChanged()"></select>
-              <button type="button" class="btn btn-slate" onclick="printHistoryReport()"><i class="fa-solid fa-print"></i> พิมพ์รายงานประวัติ</button>
+              <button type="button" class="btn btn-slate" onclick="exportAllEmployeeHistory()"><i class="fa-solid fa-file-csv"></i> Export ประวัติทุกคน (CSV)</button>
+              <button type="button" class="btn btn-primary" onclick="printHistoryReport()"><i class="fa-solid fa-print"></i> พิมพ์รายงานประวัติ</button>
             </div>
           </div>
 
@@ -3088,6 +3089,69 @@ function handleRestoreBackupFile(event) {
     }
   };
   reader.readAsText(file, 'utf-8');
+}
+
+function exportAllEmployeeHistory() {
+  showToast('กำลังเตรียมข้อมูลประวัติพนักงานทั้งหมด...', 'info');
+  callApi('getAllEmployeeHistory')
+    .then(function(r) {
+      if (!r.success || !r.allHistory) {
+        showToast(r.message || 'ไม่พบข้อมูลประวัติพนักงาน', 'error');
+        return;
+      }
+      var list = r.allHistory;
+      if (list.length === 0) {
+        showToast('ยังไม่มีข้อมูลประวัติเงินเดือนในระบบ', 'warning');
+        return;
+      }
+
+      var csv = '\uFEFF';
+      csv += 'งวด,รหัสพนักงาน,ชื่อ-นามสกุล,ชื่อเล่น,แผนก,ตำแหน่ง,เงินเดือนฐาน,ขาด(วัน),ลากิจ(วัน),ลาป่วย(วัน),หักสาย(บาท),OT(ชม),อัตราOT,เงินOT,เบี้ยขยัน,โบนัส,รวมหักขาดลาสาย,เงินได้รวมGross,ประกันสังคม,กองทุนPF,ภาษี,หักเงินเบิก,หักอื่นๆ,รวมหักทั้งหมด,เงินได้สุทธิNet\n';
+
+      list.forEach(function(row) {
+        var line = [
+          '"' + (row.period || '').replace(/"/g, '""') + '"',
+          '"' + (row.empId || '').replace(/"/g, '""') + '"',
+          '"' + (row.fullName || '').replace(/"/g, '""') + '"',
+          '"' + (row.nickname || '').replace(/"/g, '""') + '"',
+          '"' + (row.department || '').replace(/"/g, '""') + '"',
+          '"' + (row.position || '').replace(/"/g, '""') + '"',
+          Number(row.baseSalary) || 0,
+          Number(row.absentDays) || 0,
+          Number(row.leaveDays) || 0,
+          Number(row.sickLeaveDays) || 0,
+          Number(row.lateDeduct) || 0,
+          Number(row.otHours) || 0,
+          Number(row.otRate) || 40,
+          Number(row.otPay) || 0,
+          Number(row.allowance) || 0,
+          Number(row.bonus) || 0,
+          Number(row.leaveDeduction) || 0,
+          Number(row.grossPay) || 0,
+          Number(row.sso) || 0,
+          Number(row.pf) || 0,
+          Number(row.tax) || 0,
+          Number(row.advanceDeduct) || 0,
+          Number(row.otherDeduct) || 0,
+          Number(row.totalDeductions) || 0,
+          Number(row.netPay) || 0
+        ];
+        csv += line.join(',') + '\n';
+      });
+
+      var filename = 'PTN_All_Employees_History_' + new Date().toISOString().substring(0, 10) + '.csv';
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('ดาวน์โหลดไฟล์ประวัติพนักงานทั้งหมด (' + list.length + ' รายการ) สำเร็จ');
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
 }
 
 </script>

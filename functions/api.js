@@ -440,6 +440,55 @@ async function handleAction(db, action, params) {
     }
 
     // 7. EMPLOYEE HISTORY
+        // 7.1 GET ALL EMPLOYEES HISTORY
+    case 'getAllEmployeeHistory': {
+      const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY period DESC, emp_id ASC').all()).results || [];
+      const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY period DESC, emp_id ASC').all()).results || [];
+      const emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+
+      const empMap = {};
+      for (const e of emps) empMap[e.emp_id] = e;
+
+      const inputMap = {};
+      for (const i of inputs) {
+        inputMap[`${i.period}_${i.emp_id}`] = i;
+      }
+
+      const allRecords = calcs.map(c => {
+        const inp = inputMap[`${c.period}_${c.emp_id}`] || {};
+        const emp = empMap[c.emp_id] || {};
+        return {
+          period: c.period,
+          empId: c.emp_id,
+          fullName: c.full_name || emp.full_name || '',
+          nickname: emp.nickname || '',
+          department: c.department || emp.department || '',
+          position: c.position || emp.position || '',
+          baseSalary: Number(c.base_salary) || 0,
+          absentDays: Number(inp.absent_days) || 0,
+          leaveDays: Number(inp.leave_days) || 0,
+          sickLeaveDays: Number(inp.sick_leave_days) || 0,
+          lateDeduct: Number(inp.late_deduct) || 0,
+          otHours: Number(c.ot_hours) || 0,
+          otRate: Number(c.ot_rate) || 40,
+          otPay: Number(c.ot_pay) || 0,
+          allowance: Number(c.allowance) || 0,
+          bonus: Number(c.bonus) || 0,
+          leaveDeduction: Number(c.leave_deduction) || 0,
+          grossPay: Number(c.gross_pay) || 0,
+          sso: Number(c.sso) || 0,
+          pf: Number(c.pf) || 0,
+          tax: Number(c.tax) || 0,
+          advanceDeduct: Number(c.advance_deduct) || 0,
+          otherDeduct: Number(c.other_deduct) || 0,
+          totalDeductions: Number(c.total_deductions) || 0,
+          netPay: Number(c.net_pay) || 0
+        };
+      });
+
+      return { success: true, allHistory: allRecords };
+    }
+
     case 'getEmployeeHistory': {
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
