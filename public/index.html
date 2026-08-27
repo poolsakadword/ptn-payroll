@@ -349,8 +349,13 @@
               <div class="card-sub">ค้นหาพนักงานเพื่อดูประวัติการขาด ลา มาสาย OT เงินเดือนย้อนหลังทุกงวด พร้อมพิมพ์รายงาน A4</div>
             </div>
             <div class="toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="historySearchInput" placeholder="ค้นหางวด/แผนก/ตำแหน่ง..." oninput="filterHistoryTable()">
+              </div>
               <label style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-user"></i> เลือกพนักงาน:</label>
-              <select id="histEmpSelect" class="period-select" style="min-width:240px" onchange="onHistoryEmpChanged()"></select>
+              <select id="histEmpSelect" class="period-select" style="min-width:260px" onchange="onHistoryEmpChanged()"></select>
+              <button type="button" class="btn btn-slate" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์รายงานประวัติ</button>
             </div>
           </div>
 

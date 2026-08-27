@@ -924,8 +924,13 @@ footer {
               <div class="card-sub">ค้นหาพนักงานเพื่อดูประวัติการขาด ลา มาสาย OT เงินเดือนย้อนหลังทุกงวด พร้อมพิมพ์รายงาน A4</div>
             </div>
             <div class="toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="historySearchInput" placeholder="ค้นหางวด/แผนก/ตำแหน่ง..." oninput="filterHistoryTable()">
+              </div>
               <label style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-user"></i> เลือกพนักงาน:</label>
-              <select id="histEmpSelect" class="period-select" style="min-width:240px" onchange="onHistoryEmpChanged()"></select>
+              <select id="histEmpSelect" class="period-select" style="min-width:260px" onchange="onHistoryEmpChanged()"></select>
+              <button type="button" class="btn btn-slate" onclick="window.print()"><i class="fa-solid fa-print"></i> พิมพ์รายงานประวัติ</button>
             </div>
           </div>
 
@@ -2007,6 +2012,7 @@ function renderEmployeesTable() {
 }
 
 // 5. EMPLOYEE WORK HISTORY TAB
+var currentHistoryList = [];
 function renderHistoryTab() {
   var sel = document.getElementById('histEmpSelect');
   if (sel && sel.value) {
@@ -2016,58 +2022,80 @@ function renderHistoryTab() {
 
 function onHistoryEmpChanged() {
   var empId = document.getElementById('histEmpSelect').value;
+  var contentArea = document.getElementById('histContentArea');
   if (!empId) {
-    document.getElementById('histContentArea').style.display = 'none';
+    if (contentArea) contentArea.style.display = 'none';
+    currentHistoryList = [];
     return;
   }
 
   callApi('getEmployeeHistory', { empId: empId })
     .then(function(r) {
       if (!r.success) { showToast(r.message, 'error'); return; }
-      var emp = r.employee;
-      var hist = r.history || [];
+      var emp = r.employee || {};
+      currentHistoryList = r.history || [];
 
-      document.getElementById('histContentArea').style.display = 'block';
-      document.getElementById('histEmpCardName').textContent = emp.fullName + ' (' + emp.empId + ')';
-      document.getElementById('histEmpCardDept').textContent = (emp.department || '-') + ' / ' + (emp.position || '-');
+      if (contentArea) contentArea.style.display = 'block';
+      if (document.getElementById('histEmpCardName')) document.getElementById('histEmpCardName').textContent = (emp.fullName || '') + (emp.nickname ? ' (' + emp.nickname + ')' : '') + ' [' + (emp.empId || '') + ']';
+      if (document.getElementById('histEmpCardDept')) document.getElementById('histEmpCardDept').textContent = (emp.department || '-') + ' / ' + (emp.position || '-');
       var birthAgeStr = (emp.birthDate || '-') + (emp.age ? ' (' + emp.age + ' ปี)' : '');
-      document.getElementById('histEmpCardBirthAge').textContent = birthAgeStr;
-      document.getElementById('histEmpCardCitizen').textContent = emp.citizenId || '-';
-      document.getElementById('histEmpCardPhone').textContent = emp.phone || '-';
-      document.getElementById('histEmpCardBank').textContent = (emp.bankName || '-') + ' ' + (emp.bankAccount || '-');
-      document.getElementById('histEmpCardSalary').textContent = fmt(emp.baseSalary);
-      document.getElementById('histEmpCardJoin').textContent = emp.joinDate || '-';
-      document.getElementById('histEmpCardPf').textContent = ((emp.pfRate || 0.05) * 100).toFixed(0) + '%';
+      if (document.getElementById('histEmpCardBirthAge')) document.getElementById('histEmpCardBirthAge').textContent = birthAgeStr;
+      if (document.getElementById('histEmpCardCitizen')) document.getElementById('histEmpCardCitizen').textContent = emp.citizenId || '-';
+      if (document.getElementById('histEmpCardPhone')) document.getElementById('histEmpCardPhone').textContent = emp.phone || '-';
+      if (document.getElementById('histEmpCardBank')) document.getElementById('histEmpCardBank').textContent = (emp.bankName || '-') + ' ' + (emp.bankAccount || '-');
+      if (document.getElementById('histEmpCardSalary')) document.getElementById('histEmpCardSalary').textContent = fmt(emp.baseSalary);
+      if (document.getElementById('histEmpCardJoin')) document.getElementById('histEmpCardJoin').textContent = emp.joinDate || '-';
+      if (document.getElementById('histEmpCardPf')) document.getElementById('histEmpCardPf').textContent = (Number(emp.pfRate) > 0) ? (((Number(emp.pfRate) * 100).toFixed(0)) + '%') : 'ไม่หัก (0%)';
 
-      var tbody = document.getElementById('histTableBody');
-      if (hist.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="15" class="text-center text-muted" style="padding:24px">ยังไม่มีประวัติเงินเดือนในระบบ</td></tr>';
-        return;
-      }
-
-      var h = '';
-      hist.forEach(function(row) {
-        h += '<tr>' +
-          '<td class="font-bold text-blue">' + esc(row.period) + '</td>' +
-          '<td class="text-right font-mono font-bold">' + fmt(row.baseSalary) + '</td>' +
-          '<td class="text-right font-mono text-red font-bold">' + (row.absentDays || 0) + '</td>' +
-          '<td class="text-right font-mono">' + (row.leaveDays || 0) + '</td>' +
-          '<td class="text-right font-mono text-red">' + (row.sickLeaveDays || 0) + '</td>' +
-          '<td class="text-right font-mono text-red">' + fmt(row.lateDeduct || 0) + '</td>' +
-          '<td class="text-right font-mono">' + (row.otHours || 0) + '</td>' +
-          '<td class="text-right font-mono text-blue font-bold">' + fmt(row.otPay) + '</td>' +
-          '<td class="text-right font-mono text-green font-bold">' + fmt(row.allowance) + '</td>' +
-          '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(row.grossPay) + '</td>' +
-          '<td class="text-right font-mono">' + fmt(row.sso) + '</td>' +
-          '<td class="text-right font-mono font-bold text-blue">' + fmt(row.pf) + '</td>' +
-          '<td class="text-right font-mono">' + fmt(row.tax) + '</td>' +
-          '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(row.totalDeductions) + '</td>' +
-          '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:13px">' + fmt(row.netPay) + '</td>' +
-        '</tr>';
-      });
-      tbody.innerHTML = h;
+      filterHistoryTable();
     })
     .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+function filterHistoryTable() {
+  var tbody = document.getElementById('historyTableBody') || document.getElementById('histTableBody');
+  if (!tbody) return;
+
+  var q = (document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value : '').trim().toLowerCase();
+  var list = (currentHistoryList || []).filter(function(row) {
+    if (!q) return true;
+    return (row.period && row.period.toLowerCase().indexOf(q) >= 0) ||
+           (row.department && row.department.toLowerCase().indexOf(q) >= 0) ||
+           (row.position && row.position.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="19" class="text-center text-muted" style="padding:28px">' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:4px"><i class="fa-solid fa-clock-rotate-left"></i> ' + (q ? 'ไม่พบประวัติที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีประวัติเงินเดือนในระบบ') + '</div>' +
+    '</td></tr>';
+    return;
+  }
+
+  var h = '';
+  list.forEach(function(c) {
+    h += '<tr>' +
+      '<td class="font-bold text-blue">' + esc(c.period) + '</td>' +
+      '<td class="text-right font-mono font-bold">' + fmt(c.baseSalary) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + (c.absentDays || 0) + '</td>' +
+      '<td class="text-right font-mono">' + (c.leaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + (c.sickLeaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(c.lateDeduct || 0) + '</td>' +
+      '<td class="text-right font-mono">' + (c.otHours || 0) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(c.otPay || 0) + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + fmt(c.allowance || 0) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(c.bonus || 0) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + fmt(c.leaveDeduction || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(c.grossPay || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-red">' + fmt(c.sso || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue">' + fmt(c.pf || 0) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(c.tax || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(c.advanceDeduct || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(c.otherDeduct || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(c.totalDeductions || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:13px">' + fmt(c.netPay || 0) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = h;
 }
 
 // 6. COMPANY SETTINGS RENDERER
