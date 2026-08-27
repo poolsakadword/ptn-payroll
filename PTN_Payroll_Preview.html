@@ -769,6 +769,10 @@ footer {
               <div class="card-sub">ผลการคำนวณเงินเดือน OT 40 บาท เบี้ยขยัน กองทุน PF ประกันสังคม ภาษี หักขาด/ลา/สาย</div>
             </div>
             <div class="toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="payrollSearchInput" placeholder="ค้นหาเงินเดือน (รหัส, ชื่อ, แผนก)..." oninput="renderPayrollTable()">
+              </div>
               <button type="button" class="btn btn-slate" onclick="exportToCSV('payroll')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
               </button>
@@ -873,6 +877,10 @@ footer {
               <div class="card-sub">ข้อมูลพนักงาน บัตรประชาชน เบอร์โทร ธนาคาร เงินเดือนฐาน อัตรา PF และค่าเริ่มต้น SSO/Tax</div>
             </div>
             <div class="toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="empSearchInput" placeholder="ค้นหาพนักงาน (รหัส, ชื่อ, แผนก)..." oninput="renderEmployeesTable()">
+              </div>
               <button type="button" class="btn btn-slate" onclick="exportToCSV('employees')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
               </button>
@@ -1782,9 +1790,18 @@ function renderPayrollTable() {
   var tbody = document.getElementById('payrollTableBody');
   if (!tbody) return;
 
-  if (State.payrollList.length === 0) {
+  var q = (document.getElementById('payrollSearchInput') ? document.getElementById('payrollSearchInput').value : '').trim().toLowerCase();
+  var list = State.payrollList.filter(function(r) {
+    if (!q) return true;
+    return (r.empId && r.empId.toLowerCase().indexOf(q) >= 0) ||
+           (r.name && r.name.toLowerCase().indexOf(q) >= 0) ||
+           (r.department && r.department.toLowerCase().indexOf(q) >= 0) ||
+           (r.position && r.position.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:36px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ' + (q ? 'ไม่พบข้อมูลที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กรุณาไปที่แท็บ <strong>"บันทึกข้อมูลประจำงวด"</strong> แล้วกดปุ่ม <strong>"ดึงพนักงานทุกคนเข้างวดนี้"</strong> หรือบันทึกข้อมูลรายคน</div>' +
     '</td></tr>';
     return;
@@ -1792,7 +1809,7 @@ function renderPayrollTable() {
 
   var workDays = State.workingDays > 0 ? State.workingDays : 30;
   var h = '';
-  State.payrollList.forEach(function(row) {
+  list.forEach(function(row) {
     var baseSal = Number(row.baseSalary) || 0;
     var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
 

@@ -318,9 +318,18 @@ function renderPayrollTable() {
   var tbody = document.getElementById('payrollTableBody');
   if (!tbody) return;
 
-  if (State.payrollList.length === 0) {
+  var q = (document.getElementById('payrollSearchInput') ? document.getElementById('payrollSearchInput').value : '').trim().toLowerCase();
+  var list = State.payrollList.filter(function(r) {
+    if (!q) return true;
+    return (r.empId && r.empId.toLowerCase().indexOf(q) >= 0) ||
+           (r.name && r.name.toLowerCase().indexOf(q) >= 0) ||
+           (r.department && r.department.toLowerCase().indexOf(q) >= 0) ||
+           (r.position && r.position.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:36px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ' + (q ? 'ไม่พบข้อมูลที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กรุณาไปที่แท็บ <strong>"บันทึกข้อมูลประจำงวด"</strong> แล้วกดปุ่ม <strong>"ดึงพนักงานทุกคนเข้างวดนี้"</strong> หรือบันทึกข้อมูลรายคน</div>' +
     '</td></tr>';
     return;
@@ -328,7 +337,7 @@ function renderPayrollTable() {
 
   var workDays = State.workingDays > 0 ? State.workingDays : 30;
   var h = '';
-  State.payrollList.forEach(function(row) {
+  list.forEach(function(row) {
     var baseSal = Number(row.baseSalary) || 0;
     var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
 

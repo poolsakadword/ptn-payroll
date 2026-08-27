@@ -194,6 +194,10 @@
               <div class="card-sub">ผลการคำนวณเงินเดือน OT 40 บาท เบี้ยขยัน กองทุน PF ประกันสังคม ภาษี หักขาด/ลา/สาย</div>
             </div>
             <div class="toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="payrollSearchInput" placeholder="ค้นหาเงินเดือน (รหัส, ชื่อ, แผนก)..." oninput="renderPayrollTable()">
+              </div>
               <button type="button" class="btn btn-slate" onclick="exportToCSV('payroll')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
               </button>
@@ -298,6 +302,10 @@
               <div class="card-sub">ข้อมูลพนักงาน บัตรประชาชน เบอร์โทร ธนาคาร เงินเดือนฐาน อัตรา PF และค่าเริ่มต้น SSO/Tax</div>
             </div>
             <div class="toolbar">
+              <div class="search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="empSearchInput" placeholder="ค้นหาพนักงาน (รหัส, ชื่อ, แผนก)..." oninput="renderEmployeesTable()">
+              </div>
               <button type="button" class="btn btn-slate" onclick="exportToCSV('employees')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
               </button>
