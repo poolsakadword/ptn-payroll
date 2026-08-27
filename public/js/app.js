@@ -469,7 +469,7 @@ function renderEmployeesTable() {
   State.employees.forEach(function(e) {
     var nickDisplay = e.nickname ? ' (' + e.nickname + ')' : '';
     var empPf = (e.pfRate !== null && e.pfRate !== undefined && !isNaN(Number(e.pfRate))) ? Number(e.pfRate) : 0;
-    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + empPf + '" data-sso="' + (e.defaultSso !== undefined ? e.defaultSso : 750) + '" data-tax="' + (e.defaultTax || 0) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + '</option>';
+    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + empPf + '" data-sso="' + (e.defaultSso !== null && e.defaultSso !== undefined && !isNaN(Number(e.defaultSso)) ? Number(e.defaultSso) : 0) + '" data-tax="' + (e.defaultTax || 0) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + '</option>';
   });
   var miSel = document.getElementById('miEmpId');
   if (miSel) miSel.innerHTML = sel;
@@ -731,7 +731,7 @@ function openAddInputModal() {
   document.getElementById('miBonus').value = '0';
   document.getElementById('miAdvanceDeduct').value = '0';
   document.getElementById('miOtherDeduct').value = '0';
-  document.getElementById('miSso').value = '750';
+  document.getElementById('miSso').value = '0';
   document.getElementById('miTax').value = '0';
   updateModalDailyRate(0);
   openModal('inputModal');
@@ -782,7 +782,7 @@ function onInputEmpSelectChanged() {
       document.getElementById('miOtRate').value = '40';
     }
     var ssoVal = opt.getAttribute('data-sso');
-    var finalSso = (ssoVal !== null && ssoVal !== '' && !isNaN(Number(ssoVal))) ? Number(ssoVal) : (emp && emp.defaultSso !== undefined && emp.defaultSso !== null ? Number(emp.defaultSso) : 0);
+    var finalSso = (ssoVal !== null && ssoVal !== '' && !isNaN(Number(ssoVal))) ? Number(ssoVal) : ((emp && emp.defaultSso !== undefined && emp.defaultSso !== null && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 0);
     document.getElementById('miSso').value = finalSso;
     var taxVal = opt.getAttribute('data-tax');
     document.getElementById('miTax').value = (taxVal !== null && taxVal !== '') ? taxVal : '0';
@@ -828,7 +828,7 @@ function saveInputRecordForm(e) {
     bonus: Number(document.getElementById('miBonus').value) || 0,
     advanceDeduct: Number(document.getElementById('miAdvanceDeduct').value) || 0,
     otherDeduct: Number(document.getElementById('miOtherDeduct').value) || 0,
-    sso: Number(document.getElementById('miSso').value) || 0,
+    sso: (document.getElementById('miSso') && document.getElementById('miSso').value !== '' && !isNaN(Number(document.getElementById('miSso').value))) ? Number(document.getElementById('miSso').value) : 0,
     tax: Number(document.getElementById('miTax').value) || 0
   };
 

@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>คู่มือการใช้งาน PTN Payroll V4.0</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 15mm 15mm 15mm 15mm;
+      @bottom-center {
+        content: "หน้า " counter(page) " จาก " counter(pages);
+        font-family: 'Sarabun', sans-serif;
+        font-size: 10pt;
+        color: #94a3b8;
+      }
+    }
+    
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    
+    body {
+      font-family: 'Sarabun', 'Prompt', 'Tahoma', sans-serif;
+      font-size: 11pt;
+      line-height: 1.65;
+      color: #1e293b;
+      background: #ffffff;
+      margin: 0;
+      padding: 0;
+    }
+    
+    .doc-title {
+      font-family: 'Prompt', sans-serif;
+      font-size: 22pt;
+      font-weight: 700;
+      color: #1e3a8a;
+      margin: 0 0 6px 0;
+      padding-bottom: 8px;
+      border-bottom: 3px solid #2563eb;
+    }
+    
+    .doc-sub {
+      font-family: 'Prompt', sans-serif;
+      font-size: 15pt;
+      font-weight: 600;
+      color: #3b82f6;
+      margin: 0 0 16px 0;
+    }
+    
+    .sec-title {
+      font-family: 'Prompt', sans-serif;
+      font-size: 14pt;
+      font-weight: 700;
+      color: #0f172a;
+      background: #f1f5f9;
+      padding: 8px 14px;
+      border-left: 5px solid #2563eb;
+      border-radius: 4px;
+      margin: 22px 0 12px 0;
+      page-break-after: avoid;
+    }
+    
+    .sub-sec-title {
+      font-family: 'Prompt', sans-serif;
+      font-size: 12pt;
+      font-weight: 600;
+      color: #1e40af;
+      margin: 16px 0 8px 0;
+      page-break-after: avoid;
+    }
+    
+    .doc-p {
+      margin: 6px 0;
+    }
+    
+    .divider {
+      border: none;
+      border-top: 1px solid #e2e8f0;
+      margin: 18px 0;
+    }
+    
+    .callout-box {
+      background: #eff6ff;
+      border: 1.5px solid #bfdbfe;
+      border-left: 5px solid #3b82f6;
+      border-radius: 6px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-size: 10.5pt;
+      color: #1e3a8a;
+      page-break-inside: avoid;
+    }
+    
+    .table-container {
+      margin: 14px 0;
+      page-break-inside: avoid;
+    }
+    
+    .doc-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10pt;
+    }
+    
+    .doc-table th {
+      background: #1e3a8a;
+      color: #ffffff;
+      font-weight: 600;
+      padding: 8px 10px;
+      text-align: left;
+      border: 1px solid #1e3a8a;
+    }
+    
+    .doc-table td {
+      padding: 7px 10px;
+      border: 1px solid #cbd5e1;
+      vertical-align: middle;
+    }
+    
+    .doc-table tr:nth-child(even) {
+      background: #f8fafc;
+    }
+    
+    .badge-yes {
+      color: #059669;
+      font-weight: 700;
+      font-size: 9pt;
+    }
+    
+    .badge-no {
+      color: #dc2626;
+      font-weight: 700;
+      font-size: 9pt;
+    }
+    
+    .doc-li, .doc-num-li {
+      margin: 4px 0 4px 20px;
+    }
+    
+    code {
+      background: #f1f5f9;
+      color: #0f172a;
+      font-family: 'Consolas', monospace;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 9.5pt;
+      border: 1px solid #cbd5e1;
+    }
+    
+    .header-box {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #1e3a8a;
+      color: #ffffff;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    
+    .header-box h2 {
+      margin: 0;
+      font-family: 'Prompt', sans-serif;
+      font-size: 18pt;
+    }
+    
+    .header-box p {
+      margin: 4px 0 0 0;
+      font-size: 11pt;
+      color: #bfdbfe;
+    }
+  </style>
+</head>
+<body>
+  <div class="header-box">
+    <div>
+      <h2>คู่มือการใช้งานระบบ PTN Payroll V4.0</h2>
+      <p>บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด (PTN Pharma Center Co., Ltd.)</p>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:12pt;font-weight:700">เวอร์ชัน 4.0 (Official Release)</div>
+      <div style="font-size:10pt;color:#bfdbfe">URL: master.ptn-payroll.pages.dev</div>
+    </div>
+  </div>
+
+  <h1 class="doc-title">คู่มือการใช้งานระบบบริหารจัดการเงินเดือน (User Manual)</h1>
+<h2 class="doc-sub">ระบบ PTN Payroll System V4.0</h2>
+<p class="doc-p"><strong>บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด (PTN Pharma Center Co., Ltd.)</strong></p>
+<hr class="divider">
+<h3 class="sec-title">🌐 ลิงก์เข้าใช้งานระบบ</h3>
+<p class="doc-p">👉 <strong>URL:</strong> [https://master.ptn-payroll.pages.dev](https://master.ptn-payroll.pages.dev)</p>
+<hr class="divider">
+<h2 class="doc-sub">สารบัญ (Table of Contents)</h2>
+<li class="doc-num-li">[ภาพรวมและสถาปัตยกรรมระบบ](#1-ภาพรวมและสถาปัตยกรรมระบบ)</li>
+<li class="doc-num-li">[การเข้าสู่ระบบและระดับสิทธิ์ผู้ใช้งาน (RBAC)](#2-การเข้าสู่ระบบและระดับสิทธิ์ผู้ใช้งาน-rbac)</li>
+<li class="doc-num-li">[ขั้นตอนการทำงานรอบเดือน (Monthly Payroll Workflow)](#3-ขั้นตอนการทำงานรอบเดือน-monthly-payroll-workflow)</li>
+<li class="doc-li">[ขั้นตอนที่ 1: เลือกงวดประจำเดือนและตั้งค่าวันทำงาน](#ขั้นตอนที่-1-เลือกงวดประจำเดือนและตั้งค่าวันทำงาน)</li>
+<li class="doc-li">[ขั้นตอนที่ 2: จัดการทะเบียนประวัติพนักงาน (Employee Master)](#ขั้นตอนที่-2-จัดการทะเบียนประวัติพนักงาน-employee-master)</li>
+<li class="doc-li">[ขั้นตอนที่ 3: บันทึกข้อมูลประจำงวด (Monthly Input)](#ขั้นตอนที่-3-บันทึกข้อมูลประจำงวด-monthly-input)</li>
+<li class="doc-li">[ขั้นตอนที่ 4: คำนวณเงินเดือนและพิมพ์สลิป (Payroll & Payslips)](#ขั้นตอนที่-4-คำนวณเงินเดือนและพิมพ์สลิป-payroll--payslips)</li>
+<li class="doc-li">[ขั้นตอนที่ 5: การล็อคและปิดงวดบัญชี (Period Closing)](#ขั้นตอนที่-5-การล็อคและปิดงวดบัญชี-period-closing)</li>
+<li class="doc-num-li">[คู่มือการใช้งานแต่ละเมนู (Module Guides)](#4-คู่มือการใช้งานแต่ละเมนู-module-guides)</li>
+<li class="doc-li">[4.1 แดชบอร์ดสรุปภาพรวม (Dashboard)](#41-แดชบอร์ดสรุปภาพรวม-dashboard)</li>
+<li class="doc-li">[4.2 ประวัติการทำงานและเงินเดือนย้อนหลังรายบุคคล (History)](#42-ประวัติการทำงานและเงินเดือนย้อนหลังรายบุคคล-history)</li>
+<li class="doc-li">[4.3 ตั้งค่าข้อมูลบริษัท (Company Settings)](#43-ตั้งค่าข้อมูลบริษัท-company-settings)</li>
+<li class="doc-li">[4.4 สำรองและกู้คืนฐานข้อมูล (Backup & Restore)](#44-สำรองและกู้คืนฐานข้อมูล-backup--restore)</li>
+<li class="doc-li">[4.5 จัดการผู้ใช้งานระบบ (User Management)](#45-จัดการผู้ใช้งานระบบ-user-management)</li>
+<li class="doc-num-li">[สูตรและหลักเกณฑ์การคำนวณเงินเดือน (Calculation Rules)](#5-สูตรและหลักเกณฑ์การคำนวณเงินเดือน-calculation-rules)</li>
+<li class="doc-num-li">[คำถามที่พบบ่อยและการแก้ไขปัญหาเบื้องต้น (FAQ & Troubleshooting)](#6-คำถามที่พบบ่อยและการแก้ไขปัญหาเบื้องต้น-faq--troubleshooting)</li>
+<hr class="divider">
+<h2 class="doc-sub">1. ภาพรวมและสถาปัตยกรรมระบบ</h2>
+<p class="doc-p">ระบบ <strong>PTN Payroll V4.0</strong> เป็นเว็บแอปพลิเคชันบริหารจัดการเงินเดือนเต็มรูปแบบ พัฒนาขึ้นโดยใช้สถาปัตยกรรม Serverless ทำงานบนเครือข่าย <strong>Cloudflare Pages</strong> ร่วมกับฐานข้อมูล SQL <strong>Cloudflare D1</strong></p>
+<li class="doc-li"><strong>ความเร็วสูง</strong>: โหลดข้อมูลรวดเร็วแบบ Single Page Application (SPA)</li>
+<li class="doc-li"><strong>ความปลอดภัยระดับองค์กร</strong>: แยกสิทธิ์ผู้ใช้งานแบบ Role-Based Access Control (RBAC) ป้องกันการรั่วไหลของข้อมูลเงินเดือน</li>
+<li class="doc-li"><strong>รองรับการใช้งานต่อเนื่อง</strong>: ไม่หลุดออกจากระบบเมื่อกด Refresh (F5) และจดจำงวดที่ทำงานล่าสุดเสมอ</li>
+<li class="doc-li"><strong>ระบบป้องกันแคช</strong>: มี Header Anti-Cache เพื่อให้ข้อมูลทุกตารางอัปเดตแบบเรียลไทม์เสมอ</li>
+<hr class="divider">
+<h2 class="doc-sub">2. การเข้าสู่ระบบและระดับสิทธิ์ผู้ใช้งาน (RBAC)</h2>
+<h3 class="sec-title">บัญชีผู้ใช้งานเริ่มต้น</h3>
+<li class="doc-li"><strong>Username</strong>: `admin`</li>
+<li class="doc-li"><strong>Password</strong>: `123456`</li>
+<h3 class="sec-title">ตารางเปรียบเทียบสิทธิ์การใช้งาน (Role Permissions)</h3>
+<div class="table-container"><table class="doc-table"><thead><tr>
+<th>เมนู / ฟังก์ชัน</th>
+<th>Admin / HR (ผู้ดูแลระบบ)</th>
+<th>HR (ฝ่ายบุคคล/บัญชี)</th>
+<th>User (ผู้ใช้งานทั่วไป)</th>
+</tr></thead><tbody>
+<tr>
+<td>📊 แดชบอร์ดสรุปภาพรวม (Dashboard)</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> เห็นครบถ้วน</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> เห็นครบถ้วน</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+</tr>
+<tr>
+<td>🧮 คำนวณเงินเดือน & พิมพ์สลิป (Payroll)</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้ทั้งหมด</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้ทั้งหมด</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+</tr>
+<tr>
+<td>📅 บันทึกข้อมูลประจำงวด (Monthly Input)</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้ทั้งหมด</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้ทั้งหมด</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+</tr>
+<tr>
+<td>👥 ทะเบียนพนักงาน: ดูข้อมูลทั่วไป</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> เห็นทุกข้อมูล</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> เห็นทุกข้อมูล</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> เห็นเฉพาะข้อมูลทั่วไป</td>
+</tr>
+<tr>
+<td>💰 ทะเบียนพนักงาน: ดู/แก้ไข เงินเดือนฐาน</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้</td>
+<td><span class="badge-no">❌ ซ่อน</span> <strong>ซ่อน 100%</strong></td>
+</tr>
+<tr>
+<td>➕ ทะเบียนพนักงาน: เพิ่ม/แก้ไข ข้อมูลทั่วไป</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> ทำได้</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> ทำได้</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> ทำได้ (เงินเดือนเดิมไม่หาย)</td>
+</tr>
+<tr>
+<td>🗑️ ทะเบียนพนักงาน: ลบพนักงาน</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> ลบได้</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> ลบได้</td>
+<td><span class="badge-no">❌ ซ่อน</span> <strong>ซ่อนปุ่มลบ</strong></td>
+</tr>
+<tr>
+<td>📜 ประวัติย้อนหลังรายคน (History)</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> ดูและพิมพ์ได้</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> ดูและพิมพ์ได้</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+</tr>
+<tr>
+<td>🏢 ตั้งค่าข้อมูลบริษัท (Company Settings)</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+</tr>
+<tr>
+<td>💾 สำรอง/กู้คืนฐานข้อมูล (Backup & Restore)</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+</tr>
+<tr>
+<td><span style="color:#475569">👤</span> จัดการผู้ใช้งานระบบ (User Management)</td>
+<td><span class="badge-yes">✅ มีสิทธิ์</span> จัดการได้</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+<td><span class="badge-no">❌ ซ่อน</span> ซ่อน</td>
+</tr>
+</tbody></table></div>
+<hr class="divider">
+<h2 class="doc-sub">3. ขั้นตอนการทำงานรอบเดือน (Monthly Payroll Workflow)</h2>
+<p class="doc-p"><code></code>`mermaid</p>
+<p class="doc-p">graph TD</p>
+<p class="doc-p">A["1. เลือกงวดเดือน/ปี & กำหนดวันทำงาน"] --> B["2. ตรวจสอบ/ปรับปรุง ทะเบียนพนักงาน"]</p>
+<p class="doc-p">B --> C["3. กด 'ดึงพนักงานทุกคนเข้างวดนี้' ในแท็บบันทึกงวด"]</p>
+<p class="doc-p">C --> D["4. กรอก ขาด/ลา/สาย/OT/เบี้ยขยัน/โบนัส"]</p>
+<p class="doc-p">D --> E["5. ตรวจสอบหน้า 'คำนวณเงินเดือน & สลิป'"]</p>
+<p class="doc-p">E --> F["6. พิมพ์สลิปเงินเดือน & Export CSV"]</p>
+<p class="doc-p">F --> G["7. กด 'ปิดงวดนี้' เพื่อล็อคข้อมูล"]</p>
+<p class="doc-p"><code></code>`</p>
+<h3 class="sec-title">ขั้นตอนที่ 1: เลือกงวดประจำเดือนและตั้งค่าวันทำงาน</h3>
+<li class="doc-num-li">ที่แถบด้านบนสุด (Period Bar) เลือก <strong>เดือน</strong> และ <strong>ปี พ.ศ.</strong> (ระบบรองรับย้อนหลัง 5 ปี และล่วงหน้า 20 ปี)</li>
+<li class="doc-num-li">ในช่อง <strong>"วันทำงานในงวด"</strong> กรอกจำนวนวันทำงานจริงของเดือนนั้น (ค่าเริ่มต้นคือ `30` วัน)</li>
+<li class="doc-num-li">กดปุ่ม <strong>"Set"</strong> เพื่อบันทึกวันทำงานนำไปใช้คำนวณอัตราค่าจ้างต่อวันของพนักงานทุกคนในงวดทันที</li>
+<hr class="divider">
+<h3 class="sec-title">ขั้นตอนที่ 2: จัดการทะเบียนประวัติพนักงาน (Employee Master)</h3>
+<p class="doc-p">เปิดแท็บ <strong>"ทะเบียนพนักงาน"</strong> เพื่อบันทึกและจัดการข้อมูลพนักงานของบริษัท:</p>
+<li class="doc-num-li"><strong>เพิ่มพนักงานใหม่</strong>: กดปุ่ม <strong>"+ เพิ่มพนักงาน"</strong> กรอกข้อมูล:</li>
+<li class="doc-li"><strong>รหัสพนักงาน</strong> (เช่น `EMP001`), <strong>ชื่อ-นามสกุล</strong>, <strong>ชื่อเล่น</strong></li>
+<li class="doc-li"><strong>วันเกิด</strong>: เมื่อเลือกวันที่ ระบบจะคำนวณ <strong>อายุ (ปี)</strong> ให้โดยอัตโนมัติ</li>
+<li class="doc-li"><strong>บัตรประชาชน, เบอร์โทร, ที่อยู่, แผนก, ตำแหน่ง, ธนาคาร, เลขบัญชี, วันเริ่มงาน</strong></li>
+<li class="doc-li"><strong>เงินเดือนฐาน (บาท)</strong></li>
+<li class="doc-li"><strong>กองทุนสำรองเลี้ยงชีพ (PF)</strong>:</li>
+<li class="doc-li">ติ๊กถูก `[✓] เข้าร่วมกองทุน (หัก PF)` ➔ ระบุอัตรา เช่น `0.05` (5%)</li>
+<li class="doc-li">ติ๊กออก `[ ] เข้าร่วมกองทุน (หัก PF)` ➔ สำหรับพนักงานที่ไม่เข้าร่วม (ระบบจะไม่หัก PF = ฿0.00)</li>
+<li class="doc-li"><strong>ประกันสังคม (SSO)</strong>:</li>
+<li class="doc-li">ติ๊กถูก `[✓] หักประกันสังคม (SSO)` ➔ ระบุตัวเลขยอดหัก เช่น `750`</li>
+<li class="doc-li">ติ๊กออก `[ ] หักประกันสังคม (SSO)` ➔ สำหรับคนที่ไม่หักประกันสังคม (ระบบจะไม่หัก SSO = ฿0.00)</li>
+<li class="doc-li"><strong>ภาษีเริ่มต้น (Tax Default)</strong></li>
+<li class="doc-li"><strong>หมายเหตุ (Remark)</strong>: สำหรับระบุข้อมูลเพิ่มเติม เช่น *พนักงานทดลองงาน, สัญญาจ้างชั่วคราว*</li>
+<li class="doc-num-li"><strong>การแก้ไขพนักงาน</strong>: กดปุ่ม <strong>"✏️ แก้ไข"</strong> ที่แถวพนักงานที่ต้องการ</li>
+<div class="callout-box">*ข้อดี: เมื่อแก้ไขข้อมูลพนักงาน ระบบจะ Real-time Auto-Sync อัปเดตข้อมูลไปยังงวดปัจจุบันทันที*</div>
+<li class="doc-num-li"><strong>การนำเข้า/ส่งออกไฟล์ CSV</strong>:</li>
+<li class="doc-li">กด <strong>"📄 Export CSV"</strong> เพื่อดาวน์โหลดรายชื่อพนักงานทั้งหมดเป็นไฟล์ Excel/CSV</li>
+<li class="doc-li">กด <strong>"📥 Import CSV"</strong> เพื่อนำเข้าพนักงานจำนวนมากพร้อมกันผ่านไฟล์ CSV</li>
+<hr class="divider">
+<h3 class="sec-title">ขั้นตอนที่ 3: บันทึกข้อมูลประจำงวด (Monthly Input)</h3>
+<p class="doc-p">เปิดแท็บ <strong>"บันทึกข้อมูลประจำงวด"</strong>:</p>
+<li class="doc-num-li">กดปุ่มสีเหลือง <strong>"👥 ดึงพนักงานทุกคนเข้างวดนี้"</strong>:</li>
+<li class="doc-li">ระบบจะดึงพนักงานทุกคนจากทะเบียนพนักงานเข้ามาในงวด พร้อมเงินเดือนฐาน, กองทุน PF, ประกันสังคม, ภาษี และอัตรา OT เริ่มต้นที่ <strong>40 บาท/ชม.</strong></li>
+<li class="doc-num-li"><strong>กรอกข้อมูลการทำงานของพนักงานแต่ละคน</strong>:</li>
+<li class="doc-li">กดปุ่ม <strong>"✏️ แก้ไข"</strong> ที่แถวของพนักงานคนนั้น หรือกด <strong>"+ บันทึกข้อมูลรายคน"</strong></li>
+<li class="doc-li">กรอกวัน <strong>ขาดงาน (วัน)</strong>, <strong>ลากิจ (วัน)</strong>, <strong>ลาป่วย (วัน)</strong></li>
+<li class="doc-li">กรอกยอด <strong>หักมาสาย (บาท)</strong></li>
+<li class="doc-li">กรอกจำนวนชั่วโมง <strong>OT (ชม.)</strong> (ระบบจะคำนวณเงิน OT จากสูตร: `ชั่วโมง OT × อัตรา OT 40 บาท` ให้อัตโนมัติ)</li>
+<li class="doc-li">กรอก <strong>เบี้ยขยัน (บาท)</strong>, <strong>เงินรางวัล/โบนัส (บาท)</strong></li>
+<li class="doc-li">กรอกยอด <strong>หักเงินเบิก/เงินยืม (บาท)</strong> และ <strong>หักอื่น ๆ (บาท)</strong></li>
+<li class="doc-li">กดปุ่ม <strong>"บันทึกข้อมูลประจำงวด"</strong></li>
+<hr class="divider">
+<h3 class="sec-title">ขั้นตอนที่ 4: คำนวณเงินเดือนและพิมพ์สลิป (Payroll & Payslips)</h3>
+<p class="doc-p">เปิดแท็บ <strong>"คำนวณเงินเดือน & สลิป"</strong>:</p>
+<li class="doc-num-li">ตารางจะแสดงผลการคำนวณเงินเดือนครบถ้วน <strong>20 คอลัมน์</strong> แบบเรียลไทม์</li>
+<li class="doc-num-li">หากมีการแก้ไขข้อมูล สามารถกดปุ่ม <strong>"⚡ ประมวลผลคำนวณเงินเดือน"</strong> เพื่อให้ระบบรีเฟรชยอดคำนวณใหม่ได้ทันที</li>
+<li class="doc-num-li"><strong>การพิมพ์สลิปเงินเดือน</strong>:</li>
+<li class="doc-li">กดปุ่ม <strong>"สลิป"</strong> ที่แถวของพนักงานที่ต้องการ</li>
+<li class="doc-li">หน้าต่างสลิปเงินเดือนจะแสดงรายละเอียดรายรับ, รายการหัก, ยอดเงินได้รวม (Gross Pay), ยอดหักรวม และเงินได้สุทธิ (Net Pay) พร้อมลายเซ็นผู้จ่ายเงินและผู้รับเงิน</li>
+<li class="doc-li">กดปุ่ม <strong>"🖨️ พิมพ์สลิปเงินเดือน"</strong> เพื่อพิมพ์ออกเครื่องพิมพ์ หรือบันทึกเป็น PDF ขนาดมาตรฐาน A4</li>
+<li class="doc-num-li"><strong>การส่งออกรายงาน</strong>: กดปุ่ม <strong>"📄 Export CSV"</strong> เพื่อดาวน์โหลดตารางสรุปเงินเดือนประจำงวดทั้งหมด</li>
+<hr class="divider">
+<h3 class="sec-title">ขั้นตอนที่ 5: การล็อคและปิดงวดบัญชี (Period Closing)</h3>
+<li class="doc-num-li">เมื่อตรวจสอบยอดเงินเดือนในงวดถูกต้องครบถ้วนแล้ว ให้ไปที่แถบด้านบน (Period Bar)</li>
+<li class="doc-num-li">กดปุ่มสีแดง <strong>"🔒 ปิดงวดนี้"</strong></li>
+<li class="doc-li">ระบบจะประมวลผลคำนวณยอดเงินเดือนสุดท้าย และเปลี่ยนสถานะงวดเป็น <strong>`ปิดงวดแล้ว`</strong></li>
+<li class="doc-li">บันทึกวัน-เวลา และชื่อผู้ที่ทำการปิดงวดไว้เป็นหลักฐาน</li>
+<li class="doc-num-li">หากต้องการแก้ไขข้อมูลเพิ่มเติมในภายหลัง ผู้ดูแลระบบสามารถกดปุ่ม <strong>"🔓 ปลดล็อคงวด"</strong> เพื่อเปิดให้แก้ไขข้อมูลใหม่ได้ตลอดเวลา</li>
+<hr class="divider">
+<h2 class="doc-sub">4. คู่มือการใช้งานแต่ละเมนู (Module Guides)</h2>
+<h3 class="sec-title">4.1 แดชบอร์ดสรุปภาพรวม (Dashboard)</h3>
+<li class="doc-li"><strong>การ์ดสรุปยอดเงินเดือน (4 การ์ดหลัก)</strong>:</li>
+<li class="doc-num-li">👥 <strong>พนักงานทั้งหมดในงวด</strong> (คน)</li>
+<li class="doc-num-li">📈 <strong>ยอดจ่ายรวม (Gross Pay)</strong> (บาท)</li>
+<li class="doc-num-li">📉 <strong>ยอดหักทั้งหมด (Deductions)</strong> (บาท)</li>
+<li class="doc-num-li">💵 <strong>ยอดจ่ายสุทธิ (Net Pay)</strong> (บาท)</li>
+<li class="doc-li"><strong>ช่องค้นหาเรียลไทม์</strong>: พิมพ์รหัส, ชื่อ, หรือแผนก เพื่อกรองดูข้อมูลได้ทันที</li>
+<hr class="divider">
+<h3 class="sec-title">4.2 ประวัติการทำงานและเงินเดือนย้อนหลังรายบุคคล (History)</h3>
+<li class="doc-num-li">เลือกรายชื่อพนักงานจากเมนู Dropdown</li>
+<li class="doc-num-li">ระบบจะแสดง <strong>การ์ดโปรไฟล์พนักงาน</strong> (รหัส, ชื่อเล่น, วันเกิด, อายุ, เลขบัญชี, เงินเดือนฐาน ฯลฯ)</li>
+<li class="doc-num-li">ตารางด้านล่างจะแสดง <strong>ประวัติเงินเดือนย้อนหลังครบทุกงวด</strong> (19 คอลัมน์) ของพนักงานคนนั้น</li>
+<li class="doc-num-li">สามารถใช้ช่องค้นหาเพื่อค้นหางวด หรือกดปุ่ม <strong>"🖨️ พิมพ์รายงานประวัติ"</strong> เพื่อออกรายงานย้อนหลังได้</li>
+<hr class="divider">
+<h3 class="sec-title">4.3 ตั้งค่าข้อมูลบริษัท (Company Settings)</h3>
+<li class="doc-li">เข้าสู่แท็บ <strong>"ข้อมูลบริษัท"</strong> เพื่อระบุ:</li>
+<li class="doc-li"><strong>ชื่อบริษัท</strong>: เช่น `บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด`</li>
+<li class="doc-li"><strong>ที่อยู่สถานประกอบการ</strong></li>
+<li class="doc-li"><strong>เบอร์โทรศัพท์</strong></li>
+<li class="doc-li"><strong>เลขประจำตัวผู้เสียภาษีอากร (13 หลัก)</strong></li>
+<li class="doc-li">ข้อมูลนี้จะถูกนำไปแสดงบน <strong>หัวสลิปเงินเดือน</strong> และเอกสารรายงานทุกฉบับ</li>
+<hr class="divider">
+<h3 class="sec-title">4.4 สำรองและกู้คืนฐานข้อมูล (Backup & Restore)</h3>
+<p class="doc-p">อยู่ในส่วนล่างของแท็บ <strong>"ข้อมูลบริษัท"</strong>:</p>
+<li class="doc-num-li"><strong>สำรองข้อมูล (Backup)</strong>:</li>
+<li class="doc-li">กดปุ่ม <strong>"ดาวน์โหลด Backup (.json)"</strong></li>
+<li class="doc-li">ระบบจะรวมข้อมูลทั้ง 5 ตารางในฐานข้อมูล (Settings, Users, Employees, Monthly Inputs, Payroll Calcs) เป็นไฟล์ `.json` ดาวน์โหลดลงเครื่องคอมพิวเตอร์</li>
+<li class="doc-num-li"><strong>กู้คืนข้อมูล (Restore)</strong>:</li>
+<li class="doc-li">กดปุ่ม <strong>"เลือกไฟล์กู้คืน"</strong> ➔ เลือกไฟล์สำรอง `.json`</li>
+<li class="doc-li">กดยืนยันการกู้คืน ข้อมูลทั้งหมดจะถูกเขียนกลับคืนสู่ฐานข้อมูลทันที</li>
+<hr class="divider">
+<h3 class="sec-title">4.5 จัดการผู้ใช้งานระบบ (User Management)</h3>
+<p class="doc-p">เฉพาะผู้ใช้งานระดับ <strong>Admin</strong> เท่านั้นที่เข้าถึงเมนูนี้ได้:</p>
+<li class="doc-num-li"><strong>เพิ่มผู้ใช้งาน</strong>: กด <strong>"+ เพิ่มผู้ใช้งาน"</strong> &rarr; กรอก Username, Password และเลือกระดับสิทธิ์ (`Admin / HR`, `HR`, `User`)</li>
+<li class="doc-num-li"><strong>แก้ไขผู้ใช้งาน</strong>: กด <strong>"✏️ แก้ไข"</strong> เพื่อเปลี่ยนรหัสผ่านหรือระดับสิทธิ์</li>
+<li class="doc-num-li"><strong>ลบผู้ใช้งาน</strong>: กด <strong>"🗑️ ลบ"</strong> (ระบบป้องกันไม่ให้ลบ Admin หลัก)</li>
+<hr class="divider">
+<h2 class="doc-sub">5. สูตรและหลักเกณฑ์การคำนวณเงินเดือน (Calculation Rules)</h2>
+<h3 class="sec-title">ค่าจ้างต่อวัน (Daily Rate)</h3>
+<li class="doc-li"><strong>ค่าจ้างต่อวัน</strong> = `เงินเดือนฐาน / จำนวนวันทำงานในงวด (เช่น 30 วัน)`</li>
+<h3 class="sec-title">1. รายการหักการขาด ลา มาสาย (Leave Deductions)</h3>
+<li class="doc-li"><strong>หักขาดงาน</strong> = `จำนวนวันขาด × ค่าจ้างต่อวัน × 1.5` *(หัก 1.5 เท่าตามระเบียบบริษัท)*</li>
+<li class="doc-li"><strong>หักลากิจ</strong> = `จำนวนวันลากิจ × ค่าจ้างต่อวัน × 1.0`</li>
+<li class="doc-li"><strong>หักลาป่วย</strong> = `จำนวนวันลาป่วย × ค่าจ้างต่อวัน × 1.0`</li>
+<li class="doc-li"><strong>หักมาสาย</strong> = `ยอดเงินหักสายที่ระบุโดยตรง (บาท)`</li>
+<li class="doc-li"><strong>รวมยอดหักขาดลาสาย</strong> = `หักขาดงาน + หักลากิจ + หักลาป่วย + หักมาสาย`</li>
+<hr class="divider">
+<h3 class="sec-title">2. รายรับและเงินได้รวม (Gross Pay)</h3>
+<li class="doc-li"><strong>เงิน OT</strong> = `ชั่วโมง OT × อัตรา OT (ค่าเริ่มต้น 40 บาท/ชม.)`</li>
+<li class="doc-li"><strong>เงินได้รวม (Gross Pay)</strong> = `เงินเดือนฐาน + เงิน OT + เบี้ยขยัน + โบนัส - รวมยอดหักขาดลาสาย`</li>
+<hr class="divider">
+<h3 class="sec-title">3. รายการหักประจำเดือน (Monthly Deductions)</h3>
+<li class="doc-li"><strong>กองทุนสำรองเลี้ยงชีพ (PF)</strong> = `เงินเดือนฐาน × อัตรา PF` *(หากไม่ได้เข้าร่วม = 0 บาท)*</li>
+<li class="doc-li"><strong>ประกันสังคม (SSO)</strong> = `ยอดเงินประกันสังคมที่ระบุ` *(หากไม่ได้หัก = 0 บาท)*</li>
+<li class="doc-li"><strong>ภาษีหัก ณ ที่จ่าย</strong> = `ยอดเงินภาษีที่ระบุ`</li>
+<li class="doc-li"><strong>รวมยอดหักทั้งหมด (Total Deductions)</strong> = `ประกันสังคม + กองทุน PF + ภาษี + หักเงินเบิก + หักอื่น ๆ`</li>
+<hr class="divider">
+<h3 class="sec-title">4. เงินได้สุทธิ (Net Pay)</h3>
+<li class="doc-li"><strong>เงินได้สุทธิ (Net Pay)</strong> = `เงินได้รวม (Gross Pay) - รวมยอดหักทั้งหมด (Total Deductions)`</li>
+<hr class="divider">
+<h2 class="doc-sub">6. คำถามที่พบบ่อยและการแก้ไขปัญหาเบื้องต้น (FAQ & Troubleshooting)</h2>
+<h4 class="sub-sec-title">Q1: พนักงานบางคนไม่ต้องการหักกองทุน PF หรือประกันสังคม ต้องทำอย่างไร?</h4>
+<div class="callout-box"><strong>ตอบ:</strong> ไปที่แท็บ **"ทะเบียนพนักงาน"** &rarr; กด **"✏️ แก้ไข"** พนักงานคนนั้น &rarr; ติ๊กเอาเครื่องหมายถูกตรง **"เข้าร่วมกองทุน (หัก PF)"** หรือ **"หักประกันสังคม (SSO)"** ออก แล้วกดบันทึก ระบบจะปรับยอดหักเป็น **฿0.00** ให้ทันทีอัตโนมัติ</div>
+<h4 class="sub-sec-title">Q2: อัตราค่าล่วงเวลา (OT) กำหนดอย่างไร?</h4>
+<div class="callout-box"><strong>ตอบ:</strong> ค่าเริ่มต้นของระบบกำหนดอัตรา OT ไว้ที่ **40 บาทต่อชั่วโมง** ตามนโยบายบริษัท โดยท่านสามารถแก้ไขอัตรา OT รายคนในหน้าต่างบันทึกประจำงวดได้หากมีกรณีพิเศษ</div>
+<h4 class="sub-sec-title">Q3: หากกด Refresh (F5) หรือปิดเบราว์เซอร์แล้วเปิดใหม่ ข้อมูลจะหายหรือไม่?</h4>
+<div class="callout-box"><strong>ตอบ:</strong> ไม่หายครับ ระบบมีกลไก Session Persistence จดจำการเข้าสู่ระบบและงวดประจำเดือนล่าสุดไว้ใน LocalStorage และข้อมูลทุกอย่างถูกจัดเก็บอย่างถาวรใน Cloudflare D1 SQL Database</div>
+<h4 class="sub-sec-title">Q4: หากต้องการพิมพ์สลิปเงินเดือนทุกคนในงวดทีเดียว ทำอย่างไร?</h4>
+<div class="callout-box"><strong>ตอบ:</strong> ท่านสามารถกด **"Export CSV"** ในหน้าคำนวณเงินเดือนเพื่อนำข้อมูลไปใช้งาน หรือกดปุ่ม **"สลิป"** ในแต่ละแถวเพื่อสั่งพิมพ์สลิป A4 ทีละคนได้อย่างคมชัดสวยงาม</div>
+<hr class="divider">
+<p class="doc-p">*เอกสารคู่มือจัดทำขึ้นสำหรับ บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด โดยระบบ PTN Payroll V4.0*</p>
+</body>
+</html>

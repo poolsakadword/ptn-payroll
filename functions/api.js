@@ -135,7 +135,7 @@ async function handleAction(db, action, params) {
         age: Number(e.age) || 0,
         joinDate: e.join_date || '',
         pfRate: (e.pf_rate !== null && e.pf_rate !== undefined && !isNaN(Number(e.pf_rate))) ? Number(e.pf_rate) : 0.05,
-        defaultSso: (e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 750,
+        defaultSso: (e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 0,
         defaultTax: Number(e.default_tax) || 0,
         remark: e.remark || ''
       }));
@@ -364,7 +364,7 @@ async function handleAction(db, action, params) {
         Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
         Number(r.otHours) || 0, otRate,
         Number(r.allowance) || 0, Number(r.bonus) || 0, Number(r.advanceDeduct) || 0,
-        Number(r.otherDeduct) || 0, Number(r.sso) || 750, Number(r.tax) || 0
+        Number(r.otherDeduct) || 0, (r.sso !== null && r.sso !== undefined && !isNaN(Number(r.sso))) ? Number(r.sso) : 0, Number(r.tax) || 0
       ).run();
 
       await calculateAndSavePayroll(db, period);
@@ -399,7 +399,7 @@ async function handleAction(db, action, params) {
         const baseSal = Number(emp.base_salary) || 0;
         const pfRate = (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05;
         const pfAmt = pfRate > 0 ? Math.round(baseSal * pfRate * 100) / 100 : 0;
-        const sso = (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 750;
+        const sso = (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 0;
         const tax = Number(emp.default_tax) || 0;
 
         const exist = existingMap[emp.emp_id] || {};
@@ -501,7 +501,7 @@ async function handleAction(db, action, params) {
           age: Number(emp.age) || 0,
           joinDate: emp.join_date || '',
           pfRate: (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05,
-          defaultSso: (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 750,
+          defaultSso: (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 0,
           defaultTax: Number(emp.default_tax) || 0,
           remark: emp.remark || ''
         },
@@ -621,7 +621,7 @@ async function handleAction(db, action, params) {
               e.bank_name || '', e.bank_account || '', e.birth_date || '', Number(e.age) || 0,
               e.join_date || '',
               (e.pf_rate !== null && e.pf_rate !== undefined && !isNaN(Number(e.pf_rate))) ? Number(e.pf_rate) : 0.05,
-              (e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 750,
+              (e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 0,
               Number(e.default_tax) || 0, e.remark || ''
             ).run();
           }
