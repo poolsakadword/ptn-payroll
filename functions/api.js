@@ -69,18 +69,21 @@ async function handleAction(db, action, params) {
   const period = params.period || getDefaultPeriod();
 
   switch (action) {
-    // 1. AUTH
+    // 1. AUTH (STRICT D1 DATABASE AUTHENTICATION)
     case 'checkLogin': {
       const u = String(params.username || '').trim().toLowerCase();
       const p = String(params.password || '').trim();
       if (!u || !p) return { success: false, message: 'กรุณากรอกชื่อผู้ใช้งานและรหัสผ่าน' };
 
-      if ((u === 'admin' || u === 'admin@company.com') && (p === '123456' || p === 'P@ssword123' || p === 'admin')) {
-        return { success: true, username: 'admin', role: 'Admin / HR' };
+      // Ensure default admin user exists in D1 database if table is empty
+      const userCountRow = await db.prepare('SELECT COUNT(*) as count FROM users').first();
+      if (!userCountRow || userCountRow.count === 0) {
+        await db.prepare('INSERT OR REPLACE INTO users (username, password, role) VALUES (?, ?, ?)').bind('admin', '123456', 'Admin / HR').run();
       }
 
-      const userRow = await db.prepare('SELECT username, role FROM users WHERE LOWER(username) = ? AND password = ?').bind(u, p).first();
-      if (userRow) {
+      // Check strictly against D1 users database (No hardcoded credentials)
+      const userRow = await db.prepare('SELECT username, password, role FROM users WHERE LOWER(username) = ?').bind(u).first();
+      if (userRow && userRow.password === p) {
         return { success: true, username: userRow.username, role: userRow.role || 'User' };
       }
       return { success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' };
