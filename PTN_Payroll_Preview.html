@@ -1167,8 +1167,8 @@ footer {
           </div>
 
           <div class="form-grid">
-            <!-- 1. Employee Selector -->
-            <div class="form-row-2">
+            <!-- 1. Employee Selector & Remark -->
+            <div class="form-row-3">
               <div class="form-group">
                 <label style="font-weight:700;color:#0f172a">รหัสพนักงาน *</label>
                 <select id="miEmpId" onchange="onInputEmpSelectChanged()" required style="font-weight:600"></select>
@@ -1176,6 +1176,10 @@ footer {
               <div class="form-group">
                 <label style="font-weight:700;color:#0f172a">ชื่อ-นามสกุล</label>
                 <input type="text" id="miEmpName" readonly style="font-weight:700;color:#1e3a8a;background:#f8fafc">
+              </div>
+              <div class="form-group">
+                <label style="font-weight:700;color:#d97706"><i class="fa-solid fa-note-sticky"></i> หมายเหตุ (จากทะเบียนพนักงาน)</label>
+                <input type="text" id="miEmpRemark" readonly style="background:#fffbeb;color:#92400e;border-color:#fde68a;font-weight:500" placeholder="-">
               </div>
             </div>
 
@@ -1956,7 +1960,11 @@ function renderInputTable() {
     h += '<tr>' +
       '<td class="text-center font-mono">' + (i.no || (idx + 1)) + '</td>' +
       '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
-      '<td class="font-bold">' + esc(i.empName || '-') + '</td>' +
+      (function() {
+      var emp = State.employees.find(function(e) { return e.empId === i.empId; });
+      var remBadge = (emp && emp.remark) ? '<br><span style="font-size:11px;font-weight:normal;color:#d97706;background:#fffbeb;border:1px solid #fef3c7;padding:1px 6px;border-radius:4px;display:inline-block;margin-top:2px"><i class="fa-solid fa-note-sticky"></i> ' + esc(emp.remark) + '</span>' : '';
+      return '<td class="font-bold">' + esc(i.empName || '-') + remBadge + '</td>';
+    })() +
       '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + fmt(baseSal) + '</td>' +
       '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + fmt(dailyRate) + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + (i.absentDays || 0) + '</td>' +
@@ -2027,7 +2035,8 @@ function renderEmployeesTable() {
   State.employees.forEach(function(e) {
     var nickDisplay = e.nickname ? ' (' + e.nickname + ')' : '';
     var empPf = (e.pfRate !== null && e.pfRate !== undefined && !isNaN(Number(e.pfRate))) ? Number(e.pfRate) : 0;
-    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + empPf + '" data-sso="' + (e.defaultSso !== null && e.defaultSso !== undefined && !isNaN(Number(e.defaultSso)) ? Number(e.defaultSso) : 0) + '" data-tax="' + (e.defaultTax || 0) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + '</option>';
+    var empSso = (e.defaultSso !== null && e.defaultSso !== undefined && !isNaN(Number(e.defaultSso))) ? Number(e.defaultSso) : 0;
+    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + empPf + '" data-sso="' + empSso + '" data-tax="' + (e.defaultTax || 0) + '" data-remark="' + esc(e.remark || '') + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + '</option>';
   });
   var miSel = document.getElementById('miEmpId');
   if (miSel) miSel.innerHTML = sel;
@@ -2276,6 +2285,7 @@ function openAddInputModal() {
   document.getElementById('inputOrigEmpId').value = '';
   document.getElementById('miEmpId').value = '';
   document.getElementById('miEmpName').value = '';
+  if (document.getElementById('miEmpRemark')) document.getElementById('miEmpRemark').value = '';
   document.getElementById('miBaseSalary').value = '';
   document.getElementById('miPfRate').value = '0.05';
   document.getElementById('miPfAmount').value = '0';
@@ -2303,6 +2313,8 @@ function openEditInputModal(empId) {
   document.getElementById('inputOrigEmpId').value = r.empId;
   document.getElementById('miEmpId').value = r.empId;
   document.getElementById('miEmpName').value = r.empName || '';
+  var empMatch = State.employees.find(function(e) { return e.empId === r.empId; });
+  if (document.getElementById('miEmpRemark')) document.getElementById('miEmpRemark').value = (empMatch && empMatch.remark) ? empMatch.remark : '-';
   document.getElementById('miBaseSalary').value = r.baseSalary || '';
   var inpPfRate = (r.pfRate !== null && r.pfRate !== undefined && !isNaN(Number(r.pfRate))) ? Number(r.pfRate) : 0;
   document.getElementById('miPfRate').value = inpPfRate;
@@ -2330,6 +2342,8 @@ function onInputEmpSelectChanged() {
     var empId = opt.value;
     var emp = State.employees.find(function(e) { return e.empId === empId; });
     document.getElementById('miEmpName').value = opt.getAttribute('data-name') || (emp ? emp.fullName : '');
+    var remVal = opt.getAttribute('data-remark') || (emp ? emp.remark : '');
+    if (document.getElementById('miEmpRemark')) document.getElementById('miEmpRemark').value = remVal ? remVal : '-';
     var sal = Number(opt.getAttribute('data-salary') || (emp ? emp.baseSalary : 0));
     document.getElementById('miBaseSalary').value = sal;
     var pfVal = opt.getAttribute('data-pf');
