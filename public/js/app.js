@@ -540,92 +540,506 @@ function renderEmployeesTable() {
   tbody.innerHTML = h;
 }
 
-// 5. EMPLOYEE WORK HISTORY TAB
+// =======================================================
+// 5. EMPLOYEE HISTORY & YEARLY SUMMARY
+// =======================================================
+var currentHistoryMode = 'yearly'; // 'yearly' or 'individual'
+var currentYearlySummaryData = [];
+var currentGrandTotalData = {};
 var currentHistoryList = [];
-function renderHistoryTab() {
-  var sel = document.getElementById('histEmpSelect');
-  if (sel && sel.value) {
+
+function switchHistoryViewMode(mode) {
+  currentHistoryMode = mode;
+  var btnYearly = document.getElementById('btnHistModeYearly');
+  var btnIndiv = document.getElementById('btnHistModeIndividual');
+  var empGroup = document.getElementById('histEmpSelectGroup');
+  var viewYearly = document.getElementById('histYearlyViewArea');
+  var viewIndiv = document.getElementById('histContentArea');
+
+  if (mode === 'yearly') {
+    if (btnYearly) { btnYearly.className = 'btn btn-primary btn-sm'; }
+    if (btnIndiv) { btnIndiv.className = 'btn btn-slate btn-sm'; }
+    if (empGroup) empGroup.style.display = 'none';
+    if (viewYearly) viewYearly.style.display = 'block';
+    if (viewIndiv) viewIndiv.style.display = 'none';
+    loadYearlySummaryData();
+  } else {
+    if (btnYearly) { btnYearly.className = 'btn btn-slate btn-sm'; }
+    if (btnIndiv) { btnIndiv.className = 'btn btn-primary btn-sm'; }
+    if (empGroup) empGroup.style.display = 'inline-flex';
+    if (viewYearly) viewYearly.style.display = 'none';
+    if (viewIndiv) viewIndiv.style.display = 'block';
     onHistoryEmpChanged();
   }
 }
 
+function initHistoryYearDropdown() {
+  var sel = document.getElementById('histYearSelect');
+  if (!sel) return;
+  var curYear = new Date().getFullYear() + 543;
+  var curVal = sel.value;
+  var h = '';
+  for (var y = curYear + 5; y >= curYear - 5; y--) {
+    h += '<option value="' + y + '"' + (y === curYear ? ' selected' : '') + '>' + y + '</option>';
+  }
+  h += '<option value="ALL">ทุกปี (ทั้งหมด)</option>';
+  sel.innerHTML = h;
+  if (curVal) sel.value = curVal;
+}
+
+function onHistoryYearChanged() {
+  if (currentHistoryMode === 'yearly') {
+    loadYearlySummaryData();
+  } else {
+    onHistoryEmpChanged();
+  }
+}
+
+function renderHistoryTab() {
+  initHistoryYearDropdown();
+  var sel = document.getElementById('histEmpSelect');
+  if (sel) {
+    var curVal = sel.value;
+    var h = '<option value="">-- เลือกพนักงาน --</option>';
+    State.employees.forEach(function(e) {
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      h += '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nick + '</option>';
+    });
+    sel.innerHTML = h;
+    if (curVal) sel.value = curVal;
+  }
+
+  if (currentHistoryMode === 'yearly') {
+    loadYearlySummaryData();
+  } else if (sel && sel.value) {
+    onHistoryEmpChanged();
+  }
+}
+
+function loadYearlySummaryData() {
+  var yrSel = document.getElementById('histYearSelect');
+  var yr = yrSel ? yrSel.value : '';
+  if (!yr) {
+    var curYear = new Date().getFullYear() + 543;
+    yr = String(curYear);
+  }
+
+  showToast('กำลังโหลดข้อมูลสรุปประจำปี ' + yr + '...', 'info');
+  callApi('getYearlySummary', { year: yr })
+    .then(function(r) {
+      if (!r.success) {
+        showToast(r.message || 'ไม่สามารถโหลดข้อมูลสรุปประจำปีได้', 'error');
+        return;
+      }
+      currentYearlySummaryData = r.yearlySummary || [];
+      currentGrandTotalData = r.grandTotal || {};
+      renderYearlySummaryTable();
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function renderYearlySummaryTable() {
+  var tbody = document.getElementById('yearlySummaryTableBody');
+  var tfoot = document.getElementById('yearlySummaryTableFoot');
+  var yrSel = document.getElementById('histYearSelect');
+  var yr = yrSel ? yrSel.value : '';
+
+  // Update Grand Stats
+  var gt = currentGrandTotalData || {};
+  if (document.getElementById('statYearlyEmps')) document.getElementById('statYearlyEmps').textContent = (gt.activeEmployees || 0) + ' / ' + (gt.totalEmployees || 0) + ' คน';
+  if (document.getElementById('statYearlyGross')) document.getElementById('statYearlyGross').textContent = fmt(gt.totalGrossPay || 0);
+  if (document.getElementById('statYearlyDeductions')) document.getElementById('statYearlyDeductions').textContent = fmt(gt.totalDeductions || 0);
+  if (document.getElementById('statYearlyNet')) document.getElementById('statYearlyNet').textContent = fmt(gt.totalNetPay || 0);
+
+  if (document.getElementById('yearlyPrintCompName')) document.getElementById('yearlyPrintCompName').textContent = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  if (document.getElementById('yearlyPrintYearDisplay')) document.getElementById('yearlyPrintYearDisplay').textContent = yr === 'ALL' ? 'ทั้งหมดทุกปี' : yr;
+
+  var q = (document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value : '').trim().toLowerCase();
+  var list = (currentYearlySummaryData || []).filter(function(r) {
+    if (!q) return true;
+    return (r.empId && r.empId.toLowerCase().indexOf(q) >= 0) ||
+           (r.fullName && r.fullName.toLowerCase().indexOf(q) >= 0) ||
+           (r.nickname && r.nickname.toLowerCase().indexOf(q) >= 0) ||
+           (r.department && r.department.toLowerCase().indexOf(q) >= 0) ||
+           (r.position && r.position.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (!tbody) return;
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="19" class="text-center text-muted" style="padding:28px">ไม่พบข้อมูลประวัติเงินเดือนในปี ' + esc(yr) + '</td></tr>';
+    if (tfoot) tfoot.innerHTML = '';
+    return;
+  }
+
+  var h = '';
+  list.forEach(function(r, idx) {
+    var nick = r.nickname ? ' (' + esc(r.nickname) + ')' : '';
+    h += '<tr>' +
+      '<td class="text-center font-mono">' + (idx + 1) + '</td>' +
+      '<td class="font-mono font-bold">' + esc(r.empId) + '</td>' +
+      '<td class="font-bold">' + esc(r.fullName) + nick + '</td>' +
+      '<td>' + esc(r.department || '-') + '</td>' +
+      '<td class="text-center font-mono font-bold" style="color:#2563eb">' + (r.totalPeriods || 0) + ' งวด</td>' +
+      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + fmt(r.baseSalaryLatest) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + (r.totalAbsentDays || 0) + '</td>' +
+      '<td class="text-right font-mono">' + (r.totalLeaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + (r.totalSickLeaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(r.totalLateDeduct || 0) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(r.totalOtPay || 0) + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + fmt(r.totalAllowance || 0) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(r.totalBonus || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(r.totalGrossPay || 0) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + fmt(r.totalSso || 0) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(r.totalPf || 0) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(r.totalTax || 0) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold bg-red-light">' + fmt(r.totalDeductions || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light">' + fmt(r.totalNetPay || 0) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = h;
+
+  // Render Grand Total row in tfoot
+  if (tfoot) {
+    tfoot.innerHTML = '<tr style="background:#f1f5f9;font-weight:700;font-size:12px;border-top:2px solid #94a3b8">' +
+      '<td colspan="4" class="text-center font-bold" style="color:#0f172a;font-size:12.5px">รวมยอดทั้งบริษัท (' + list.length + ' คน)</td>' +
+      '<td class="text-center font-mono font-bold" style="color:#2563eb">-</td>' +
+      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">-</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + (gt.totalAbsentDays || 0) + '</td>' +
+      '<td class="text-right font-mono">' + (gt.totalLeaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + (gt.totalSickLeaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(gt.totalLateDeduct || 0) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(gt.totalOtPay || 0) + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + fmt(gt.totalAllowance || 0) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(gt.totalBonus || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light" style="font-size:13px">' + fmt(gt.totalGrossPay || 0) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + fmt(gt.totalSso || 0) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(gt.totalPf || 0) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(gt.totalTax || 0) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold bg-red-light" style="font-size:13px">' + fmt(gt.totalDeductions || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:14px;color:#15803d">' + fmt(gt.totalNetPay || 0) + '</td>' +
+    '</tr>';
+  }
+}
+
 function onHistoryEmpChanged() {
-  var empId = document.getElementById('histEmpSelect').value;
-  var contentArea = document.getElementById('histContentArea');
+  var sel = document.getElementById('histEmpSelect');
+  var empId = sel ? sel.value : '';
+  var area = document.getElementById('histContentArea');
+
   if (!empId) {
-    if (contentArea) contentArea.style.display = 'none';
+    if (area) area.style.display = 'none';
     currentHistoryList = [];
     return;
   }
 
+  showToast('กำลังโหลดประวัติของ ' + empId + '...', 'info');
   callApi('getEmployeeHistory', { empId: empId })
     .then(function(r) {
       if (!r.success) { showToast(r.message, 'error'); return; }
       var emp = r.employee || {};
       currentHistoryList = r.history || [];
 
-      if (contentArea) contentArea.style.display = 'block';
-      if (document.getElementById('histEmpCardName')) document.getElementById('histEmpCardName').textContent = (emp.fullName || '') + (emp.nickname ? ' (' + emp.nickname + ')' : '') + ' [' + (emp.empId || '') + ']';
+      // Filter by selected year if not ALL
+      var yrSel = document.getElementById('histYearSelect');
+      var yr = yrSel ? yrSel.value : '';
+      if (yr && yr !== 'ALL') {
+        currentHistoryList = currentHistoryList.filter(function(h) {
+          return h.period && h.period.indexOf(yr) >= 0;
+        });
+      }
+
+      if (document.getElementById('histEmpCardName')) document.getElementById('histEmpCardName').textContent = emp.fullName + (emp.nickname ? ' (' + emp.nickname + ')' : '') + ' [' + (emp.empId || '') + ']';
       if (document.getElementById('histEmpCardDept')) document.getElementById('histEmpCardDept').textContent = (emp.department || '-') + ' / ' + (emp.position || '-');
-      var birthAgeStr = (emp.birthDate || '-') + (emp.age ? ' (' + emp.age + ' ปี)' : '');
-      if (document.getElementById('histEmpCardBirthAge')) document.getElementById('histEmpCardBirthAge').textContent = birthAgeStr;
+      if (document.getElementById('histEmpCardBirthAge')) document.getElementById('histEmpCardBirthAge').textContent = (emp.birthDate || '-') + ' (' + (emp.age || 0) + ' ปี)';
       if (document.getElementById('histEmpCardCitizen')) document.getElementById('histEmpCardCitizen').textContent = emp.citizenId || '-';
       if (document.getElementById('histEmpCardPhone')) document.getElementById('histEmpCardPhone').textContent = emp.phone || '-';
       if (document.getElementById('histEmpCardBank')) document.getElementById('histEmpCardBank').textContent = (emp.bankName || '-') + ' ' + (emp.bankAccount || '-');
       if (document.getElementById('histEmpCardSalary')) document.getElementById('histEmpCardSalary').textContent = fmt(emp.baseSalary);
       if (document.getElementById('histEmpCardJoin')) document.getElementById('histEmpCardJoin').textContent = emp.joinDate || '-';
-      if (document.getElementById('histEmpCardPf')) document.getElementById('histEmpCardPf').textContent = (Number(emp.pfRate) > 0) ? (((Number(emp.pfRate) * 100).toFixed(0)) + '%') : 'ไม่หัก (0%)';
+      var pfText = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate)) && Number(emp.pfRate) > 0) ? (Math.round(Number(emp.pfRate) * 100) + '%') : 'ไม่หัก PF';
+      if (document.getElementById('histEmpCardPf')) document.getElementById('histEmpCardPf').textContent = pfText;
 
       filterHistoryTable();
+      if (area) area.style.display = 'block';
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }
 
 function filterHistoryTable() {
-  var tbody = document.getElementById('historyTableBody') || document.getElementById('histTableBody');
-  if (!tbody) return;
-
-  var q = (document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value : '').trim().toLowerCase();
-  var list = (currentHistoryList || []).filter(function(row) {
-    if (!q) return true;
-    return (row.period && row.period.toLowerCase().indexOf(q) >= 0) ||
-           (row.department && row.department.toLowerCase().indexOf(q) >= 0) ||
-           (row.position && row.position.toLowerCase().indexOf(q) >= 0);
-  });
-
-  if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="19" class="text-center text-muted" style="padding:28px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:4px"><i class="fa-solid fa-clock-rotate-left"></i> ' + (q ? 'ไม่พบประวัติที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีประวัติเงินเดือนในระบบ') + '</div>' +
-    '</td></tr>';
+  if (currentHistoryMode === 'yearly') {
+    renderYearlySummaryTable();
     return;
   }
 
+  var tbody = document.getElementById('historyTableBody');
+  var tfoot = document.getElementById('historyTableFoot');
+  if (!tbody) return;
+
+  var q = (document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value : '').trim().toLowerCase();
+  var list = (currentHistoryList || []).filter(function(r) {
+    if (!q) return true;
+    return (r.period && r.period.toLowerCase().indexOf(q) >= 0);
+  });
+
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="19" class="text-center text-muted" style="padding:28px">ไม่พบข้อมูลประวัติเงินเดือน</td></tr>';
+    if (tfoot) tfoot.innerHTML = '';
+    return;
+  }
+
+  var sumBase = 0, sumAbsent = 0, sumLeave = 0, sumSick = 0, sumLate = 0;
+  var sumOtHours = 0, sumOtPay = 0, sumAllowance = 0, sumBonus = 0, sumLeaveDed = 0;
+  var sumGross = 0, sumSso = 0, sumPf = 0, sumTax = 0, sumAdv = 0, sumOther = 0, sumDed = 0, sumNet = 0;
+
   var h = '';
-  list.forEach(function(c) {
+  list.forEach(function(r) {
+    var base = Number(r.baseSalary) || 0;
+    var abs = Number(r.absentDays) || 0;
+    var lev = Number(r.leaveDays) || 0;
+    var sck = Number(r.sickLeaveDays) || 0;
+    var late = Number(r.lateDeduct) || 0;
+    var otH = Number(r.otHours) || 0;
+    var otP = Number(r.otPay) || 0;
+    var allow = Number(r.allowance) || 0;
+    var bon = Number(r.bonus) || 0;
+    var lDed = Number(r.leaveDeduction) || 0;
+    var grs = Number(r.grossPay) || 0;
+    var ssoVal = Number(r.sso) || 0;
+    var pfVal = Number(r.pf) || 0;
+    var taxVal = Number(r.tax) || 0;
+    var adv = Number(r.advanceDeduct) || 0;
+    var oth = Number(r.otherDeduct) || 0;
+    var totDed = Number(r.totalDeductions) || 0;
+    var net = Number(r.netPay) || 0;
+
+    sumBase += base; sumAbsent += abs; sumLeave += lev; sumSick += sck; sumLate += late;
+    sumOtHours += otH; sumOtPay += otP; sumAllowance += allow; sumBonus += bon; sumLeaveDed += lDed;
+    sumGross += grs; sumSso += ssoVal; sumPf += pfVal; sumTax += taxVal; sumAdv += adv; sumOther += oth;
+    sumDed += totDed; sumNet += net;
+
     h += '<tr>' +
-      '<td class="font-bold text-blue">' + esc(c.period) + '</td>' +
-      '<td class="text-right font-mono font-bold">' + fmt(c.baseSalary) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + (c.absentDays || 0) + '</td>' +
-      '<td class="text-right font-mono">' + (c.leaveDays || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + (c.sickLeaveDays || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(c.lateDeduct || 0) + '</td>' +
-      '<td class="text-right font-mono">' + (c.otHours || 0) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(c.otPay || 0) + '</td>' +
-      '<td class="text-right font-mono text-green font-bold">' + fmt(c.allowance || 0) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(c.bonus || 0) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + fmt(c.leaveDeduction || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(c.grossPay || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red">' + fmt(c.sso || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue">' + fmt(c.pf || 0) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(c.tax || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(c.advanceDeduct || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(c.otherDeduct || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(c.totalDeductions || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:13px">' + fmt(c.netPay || 0) + '</td>' +
+      '<td class="font-bold">' + esc(r.period) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(base) + '</td>' +
+      '<td class="text-right font-mono text-red">' + abs + '</td>' +
+      '<td class="text-right font-mono">' + lev + '</td>' +
+      '<td class="text-right font-mono text-red">' + sck + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(late) + '</td>' +
+      '<td class="text-right font-mono">' + otH + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(otP) + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + fmt(allow) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(bon) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(lDed) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(grs) + '</td>' +
+      '<td class="text-right font-mono font-bold text-red">' + fmt(ssoVal) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(pfVal) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(taxVal) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(adv) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(oth) + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(totDed) + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light">' + fmt(net) + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = h;
+
+  // Individual Annual Total Row in tfoot
+  if (tfoot) {
+    tfoot.innerHTML = '<tr style="background:#eff6ff;font-weight:700;font-size:12px;border-top:2px solid #60a5fa">' +
+      '<td class="font-bold" style="color:#1e40af">รวมสะสม (' + list.length + ' งวด)</td>' +
+      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + fmt(sumBase) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + sumAbsent + '</td>' +
+      '<td class="text-right font-mono">' + sumLeave + '</td>' +
+      '<td class="text-right font-mono text-red">' + sumSick + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(sumLate) + '</td>' +
+      '<td class="text-right font-mono">' + sumOtHours + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(sumOtPay) + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + fmt(sumAllowance) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(sumBonus) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(sumLeaveDed) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light" style="font-size:13px">' + fmt(sumGross) + '</td>' +
+      '<td class="text-right font-mono font-bold text-red">' + fmt(sumSso) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + fmt(sumPf) + '</td>' +
+      '<td class="text-right font-mono">' + fmt(sumTax) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(sumAdv) + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(sumOther) + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light" style="font-size:13px">' + fmt(sumDed) + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:14px;color:#15803d">' + fmt(sumNet) + '</td>' +
+    '</tr>';
+  }
 }
+
+function printActiveHistoryReport() {
+  if (currentHistoryMode === 'yearly') {
+    printYearlySummary();
+  } else {
+    printHistoryReport();
+  }
+}
+
+function printYearlySummary() {
+  document.body.classList.remove('printing-payslip');
+  document.body.classList.remove('printing-history');
+  document.body.classList.remove('printing-batch-history');
+  document.body.classList.add('printing-yearly-summary');
+
+  window.print();
+
+  setTimeout(function() {
+    document.body.classList.remove('printing-yearly-summary');
+  }, 1000);
+}
+
+function printHistoryReport() {
+  var area = document.getElementById('histContentArea');
+  if (!area || area.style.display === 'none') {
+    showToast('กรุณาเลือกพนักงานก่อนพิมพ์รายงานประวัติ', 'warning');
+    return;
+  }
+  document.body.classList.remove('printing-payslip');
+  document.body.classList.remove('printing-yearly-summary');
+  document.body.classList.remove('printing-batch-history');
+  document.body.classList.add('printing-history');
+
+  window.print();
+
+  setTimeout(function() {
+    document.body.classList.remove('printing-history');
+  }, 1000);
+}
+
+function exportActiveHistoryCsv() {
+  if (currentHistoryMode === 'yearly') {
+    exportYearlySummaryCsv();
+  } else {
+    exportCurrentEmployeeHistory();
+  }
+}
+
+function exportYearlySummaryCsv() {
+  var yrSel = document.getElementById('histYearSelect');
+  var yr = yrSel ? yrSel.value : 'ALL';
+
+  if (!currentYearlySummaryData || currentYearlySummaryData.length === 0) {
+    showToast('ยังไม่มีข้อมูลสรุปประจำปี ' + yr, 'warning');
+    return;
+  }
+
+  var csv = '\uFEFF';
+  csv += 'ลำดับ,รหัสพนักงาน,ชื่อ-นามสกุล,ชื่อเล่น,แผนก,ตำแหน่ง,จำนวนงวด,เงินเดือนฐานล่าสุด,ขาด(วัน),ลากิจ(วัน),ลาป่วย(วัน),หักสาย(บาท),เงินOTรวม(บาท),เบี้ยขยันรวม(บาท),โบนัสรวม(บาท),รวมเงินได้Grossทั้งปี,ประกันสังคมสะสมทั้งปี,กองทุนPFสะสมทั้งปี,ภาษีสะสมทั้งปี,รวมหักสะสมทั้งปี,เงินได้สุทธิNetทั้งปี\n';
+
+  currentYearlySummaryData.forEach(function(r, idx) {
+    var line = [
+      idx + 1,
+      '"' + (r.empId || '').replace(/"/g, '""') + '"',
+      '"' + (r.fullName || '').replace(/"/g, '""') + '"',
+      '"' + (r.nickname || '').replace(/"/g, '""') + '"',
+      '"' + (r.department || '').replace(/"/g, '""') + '"',
+      '"' + (r.position || '').replace(/"/g, '""') + '"',
+      Number(r.totalPeriods) || 0,
+      Number(r.baseSalaryLatest) || 0,
+      Number(r.totalAbsentDays) || 0,
+      Number(r.totalLeaveDays) || 0,
+      Number(r.totalSickLeaveDays) || 0,
+      Number(r.totalLateDeduct) || 0,
+      Number(r.totalOtPay) || 0,
+      Number(r.totalAllowance) || 0,
+      Number(r.totalBonus) || 0,
+      Number(r.totalGrossPay) || 0,
+      Number(r.totalSso) || 0,
+      Number(r.totalPf) || 0,
+      Number(r.totalTax) || 0,
+      Number(r.totalDeductions) || 0,
+      Number(r.totalNetPay) || 0
+    ];
+    csv += line.join(',') + '\n';
+  });
+
+  // Add Grand Total row
+  var gt = currentGrandTotalData || {};
+  var grandLine = [
+    '""',
+    '"TOTAL"',
+    '"รวมทั้งบริษัท (' + currentYearlySummaryData.length + ' คน)"',
+    '""',
+    '""',
+    '""',
+    '""',
+    '""',
+    Number(gt.totalAbsentDays) || 0,
+    Number(gt.totalLeaveDays) || 0,
+    Number(gt.totalSickLeaveDays) || 0,
+    Number(gt.totalLateDeduct) || 0,
+    Number(gt.totalOtPay) || 0,
+    Number(gt.totalAllowance) || 0,
+    Number(gt.totalBonus) || 0,
+    Number(gt.totalGrossPay) || 0,
+    Number(gt.totalSso) || 0,
+    Number(gt.totalPf) || 0,
+    Number(gt.totalTax) || 0,
+    Number(gt.totalDeductions) || 0,
+    Number(gt.totalNetPay) || 0
+  ];
+  csv += grandLine.join(',') + '\n';
+
+  var filename = 'PTN_Yearly_Summary_' + yr + '_' + new Date().toISOString().substring(0,10) + '.csv';
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์สรุปประจำปี ' + yr + ' สำเร็จ');
+}
+
+function exportCurrentEmployeeHistory() {
+  var sel = document.getElementById('histEmpSelect');
+  var empId = sel ? sel.value : '';
+  if (!empId || !currentHistoryList || currentHistoryList.length === 0) {
+    showToast('กรุณาเลือกพนักงานและโหลดข้อมูลก่อนส่งออก CSV', 'warning');
+    return;
+  }
+
+  var csv = '\uFEFF';
+  csv += 'งวด,เงินเดือนฐาน,ขาด(วัน),ลากิจ(วัน),ลาป่วย(วัน),หักสาย(บาท),OT(ชม),เงินOT,เบี้ยขยัน,โบนัส,หักขาดลาสาย,เงินได้Gross,ประกันสังคม,กองทุนPF,ภาษี,หักเงินเบิก,หักอื่นๆ,รวมหัก,เงินได้สุทธิNet\n';
+
+  currentHistoryList.forEach(function(r) {
+    var line = [
+      '"' + (r.period || '').replace(/"/g, '""') + '"',
+      Number(r.baseSalary) || 0,
+      Number(r.absentDays) || 0,
+      Number(r.leaveDays) || 0,
+      Number(r.sickLeaveDays) || 0,
+      Number(r.lateDeduct) || 0,
+      Number(r.otHours) || 0,
+      Number(r.otPay) || 0,
+      Number(r.allowance) || 0,
+      Number(r.bonus) || 0,
+      Number(r.leaveDeduction) || 0,
+      Number(r.grossPay) || 0,
+      Number(r.sso) || 0,
+      Number(r.pf) || 0,
+      Number(r.tax) || 0,
+      Number(r.advanceDeduct) || 0,
+      Number(r.otherDeduct) || 0,
+      Number(r.totalDeductions) || 0,
+      Number(r.netPay) || 0
+    ];
+    csv += line.join(',') + '\n';
+  });
+
+  var filename = 'PTN_History_' + empId + '_' + new Date().toISOString().substring(0,10) + '.csv';
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดประวัติพนักงาน ' + empId + ' สำเร็จ');
+}
+
 
 // 6. COMPANY SETTINGS RENDERER
 function renderCompanySettings() {
