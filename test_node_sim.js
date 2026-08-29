@@ -267,6 +267,31 @@ document.addEventListener('DOMContentLoaded', function() {
   checkAuth();
 });
 
+function navigateToAuthorizedTab() {
+  var curActiveTab = document.querySelector('.tab-content.active');
+  var curId = curActiveTab ? curActiveTab.id : '';
+
+  // If on a forbidden tab or first login, switch to primary allowed tab
+  var isAllowed = false;
+  if (curId === 'tab-dashboard' && hasPermission('view_dash')) isAllowed = true;
+  else if (curId === 'tab-payroll' && hasPermission('view_payroll')) isAllowed = true;
+  else if (curId === 'tab-input' && hasPermission('view_inputs')) isAllowed = true;
+  else if (curId === 'tab-employees' && hasPermission('view_emp')) isAllowed = true;
+  else if (curId === 'tab-history' && hasPermission('view_history')) isAllowed = true;
+  else if (curId === 'tab-company' && (hasPermission('manage_company') || hasPermission('manage_backup'))) isAllowed = true;
+  else if (curId === 'tab-users' && hasPermission('manage_users')) isAllowed = true;
+
+  if (!isAllowed) {
+    if (hasPermission('view_dash')) switchTab('dashboard');
+    else if (hasPermission('view_emp')) switchTab('employees');
+    else if (hasPermission('view_inputs')) switchTab('input');
+    else if (hasPermission('view_payroll')) switchTab('payroll');
+    else if (hasPermission('view_history')) switchTab('history');
+    else if (hasPermission('manage_company')) switchTab('company');
+    else if (hasPermission('manage_users')) switchTab('users');
+  }
+}
+
 function checkAuth() {
   var savedUser = localStorage.getItem('ptn_user') || sessionStorage.getItem('ptn_user');
   if (savedUser) {
@@ -275,6 +300,7 @@ function checkAuth() {
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appShell').classList.add('active');
       applyRolePermissions();
+      navigateToAuthorizedTab();
       loadAppData();
     } catch(e) {
       handleLogout();
@@ -294,10 +320,20 @@ function handleLogin(e) {
   callApi('checkLogin', { username: u, password: p })
     .then(function(r) {
       if (r.success) {
-        State.currentUser = { username: r.username, role: r.role };
-        localStorage.setItem('ptn_user', JSON.stringify(State.currentUser)); sessionStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
+        State.currentUser = {
+          username: r.username,
+          role: r.role,
+          permissions: r.permissions || []
+        };
+        localStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
+        sessionStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
         showToast('เข้าสู่ระบบสำเร็จ ยินดีต้อนรับ ' + r.username);
-        checkAuth();
+
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appShell').classList.add('active');
+        applyRolePermissions();
+        navigateToAuthorizedTab();
+        loadAppData();
       } else {
         showToast(r.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'error');
       }
@@ -310,6 +346,16 @@ function handleLogin(e) {
 function handleLogout() {
   localStorage.removeItem('ptn_user');
   sessionStorage.removeItem('ptn_user');
+  State.currentUser = null;
+
+  // Reset tabs to default state
+  document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
+  document.querySelectorAll('.nav-tab-btn').forEach(function(el) { el.classList.remove('active'); });
+  var dashTab = document.getElementById('tab-dashboard');
+  var dashBtn = document.getElementById('navBtn-dashboard');
+  if (dashTab) dashTab.classList.add('active');
+  if (dashBtn) dashBtn.classList.add('active');
+
   checkAuth();
 }
 
