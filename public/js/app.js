@@ -1,9 +1,20 @@
+// GLOBAL PERMISSIONS HELPER
+function hasPermission(permKey) {
+  if (!State.currentUser) return false;
+  var role = State.currentUser.role ? String(State.currentUser.role).toLowerCase() : '';
+  var username = State.currentUser.username ? String(State.currentUser.username).toLowerCase() : '';
+  if (username === 'admin' || role.indexOf('admin') >= 0) return true;
+  var perms = State.currentUser.permissions || [];
+  if (perms.indexOf('all') >= 0) return true;
+  return perms.indexOf(permKey) >= 0;
+}
+
 function applyRolePermissions() {
-  var role = (State.currentUser && State.currentUser.role) ? String(State.currentUser.role).trim() : 'User';
-  var roleLower = role.toLowerCase();
-  var isGeneralUser = (roleLower === 'user');
-  var isHR = (roleLower === 'hr');
-  var isAdmin = (roleLower.indexOf('admin') >= 0);
+  if (!State.currentUser) return;
+
+  var role = State.currentUser.role || 'User';
+  var isAdmin = hasPermission('all');
+  var isHR = (role.indexOf('HR') >= 0);
 
   // Top user badge
   var badgeEl = document.getElementById('topUserBadge');
@@ -12,44 +23,113 @@ function applyRolePermissions() {
     badgeEl.innerHTML = '<i class="fa-solid ' + iconClass + '"></i> ' + esc(State.currentUser.username) + ' (' + esc(role) + ')';
   }
 
-  // Navigation tabs
-  var tabDash = document.getElementById('navBtn-dashboard');
-  var tabPay = document.getElementById('navBtn-payroll');
-  var tabInp = document.getElementById('navBtn-input');
-  var tabEmp = document.getElementById('navBtn-employees');
-  var tabHist = document.getElementById('navBtn-history');
-  var tabComp = document.getElementById('navBtn-company');
-  var tabUsers = document.getElementById('navBtn-users');
-  var periodBar = document.getElementById('periodBar');
+  var canViewDash = hasPermission('view_dash');
+  var canViewPayroll = hasPermission('view_payroll');
+  var canViewInputs = hasPermission('view_inputs');
+  var canViewEmp = hasPermission('view_emp');
+  var canViewHistory = hasPermission('view_history');
+  var canManageCompany = hasPermission('manage_company') || hasPermission('manage_backup');
+  var canManageUsers = hasPermission('manage_users');
+  var canViewSalary = hasPermission('view_salary');
+  var canEditEmp = hasPermission('edit_emp');
+  var canEditInputs = hasPermission('edit_inputs');
+  var canPopulateInputs = hasPermission('populate_inputs');
+  var canCalcPayroll = hasPermission('calc_payroll');
+  var canClosePeriod = hasPermission('close_period');
+  var canPrintHistory = hasPermission('print_history');
+  var canExportCsv = hasPermission('export_csv');
 
-  if (isGeneralUser) {
-    if (tabDash) tabDash.style.display = 'none';
-    if (tabPay) tabPay.style.display = 'none';
-    if (tabInp) tabInp.style.display = 'none';
-    if (tabHist) tabHist.style.display = 'none';
-    if (tabComp) tabComp.style.display = 'none';
-    if (tabUsers) tabUsers.style.display = 'none';
-    if (periodBar) periodBar.style.display = 'none';
-    if (tabEmp) tabEmp.style.display = 'inline-flex';
+  // 1. Navigation Tabs Visibility
+  var navDash = document.getElementById('navBtn-dashboard');
+  var navPayroll = document.getElementById('navBtn-payroll');
+  var navInput = document.getElementById('navBtn-input');
+  var navEmp = document.getElementById('navBtn-employees');
+  var navHistory = document.getElementById('navBtn-history');
+  var navCompany = document.getElementById('navBtn-company');
+  var navUsers = document.getElementById('navBtn-users');
 
-    // Force active tab to employees immediately
-    switchTab('employees');
-  } else {
-    if (tabDash) tabDash.style.display = 'inline-flex';
-    if (tabPay) tabPay.style.display = 'inline-flex';
-    if (tabInp) tabInp.style.display = 'inline-flex';
-    if (tabEmp) tabEmp.style.display = 'inline-flex';
-    if (tabHist) tabHist.style.display = 'inline-flex';
-    if (periodBar) periodBar.style.display = 'flex';
+  if (navDash) navDash.style.display = canViewDash ? 'inline-flex' : 'none';
+  if (navPayroll) navPayroll.style.display = canViewPayroll ? 'inline-flex' : 'none';
+  if (navInput) navInput.style.display = canViewInputs ? 'inline-flex' : 'none';
+  if (navEmp) navEmp.style.display = canViewEmp ? 'inline-flex' : 'none';
+  if (navHistory) navHistory.style.display = canViewHistory ? 'inline-flex' : 'none';
+  if (navCompany) navCompany.style.display = canManageCompany ? 'inline-flex' : 'none';
+  if (navUsers) navUsers.style.display = canManageUsers ? 'inline-flex' : 'none';
 
-    if (isAdmin) {
-      if (tabComp) tabComp.style.display = 'inline-flex';
-      if (tabUsers) tabUsers.style.display = 'inline-flex';
-    } else {
-      if (tabComp) tabComp.style.display = 'none';
-      if (tabUsers) tabUsers.style.display = 'none';
+  // 2. Ensure current active tab is accessible
+  var curActiveTab = document.querySelector('.tab-content.active');
+  if (curActiveTab) {
+    var tabId = curActiveTab.id;
+    var allowed = true;
+    if (tabId === 'tab-dashboard' && !canViewDash) allowed = false;
+    if (tabId === 'tab-payroll' && !canViewPayroll) allowed = false;
+    if (tabId === 'tab-input' && !canViewInputs) allowed = false;
+    if (tabId === 'tab-employees' && !canViewEmp) allowed = false;
+    if (tabId === 'tab-history' && !canViewHistory) allowed = false;
+    if (tabId === 'tab-company' && !canManageCompany) allowed = false;
+    if (tabId === 'tab-users' && !canManageUsers) allowed = false;
+
+    if (!allowed) {
+      if (canViewDash) switchTab('dashboard');
+      else if (canViewEmp) switchTab('employees');
+      else if (canViewInputs) switchTab('input');
+      else if (canViewPayroll) switchTab('payroll');
+      else if (canViewHistory) switchTab('history');
     }
   }
+
+  // 3. Employee Master Toolbar & Salary Inputs
+  var btnAddEmp = document.querySelector('button[onclick="openAddEmployeeModal()"]');
+  if (btnAddEmp) btnAddEmp.style.display = canEditEmp ? 'inline-flex' : 'none';
+  var btnImportEmp = document.querySelector('button[onclick*="empCsvFileInput"]');
+  if (btnImportEmp) btnImportEmp.style.display = canEditEmp ? 'inline-flex' : 'none';
+
+  var baseSalaryGroup = document.getElementById('empBaseSalaryGroup');
+  var pfRateGroup = document.getElementById('empPfRateGroup');
+  var ssoGroup = document.getElementById('empSsoGroup');
+  var taxGroup = document.getElementById('empTaxGroup');
+
+  if (!canViewSalary) {
+    if (baseSalaryGroup) baseSalaryGroup.style.display = 'none';
+    if (pfRateGroup) pfRateGroup.style.display = 'none';
+    if (ssoGroup) ssoGroup.style.display = 'none';
+    if (taxGroup) taxGroup.style.display = 'none';
+  } else {
+    if (baseSalaryGroup) baseSalaryGroup.style.display = 'block';
+    if (pfRateGroup) pfRateGroup.style.display = 'block';
+    if (ssoGroup) ssoGroup.style.display = 'block';
+    if (taxGroup) taxGroup.style.display = 'block';
+  }
+
+  // 4. Monthly Input Toolbar Buttons
+  var btnAddInput = document.querySelector('button[onclick="openAddInputModal()"]');
+  if (btnAddInput) btnAddInput.style.display = canEditInputs ? 'inline-flex' : 'none';
+  var btnPopulate = document.querySelector('button[onclick="populateEmployeesToCurrentPeriod()"]');
+  if (btnPopulate) btnPopulate.style.display = canPopulateInputs ? 'inline-flex' : 'none';
+
+  // 5. Payroll Toolbar Buttons
+  var btnCalcPayroll = document.querySelector('button[onclick="runPayrollRecalc()"]');
+  if (btnCalcPayroll) btnCalcPayroll.style.display = canCalcPayroll ? 'inline-flex' : 'none';
+
+  // 6. Period Lock Button
+  var periodCloseContainer = document.getElementById('periodCloseBtnContainer');
+  if (periodCloseContainer && !canClosePeriod) {
+    periodCloseContainer.style.display = 'none';
+  } else if (periodCloseContainer) {
+    periodCloseContainer.style.display = 'inline-block';
+  }
+
+  // 7. History Print Buttons
+  var btnPrintActive = document.querySelector('button[onclick="printActiveHistoryReport()"]');
+  if (btnPrintActive) btnPrintActive.style.display = canPrintHistory ? 'inline-flex' : 'none';
+  var btnPrintBatch = document.querySelector('button[onclick="printAllEmployeesBatch()"]');
+  if (btnPrintBatch) btnPrintBatch.style.display = canPrintHistory ? 'inline-flex' : 'none';
+
+  // 8. Export CSV Buttons
+  var exportBtns = document.querySelectorAll('button[onclick*="exportToCSV"], button[onclick*="exportActiveHistoryCsv"], button[onclick*="exportAllEmployeeHistory"]');
+  exportBtns.forEach(function(b) {
+    b.style.display = canExportCsv ? 'inline-flex' : 'none';
+  });
 }
 
 /**
