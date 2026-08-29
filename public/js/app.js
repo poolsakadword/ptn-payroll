@@ -595,7 +595,7 @@ function onHistoryYearChanged() {
   }
 }
 
-function renderHistoryTab() {
+function renderHistoryTab(silent) {
   initHistoryYearDropdown();
   var sel = document.getElementById('histEmpSelect');
   if (sel) {
@@ -609,14 +609,15 @@ function renderHistoryTab() {
     if (curVal) sel.value = curVal;
   }
 
+  var isHistTabActive = document.getElementById('tab-history') && document.getElementById('tab-history').classList.contains('active');
   if (currentHistoryMode === 'yearly') {
-    loadYearlySummaryData();
+    loadYearlySummaryData(silent || !isHistTabActive);
   } else if (sel && sel.value) {
-    onHistoryEmpChanged();
+    onHistoryEmpChanged(silent || !isHistTabActive);
   }
 }
 
-function loadYearlySummaryData() {
+function loadYearlySummaryData(silent) {
   var yrSel = document.getElementById('histYearSelect');
   var yr = yrSel ? yrSel.value : '';
   if (!yr) {
@@ -624,11 +625,15 @@ function loadYearlySummaryData() {
     yr = String(curYear);
   }
 
-  showToast('กำลังโหลดข้อมูลสรุปประจำปี ' + yr + '...', 'info');
+  var isHistTabActive = document.getElementById('tab-history') && document.getElementById('tab-history').classList.contains('active');
+  if (!silent && isHistTabActive) {
+    showToast('กำลังโหลดข้อมูลสรุปประจำปี ' + yr + '...', 'info');
+  }
+
   callApi('getYearlySummary', { year: yr })
     .then(function(r) {
       if (!r.success) {
-        showToast(r.message || 'ไม่สามารถโหลดข้อมูลสรุปประจำปีได้', 'error');
+        if (isHistTabActive) showToast(r.message || 'ไม่สามารถโหลดข้อมูลสรุปประจำปีได้', 'error');
         return;
       }
       currentYearlySummaryData = r.yearlySummary || [];
@@ -636,7 +641,7 @@ function loadYearlySummaryData() {
       renderYearlySummaryTable();
     })
     .catch(function(err) {
-      showToast('Error: ' + err.message, 'error');
+      if (isHistTabActive) showToast('Error: ' + err.message, 'error');
     });
 }
 
@@ -723,7 +728,7 @@ function renderYearlySummaryTable() {
   }
 }
 
-function onHistoryEmpChanged() {
+function onHistoryEmpChanged(silent) {
   var sel = document.getElementById('histEmpSelect');
   var empId = sel ? sel.value : '';
   var area = document.getElementById('histContentArea');
@@ -734,7 +739,10 @@ function onHistoryEmpChanged() {
     return;
   }
 
-  showToast('กำลังโหลดประวัติของ ' + empId + '...', 'info');
+  var isHistTabActive = document.getElementById('tab-history') && document.getElementById('tab-history').classList.contains('active');
+  if (!silent && isHistTabActive) {
+    showToast('กำลังโหลดประวัติของ ' + empId + '...', 'info');
+  }
   callApi('getEmployeeHistory', { empId: empId })
     .then(function(r) {
       if (!r.success) { showToast(r.message, 'error'); return; }
