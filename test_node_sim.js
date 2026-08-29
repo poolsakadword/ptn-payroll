@@ -348,6 +348,12 @@ function handleLogout() {
   sessionStorage.removeItem('ptn_user');
   State.currentUser = null;
 
+  // Clear login inputs
+  var uInput = document.getElementById('loginUsername');
+  var pInput = document.getElementById('loginPassword');
+  if (uInput) uInput.value = '';
+  if (pInput) pInput.value = '';
+
   // Reset tabs to default state
   document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
   document.querySelectorAll('.nav-tab-btn').forEach(function(el) { el.classList.remove('active'); });
