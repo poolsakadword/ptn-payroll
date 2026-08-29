@@ -444,6 +444,160 @@ async function handleAction(db, action, params) {
 
     // 7. EMPLOYEE HISTORY
         // 7.1 GET ALL EMPLOYEES HISTORY
+        // 7.2 GET YEARLY SUMMARY (1 ROW PER EMPLOYEE)
+    case 'getYearlySummary': {
+      const year = String(params.year || '').trim();
+      let calcsQuery = 'SELECT * FROM payroll_calcs';
+      let inputsQuery = 'SELECT * FROM monthly_inputs';
+      const bindings = [];
+
+      if (year && year !== 'ALL') {
+        calcsQuery += ' WHERE period LIKE ?';
+        inputsQuery += ' WHERE period LIKE ?';
+        bindings.push(`% ${year}`);
+      }
+
+      calcsQuery += ' ORDER BY period ASC, emp_id ASC';
+      inputsQuery += ' ORDER BY period ASC, emp_id ASC';
+
+      const calcs = (bindings.length > 0 ? await db.prepare(calcsQuery).bind(...bindings).all() : await db.prepare(calcsQuery).all()).results || [];
+      const inputs = (bindings.length > 0 ? await db.prepare(inputsQuery).bind(...bindings).all() : await db.prepare(inputsQuery).all()).results || [];
+      const emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+
+      const empMap = {};
+      for (const e of emps) empMap[e.emp_id] = e;
+
+      const inputMap = {};
+      for (const i of inputs) {
+        inputMap[`${i.period}_${i.emp_id}`] = i;
+      }
+
+      // Group by emp_id
+      const empSummaryMap = {};
+      for (const e of emps) {
+        empSummaryMap[e.emp_id] = {
+          empId: e.emp_id,
+          fullName: e.full_name,
+          nickname: e.nickname || '',
+          department: e.department || '',
+          position: e.position || '',
+          bankName: e.bank_name || '',
+          bankAccount: e.bank_account || '',
+          citizenId: e.citizen_id || '',
+          totalPeriods: 0,
+          periodsList: [],
+          baseSalaryLatest: Number(e.base_salary) || 0,
+          totalBaseSalary: 0,
+          totalAbsentDays: 0,
+          totalLeaveDays: 0,
+          totalSickLeaveDays: 0,
+          totalLateDeduct: 0,
+          totalOtHours: 0,
+          totalOtPay: 0,
+          totalAllowance: 0,
+          totalBonus: 0,
+          totalLeaveDeduction: 0,
+          totalGrossPay: 0,
+          totalSso: 0,
+          totalPf: 0,
+          totalTax: 0,
+          totalAdvanceDeduct: 0,
+          totalOtherDeduct: 0,
+          totalDeductions: 0,
+          totalNetPay: 0
+        };
+      }
+
+      for (const c of calcs) {
+        if (!empSummaryMap[c.emp_id]) {
+          const emp = empMap[c.emp_id] || {};
+          empSummaryMap[c.emp_id] = {
+            empId: c.emp_id,
+            fullName: c.full_name || emp.full_name || '',
+            nickname: emp.nickname || '',
+            department: c.department || emp.department || '',
+            position: c.position || emp.position || '',
+            bankName: c.bank_name || emp.bank_name || '',
+            bankAccount: c.bank_account || emp.bank_account || '',
+            citizenId: emp.citizen_id || '',
+            totalPeriods: 0,
+            periodsList: [],
+            baseSalaryLatest: Number(c.base_salary) || 0,
+            totalBaseSalary: 0,
+            totalAbsentDays: 0,
+            totalLeaveDays: 0,
+            totalSickLeaveDays: 0,
+            totalLateDeduct: 0,
+            totalOtHours: 0,
+            totalOtPay: 0,
+            totalAllowance: 0,
+            totalBonus: 0,
+            totalLeaveDeduction: 0,
+            totalGrossPay: 0,
+            totalSso: 0,
+            totalPf: 0,
+            totalTax: 0,
+            totalAdvanceDeduct: 0,
+            totalOtherDeduct: 0,
+            totalDeductions: 0,
+            totalNetPay: 0
+          };
+        }
+
+        const s = empSummaryMap[c.emp_id];
+        const inp = inputMap[`${c.period}_${c.emp_id}`] || {};
+
+        s.totalPeriods += 1;
+        s.periodsList.push(c.period);
+        s.baseSalaryLatest = Number(c.base_salary) || s.baseSalaryLatest;
+        s.totalBaseSalary += Number(c.base_salary) || 0;
+        s.totalAbsentDays += Number(inp.absent_days) || 0;
+        s.totalLeaveDays += Number(inp.leave_days) || 0;
+        s.totalSickLeaveDays += Number(inp.sick_leave_days) || 0;
+        s.totalLateDeduct += Number(inp.late_deduct) || 0;
+        s.totalOtHours += Number(c.ot_hours) || 0;
+        s.totalOtPay += Number(c.ot_pay) || 0;
+        s.totalAllowance += Number(c.allowance) || 0;
+        s.totalBonus += Number(c.bonus) || 0;
+        s.totalLeaveDeduction += Number(c.leave_deduction) || 0;
+        s.totalGrossPay += Number(c.gross_pay) || 0;
+        s.totalSso += Number(c.sso) || 0;
+        s.totalPf += Number(c.pf) || 0;
+        s.totalTax += Number(c.tax) || 0;
+        s.totalAdvanceDeduct += Number(c.advance_deduct) || 0;
+        s.totalOtherDeduct += Number(c.other_deduct) || 0;
+        s.totalDeductions += Number(c.total_deductions) || 0;
+        s.totalNetPay += Number(c.net_pay) || 0;
+      }
+
+      const summaryList = Object.values(empSummaryMap).sort((a,b) => a.empId.localeCompare(b.empId));
+
+      const grandTotal = {
+        totalEmployees: summaryList.length,
+        activeEmployees: summaryList.filter(x => x.totalPeriods > 0).length,
+        totalBaseSalary: summaryList.reduce((acc, x) => acc + x.totalBaseSalary, 0),
+        totalAbsentDays: summaryList.reduce((acc, x) => acc + x.totalAbsentDays, 0),
+        totalLeaveDays: summaryList.reduce((acc, x) => acc + x.totalLeaveDays, 0),
+        totalSickLeaveDays: summaryList.reduce((acc, x) => acc + x.totalSickLeaveDays, 0),
+        totalLateDeduct: summaryList.reduce((acc, x) => acc + x.totalLateDeduct, 0),
+        totalOtHours: summaryList.reduce((acc, x) => acc + x.totalOtHours, 0),
+        totalOtPay: summaryList.reduce((acc, x) => acc + x.totalOtPay, 0),
+        totalAllowance: summaryList.reduce((acc, x) => acc + x.totalAllowance, 0),
+        totalBonus: summaryList.reduce((acc, x) => acc + x.totalBonus, 0),
+        totalLeaveDeduction: summaryList.reduce((acc, x) => acc + x.totalLeaveDeduction, 0),
+        totalGrossPay: summaryList.reduce((acc, x) => acc + x.totalGrossPay, 0),
+        totalSso: summaryList.reduce((acc, x) => acc + x.totalSso, 0),
+        totalPf: summaryList.reduce((acc, x) => acc + x.totalPf, 0),
+        totalTax: summaryList.reduce((acc, x) => acc + x.totalTax, 0),
+        totalAdvanceDeduct: summaryList.reduce((acc, x) => acc + x.totalAdvanceDeduct, 0),
+        totalOtherDeduct: summaryList.reduce((acc, x) => acc + x.totalOtherDeduct, 0),
+        totalDeductions: summaryList.reduce((acc, x) => acc + x.totalDeductions, 0),
+        totalNetPay: summaryList.reduce((acc, x) => acc + x.totalNetPay, 0)
+      };
+
+      return { success: true, year: year, yearlySummary: summaryList, grandTotal: grandTotal };
+    }
+
     case 'getAllEmployeeHistory': {
       const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY period DESC, emp_id ASC').all()).results || [];
       const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY period DESC, emp_id ASC').all()).results || [];

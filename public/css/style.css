@@ -588,7 +588,7 @@ footer {
   margin-top: auto;
 }
 
-/* PRINT STYLES (PAYSLIP & EMPLOYEE HISTORY REPORT) */
+/* PRINT STYLES (PAYSLIP, EMPLOYEE HISTORY REPORT & YEARLY SUMMARY) */
 @media print {
   @page {
     size: A4 portrait;
@@ -617,11 +617,12 @@ footer {
   .modal-header,
   .modal-footer,
   .modal-close-btn,
+  .card-header,
   .no-print {
     display: none !important;
   }
 
-  /* 1. PRINTING PAYSLIP (STRICT 1-PAGE A4, ONLY PAYSLIP) */
+  /* 1. PRINTING PAYSLIP (STRICT 1-PAGE A4) */
   body.printing-payslip {
     height: auto !important;
     min-height: 0 !important;
@@ -661,7 +662,7 @@ footer {
     visibility: visible !important;
   }
 
-  /* 2. PRINTING EMPLOYEE HISTORY REPORT */
+  /* 2. PRINTING EMPLOYEE HISTORY REPORT (INDIVIDUAL) */
   body.printing-history #appShell,
   body.printing-history .main-container,
   body.printing-history #tab-history,
@@ -675,8 +676,7 @@ footer {
     box-shadow: none !important;
     background: #ffffff !important;
   }
-  body.printing-history .card-header,
-  body.printing-history .tab-content:not(#tab-history) {
+  body.printing-history #histYearlyViewArea {
     display: none !important;
   }
   body.printing-history #histContentArea {
@@ -700,5 +700,58 @@ footer {
   body.printing-history .data-table th,
   body.printing-history .data-table td {
     padding: 4px 6px !important;
+  }
+
+  /* 3. PRINTING YEARLY SUMMARY REPORT (ALL EMPLOYEES MATRIX, LANDSCAPE) */
+  body.printing-yearly-summary {
+    height: auto !important;
+  }
+  body.printing-yearly-summary @page {
+    size: A4 landscape;
+    margin: 8mm 10mm;
+  }
+  body.printing-yearly-summary #appShell,
+  body.printing-yearly-summary .main-container,
+  body.printing-yearly-summary #tab-history,
+  body.printing-yearly-summary #tab-history .card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+  body.printing-yearly-summary #histContentArea,
+  body.printing-yearly-summary .stats-grid {
+    display: none !important;
+  }
+  body.printing-yearly-summary #histYearlyViewArea {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body.printing-yearly-summary #yearlyPrintHeaderBanner {
+    display: block !important;
+  }
+  body.printing-yearly-summary #yearlyPrintSignatures {
+    display: grid !important;
+    page-break-inside: avoid !important;
+  }
+  body.printing-yearly-summary .table-wrapper {
+    overflow: visible !important;
+    max-height: none !important;
+    border: 1px solid #cbd5e1 !important;
+  }
+  body.printing-yearly-summary .data-table {
+    font-size: 7.5pt !important;
+    width: 100% !important;
+  }
+  body.printing-yearly-summary .data-table th,
+  body.printing-yearly-summary .data-table td {
+    padding: 3px 4px !important;
   }
 }
