@@ -1,3 +1,29 @@
+function getDefaultRolePermissions(role) {
+  if (role === 'Admin / HR' || role === 'Admin' || role === 'Super Admin') {
+    return ['all'];
+  } else if (role === 'HR Payroll' || role === 'HR') {
+    return [
+      'view_dash', 'view_emp', 'view_salary', 'edit_emp',
+      'view_inputs', 'edit_inputs', 'populate_inputs',
+      'view_payroll', 'calc_payroll', 'view_payslip',
+      'view_history', 'print_history', 'export_csv'
+    ];
+  } else if (role === 'HR Time Attendance') {
+    return [
+      'view_emp', 'view_inputs', 'edit_inputs', 'populate_inputs',
+      'view_history', 'print_history'
+    ];
+  } else if (role === 'Accounting / Finance') {
+    return [
+      'view_dash', 'view_payroll', 'view_payslip',
+      'view_history', 'print_history', 'export_csv'
+    ];
+  } else {
+    // General User
+    return ['view_emp'];
+  }
+}
+
 /**
  * ==============================================================================
  * PTN Payroll System V4.0 - Clean Enterprise Cloudflare D1 Backend
@@ -81,10 +107,22 @@ async function handleAction(db, action, params) {
         await db.prepare('INSERT OR REPLACE INTO users (username, password, role) VALUES (?, ?, ?)').bind('admin', '123456', 'Admin / HR').run();
       }
 
+      // Ensure permissions column exists
+      await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
+
       // Check strictly against D1 users database (No hardcoded credentials)
-      const userRow = await db.prepare('SELECT username, password, role FROM users WHERE LOWER(username) = ?').bind(u).first();
+      const userRow = await db.prepare('SELECT * FROM users WHERE LOWER(username) = ?').bind(u).first();
       if (userRow && userRow.password === p) {
-        return { success: true, username: userRow.username, role: userRow.role || 'User' };
+        let perms = [];
+        try {
+          perms = userRow.permissions ? JSON.parse(userRow.permissions) : getDefaultRolePermissions(userRow.role);
+        } catch(e) {
+          perms = getDefaultRolePermissions(userRow.role);
+        }
+        if (userRow.username === 'admin' || userRow.role === 'Admin / HR' || userRow.role === 'Admin') {
+          perms = ['all'];
+        }
+        return { success: true, username: userRow.username, role: userRow.role || 'User', permissions: perms };
       }
       return { success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' };
     }
@@ -744,11 +782,13 @@ async function handleAction(db, action, params) {
       const u = params.user || {};
       const origUser = params.origUser;
       if (!u.username || !u.password) return { success: false, message: 'กรุณากรอก Username และ Password' };
+      await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
       if (origUser && origUser !== u.username) {
         await db.prepare('DELETE FROM users WHERE username = ?').bind(origUser).run();
       }
-      await db.prepare('INSERT OR REPLACE INTO users (username, password, role) VALUES (?, ?, ?)').bind(u.username, u.password, u.role || 'User').run();
-      return { success: true, message: 'บันทึกผู้ใช้งานเรียบร้อยแล้ว' };
+      const permsJson = JSON.stringify(u.permissions || getDefaultRolePermissions(u.role));
+      await db.prepare('INSERT OR REPLACE INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)').bind(u.username, u.password, u.role || 'User', permsJson).run();
+      return { success: true, message: 'บันทึกผู้ใช้งานและกำหนดสิทธิ์เรียบร้อยแล้ว' };
     }
 
     case 'deleteUser': {

@@ -1741,51 +1741,159 @@ function parseAndImportEmployeesCSV(csvText) {
 }
 
 // USER MANAGEMENT HANDLERS
+function onRoleTemplateChanged() {
+  var role = document.getElementById('mRole').value;
+  var allPerms = [
+    'perm_view_emp', 'perm_view_salary', 'perm_edit_emp', 'perm_del_emp',
+    'perm_view_inputs', 'perm_edit_inputs', 'populate_inputs',
+    'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip', 'perm_close_period',
+    'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv',
+    'perm_manage_users', 'perm_company_settings', 'perm_backup_restore'
+  ];
+
+  if (role === 'Admin / HR' || role === 'Admin') {
+    allPerms.forEach(function(p) {
+      var el = document.getElementById(p);
+      if (el) el.checked = true;
+    });
+  } else if (role === 'HR Payroll') {
+    var hrPerms = ['perm_view_emp', 'perm_view_salary', 'perm_edit_emp', 'perm_view_inputs', 'perm_edit_inputs', 'populate_inputs', 'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip', 'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv'];
+    allPerms.forEach(function(p) {
+      var el = document.getElementById(p);
+      if (el) el.checked = (hrPerms.indexOf(p) >= 0);
+    });
+  } else if (role === 'HR Time Attendance') {
+    var attPerms = ['perm_view_emp', 'perm_edit_emp', 'perm_view_inputs', 'perm_edit_inputs', 'populate_inputs', 'perm_view_history', 'perm_print_history'];
+    allPerms.forEach(function(p) {
+      var el = document.getElementById(p);
+      if (el) el.checked = (attPerms.indexOf(p) >= 0);
+    });
+  } else if (role === 'Accounting / Finance') {
+    var accPerms = ['perm_view_dash', 'perm_view_payroll', 'perm_view_payslip', 'perm_view_history', 'perm_print_history', 'perm_export_csv'];
+    allPerms.forEach(function(p) {
+      var el = document.getElementById(p);
+      if (el) el.checked = (accPerms.indexOf(p) >= 0);
+    });
+  } else if (role === 'User') {
+    var userPerms = ['perm_view_emp'];
+    allPerms.forEach(function(p) {
+      var el = document.getElementById(p);
+      if (el) el.checked = (userPerms.indexOf(p) >= 0);
+    });
+  }
+}
+
 function openAddUserModal() {
   document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน';
   document.getElementById('userOrigUsername').value = '';
   document.getElementById('mUsername').value = '';
+  document.getElementById('mUsername').disabled = false;
   document.getElementById('mPassword').value = '';
-  document.getElementById('mRole').value = 'Admin / HR';
+  document.getElementById('mRole').value = 'HR Payroll';
+  onRoleTemplateChanged();
   openModal('userModal');
 }
 
 function openEditUserModal(username) {
   var u = State.users.find(function(x) { return x.username === username; });
   if (!u) return;
-  document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-user-pen"></i> แก้ไขผู้ใช้งาน';
+  document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-user-pen"></i> กำหนดสิทธิ์ / แก้ไขผู้ใช้: ' + esc(u.username);
   document.getElementById('userOrigUsername').value = u.username;
   document.getElementById('mUsername').value = u.username;
-  document.getElementById('mPassword').value = u.password || '';
-  document.getElementById('mRole').value = u.role || 'Admin / HR';
+  document.getElementById('mUsername').disabled = (u.username === 'admin');
+  document.getElementById('mPassword').value = '';
+
+  var roleSel = document.getElementById('mRole');
+  var matchedRole = false;
+  for (var i = 0; i < roleSel.options.length; i++) {
+    if (roleSel.options[i].value === u.role) {
+      roleSel.selectedIndex = i;
+      matchedRole = true;
+      break;
+    }
+  }
+  if (!matchedRole) roleSel.value = 'Custom';
+
+  // Apply user's active permissions to checkboxes
+  var perms = u.permissions || [];
+  var isAll = perms.indexOf('all') >= 0 || u.username === 'admin';
+
+  var allPerms = [
+    'perm_view_emp', 'perm_view_salary', 'perm_edit_emp', 'perm_del_emp',
+    'perm_view_inputs', 'perm_edit_inputs', 'populate_inputs',
+    'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip', 'perm_close_period',
+    'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv',
+    'perm_manage_users', 'perm_company_settings', 'perm_backup_restore'
+  ];
+
+  allPerms.forEach(function(pKey) {
+    var el = document.getElementById(pKey);
+    if (el) {
+      // Map element id to perm key
+      var cleanKey = pKey.replace('perm_', '');
+      if (pKey === 'populate_inputs') cleanKey = 'populate_inputs';
+      el.checked = isAll || (perms.indexOf(cleanKey) >= 0) || (perms.indexOf(pKey) >= 0);
+    }
+  });
+
   openModal('userModal');
 }
 
 function saveUserForm(e) {
   if (e) e.preventDefault();
-  var u = {
-    username: document.getElementById('mUsername').value.trim(),
-    password: document.getElementById('mPassword').value.trim(),
-    role: document.getElementById('mRole').value
-  };
-  if (!u.username || !u.password) {
-    showToast('กรุณากรอก Username และ Password', 'error');
-    return;
-  }
   var orig = document.getElementById('userOrigUsername').value;
-  callApi('saveUser', { user: u, origUser: orig })
-    .then(function(r) {
-      if (r.success) {
-        showToast(r.message || 'บันทึกผู้ใช้งานสำเร็จ');
-        closeModal('userModal');
-        loadAppData();
-      } else {
-        showToast(r.message || 'เกิดข้อผิดพลาดในการบันทึกผู้ใช้', 'error');
-      }
-    })
-    .catch(function(err) {
-      showToast('Error: ' + err.message, 'error');
+  var u = document.getElementById('mUsername').value.trim();
+  var p = document.getElementById('mPassword').value.trim();
+  var role = document.getElementById('mRole').value;
+
+  if (!u) { showToast('กรุณากรอก Username', 'error'); return; }
+  if (!orig && !p) { showToast('กรุณากรอก Password', 'error'); return; }
+
+  // Collect checked permissions
+  var perms = [];
+  if (role === 'Admin / HR' || role === 'Admin' || u === 'admin') {
+    perms = ['all'];
+  } else {
+    var permElements = [
+      { id: 'perm_view_emp', key: 'view_emp' },
+      { id: 'perm_view_salary', key: 'view_salary' },
+      { id: 'perm_edit_emp', key: 'edit_emp' },
+      { id: 'perm_del_emp', key: 'del_emp' },
+      { id: 'perm_view_inputs', key: 'view_inputs' },
+      { id: 'perm_edit_inputs', key: 'edit_inputs' },
+      { id: 'perm_populate_inputs', key: 'populate_inputs' },
+      { id: 'perm_view_payroll', key: 'view_payroll' },
+      { id: 'perm_calc_payroll', key: 'calc_payroll' },
+      { id: 'perm_view_payslip', key: 'view_payslip' },
+      { id: 'perm_close_period', key: 'close_period' },
+      { id: 'perm_view_dash', key: 'view_dash' },
+      { id: 'perm_view_history', key: 'view_history' },
+      { id: 'perm_print_history', key: 'print_history' },
+      { id: 'perm_export_csv', key: 'export_csv' },
+      { id: 'perm_manage_users', key: 'manage_users' },
+      { id: 'perm_company_settings', key: 'manage_company' },
+      { id: 'perm_backup_restore', key: 'manage_backup' }
+    ];
+    permElements.forEach(function(item) {
+      var el = document.getElementById(item.id);
+      if (el && el.checked) perms.push(item.key);
     });
+  }
+
+  var userData = {
+    username: u,
+    role: role,
+    permissions: perms
+  };
+  if (p) userData.password = p;
+
+  callApi('saveUser', { user: userData, origUser: orig })
+    .then(function(r) {
+      showToast(r.message || 'บันทึกผู้ใช้งานเรียบร้อยแล้ว');
+      closeModal('userModal');
+      loadAppData();
+    })
+    .catch(function(e) { showToast(e.message, 'error'); });
 }
 
 function deleteUser(username) {

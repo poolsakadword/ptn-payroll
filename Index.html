@@ -1022,38 +1022,104 @@
     </div>
   </div>
 
-    <!-- 4. USER MANAGEMENT MODAL -->
+    <!-- 4. USER MANAGEMENT & GRANULAR PERMISSION MODAL -->
   <div class="modal-overlay" id="userModal">
-    <div class="modal-card" style="max-width:480px">
+    <div class="modal-card wide" style="max-width:680px">
       <div class="modal-header">
-        <h3 id="userModalTitle"><i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน</h3>
+        <h3 id="userModalTitle"><i class="fa-solid fa-user-gear"></i> เพิ่ม / กำหนดสิทธิ์ผู้ใช้งาน</h3>
         <button type="button" class="modal-close-btn" onclick="closeModal('userModal')"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <form onsubmit="saveUserForm(event)">
-        <div class="modal-body">
+        <div class="modal-body" style="max-height:75vh;overflow-y:auto">
           <input type="hidden" id="userOrigUsername">
-          <div class="form-grid">
+
+          <!-- Basic Credentials -->
+          <div class="form-row-3" style="margin-bottom:14px">
             <div class="form-group">
-              <label><i class="fa-solid fa-user" style="color:#2563eb"></i> ชื่อผู้ใช้งาน (Username) *</label>
-              <input type="text" id="mUsername" placeholder="เช่น hr_staff, manager" required autocomplete="off">
+              <label style="font-weight:700;color:#0f172a"><i class="fa-solid fa-user" style="color:#2563eb"></i> ชื่อผู้ใช้งาน (Username) *</label>
+              <input type="text" id="mUsername" placeholder="เช่น hr_payroll, manager" required autocomplete="off">
             </div>
             <div class="form-group">
-              <label><i class="fa-solid fa-key" style="color:#2563eb"></i> รหัสผ่าน (Password) *</label>
+              <label style="font-weight:700;color:#0f172a"><i class="fa-solid fa-key" style="color:#2563eb"></i> รหัสผ่าน (Password) *</label>
               <input type="text" id="mPassword" placeholder="รหัสผ่าน" required autocomplete="off">
             </div>
             <div class="form-group">
-              <label><i class="fa-solid fa-user-shield" style="color:#2563eb"></i> สิทธิ์การใช้งาน (Role) *</label>
-              <select id="mRole" required>
-                <option value="Admin / HR">Admin / HR (ผู้ดูแลระบบ / ฝ่ายบุคคล)</option>
-                <option value="HR">HR (ฝ่ายบุคคล / คิดเงินเดือน)</option>
-                <option value="User">User (ผู้ใช้งานทั่วไป / ดูและพิมพ์สลิป)</option>
+              <label style="font-weight:700;color:#0f172a"><i class="fa-solid fa-id-badge" style="color:#2563eb"></i> เทมเพลตสิทธิ์ (Role Template)</label>
+              <select id="mRole" onchange="onRoleTemplateChanged()" style="font-weight:600">
+                <option value="Admin / HR">👑 Admin (ผู้ดูแลระบบสูงสุด - ทุกสิทธิ์)</option>
+                <option value="HR Payroll">💼 HR Payroll (ฝ่ายบุคคลคิดเงินเดือน)</option>
+                <option value="HR Time Attendance">⏱️ HR Attendance (ฝ่ายบุคคลบันทึกเวลา/ซ่อนเงินเดือน)</option>
+                <option value="Accounting / Finance">📊 Accounting / Finance (ฝ่ายการเงิน-บัญชี/รายงาน)</option>
+                <option value="User">👤 General User (ผู้ใช้งานทั่วไป)</option>
+                <option value="Custom">🛠️ กำหนดสิทธิ์เอง (Custom Matrix)</option>
               </select>
+            </div>
+          </div>
+
+          <!-- Granular Permission Matrix -->
+          <div style="background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:10px;padding:14px;margin-top:6px">
+            <div style="font-size:12.5px;font-weight:700;color:#1e3a8a;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+              <span><i class="fa-solid fa-shield-halved"></i> กำหนดสิทธิ์การเข้าถึงและการใช้งาน (Granular Permissions Matrix)</span>
+              <span style="font-size:11px;font-weight:normal;color:#64748b">ติ๊กเปิด/ปิดสิทธิ์ได้ตามต้องการ</span>
+            </div>
+
+            <!-- Group 1: Employee Master -->
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+              <div style="font-size:11.5px;font-weight:700;color:#0284c7;margin-bottom:6px"><i class="fa-solid fa-users"></i> 1. ทะเบียนประวัติพนักงาน (Employee Master)</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_emp" checked> ดูทะเบียนพนักงาน</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#1d4ed8;font-weight:600"><input type="checkbox" id="perm_view_salary" checked> มองเห็นฐานเงินเดือน (Show Salary)</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_edit_emp" checked> เพิ่ม / แก้ไข ข้อมูลพนักงาน</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#dc2626"><input type="checkbox" id="perm_del_emp" checked> ลบพนักงานออกจากระบบ</label>
+              </div>
+            </div>
+
+            <!-- Group 2: Monthly Attendance & Inputs -->
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+              <div style="font-size:11.5px;font-weight:700;color:#d97706;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> 2. บันทึกข้อมูลประจำงวด (Monthly Inputs)</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_inputs" checked> ดูรายการประจำงวด</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_edit_inputs" checked> บันทึก ขาด/ลา/สาย/OT/เบี้ยขยัน</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_populate_inputs" checked> ดึงพนักงานทุกคนเข้างวดนี้</label>
+              </div>
+            </div>
+
+            <!-- Group 3: Payroll & Payslips -->
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+              <div style="font-size:11.5px;font-weight:700;color:#16a34a;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> 3. คำนวณเงินเดือน &amp; สลิป (Payroll &amp; Payslips)</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_payroll" checked> ดูตารางคำนวณเงินเดือน</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_calc_payroll" checked> กดประมวลผลคำนวณเงินเดือน</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_payslip" checked> ดูและพิมพ์สลิปเงินเดือน A4</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#dc2626;font-weight:600"><input type="checkbox" id="perm_close_period" checked> ปิดงวด / ปลดล็อคงวดประจำเดือน</label>
+              </div>
+            </div>
+
+            <!-- Group 4: Dashboard & Reports -->
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+              <div style="font-size:11.5px;font-weight:700;color:#7c3aed;margin-bottom:6px"><i class="fa-solid fa-chart-pie"></i> 4. แดชบอร์ด รายงาน &amp; การส่งออก (Dashboard &amp; Reports)</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_dash" checked> ดูแดชบอร์ดภาพรวม</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_history" checked> ดูประวัติ &amp; สรุปประจำปี</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_print_history" checked> พิมพ์รายงานประวัติ &amp; สรุปทั้งปี</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_export_csv" checked> ส่งออกข้อมูลเป็นไฟล์ Excel / CSV</label>
+              </div>
+            </div>
+
+            <!-- Group 5: System Admin -->
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px">
+              <div style="font-size:11.5px;font-weight:700;color:#e11d48;margin-bottom:6px"><i class="fa-solid fa-sliders"></i> 5. ตั้งค่าระบบ &amp; ความปลอดภัย (System Administration)</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_manage_users" checked> จัดการผู้ใช้งานระบบ</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_company_settings" checked> แก้ไขข้อมูลบริษัท</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_backup_restore" checked> สำรอง &amp; กู้คืนฐานข้อมูล (Backup)</label>
+              </div>
             </div>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-slate" onclick="closeModal('userModal')">ยกเลิก</button>
-          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> บันทึกผู้ใช้งาน</button>
+          <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> บันทึกผู้ใช้งานและสิทธิ์</button>
         </div>
       </form>
     </div>
