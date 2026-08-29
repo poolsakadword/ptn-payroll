@@ -587,20 +587,28 @@ footer {
     padding: 0 !important;
   }
 
-  /* 1. PRINTING PAYSLIP (STRICT 1-PAGE A4) */
+  /* Universal hide for all page chrome during print */
+  header,
+  nav,
+  .top-header,
+  .nav-container,
+  .period-bar,
+  .main-container,
+  footer,
+  #toastContainer,
+  #loginScreen,
+  .modal-header,
+  .modal-footer,
+  .modal-close-btn,
+  .no-print {
+    display: none !important;
+  }
+
+  /* 1. PRINTING PAYSLIP (STRICT 1-PAGE A4, ONLY PAYSLIP) */
   body.printing-payslip {
     height: auto !important;
     min-height: 0 !important;
   }
-  body.printing-payslip .app-header,
-  body.printing-payslip .period-bar,
-  body.printing-payslip .main-nav,
-  body.printing-payslip .tab-content,
-  body.printing-payslip footer,
-  body.printing-payslip #toastContainer,
-  body.printing-payslip .modal-header,
-  body.printing-payslip .modal-footer,
-  body.printing-payslip .modal-close-btn,
   body.printing-payslip .modal-overlay:not(#payslipModal) {
     display: none !important;
   }
@@ -637,17 +645,8 @@ footer {
   }
 
   /* 2. PRINTING EMPLOYEE HISTORY REPORT */
-  body.printing-history .app-header,
-  body.printing-history .period-bar,
-  body.printing-history .main-nav,
-  body.printing-history .tab-content:not(#tab-history),
-  body.printing-history footer,
-  body.printing-history #toastContainer,
-  body.printing-history .card-header,
-  body.printing-history .modal-overlay {
-    display: none !important;
-  }
   body.printing-history #appShell,
+  body.printing-history .main-container,
   body.printing-history #tab-history,
   body.printing-history #tab-history .card {
     display: block !important;
@@ -658,6 +657,10 @@ footer {
     border: none !important;
     box-shadow: none !important;
     background: #ffffff !important;
+  }
+  body.printing-history .card-header,
+  body.printing-history .tab-content:not(#tab-history) {
+    display: none !important;
   }
   body.printing-history #histContentArea {
     display: block !important;
