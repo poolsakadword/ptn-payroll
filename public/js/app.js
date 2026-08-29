@@ -1620,3 +1620,155 @@ function exportAllEmployeeHistory() {
       showToast('Error: ' + err.message, 'error');
     });
 }
+
+function printAllEmployeesBatch() {
+  showToast('กำลังเตรียมเอกสารประวัติพนักงานทุกคนสำหรับพิมพ์...', 'info');
+  var yrSel = document.getElementById('histYearSelect');
+  var yr = yrSel ? yrSel.value : 'ALL';
+
+  callApi('getAllEmployeeHistory')
+    .then(function(r) {
+      if (!r.success || !r.allHistory || r.allHistory.length === 0) {
+        showToast('ไม่พบข้อมูลประวัติพนักงานสำหรับพิมพ์', 'warning');
+        return;
+      }
+
+      var all = r.allHistory;
+      if (yr && yr !== 'ALL') {
+        all = all.filter(function(x) { return x.period && x.period.indexOf(yr) >= 0; });
+      }
+
+      if (all.length === 0) {
+        showToast('ไม่พบข้อมูลประวัติพนักงานในปี ' + yr, 'warning');
+        return;
+      }
+
+      // Group by empId
+      var grouped = {};
+      State.employees.forEach(function(e) {
+        grouped[e.empId] = { emp: e, rows: [] };
+      });
+
+      all.forEach(function(row) {
+        if (!grouped[row.empId]) {
+          grouped[row.empId] = {
+            emp: {
+              empId: row.empId,
+              fullName: row.fullName,
+              nickname: row.nickname,
+              department: row.department,
+              position: row.position,
+              baseSalary: row.baseSalary
+            },
+            rows: []
+          };
+        }
+        grouped[row.empId].rows.push(row);
+      });
+
+      var container = document.getElementById('histBatchPrintArea');
+      if (!container) return;
+
+      var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+      var html = '';
+
+      Object.keys(grouped).sort().forEach(function(empId) {
+        var item = grouped[empId];
+        var emp = item.emp;
+        var rows = item.rows;
+        if (rows.length === 0) return; // Skip employees with no records in this year
+
+        var pfText = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate)) && Number(emp.pfRate) > 0) ? (Math.round(Number(emp.pfRate) * 100) + '%') : 'ไม่หัก PF';
+
+        html += '<div class="batch-emp-page">';
+        html += '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:8px;margin-bottom:10px">';
+        html += '<h2 style="font-size:16px;font-weight:700;margin:0 0 3px">' + esc(compName) + '</h2>';
+        html += '<p style="font-size:12px;font-weight:700;color:#1e3a8a;margin:2px 0">รายงานประวัติการทำงานและเงินเดือนรายบุคคล (ประจำปี ' + (yr === 'ALL' ? 'ทั้งหมด' : yr) + ')</p>';
+        html += '</div>';
+
+        // Profile card
+        html += '<div style="background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:10.5px;display:grid;grid-template-columns:repeat(4,1fr);gap:6px">';
+        html += '<div><span style="color:#64748b">รหัสพนักงาน:</span> <strong>' + esc(emp.empId) + '</strong></div>';
+        html += '<div><span style="color:#64748b">ชื่อ-นามสกุล:</span> <strong>' + esc(emp.fullName) + (emp.nickname ? ' (' + esc(emp.nickname) + ')' : '') + '</strong></div>';
+        html += '<div><span style="color:#64748b">แผนก/ตำแหน่ง:</span> <strong>' + esc(emp.department || '-') + ' / ' + esc(emp.position || '-') + '</strong></div>';
+        html += '<div><span style="color:#64748b">เงินเดือนฐาน:</span> <strong>' + fmt(emp.baseSalary) + '</strong></div>';
+        html += '<div><span style="color:#64748b">วันเกิด/อายุ:</span> <strong>' + esc(emp.birthDate || '-') + ' (' + (emp.age || 0) + ' ปี)</strong></div>';
+        html += '<div><span style="color:#64748b">ธนาคาร:</span> <strong>' + esc(emp.bankName || '-') + ' ' + esc(emp.bankAccount || '-') + '</strong></div>';
+        html += '<div><span style="color:#64748b">วันเริ่มงาน:</span> <strong>' + esc(emp.joinDate || '-') + '</strong></div>';
+        html += '<div><span style="color:#64748b">กองทุน PF:</span> <strong>' + pfText + '</strong></div>';
+        html += '</div>';
+
+        // Table
+        html += '<table class="data-table" style="font-size:7.5pt">';
+        html += '<thead><tr>';
+        html += '<th style="width:90px">งวด</th><th class="text-right">ฐาน</th><th class="text-right">ขาด</th><th class="text-right">ลากิจ</th><th class="text-right">ลาป่วย</th><th class="text-right">สาย</th><th class="text-right">OT ชม.</th><th class="text-right">เงินOT</th><th class="text-right">เบี้ยขยัน</th><th class="text-right">โบนัส</th><th class="text-right">Gross</th><th class="text-right">ปกส.</th><th class="text-right">PF</th><th class="text-right">ภาษี</th><th class="text-right">รวมหัก</th><th class="text-right">สุทธิ(Net)</th>';
+        html += '</tr></thead><tbody>';
+
+        var sumBase = 0, sumAbs = 0, sumLev = 0, sumSck = 0, sumLate = 0, sumOtH = 0, sumOtP = 0, sumAllow = 0, sumBon = 0, sumGross = 0, sumSso = 0, sumPf = 0, sumTax = 0, sumDed = 0, sumNet = 0;
+
+        rows.forEach(function(r) {
+          sumBase += Number(r.baseSalary) || 0; sumAbs += Number(r.absentDays) || 0; sumLev += Number(r.leaveDays) || 0; sumSck += Number(r.sickLeaveDays) || 0;
+          sumLate += Number(r.lateDeduct) || 0; sumOtH += Number(r.otHours) || 0; sumOtP += Number(r.otPay) || 0; sumAllow += Number(r.allowance) || 0;
+          sumBon += Number(r.bonus) || 0; sumGross += Number(r.grossPay) || 0; sumSso += Number(r.sso) || 0; sumPf += Number(r.pf) || 0;
+          sumTax += Number(r.tax) || 0; sumDed += Number(r.totalDeductions) || 0; sumNet += Number(r.netPay) || 0;
+
+          html += '<tr>' +
+            '<td class="font-bold">' + esc(r.period) + '</td>' +
+            '<td class="text-right font-mono">' + fmt(r.baseSalary) + '</td>' +
+            '<td class="text-right font-mono">' + (r.absentDays || 0) + '</td>' +
+            '<td class="text-right font-mono">' + (r.leaveDays || 0) + '</td>' +
+            '<td class="text-right font-mono">' + (r.sickLeaveDays || 0) + '</td>' +
+            '<td class="text-right font-mono">' + fmt(r.lateDeduct || 0) + '</td>' +
+            '<td class="text-right font-mono">' + (r.otHours || 0) + '</td>' +
+            '<td class="text-right font-mono text-blue font-bold">' + fmt(r.otPay || 0) + '</td>' +
+            '<td class="text-right font-mono text-green font-bold">' + fmt(r.allowance || 0) + '</td>' +
+            '<td class="text-right font-mono">' + fmt(r.bonus || 0) + '</td>' +
+            '<td class="text-right font-mono font-bold text-blue">' + fmt(r.grossPay || 0) + '</td>' +
+            '<td class="text-right font-mono font-bold text-red">' + fmt(r.sso || 0) + '</td>' +
+            '<td class="text-right font-mono text-blue font-bold">' + fmt(r.pf || 0) + '</td>' +
+            '<td class="text-right font-mono">' + fmt(r.tax || 0) + '</td>' +
+            '<td class="text-right font-mono font-bold text-red">' + fmt(r.totalDeductions || 0) + '</td>' +
+            '<td class="text-right font-mono font-bold text-green">' + fmt(r.netPay || 0) + '</td>' +
+          '</tr>';
+        });
+
+        html += '</tbody>';
+        html += '<tfoot style="background:#eff6ff;font-weight:700;border-top:1.5px solid #93c5fd"><tr>';
+        html += '<td class="font-bold">รวมสะสม (' + rows.length + ' งวด)</td>' +
+          '<td class="text-right font-mono">' + fmt(sumBase) + '</td>' +
+          '<td class="text-right font-mono">' + sumAbs + '</td>' +
+          '<td class="text-right font-mono">' + sumLev + '</td>' +
+          '<td class="text-right font-mono">' + sumSck + '</td>' +
+          '<td class="text-right font-mono">' + fmt(sumLate) + '</td>' +
+          '<td class="text-right font-mono">' + sumOtH + '</td>' +
+          '<td class="text-right font-mono text-blue font-bold">' + fmt(sumOtP) + '</td>' +
+          '<td class="text-right font-mono text-green font-bold">' + fmt(sumAllow) + '</td>' +
+          '<td class="text-right font-mono">' + fmt(sumBon) + '</td>' +
+          '<td class="text-right font-mono font-bold text-blue">' + fmt(sumGross) + '</td>' +
+          '<td class="text-right font-mono font-bold text-red">' + fmt(sumSso) + '</td>' +
+          '<td class="text-right font-mono text-blue font-bold">' + fmt(sumPf) + '</td>' +
+          '<td class="text-right font-mono">' + fmt(sumTax) + '</td>' +
+          '<td class="text-right font-mono font-bold text-red">' + fmt(sumDed) + '</td>' +
+          '<td class="text-right font-mono font-bold text-green">' + fmt(sumNet) + '</td>' +
+        '</tr></tfoot>';
+        html += '</table>';
+        html += '</div>'; // end .batch-emp-page
+      });
+
+      container.innerHTML = html;
+
+      document.body.classList.remove('printing-payslip');
+      document.body.classList.remove('printing-history');
+      document.body.classList.remove('printing-yearly-summary');
+      document.body.classList.add('printing-batch-history');
+
+      window.print();
+
+      setTimeout(function() {
+        document.body.classList.remove('printing-batch-history');
+      }, 1000);
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}

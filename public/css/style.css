@@ -754,4 +754,61 @@ footer {
   body.printing-yearly-summary .data-table td {
     padding: 3px 4px !important;
   }
+
+  /* 4. PRINTING BATCH ALL EMPLOYEES (1 EMPLOYEE PER A4 PAGE) */
+  body.printing-batch-history {
+    height: auto !important;
+  }
+  body.printing-batch-history @page {
+    size: A4 portrait;
+    margin: 8mm 12mm;
+  }
+  body.printing-batch-history #appShell,
+  body.printing-batch-history .main-container,
+  body.printing-batch-history #tab-history,
+  body.printing-batch-history #tab-history .card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+  }
+  body.printing-batch-history #histYearlyViewArea,
+  body.printing-batch-history #histContentArea {
+    display: none !important;
+  }
+  body.printing-batch-history #histBatchPrintArea {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  body.printing-batch-history #histBatchPrintArea * {
+    visibility: visible !important;
+  }
+  body.printing-batch-history .batch-emp-page {
+    page-break-after: always !important;
+    break-after: page !important;
+    padding: 10px 0 20px 0 !important;
+  }
+  body.printing-batch-history .batch-emp-page:last-child {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+  body.printing-batch-history .table-wrapper {
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  body.printing-batch-history .data-table {
+    font-size: 7.5pt !important;
+    width: 100% !important;
+  }
+  body.printing-batch-history .data-table th,
+  body.printing-batch-history .data-table td {
+    padding: 3px 5px !important;
+  }
 }
