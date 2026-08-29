@@ -1,3 +1,69 @@
+
+const elements = {};
+function createMockElement(id) {
+  return {
+    id: id,
+    value: '',
+    textContent: '',
+    innerHTML: '',
+    style: {},
+    classList: {
+      add: () => {},
+      remove: () => {},
+      contains: () => false
+    },
+    querySelectorAll: () => [],
+    querySelector: () => null,
+    appendChild: () => {},
+    removeChild: () => {},
+    addEventListener: () => {}
+  };
+}
+
+global.document = {
+  getElementById: (id) => {
+    if (!elements[id]) elements[id] = createMockElement(id);
+    return elements[id];
+  },
+  querySelectorAll: (selector) => [],
+  querySelector: (selector) => null,
+  createElement: (tag) => createMockElement(tag),
+  addEventListener: () => {},
+  body: createMockElement('body')
+};
+
+global.window = {
+  print: () => {},
+  addEventListener: () => {},
+  location: { hostname: 'master.ptn-payroll.pages.dev', protocol: 'https:', href: 'https://master.ptn-payroll.pages.dev' }
+};
+
+global.localStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {}
+};
+
+global.sessionStorage = {
+  getItem: () => null,
+  setItem: () => {},
+  removeItem: () => {}
+};
+
+global.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ success: true, yearlySummary: [], grandTotal: {} }) });
+global.Blob = function() {};
+global.URL = { createObjectURL: () => '' };
+
+/**
+ * ==============================================================================
+ * PTN Payroll System V4.0 - Config Engine
+ * ==============================================================================
+ */
+var APP_CONFIG = {
+  getApiUrl: function() {
+    return '/api';
+  }
+};
 // GLOBAL PERMISSIONS HELPER
 function hasPermission(permKey) {
   if (!State.currentUser) return false;
@@ -2388,3 +2454,75 @@ function printAllEmployeesBatch() {
       showToast('Error: ' + err.message, 'error');
     });
 }
+
+
+console.log("1. Testing functions with Admin user (Full Permissions)...");
+State.currentUser = { username: 'admin', role: 'Admin / HR', permissions: ['all'] };
+State.employees = [
+  { empId: 'EMP001', fullName: 'นายทดสอบ', nickname: 'ทดสอบ', baseSalary: 15000, pfRate: 0.05, defaultSso: 750, defaultTax: 0 }
+];
+State.inputRecords = [
+  { no: 1, empId: 'EMP001', empName: 'นายทดสอบ', baseSalary: 15000, absentDays: 0, leaveDays: 0, sickLeaveDays: 0, lateDeduct: 0, otHours: 0, otRate: 40, allowance: 0, bonus: 0, pfAmount: 750, sso: 750, tax: 0, advanceDeduct: 0, otherDeduct: 0 }
+];
+State.payrollList = [
+  { empId: 'EMP001', name: 'นายทดสอบ', department: 'โกดัง', position: 'พนักงาน', baseSalary: 15000, otHours: 0, otRate: 40, otPay: 0, allowance: 0, bonus: 0, leaveDeduction: 0, grossPay: 15000, sso: 750, pf: 750, tax: 0, advanceDeduct: 0, otherDeduct: 0, totalDeductions: 1500, netPay: 13500 }
+];
+State.stats = { totalEmployees: 1, totalGross: 15000, totalDeductions: 1500, totalNet: 13500 };
+State.users = [
+  { username: 'admin', role: 'Admin / HR', permissions: ['all'] }
+];
+
+try {
+  applyRolePermissions();
+  renderDashboard();
+  renderPayrollTable();
+  renderInputTable();
+  renderEmployeesTable();
+  renderHistoryTab();
+  renderCompanySettings();
+  renderUsersTable();
+  console.log(">>> ADMIN TEST: ALL RENDER FUNCTIONS PASSED! <<<");
+} catch (err) {
+  console.error("ADMIN TEST ERROR:", err);
+  process.exit(1);
+}
+
+console.log("2. Testing functions with General User (NO salary view)...");
+State.currentUser = { username: 'user01', role: 'User', permissions: ['view_emp'] };
+
+try {
+  applyRolePermissions();
+  renderDashboard();
+  renderPayrollTable();
+  renderInputTable();
+  renderEmployeesTable();
+  renderHistoryTab();
+  renderCompanySettings();
+  renderUsersTable();
+  console.log(">>> GENERAL USER TEST: ALL RENDER FUNCTIONS PASSED! <<<");
+} catch (err) {
+  console.error("GENERAL USER TEST ERROR:", err);
+  process.exit(1);
+}
+
+console.log("3. Testing functions with HR Time Attendance (NO salary view, has attendance write)...");
+State.currentUser = { username: 'hr_time', role: 'HR Time Attendance', permissions: ['view_emp', 'edit_emp', 'view_inputs', 'edit_inputs', 'populate_inputs'] };
+
+try {
+  applyRolePermissions();
+  renderDashboard();
+  renderPayrollTable();
+  renderInputTable();
+  renderEmployeesTable();
+  renderHistoryTab();
+  renderCompanySettings();
+  renderUsersTable();
+  console.log(">>> HR TIME ATTENDANCE TEST: ALL RENDER FUNCTIONS PASSED! <<<");
+} catch (err) {
+  console.error("HR TIME ATTENDANCE TEST ERROR:", err);
+  process.exit(1);
+}
+
+console.log("\n=============================================");
+console.log("ALL TESTS COMPLETED SUCCESSFULLY WITH 0 ERRORS!");
+console.log("=============================================");
