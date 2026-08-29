@@ -150,21 +150,21 @@ function applyRolePermissions() {
   var btnImportEmp = document.querySelector('button[onclick*="empCsvFileInput"]');
   if (btnImportEmp) btnImportEmp.style.display = canEditEmp ? 'inline-flex' : 'none';
 
-  var baseSalaryGroup = document.getElementById('empBaseSalaryGroup');
-  var pfRateGroup = document.getElementById('empPfRateGroup');
-  var ssoGroup = document.getElementById('empSsoGroup');
-  var taxGroup = document.getElementById('empTaxGroup');
+  var empFinSec = document.getElementById('empModalFinancialSection');
+  var miFinSec = document.getElementById('miModalFinancialSection');
+  var miDailySec = document.getElementById('miModalDailyRateBlock');
+  var miSsoTaxSec = document.getElementById('miModalSsoTaxSection');
 
   if (!canViewSalary) {
-    if (baseSalaryGroup) baseSalaryGroup.style.display = 'none';
-    if (pfRateGroup) pfRateGroup.style.display = 'none';
-    if (ssoGroup) ssoGroup.style.display = 'none';
-    if (taxGroup) taxGroup.style.display = 'none';
+    if (empFinSec) empFinSec.style.display = 'none';
+    if (miFinSec) miFinSec.style.display = 'none';
+    if (miDailySec) miDailySec.style.display = 'none';
+    if (miSsoTaxSec) miSsoTaxSec.style.display = 'none';
   } else {
-    if (baseSalaryGroup) baseSalaryGroup.style.display = 'block';
-    if (pfRateGroup) pfRateGroup.style.display = 'block';
-    if (ssoGroup) ssoGroup.style.display = 'block';
-    if (taxGroup) taxGroup.style.display = 'block';
+    if (empFinSec) empFinSec.style.display = 'block';
+    if (miFinSec) miFinSec.style.display = 'grid';
+    if (miDailySec) miDailySec.style.display = 'flex';
+    if (miSsoTaxSec) miSsoTaxSec.style.display = 'block';
   }
 
   // 4. Monthly Input Toolbar Buttons
@@ -856,11 +856,12 @@ function renderYearlySummaryTable() {
   var yr = yrSel ? yrSel.value : '';
 
   // Update Grand Stats
+  var canViewSalary = hasPermission('view_salary');
   var gt = currentGrandTotalData || {};
   if (document.getElementById('statYearlyEmps')) document.getElementById('statYearlyEmps').textContent = (gt.activeEmployees || 0) + ' / ' + (gt.totalEmployees || 0) + ' คน';
-  if (document.getElementById('statYearlyGross')) document.getElementById('statYearlyGross').textContent = fmt(gt.totalGrossPay || 0);
-  if (document.getElementById('statYearlyDeductions')) document.getElementById('statYearlyDeductions').textContent = fmt(gt.totalDeductions || 0);
-  if (document.getElementById('statYearlyNet')) document.getElementById('statYearlyNet').textContent = fmt(gt.totalNetPay || 0);
+  if (document.getElementById('statYearlyGross')) document.getElementById('statYearlyGross').textContent = canViewSalary ? fmt(gt.totalGrossPay || 0) : '฿***';
+  if (document.getElementById('statYearlyDeductions')) document.getElementById('statYearlyDeductions').textContent = canViewSalary ? fmt(gt.totalDeductions || 0) : '฿***';
+  if (document.getElementById('statYearlyNet')) document.getElementById('statYearlyNet').textContent = canViewSalary ? fmt(gt.totalNetPay || 0) : '฿***';
 
   if (document.getElementById('yearlyPrintCompName')) document.getElementById('yearlyPrintCompName').textContent = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
   if (document.getElementById('yearlyPrintYearDisplay')) document.getElementById('yearlyPrintYearDisplay').textContent = yr === 'ALL' ? 'ทั้งหมดทุกปี' : yr;
@@ -885,32 +886,35 @@ function renderYearlySummaryTable() {
   var h = '';
   list.forEach(function(r, idx) {
     var nick = r.nickname ? ' (' + esc(r.nickname) + ')' : '';
+    var canViewSalary = hasPermission('view_salary');
+
     h += '<tr>' +
       '<td class="text-center font-mono">' + (idx + 1) + '</td>' +
       '<td class="font-mono font-bold">' + esc(r.empId) + '</td>' +
       '<td class="font-bold">' + esc(r.fullName) + nick + '</td>' +
       '<td>' + esc(r.department || '-') + '</td>' +
       '<td class="text-center font-mono font-bold" style="color:#2563eb">' + (r.totalPeriods || 0) + ' งวด</td>' +
-      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + fmt(r.baseSalaryLatest) + '</td>' +
+      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + (canViewSalary ? fmt(r.baseSalaryLatest) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + (r.totalAbsentDays || 0) + '</td>' +
       '<td class="text-right font-mono">' + (r.totalLeaveDays || 0) + '</td>' +
       '<td class="text-right font-mono text-red">' + (r.totalSickLeaveDays || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(r.totalLateDeduct || 0) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(r.totalOtPay || 0) + '</td>' +
-      '<td class="text-right font-mono text-green font-bold">' + fmt(r.totalAllowance || 0) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(r.totalBonus || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(r.totalGrossPay || 0) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + fmt(r.totalSso || 0) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(r.totalPf || 0) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(r.totalTax || 0) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold bg-red-light">' + fmt(r.totalDeductions || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light">' + fmt(r.totalNetPay || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(r.totalLateDeduct || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(r.totalOtPay || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + (canViewSalary ? fmt(r.totalAllowance || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(r.totalBonus || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + (canViewSalary ? fmt(r.totalGrossPay || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + (canViewSalary ? fmt(r.totalSso || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(r.totalPf || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(r.totalTax || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red font-bold bg-red-light">' + (canViewSalary ? fmt(r.totalDeductions || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light">' + (canViewSalary ? fmt(r.totalNetPay || 0) : '฿***') + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = h;
 
   // Render Grand Total row in tfoot
   if (tfoot) {
+    var canViewSalary = hasPermission('view_salary');
     tfoot.innerHTML = '<tr style="background:#f1f5f9;font-weight:700;font-size:12px;border-top:2px solid #94a3b8">' +
       '<td colspan="4" class="text-center font-bold" style="color:#0f172a;font-size:12.5px">รวมยอดทั้งบริษัท (' + list.length + ' คน)</td>' +
       '<td class="text-center font-mono font-bold" style="color:#2563eb">-</td>' +
@@ -918,16 +922,16 @@ function renderYearlySummaryTable() {
       '<td class="text-right font-mono text-red font-bold">' + (gt.totalAbsentDays || 0) + '</td>' +
       '<td class="text-right font-mono">' + (gt.totalLeaveDays || 0) + '</td>' +
       '<td class="text-right font-mono text-red">' + (gt.totalSickLeaveDays || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(gt.totalLateDeduct || 0) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(gt.totalOtPay || 0) + '</td>' +
-      '<td class="text-right font-mono text-green font-bold">' + fmt(gt.totalAllowance || 0) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(gt.totalBonus || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light" style="font-size:13px">' + fmt(gt.totalGrossPay || 0) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + fmt(gt.totalSso || 0) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(gt.totalPf || 0) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(gt.totalTax || 0) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold bg-red-light" style="font-size:13px">' + fmt(gt.totalDeductions || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:14px;color:#15803d">' + fmt(gt.totalNetPay || 0) + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(gt.totalLateDeduct || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(gt.totalOtPay || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + (canViewSalary ? fmt(gt.totalAllowance || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(gt.totalBonus || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light" style="font-size:13px">' + (canViewSalary ? fmt(gt.totalGrossPay || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + (canViewSalary ? fmt(gt.totalSso || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(gt.totalPf || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(gt.totalTax || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red font-bold bg-red-light" style="font-size:13px">' + (canViewSalary ? fmt(gt.totalDeductions || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:14px;color:#15803d">' + (canViewSalary ? fmt(gt.totalNetPay || 0) : '฿***') + '</td>' +
     '</tr>';
   }
 }
@@ -970,8 +974,9 @@ function onHistoryEmpChanged(silent) {
       if (document.getElementById('histEmpCardBank')) document.getElementById('histEmpCardBank').textContent = (emp.bankName || '-') + ' ' + (emp.bankAccount || '-');
       if (document.getElementById('histEmpCardSalary')) document.getElementById('histEmpCardSalary').textContent = hasPermission('view_salary') ? fmt(emp.baseSalary) : '฿***';
       if (document.getElementById('histEmpCardJoin')) document.getElementById('histEmpCardJoin').textContent = emp.joinDate || '-';
+      var canViewSalary = hasPermission('view_salary');
       var pfText = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate)) && Number(emp.pfRate) > 0) ? (Math.round(Number(emp.pfRate) * 100) + '%') : 'ไม่หัก PF';
-      if (document.getElementById('histEmpCardPf')) document.getElementById('histEmpCardPf').textContent = pfText;
+      if (document.getElementById('histEmpCardPf')) document.getElementById('histEmpCardPf').textContent = canViewSalary ? pfText : 'ข้อมูลความลับ';
 
       filterHistoryTable();
       if (area) area.style.display = 'block';
@@ -1031,52 +1036,55 @@ function filterHistoryTable() {
     sumGross += grs; sumSso += ssoVal; sumPf += pfVal; sumTax += taxVal; sumAdv += adv; sumOther += oth;
     sumDed += totDed; sumNet += net;
 
+    var canViewSalary = hasPermission('view_salary');
+
     h += '<tr>' +
       '<td class="font-bold">' + esc(r.period) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(base) + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(base) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red">' + abs + '</td>' +
       '<td class="text-right font-mono">' + lev + '</td>' +
       '<td class="text-right font-mono text-red">' + sck + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(late) + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(late) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + otH + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(otP) + '</td>' +
-      '<td class="text-right font-mono text-green font-bold">' + fmt(allow) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(bon) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(lDed) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(grs) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red">' + fmt(ssoVal) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(pfVal) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(taxVal) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(adv) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(oth) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(totDed) + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light">' + fmt(net) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(otP) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + (canViewSalary ? fmt(allow) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(bon) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(lDed) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + (canViewSalary ? fmt(grs) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-red">' + (canViewSalary ? fmt(ssoVal) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(pfVal) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(taxVal) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(adv) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(oth) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(totDed) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light">' + (canViewSalary ? fmt(net) : '฿***') + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = h;
 
   // Individual Annual Total Row in tfoot
   if (tfoot) {
+    var canViewSalary = hasPermission('view_salary');
     tfoot.innerHTML = '<tr style="background:#eff6ff;font-weight:700;font-size:12px;border-top:2px solid #60a5fa">' +
       '<td class="font-bold" style="color:#1e40af">รวมสะสม (' + list.length + ' งวด)</td>' +
-      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + fmt(sumBase) + '</td>' +
+      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + (canViewSalary ? fmt(sumBase) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + sumAbsent + '</td>' +
       '<td class="text-right font-mono">' + sumLeave + '</td>' +
       '<td class="text-right font-mono text-red">' + sumSick + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(sumLate) + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(sumLate) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + sumOtHours + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(sumOtPay) + '</td>' +
-      '<td class="text-right font-mono text-green font-bold">' + fmt(sumAllowance) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(sumBonus) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(sumLeaveDed) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light" style="font-size:13px">' + fmt(sumGross) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red">' + fmt(sumSso) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(sumPf) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(sumTax) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(sumAdv) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(sumOther) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red bg-red-light" style="font-size:13px">' + fmt(sumDed) + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:14px;color:#15803d">' + fmt(sumNet) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(sumOtPay) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + (canViewSalary ? fmt(sumAllowance) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(sumBonus) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(sumLeaveDed) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light" style="font-size:13px">' + (canViewSalary ? fmt(sumGross) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-red">' + (canViewSalary ? fmt(sumSso) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(sumPf) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(sumTax) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(sumAdv) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(sumOther) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light" style="font-size:13px">' + (canViewSalary ? fmt(sumDed) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:14px;color:#15803d">' + (canViewSalary ? fmt(sumNet) : '฿***') + '</td>' +
     '</tr>';
   }
 }
