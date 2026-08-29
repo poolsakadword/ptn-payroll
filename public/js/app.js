@@ -273,10 +273,11 @@ function renderAllViews() {
 
 // 1. DASHBOARD RENDERER
 function renderDashboard() {
+  var canViewSalary = hasPermission('view_salary');
   document.getElementById('statTotalEmp').textContent = State.stats.totalEmployees + ' คน';
-  document.getElementById('statGrossPay').textContent = fmt(State.stats.totalGross);
-  document.getElementById('statTotalDeductions').textContent = fmt(State.stats.totalDeductions);
-  document.getElementById('statNetPay').textContent = fmt(State.stats.totalNet);
+  document.getElementById('statGrossPay').textContent = canViewSalary ? fmt(State.stats.totalGross) : '฿***';
+  document.getElementById('statTotalDeductions').textContent = canViewSalary ? fmt(State.stats.totalDeductions) : '฿***';
+  document.getElementById('statNetPay').textContent = canViewSalary ? fmt(State.stats.totalNet) : '฿***';
 
   var tbody = document.getElementById('dashboardTableBody');
   if (!tbody) return;
@@ -396,6 +397,9 @@ function renderInputTable() {
     var pfRate = (i.pfRate !== null && i.pfRate !== undefined && !isNaN(Number(i.pfRate))) ? Number(i.pfRate) : 0;
     var pfAmt = (pfRate > 0) ? ((i.pfAmount !== undefined && i.pfAmount > 0) ? Number(i.pfAmount) : Math.round(baseSal * pfRate * 100) / 100) : 0;
 
+    var canViewSalary = hasPermission('view_salary');
+    var canEditInputs = hasPermission('edit_inputs');
+
     h += '<tr>' +
       '<td class="text-center font-mono">' + (i.no || (idx + 1)) + '</td>' +
       '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
@@ -404,8 +408,8 @@ function renderInputTable() {
       var remBadge = (emp && emp.remark) ? '<br><span style="font-size:11px;font-weight:normal;color:#d97706;background:#fffbeb;border:1px solid #fef3c7;padding:1px 6px;border-radius:4px;display:inline-block;margin-top:2px"><i class="fa-solid fa-note-sticky"></i> ' + esc(emp.remark) + '</span>' : '';
       return '<td class="font-bold">' + esc(i.empName || '-') + remBadge + '</td>';
     })() +
-      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + fmt(baseSal) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + fmt(dailyRate) + '</td>' +
+      '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + (i.absentDays || 0) + '</td>' +
       '<td class="text-right font-mono">' + (i.leaveDays || 0) + '</td>' +
       '<td class="text-right font-mono text-red">' + (i.sickLeaveDays || 0) + '</td>' +
@@ -414,14 +418,13 @@ function renderInputTable() {
       '<td class="text-right font-mono">' + fmt(i.otRate || 40) + '</td>' +
       '<td class="text-right font-mono text-green font-bold">' + fmt(i.allowance || 0) + '</td>' +
       '<td class="text-right font-mono">' + fmt(i.bonus || 0) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue">' + fmt(pfAmt) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(i.sso !== undefined && i.sso !== null ? i.sso : 0) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(i.tax || 0) + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue">' + (canViewSalary ? fmt(pfAmt) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(i.sso !== undefined && i.sso !== null ? i.sso : 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(i.tax || 0) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + fmt(i.advanceDeduct || 0) + '</td>' +
       '<td class="text-right font-mono text-red">' + fmt(i.otherDeduct || 0) + '</td>' +
       '<td class="text-center">' +
-        '<button type="button" class="btn-icon edit" onclick="openEditInputModal(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
-        '<button type="button" class="btn-icon del" onclick="deleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' +
+        (canEditInputs ? '<button type="button" class="btn-icon edit" onclick="openEditInputModal(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> <button type="button" class="btn-icon del" onclick="deleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '<span class="text-muted">-</span>') +
       '</td>' +
     '</tr>';
   });
@@ -515,7 +518,7 @@ function renderEmployeesTable() {
         '<td>' + esc(e.bankName || '-') + '<br><span class="text-muted font-mono" style="font-size:11px">' + esc(e.bankAccount || '-') + '</span></td>' +
         '<td>' + esc(e.joinDate || '-') + '</td>' +
         '<td class="text-center nowrap">' +
-          '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' +
+          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
         '</td>' +
       '</tr>';
     } else {
@@ -531,8 +534,9 @@ function renderEmployeesTable() {
         '<td class="text-right font-mono text-red font-bold">' + (Number(e.defaultSso) > 0 ? fmt(e.defaultSso) : '<span class="text-muted" style="font-size:11px">ไม่หัก (฿0)</span>') + '</td>' +
         '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
         '<td class="text-center nowrap">' +
-          '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
-          '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' +
+          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' : '') +
+          (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
+          (!canEditEmp && !canDelEmp ? '<span class="text-muted">-</span>' : '') +
         '</td>' +
       '</tr>';
     }
@@ -764,7 +768,7 @@ function onHistoryEmpChanged(silent) {
       if (document.getElementById('histEmpCardCitizen')) document.getElementById('histEmpCardCitizen').textContent = emp.citizenId || '-';
       if (document.getElementById('histEmpCardPhone')) document.getElementById('histEmpCardPhone').textContent = emp.phone || '-';
       if (document.getElementById('histEmpCardBank')) document.getElementById('histEmpCardBank').textContent = (emp.bankName || '-') + ' ' + (emp.bankAccount || '-');
-      if (document.getElementById('histEmpCardSalary')) document.getElementById('histEmpCardSalary').textContent = fmt(emp.baseSalary);
+      if (document.getElementById('histEmpCardSalary')) document.getElementById('histEmpCardSalary').textContent = hasPermission('view_salary') ? fmt(emp.baseSalary) : '฿***';
       if (document.getElementById('histEmpCardJoin')) document.getElementById('histEmpCardJoin').textContent = emp.joinDate || '-';
       var pfText = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate)) && Number(emp.pfRate) > 0) ? (Math.round(Number(emp.pfRate) * 100) + '%') : 'ไม่หัก PF';
       if (document.getElementById('histEmpCardPf')) document.getElementById('histEmpCardPf').textContent = pfText;
