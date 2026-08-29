@@ -219,7 +219,7 @@ function setPeriodWorkingDays() {
 
 // DATA LOADER & STATE SYNC
 function loadAppData() {
-  callApi('getAppInitialData')
+  return callApi('getAppInitialData')
     .then(function(r) {
       if (!r.success) { showToast(r.message, 'error'); return; }
 
@@ -235,6 +235,7 @@ function loadAppData() {
       State.users = r.users || [];
 
       renderAllViews();
+      return r;
     })
     .catch(function(err) {
       showToast('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + err.message, 'error');
@@ -816,8 +817,8 @@ function updateModalDailyRate(sal) {
   document.getElementById('miModalDailyRate').textContent = fmt(daily);
 }
 
-function saveInputRecordForm(e) {
-  if (e) e.preventDefault();
+function saveInputRecordForm(e, openPayslipAfter) {
+  if (e && e.preventDefault) e.preventDefault();
   var baseSal = Number(document.getElementById('miBaseSalary').value) || 0;
   var pfRate = (document.getElementById('miPfRate') && document.getElementById('miPfRate').value !== '' && !isNaN(Number(document.getElementById('miPfRate').value))) ? Number(document.getElementById('miPfRate').value) : 0;
   var pfAmt = pfRate > 0 ? (Number(document.getElementById('miPfAmount').value) || Math.round(baseSal * pfRate * 100) / 100) : 0;
@@ -849,7 +850,14 @@ function saveInputRecordForm(e) {
     .then(function(r) {
       showToast(r.message || 'บันทึกข้อมูลสำเร็จ');
       closeModal('inputModal');
-      loadAppData();
+      var p = loadAppData();
+      if (openPayslipAfter) {
+        if (p && p.then) {
+          p.then(function() { viewPayslip(d.empId); });
+        } else {
+          setTimeout(function() { viewPayslip(d.empId); }, 300);
+        }
+      }
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }
@@ -953,8 +961,8 @@ function openEditEmployeeModal(empId) {
   openModal('empModal');
 }
 
-function saveEmployeeForm(e) {
-  if (e) e.preventDefault();
+function saveEmployeeForm(e, openPayslipAfter) {
+  if (e && e.preventDefault) e.preventDefault();
   var orig = document.getElementById('empOrigId').value;
   var existingEmp = orig ? State.employees.find(function(x) { return x.empId === orig; }) : null;
   var isUser = (State.currentUser && State.currentUser.role === 'User');
@@ -994,7 +1002,14 @@ function saveEmployeeForm(e) {
     .then(function(r) {
       showToast(r.message || 'บันทึกข้อมูลพนักงานสำเร็จ');
       closeModal('empModal');
-      loadAppData();
+      var p = loadAppData();
+      if (openPayslipAfter) {
+        if (p && p.then) {
+          p.then(function() { viewPayslip(d.empId); });
+        } else {
+          setTimeout(function() { viewPayslip(d.empId); }, 300);
+        }
+      }
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }
