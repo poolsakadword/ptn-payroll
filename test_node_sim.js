@@ -2516,6 +2516,167 @@ function printAllEmployeesBatch() {
 }
 
 
+// ==============================================================================
+// AI PAYROLL ASSISTANT CONTROLLER
+// ==============================================================================
+var isAiChatOpen = false;
+
+function toggleAiChat() {
+  isAiChatOpen = !isAiChatOpen;
+  var drawer = document.getElementById('aiChatDrawer');
+  var btn = document.getElementById('aiChatToggleBtn');
+  if (drawer) {
+    if (isAiChatOpen) {
+      drawer.classList.add('active');
+      if (btn) btn.style.display = 'none';
+      var inp = document.getElementById('aiChatInput');
+      if (inp) setTimeout(function() { inp.focus(); }, 300);
+    } else {
+      drawer.classList.remove('active');
+      if (btn) btn.style.display = 'flex';
+    }
+  }
+}
+
+function clearAiChat() {
+  var body = document.getElementById('aiChatBody');
+  if (body) {
+    body.innerHTML = '<div class="ai-msg bot">' +
+      '<div class="ai-avatar" style="width:28px;height:28px;font-size:14px;background:#e0e7ff;color:#4338ca"><i class="fa-solid fa-robot"></i></div>' +
+      '<div class="ai-msg-bubble">' +
+        'ล้างประวัติการสนทนาเรียบร้อยครับ! สามารถพิมพ์ถามข้อมูลเงินเดือนหรือพนักงานได้เลยครับ 😊' +
+      '</div>' +
+    '</div>';
+  }
+}
+
+function askQuickPrompt(text) {
+  var inp = document.getElementById('aiChatInput');
+  if (inp) {
+    inp.value = text;
+    handleSendAiMessage();
+  }
+}
+
+function formatAiMarkdown(text) {
+  if (!text) return '';
+  var html = text;
+
+  // Escape HTML tags
+  html = html.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Headings
+  html = html.replace(/^### (.*$)/gim, '<strong style="font-size:13.5px;color:#1e3a8a;display:block;margin:6px 0 4px">$1</strong>');
+  html = html.replace(/^## (.*$)/gim, '<strong style="font-size:14px;color:#0f172a;display:block;margin:8px 0 4px">$1</strong>');
+
+  // Bold & Italic
+  html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+  // Markdown Tables
+  if (html.indexOf('|') >= 0) {
+    var lines = html.split('\n');
+    var inTable = false;
+    var tableHtml = '';
+    var newLines = [];
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (line.startsWith('|') && line.endsWith('|')) {
+        if (line.indexOf('---') >= 0) continue; // skip separator row
+        var cells = line.split('|').filter(function(c, idx, arr) { return idx > 0 && idx < arr.length - 1; });
+        if (!inTable) {
+          inTable = true;
+          tableHtml = '<table><thead><tr>';
+          cells.forEach(function(c) { tableHtml += '<th>' + c.trim() + '</th>'; });
+          tableHtml += '</tr></thead><tbody>';
+        } else {
+          tableHtml += '<tr>';
+          cells.forEach(function(c) { tableHtml += '<td>' + c.trim() + '</td>'; });
+          tableHtml += '</tr>';
+        }
+      } else {
+        if (inTable) {
+          tableHtml += '</tbody></table>';
+          newLines.push(tableHtml);
+          inTable = false;
+        }
+        newLines.push(line);
+      }
+    }
+    if (inTable) {
+      tableHtml += '</tbody></table>';
+      newLines.push(tableHtml);
+    }
+    html = newLines.join('\n');
+  }
+
+  // Bullet points
+  html = html.replace(/^\* (.*$)/gim, '<li style="margin-left:14px">$1</li>');
+
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+
+  return html;
+}
+
+function handleSendAiMessage(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  var inp = document.getElementById('aiChatInput');
+  if (!inp) return;
+  var msg = inp.value.trim();
+  if (!msg) return;
+
+  var body = document.getElementById('aiChatBody');
+  if (!body) return;
+
+  // Append user message
+  var userDiv = document.createElement('div');
+  userDiv.className = 'ai-msg user';
+  userDiv.innerHTML = '<div class="ai-msg-bubble">' + esc(msg) + '</div>';
+  body.appendChild(userDiv);
+  inp.value = '';
+
+  // Append typing indicator
+  var typingDiv = document.createElement('div');
+  typingDiv.className = 'ai-typing';
+  typingDiv.id = 'aiTypingIndicator';
+  typingDiv.innerHTML = '<div class="ai-typing-dot"></div><div class="ai-typing-dot"></div><div class="ai-typing-dot"></div>';
+  body.appendChild(typingDiv);
+  body.scrollTop = body.scrollHeight;
+
+  // Call API
+  callApi('askAiAssistant', {
+    message: msg,
+    period: State.period,
+    user: State.currentUser
+  })
+  .then(function(r) {
+    var indicator = document.getElementById('aiTypingIndicator');
+    if (indicator) indicator.remove();
+
+    var botDiv = document.createElement('div');
+    botDiv.className = 'ai-msg bot';
+    var replyHtml = formatAiMarkdown(r.reply || 'ขออภัยครับ ไม่สามารถประมวลผลคำตอบได้ในขณะนี้');
+    botDiv.innerHTML = '<div class="ai-avatar" style="width:28px;height:28px;font-size:14px;background:#e0e7ff;color:#4338ca"><i class="fa-solid fa-robot"></i></div>' +
+      '<div class="ai-msg-bubble">' + replyHtml + '</div>';
+    body.appendChild(botDiv);
+    body.scrollTop = body.scrollHeight;
+  })
+  .catch(function(err) {
+    var indicator = document.getElementById('aiTypingIndicator');
+    if (indicator) indicator.remove();
+
+    var botDiv = document.createElement('div');
+    botDiv.className = 'ai-msg bot';
+    botDiv.innerHTML = '<div class="ai-avatar" style="width:28px;height:28px;font-size:14px;background:#fee2e2;color:#dc2626"><i class="fa-solid fa-triangle-exclamation"></i></div>' +
+      '<div class="ai-msg-bubble" style="color:#dc2626">เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + esc(err.message) + '</div>';
+    body.appendChild(botDiv);
+    body.scrollTop = body.scrollHeight;
+  });
+}
+
+
 console.log("1. Testing functions with Admin user (Full Permissions)...");
 State.currentUser = { username: 'admin', role: 'Admin / HR', permissions: ['all'] };
 State.employees = [

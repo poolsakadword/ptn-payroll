@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=4.6">
+  <link rel="stylesheet" href="css/style.css?v=4.7">
 </head>
 <body>
 
@@ -1125,7 +1125,54 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=4.6"></script>
-  <script src="js/app.js?v=4.6"></script>
+  <script src="js/config.js?v=4.7"></script>
+  <script src="js/app.js?v=4.7"></script>
+  <!-- AI PAYROLL ASSISTANT FLOATING BUTTON & DRAWER -->
+  <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" onclick="toggleAiChat()">
+    <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>
+    <span>ผู้ช่วย AI</span>
+  </button>
+
+  <div id="aiChatDrawer" class="ai-chat-drawer">
+    <div class="ai-chat-header">
+      <div class="ai-chat-title-group">
+        <div class="ai-avatar"><i class="fa-solid fa-robot"></i></div>
+        <div>
+          <h4 class="ai-chat-name">PTN AI Assistant</h4>
+          <div class="ai-chat-status">พร้อมให้คำปรึกษา &amp; วิเคราะห์ข้อมูล</div>
+        </div>
+      </div>
+      <div class="ai-chat-actions">
+        <button type="button" class="ai-header-btn" onclick="clearAiChat()" title="ล้างประวัติแชท"><i class="fa-solid fa-rotate-left"></i></button>
+        <button type="button" class="ai-header-btn" onclick="toggleAiChat()" title="ปิด"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+    </div>
+
+    <!-- Quick Suggestion Chips -->
+    <div class="ai-quick-chips">
+      <button type="button" class="ai-chip" onclick="askQuickPrompt('สรุปภาพรวมงวดปัจจุบัน')">📊 สรุปภาพรวมงวด</button>
+      <button type="button" class="ai-chip" onclick="askQuickPrompt('สถิติพนักงานแยกตามแผนก')">🏢 พนักงานแยกแผนก</button>
+      <button type="button" class="ai-chip" onclick="askQuickPrompt('ใครทำ OT สูงสุดในงวดนี้')">⏱️ ท็อป OT งวดนี้</button>
+      <button type="button" class="ai-chip" onclick="askQuickPrompt('ใครได้เบี้ยขยันบ้าง')">🌟 เบี้ยขยันงวดนี้</button>
+      <button type="button" class="ai-chip" onclick="askQuickPrompt('สรุปสถิติขาดลามาสายปีนี้')">📅 ขาด/ลาสะสม</button>
+    </div>
+
+    <!-- Messages Area -->
+    <div class="ai-chat-body" id="aiChatBody">
+      <div class="ai-msg bot">
+        <div class="ai-avatar" style="width:28px;height:28px;font-size:14px;background:#e0e7ff;color:#4338ca"><i class="fa-solid fa-robot"></i></div>
+        <div class="ai-msg-bubble">
+          สวัสดีครับ! ผมคือ <strong>PTN AI Assistant</strong> ผู้ช่วยระบบเงินเดือน สามารถถามสรุปยอดงวด, ค้นหาพนักงาน, ตรวจสอบสถิติ OT ขาดลา หรือวิเคราะห์ข้อมูลได้เลยครับ 😊
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer Input Bar -->
+    <form class="ai-chat-footer" onsubmit="handleSendAiMessage(event)">
+      <input type="text" id="aiChatInput" class="ai-chat-input" placeholder="พิมพ์คำถามเกี่ยวกับเงินเดือนหรือพนักงาน..." autocomplete="off">
+      <button type="submit" class="ai-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
+    </form>
+  </div>
+
 </body>
 </html>

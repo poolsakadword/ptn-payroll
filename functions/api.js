@@ -754,6 +754,156 @@ async function handleAction(db, action, params) {
     }
 
     // 8. COMPANY INFO
+        // 12. AI PAYROLL ASSISTANT
+    case 'askAiAssistant': {
+      const userMsg = (params.message || '').trim();
+      const currentPeriod = period;
+      const currentUser = params.user || {};
+      const userRole = currentUser.role || 'User';
+      const perms = currentUser.permissions || [];
+      const canViewSalary = (currentUser.username === 'admin' || userRole.indexOf('Admin') >= 0 || perms.includes('all') || perms.includes('view_salary'));
+
+      if (!userMsg) {
+        return { success: false, message: 'กรุณาระบุคำถาม' };
+      }
+
+      // Gather Live Data Context from D1
+      const employees = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      const calcs = (await db.prepare('SELECT * FROM payroll_calcs WHERE period = ?').bind(currentPeriod).all()).results || [];
+      const inputs = (await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(currentPeriod).all()).results || [];
+      const compName = (await db.prepare('SELECT value FROM settings WHERE key = "CompanyName"').first())?.value || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+      const isPeriodClosed = (await db.prepare('SELECT value FROM settings WHERE key = ?').bind(`Period_Status_${currentPeriod}`).first())?.value?.startsWith('CLOSED') || false;
+
+      // Department Aggregation
+      const deptCounts = {};
+      employees.forEach(e => {
+        const d = e.department || 'ไม่ระบุ';
+        deptCounts[d] = (deptCounts[d] || 0) + 1;
+      });
+
+      // Calculate totals for current period
+      const totalEmployees = employees.length;
+      const totalGross = calcs.reduce((a, b) => a + Number(b.gross_pay || 0), 0);
+      const totalDeductions = calcs.reduce((a, b) => a + Number(b.total_deductions || 0), 0);
+      const totalNet = calcs.reduce((a, b) => a + Number(b.net_pay || 0), 0);
+      const totalOtPay = calcs.reduce((a, b) => a + Number(b.ot_pay || 0), 0);
+      const totalOtHours = inputs.reduce((a, b) => a + Number(b.ot_hours || 0), 0);
+      const totalAllowance = calcs.reduce((a, b) => a + Number(b.allowance || 0), 0);
+      const totalBonus = calcs.reduce((a, b) => a + Number(b.bonus || 0), 0);
+      const totalAbsent = inputs.reduce((a, b) => a + Number(b.absent_days || 0), 0);
+      const totalLeave = inputs.reduce((a, b) => a + Number(b.leave_days || 0), 0);
+      const totalSick = inputs.reduce((a, b) => a + Number(b.sick_leave_days || 0), 0);
+      const totalLate = inputs.reduce((a, b) => a + Number(b.late_deduct || 0), 0);
+
+      // Top OT Earners
+      const topOtList = [...inputs].filter(i => Number(i.ot_hours) > 0).sort((a, b) => Number(b.ot_hours) - Number(a.ot_hours)).slice(0, 5).map(i => {
+        const emp = employees.find(e => e.emp_id === i.emp_id) || {};
+        return {
+          empId: i.emp_id,
+          name: emp.full_name || i.emp_name,
+          dept: emp.department || '-',
+          otHours: Number(i.ot_hours),
+          otRate: Number(i.ot_rate || 40),
+          otPay: canViewSalary ? (Number(i.ot_hours) * Number(i.ot_rate || 40)) : '฿***'
+        };
+      });
+
+      // Allowance Earners
+      const allowanceList = [...inputs].filter(i => Number(i.allowance) > 0).map(i => {
+        const emp = employees.find(e => e.emp_id === i.emp_id) || {};
+        return {
+          empId: i.emp_id,
+          name: emp.full_name || i.emp_name,
+          dept: emp.department || '-',
+          allowance: canViewSalary ? `฿${Number(i.allowance).toLocaleString('th-TH', {minimumFractionDigits:2})}` : '฿***'
+        };
+      });
+
+      // Absent / Leave Staff
+      const leaveList = [...inputs].filter(i => Number(i.absent_days) > 0 || Number(i.leave_days) > 0 || Number(i.sick_leave_days) > 0 || Number(i.late_deduct) > 0).map(i => {
+        const emp = employees.find(e => e.emp_id === i.emp_id) || {};
+        return {
+          empId: i.emp_id,
+          name: emp.full_name || i.emp_name,
+          absent: Number(i.absent_days || 0),
+          leave: Number(i.leave_days || 0),
+          sick: Number(i.sick_leave_days || 0),
+          lateDeduct: canViewSalary ? `฿${Number(i.late_deduct || 0).toLocaleString('th-TH', {minimumFractionDigits:2})}` : (Number(i.late_deduct) > 0 ? 'มีหักสาย' : '-')
+        };
+      });
+
+      // Intelligent Response Generator Engine
+      const q = userMsg.toLowerCase();
+      let reply = '';
+
+      if (q.includes('สรุป') && (q.includes('งวด') || q.includes('ภาพรวม') || q.includes('ประจำเดือน'))) {
+        reply = `### 📊 สรุปภาพรวมงวดประจำเดือน **${currentPeriod}**\n` +
+          `* 🏢 **บริษัท**: ${compName}\n` +
+          `* 🔒 **สถานะงวด**: ${isPeriodClosed ? '🔴 ปิดงวดแล้ว (ล็อคผลการคำนวณ)' : '🟢 กำลังเปิดคำนวณ (Open)'}\n` +
+          `* 👥 **พนักงานทั้งหมด**: ${totalEmployees} คน (คำนวณแล้ว ${calcs.length} คน)\n` +
+          `* ⏱️ **รวมชั่วโมง OT**: ${totalOtHours} ชม. (เงิน OT รวม: ${canViewSalary ? '฿' + totalOtPay.toLocaleString('th-TH', {minimumFractionDigits:2}) : '฿***'})\n` +
+          `* 🌟 **รวมเบี้ยขยัน**: ${canViewSalary ? '฿' + totalAllowance.toLocaleString('th-TH', {minimumFractionDigits:2}) : '฿***'}\n` +
+          (canViewSalary ? `* 💰 **ยอดเงินได้รวม (Gross)**: **฿${totalGross.toLocaleString('th-TH', {minimumFractionDigits:2})}**\n` +
+          `* 🧾 **รวมหักทั้งหมด**: ฿${totalDeductions.toLocaleString('th-TH', {minimumFractionDigits:2})}\n` +
+          `* 💵 **ยอดจ่ายสุทธิ (Net Pay)**: **฿${totalNet.toLocaleString('th-TH', {minimumFractionDigits:2})}**` : `* 🔒 *ข้อมูลตัวเลขเงินเดือนและยอดจ่ายถูกปิดบังตามสิทธิ์ความปลอดภัย*`);
+      } else if (q.includes('แผนก') || q.includes('กี่คน') || q.includes('ตำแหน่ง')) {
+        let deptRows = Object.entries(deptCounts).map(([d, c]) => `| ${d} | **${c} คน** | ${((c/totalEmployees)*100).toFixed(1)}% |`).join('\n');
+        reply = `### 🏢 สถิติพนักงานแยกตามแผนก (${totalEmployees} คน)\n\n` +
+          `| แผนก | จำนวนพนักงาน | สัดส่วน |\n|---|---|---|\n` + deptRows +
+          `\n\n💡 *แผนกหลักของบริษัทคือ **โกดัง** (${deptCounts['โกดัง'] || 0} คน)*`;
+      } else if (q.includes('ot') || q.includes('โอที') || q.includes('ล่วงเวลา')) {
+        if (topOtList.length === 0) {
+          reply = `### ⏱️ ข้อมูลค่าล่วงเวลา (OT) งวด **${currentPeriod}**\nยังไม่มีการบันทึกชั่วโมง OT ในงวดนี้ครับ`;
+        } else {
+          let otRows = topOtList.map((x, idx) => `| ${idx+1} | ${x.empId} | ${x.name} | ${x.dept} | **${x.otHours} ชม.** | ${x.otPay} |`).join('\n');
+          reply = `### ⏱️ อันดับพนักงานที่ทำ OT สูงสุดงวด **${currentPeriod}**\n\n` +
+            `* รวมชั่วโมง OT ทั้งบริษัท: **${totalOtHours} ชั่วโมง**\n` +
+            `* รวมเงิน OT: **${canViewSalary ? '฿' + totalOtPay.toLocaleString('th-TH', {minimumFractionDigits:2}) : '฿***'}**\n\n` +
+            `| อันดับ | รหัส | ชื่อ-นามสกุล | แผนก | ชม. OT | รวมเงิน OT |\n|:---:|---|---|---|:---:|:---:|\n` + otRows;
+        }
+      } else if (q.includes('เบี้ยขยัน') || q.includes('โบนัส')) {
+        if (allowanceList.length === 0) {
+          reply = `### 🌟 ข้อมูลเบี้ยขยันและโบนัสงวด **${currentPeriod}**\nงวดนี้ยังไม่มีพนักงานที่ได้รับเบี้ยขยันครับ`;
+        } else {
+          let alRows = allowanceList.map((x, idx) => `| ${idx+1} | ${x.empId} | ${x.name} | ${x.dept} | ${x.allowance} |`).join('\n');
+          reply = `### 🌟 รายชื่อพนักงานที่ได้รับเบี้ยขยันงวด **${currentPeriod}** (${allowanceList.length} คน)\n\n` +
+            `* รวมเงินเบี้ยขยันทั้งหมด: **${canViewSalary ? '฿' + totalAllowance.toLocaleString('th-TH', {minimumFractionDigits:2}) : '฿***'}**\n\n` +
+            `| # | รหัส | ชื่อ-นามสกุล | แผนก | เบี้ยขยัน |\n|:---:|---|---|---|:---:|\n` + alRows;
+        }
+      } else if (q.includes('ขาด') || q.includes('ลา') || q.includes('สาย') || q.includes('ป่วย')) {
+        if (leaveList.length === 0) {
+          reply = `### 📅 สถิติการขาด / ลา / มาสาย งวด **${currentPeriod}**\nยอดเยี่ยมมากครับ! งวดนี้ไม่มีพนักงานขาดงาน ลากิจ หรือลาป่วยเลยครับ 👏✨`;
+        } else {
+          let lvRows = leaveList.map((x, idx) => `| ${idx+1} | ${x.empId} | ${x.name} | ${x.absent} | ${x.leave} | ${x.sick} | ${x.lateDeduct} |`).join('\n');
+          reply = `### 📅 สรุปรายการ ขาด / ลา / มาสาย งวด **${currentPeriod}** (${leaveList.length} คน)\n\n` +
+            `* 🔴 รวมขาดงาน: **${totalAbsent} วัน** (หัก 1.5 เท่า)\n` +
+            `* 🟡 รวมลากิจ: **${totalLeave} วัน**\n` +
+            `* 🟢 รวมลาป่วย: **${totalSick} วัน**\n\n` +
+            `| # | รหัส | ชื่อ-นามสกุล | ขาด (วัน) | ลากิจ (วัน) | ลาป่วย (วัน) | หักสาย |\n|:---:|---|---|:---:|:---:|:---:|:---:|\n` + lvRows;
+        }
+      } else if (q.includes('ช่วย') || q.includes('ทำอะไรได้') || q.includes('help')) {
+        reply = `### 🤖 ผมคือ PTN AI Payroll Assistant\nคุณสามารถพิมพ์ถามข้อมูลได้หลากหลาย เช่น:\n\n` +
+          `* 📊 *"สรุปภาพรวมงวดปัจจุบัน"* &rarr; รายงานยอดเงินรวม, สถานะงวด, จำนวนพนักงาน\n` +
+          `* 🏢 *"สถิติพนักงานแยกตามแผนก"* &rarr; แจกแจงจำนวนคนในแต่ละแผนก\n` +
+          `* ⏱️ *"ใครทำ OT สูงสุดในงวดนี้"* &rarr; จัดอันดับชั่วโมง OT รายคน\n` +
+          `* 🌟 *"ใครได้เบี้ยขยันบ้าง"* &rarr; รายชื่อคนได้รับเบี้ยขยัน\n` +
+          `* 📅 *"สรุปสถิติขาดลามาสาย"* &rarr; สรุปวันขาด ลา ป่วย และสายงวดนี้`;
+      } else {
+        // Fallback intelligent query
+        reply = `### 💡 ผลการค้นหาข้อมูลสำหรับ: "${userMsg}"\n` +
+          `* 🏢 **บริษัท**: ${compName}\n` +
+          `* 📅 **งวดปัจจุบัน**: ${currentPeriod} (${isPeriodClosed ? 'ปิดงวดแล้ว' : 'กำลังเปิดคำนวณ'})\n` +
+          `* 👥 **พนักงานทั้งหมด**: ${totalEmployees} คน\n` +
+          (canViewSalary ? `* 💰 **ยอดจ่ายสุทธิประจำงวด**: **฿${totalNet.toLocaleString('th-TH', {minimumFractionDigits:2})}**\n` : '') +
+          `\nท่านสามารถกดปุ่มหัวข้อด้านบน หรือพิมพ์ถาม เช่น *"สรุปภาพรวมงวด"*, *"ใครทำ OT มากที่สุด"*, หรือ *"สถิติแยกแผนก"* ได้เลยครับ 😊`;
+      }
+
+      return {
+        success: true,
+        reply: reply
+      };
+    }
+
     case 'saveCompanyInfo': {
       const cfg = params.settings || {};
       if (cfg.companyName) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CompanyName", ?)').bind(cfg.companyName).run();
