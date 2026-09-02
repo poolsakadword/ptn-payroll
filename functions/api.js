@@ -1004,6 +1004,49 @@ async function handleAction(db, action, params) {
       };
     }
 
+        // 15. BATCH IMPORT ATTENDANCE CSV
+    case 'importAttendanceBatch': {
+      const records = params.records || [];
+      if (!Array.isArray(records) || records.length === 0) {
+        return { success: false, message: 'ไม่พบรายการข้อมูลที่ต้องการนำเข้า' };
+      }
+
+      const emps = (await db.prepare('SELECT * FROM employees').all()).results || [];
+      let importedCount = 0;
+
+      for (const r of records) {
+        const empId = (r.empId || '').trim();
+        if (!empId) continue;
+        const emp = emps.find(e => e.emp_id === empId) || {};
+        const empName = emp.full_name || r.empName || '';
+        const baseSal = Number(r.baseSalary) || Number(emp.base_salary) || 0;
+        const pfRate = (r.pfRate !== undefined && r.pfRate !== '') ? Number(r.pfRate) : (emp.pf_rate !== undefined ? Number(emp.pf_rate) : 0.05);
+        const pfAmt = pfRate > 0 ? (Number(r.pfAmount) || Math.round(baseSal * pfRate * 100) / 100) : 0;
+        const sso = (r.sso !== undefined && r.sso !== '') ? Number(r.sso) : (emp.default_sso !== undefined ? Number(emp.default_sso) : 750);
+        const tax = (r.tax !== undefined && r.tax !== '') ? Number(r.tax) : (Number(emp.default_tax) || 0);
+
+        await db.prepare(`
+          INSERT OR REPLACE INTO monthly_inputs (
+            period, emp_id, emp_name, base_salary, pf_rate, pf_amount,
+            absent_days, leave_days, sick_leave_days, late_deduct,
+            ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct,
+            sso, tax
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          period, empId, empName, baseSal, pfRate, pfAmt,
+          Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
+          Number(r.otHours) || 0, Number(r.otRate) || 40, Number(r.allowance) || 0, Number(r.bonus) || 0,
+          Number(r.advanceDeduct) || 0, Number(r.otherDeduct) || 0, sso, tax
+        ).run();
+
+        importedCount++;
+      }
+
+      await calculateAndSavePayroll(db, period);
+      await logSystemActivity(db, params.username || 'Admin', 'ATTENDANCE_IMPORT', `นำเข้าข้อมูลเวลาทำงาน ${importedCount} รายการ งวด ${period}`);
+      return { success: true, count: importedCount, message: `นำเข้าข้อมูลเวลาสำเร็จ ${importedCount} รายการ และคำนวณเงินเดือนเรียบร้อยแล้ว` };
+    }
+
     case 'saveCompanyInfo': {
       const cfg = params.settings || {};
       if (cfg.companyName) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CompanyName", ?)').bind(cfg.companyName).run();

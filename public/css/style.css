@@ -1135,4 +1135,36 @@ footer {
     page-break-inside: avoid !important;
   }
 
+
+  /* MONTHLY PAYROLL SUMMARY SIGN-OFF PRINT MODE */
+  body.printing-payroll-summary {
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+  }
+  body.printing-payroll-summary @page {
+    size: A4 landscape;
+    margin: 8mm 10mm;
+  }
+  body.printing-payroll-summary #appShell,
+  body.printing-payroll-summary header,
+  body.printing-payroll-summary nav,
+  body.printing-payroll-summary .nav-tab-container,
+  body.printing-payroll-summary .period-bar,
+  body.printing-payroll-summary .ai-chat-btn,
+  body.printing-payroll-summary .ai-chat-drawer,
+  body.printing-payroll-summary .modal-overlay {
+    display: none !important;
+  }
+  body.printing-payroll-summary #payrollSignoffPrintArea {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    background: #ffffff !important;
+  }
+  body.printing-payroll-summary #payrollSignoffPrintArea * {
+    visibility: visible !important;
+  }
+
 }

@@ -1568,6 +1568,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
     address: document.getElementById('mAddress').value.trim(),
     department: document.getElementById('mDepartment').value.trim(),
     position: document.getElementById('mPosition').value.trim(),
+    status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
     baseSalary: baseSal,
     bankName: document.getElementById('mBankName').value.trim(),
     bankAccount: document.getElementById('mBankAccount').value.trim(),
@@ -2861,3 +2862,278 @@ function openActivityLogModal() {
       showToast('Error: ' + err.message, 'error');
     });
 }
+
+
+// ==============================================================================
+// MONTHLY PAYROLL SUMMARY SIGN-OFF SHEET CONTROLLER
+// ==============================================================================
+function printMonthlyPayrollSummary() {
+  if (!hasPermission('view_salary')) {
+    showToast('คุณไม่มีสิทธิ์พิมพ์ใบสรุปยอดเงินเดือน', 'warning');
+    return;
+  }
+  if (!State.payrollList || State.payrollList.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var compAddr = State.company.address || '';
+  if (document.getElementById('signoffCompName')) document.getElementById('signoffCompName').textContent = compName;
+  if (document.getElementById('signoffCompAddr')) document.getElementById('signoffCompAddr').textContent = compAddr ? 'ที่อยู่: ' + compAddr : '';
+  if (document.getElementById('signoffPeriodDisplay')) document.getElementById('signoffPeriodDisplay').textContent = State.period;
+
+  var tbody = document.getElementById('signoffTableBody');
+  var tfoot = document.getElementById('signoffTableFoot');
+  if (!tbody) return;
+
+  var sumBase = 0, sumOt = 0, sumAllow = 0, sumBonus = 0, sumLeaveDed = 0;
+  var sumGross = 0, sumSso = 0, sumPf = 0, sumTax = 0, sumOtherDed = 0, sumTotDed = 0, sumNet = 0;
+
+  var h = '';
+  State.payrollList.forEach(function(r, idx) {
+    var base = Number(r.baseSalary) || 0;
+    var ot = Number(r.otPay) || 0;
+    var allow = Number(r.allowance) || 0;
+    var bon = Number(r.bonus) || 0;
+    var lDed = Number(r.leaveDeduction) || 0;
+    var grs = Number(r.grossPay) || 0;
+    var sso = Number(r.sso) || 0;
+    var pf = Number(r.pf) || 0;
+    var tax = Number(r.tax) || 0;
+    var othDed = (Number(r.advanceDeduct) || 0) + (Number(r.otherDeduct) || 0);
+    var totDed = Number(r.totalDeductions) || 0;
+    var net = Number(r.netPay) || 0;
+
+    sumBase += base; sumOt += ot; sumAllow += allow; sumBonus += bon; sumLeaveDed += lDed;
+    sumGross += grs; sumSso += sso; sumPf += pf; sumTax += tax; sumOtherDed += othDed; sumTotDed += totDed; sumNet += net;
+
+    var emp = State.employees.find(function(e) { return e.empId === r.empId; }) || {};
+    var bankInfo = (r.bankName || emp.bankName || '-') + ' ' + (r.bankAccount || emp.bankAccount || '-');
+
+    h += '<tr style="border-bottom:1px solid #e2e8f0">' +
+      '<td style="padding:3px;text-align:center">' + (idx + 1) + '</td>' +
+      '<td style="padding:3px;font-family:monospace;font-weight:700">' + esc(r.empId) + '</td>' +
+      '<td style="padding:3px;font-weight:700">' + esc(r.name) + '</td>' +
+      '<td style="padding:3px">' + esc(r.department || '-') + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(base) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(ot) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(allow) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(bon) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(lDed) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace;font-weight:700">' + fmt(grs) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sso) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace;color:#2563eb">' + fmt(pf) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(tax) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(othDed) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace;font-weight:700;color:#dc2626">' + fmt(totDed) + '</td>' +
+      '<td style="padding:3px;text-align:right;font-family:monospace;font-weight:700;color:#15803d">' + fmt(net) + '</td>' +
+      '<td style="padding:3px;font-size:7pt;color:#475569">' + esc(bankInfo) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = h;
+
+  if (tfoot) {
+    tfoot.innerHTML = '<tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #000;border-bottom:2px solid #000">' +
+      '<td colspan="4" style="padding:5px 3px;text-align:center">รวมยอดทั้งสิ้น (' + State.payrollList.length + ' คน)</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumBase) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumOt) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumAllow) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumBonus) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumLeaveDed) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumGross) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumSso) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#2563eb">' + fmt(sumPf) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumTax) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumOtherDed) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumTotDed) + '</td>' +
+      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#15803d">' + fmt(sumNet) + '</td>' +
+      '<td></td>' +
+    '</tr>';
+  }
+
+  document.body.classList.remove('printing-payslip');
+  document.body.classList.remove('printing-history');
+  document.body.classList.remove('printing-yearly-summary');
+  document.body.classList.remove('printing-batch-history');
+  document.body.classList.remove('printing-50twi');
+  document.body.classList.add('printing-payroll-summary');
+
+  window.print();
+
+  setTimeout(function() {
+    document.body.classList.remove('printing-payroll-summary');
+  }, 1000);
+}
+
+// ==============================================================================
+// ATTENDANCE BATCH IMPORT CONTROLLER
+// ==============================================================================
+var parsedAttendanceRecords = [];
+
+function openImportAttendanceModal() {
+  if (!hasPermission('edit_inputs')) {
+    showToast('คุณไม่มีสิทธิ์นำเข้าข้อมูลเวลาทำงาน', 'warning');
+    return;
+  }
+  parsedAttendanceRecords = [];
+  var fileInp = document.getElementById('attendanceFileInput');
+  if (fileInp) fileInp.value = '';
+  var prevArea = document.getElementById('attendanceImportPreviewArea');
+  if (prevArea) prevArea.style.display = 'none';
+  var btnConfirm = document.getElementById('btnConfirmImportAttendance');
+  if (btnConfirm) btnConfirm.style.display = 'none';
+  openModal('importAttendanceModal');
+}
+
+function downloadAttendanceTemplateCsv() {
+  var csv = '\uFEFF';
+  csv += 'รหัสพนักงาน,ชื่อ-นามสกุล,แผนก,ขาด(วัน),ลากิจ(วัน),ลาป่วย(วัน),หักสาย(บาท),ชั่วโมงOT,เบี้ยขยัน\n';
+
+  var emps = State.employees.filter(function(e) { return e.status !== 'Resigned'; });
+  emps.forEach(function(e) {
+    csv += [
+      e.empId,
+      '"' + (e.fullName || '').replace(/"/g, '""') + '"',
+      '"' + (e.department || '').replace(/"/g, '""') + '"',
+      '0', '0', '0', '0', '0', '0'
+    ].join(',') + '\n';
+  });
+
+  var filename = 'Attendance_Template_' + State.period.replace(/\s+/g, '_') + '.csv';
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์แม่แบบเวลาทำงานสำเร็จ');
+}
+
+function handleAttendanceFileSelected(e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  var reader = new FileReader();
+  reader.onload = function(evt) {
+    try {
+      var text = evt.target.result;
+      parseAttendanceCsvText(text);
+    } catch(err) {
+      showToast('ไม่สามารถอ่านไฟล์ได้: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function parseAttendanceCsvText(text) {
+  var lines = text.split(/\r?\n/).filter(function(l) { return l.trim().length > 0; });
+  if (lines.length <= 1) {
+    showToast('ไฟล์ไม่มีข้อมูล', 'warning');
+    return;
+  }
+
+  parsedAttendanceRecords = [];
+  var tbody = document.getElementById('attendanceImportPreviewBody');
+  if (!tbody) return;
+
+  var h = '';
+  // Skip header line
+  for (var i = 1; i < lines.length; i++) {
+    var cols = lines[i].split(',').map(function(c) { return c.trim().replace(/^["']|["']$/g, ''); });
+    if (cols.length < 2) continue;
+
+    var empId = cols[0];
+    var empMatch = State.employees.find(function(e) { return e.empId === empId; }) || {};
+    var empName = cols[1] || empMatch.fullName || empId;
+    var abs = Number(cols[3]) || 0;
+    var lev = Number(cols[4]) || 0;
+    var sck = Number(cols[5]) || 0;
+    var late = Number(cols[6]) || 0;
+    var otH = Number(cols[7]) || 0;
+    var allow = Number(cols[8]) || 0;
+
+    parsedAttendanceRecords.push({
+      empId: empId,
+      empName: empName,
+      absentDays: abs,
+      leaveDays: lev,
+      sickLeaveDays: sck,
+      lateDeduct: late,
+      otHours: otH,
+      allowance: allow
+    });
+
+    h += '<tr>' +
+      '<td class="font-mono font-bold">' + esc(empId) + '</td>' +
+      '<td>' + esc(empName) + '</td>' +
+      '<td class="text-right font-mono text-red">' + abs + '</td>' +
+      '<td class="text-right font-mono">' + lev + '</td>' +
+      '<td class="text-right font-mono text-red">' + sck + '</td>' +
+      '<td class="text-right font-mono text-red">' + fmt(late) + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + otH + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + fmt(allow) + '</td>' +
+    '</tr>';
+  }
+
+  tbody.innerHTML = h;
+  if (document.getElementById('importPreviewCount')) document.getElementById('importPreviewCount').textContent = parsedAttendanceRecords.length;
+  if (document.getElementById('importPreviewPeriod')) document.getElementById('importPreviewPeriod').textContent = State.period;
+
+  var prevArea = document.getElementById('attendanceImportPreviewArea');
+  if (prevArea) prevArea.style.display = 'block';
+  var btnConfirm = document.getElementById('btnConfirmImportAttendance');
+  if (btnConfirm) btnConfirm.style.display = 'inline-flex';
+
+  showToast('อ่านข้อมูลสำเร็จ ' + parsedAttendanceRecords.length + ' รายการ กรุณาตรวจสอบก่อนกดยืนยัน', 'info');
+}
+
+function confirmImportAttendance() {
+  if (parsedAttendanceRecords.length === 0) {
+    showToast('ไม่มีข้อมูลที่พร้อมนำเข้า', 'warning');
+    return;
+  }
+
+  showToast('กำลังนำเข้าข้อมูลและคำนวณเงินเดือน...', 'info');
+  callApi('importAttendanceBatch', {
+    period: State.period,
+    records: parsedAttendanceRecords,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+  .then(function(r) {
+    if (!r.success) {
+      showToast(r.message || 'เกิดข้อผิดพลาดในการนำเข้า', 'error');
+      return;
+    }
+    showToast(r.message, 'success');
+    closeModal('importAttendanceModal');
+    loadCurrentPeriodInputs();
+    runPayrollRecalc();
+  })
+  .catch(function(err) {
+    showToast('Error: ' + err.message, 'error');
+  });
+}
+
+// ==============================================================================
+// SESSION TIMEOUT CONTROLLER (AUTO-LOGOUT 30 MINS)
+// ==============================================================================
+var idleTimer = null;
+var IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+
+function resetIdleTimer() {
+  if (idleTimer) clearTimeout(idleTimer);
+  if (!State.currentUser || !State.currentUser.username) return;
+
+  idleTimer = setTimeout(function() {
+    if (State.currentUser && State.currentUser.username) {
+      handleLogout();
+      showToast('⚠️ คุณไม่ได้ใช้งานระบบเกิน 30 นาที ระบบได้ทำการล็อกเอาต์อัตโนมัติเพื่อความปลอดภัย', 'warning');
+    }
+  }, IDLE_TIMEOUT_MS);
+}
+
+['mousemove', 'keydown', 'touchstart', 'click', 'scroll'].forEach(function(evt) {
+  window.addEventListener(evt, resetIdleTimer, { passive: true });
+});

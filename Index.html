@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=5.1">
+  <link rel="stylesheet" href="css/style.css?v=5.2">
   <!-- PWA & Mobile Web App Meta -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1e3a8a">
@@ -206,6 +206,9 @@
               </div>
               <button type="button" class="btn btn-slate" onclick="exportToCSV('payroll')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button type="button" class="btn btn-primary" onclick="printMonthlyPayrollSummary()" style="background:#1e40af;border-color:#1e40af;font-weight:700" title="พิมพ์ใบสรุปยอดจ่ายเงินเดือนประจำงวดพร้อมช่องลงนาม 3 ฝ่าย">
+                <i class="fa-solid fa-file-signature"></i> พิมพ์ใบสรุปงวด (A4)
               </button>
               <!-- TTB Bank Export Buttons -->
               <button type="button" class="btn btn-slate" style="background:#0284c7;color:#ffffff;border-color:#0284c7;font-weight:700" onclick="exportTtbPayrollCsv()" title="ดาวน์โหลดไฟล์ CSV สำหรับอัปโหลดเข้า ttb business one">
@@ -1141,8 +1144,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=5.1"></script>
-  <script src="js/app.js?v=5.1"></script>
+  <script src="js/config.js?v=5.2"></script>
+  <script src="js/app.js?v=5.2"></script>
   <!-- AI PAYROLL ASSISTANT FLOATING BUTTON & DRAWER -->
   <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" onclick="toggleAiChat()">
     <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>
@@ -1311,6 +1314,129 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-slate" onclick="closeModal('activityLogModal')">ปิด</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 7. ATTENDANCE IMPORT MODAL -->
+  <div class="modal-overlay" id="importAttendanceModal">
+    <div class="modal-card wide" style="max-width:760px">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-file-import" style="color:#059669"></i> นำเข้าข้อมูลเวลาทำงานจาก Excel / CSV</h3>
+        <button type="button" class="modal-close-btn" onclick="closeModal('importAttendanceModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="padding:20px">
+        <div style="background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:var(--radius-md);padding:14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="font-weight:700;color:#1e40af;font-size:13px"><i class="fa-solid fa-circle-info"></i> รูปแบบไฟล์ที่รองรับ</div>
+            <div style="font-size:11.5px;color:#3b82f6">คอลัมน์: รหัสพนักงาน, ขาด(วัน), ลากิจ(วัน), ลาป่วย(วัน), หักสาย(บาท), ชม.OT, เบี้ยขยัน</div>
+          </div>
+          <button type="button" class="btn btn-slate btn-sm" onclick="downloadAttendanceTemplateCsv()" style="background:#ffffff;color:#1e40af;border-color:#bfdbfe;font-weight:700">
+            <i class="fa-solid fa-download"></i> ดาวน์โหลดแม่แบบ (Template CSV)
+          </button>
+        </div>
+
+        <div style="border:2px dashed #cbd5e1;border-radius:12px;padding:28px 20px;text-align:center;background:#f8fafc;cursor:pointer" onclick="document.getElementById('attendanceFileInput').click()">
+          <i class="fa-solid fa-cloud-arrow-up" style="font-size:36px;color:#059669;margin-bottom:8px"></i>
+          <div style="font-weight:700;color:#0f172a;font-size:14px">คลิกเพื่อเลือกไฟล์ CSV หรือ Excel (.csv)</div>
+          <div style="font-size:11.5px;color:#64748b;margin-top:4px">ระบบจะอ่านและแสดงตัวอย่างข้อมูลก่อนบันทึก</div>
+          <input type="file" id="attendanceFileInput" accept=".csv,text/csv" style="display:none" onchange="handleAttendanceFileSelected(event)">
+        </div>
+
+        <!-- Import Preview Container -->
+        <div id="attendanceImportPreviewArea" style="display:none;margin-top:16px">
+          <div style="font-weight:700;color:#0f172a;font-size:13px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+            <span><i class="fa-solid fa-table-list"></i> ตัวอย่างข้อมูลที่อ่านได้ (<span id="importPreviewCount">0</span> คน)</span>
+            <span class="period-pill" style="font-size:11px">งวด: <strong id="importPreviewPeriod">-</strong></span>
+          </div>
+          <div class="table-wrapper" style="max-height:260px">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width:70px">รหัส</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th class="text-right" style="width:65px">ขาด (วัน)</th>
+                  <th class="text-right" style="width:65px">ลากิจ</th>
+                  <th class="text-right" style="width:65px">ลาป่วย</th>
+                  <th class="text-right" style="width:75px">หักสาย (฿)</th>
+                  <th class="text-right" style="width:75px">OT (ชม.)</th>
+                  <th class="text-right" style="width:75px">เบี้ยขยัน</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceImportPreviewBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center">
+        <button type="button" class="btn btn-slate" onclick="closeModal('importAttendanceModal')">ยกเลิก</button>
+        <button type="button" id="btnConfirmImportAttendance" class="btn btn-success" style="display:none" onclick="confirmImportAttendance()">
+          <i class="fa-solid fa-check-double"></i> ยืนยันนำเข้าและคำนวณเงินเดือนทันที
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. MONTHLY PAYROLL SUMMARY SIGN-OFF SHEET PRINT VIEW -->
+  <div id="payrollSignoffPrintArea" style="display:none">
+    <div style="font-family:'Sarabun',sans-serif;color:#000;padding:10px 15px">
+      <!-- Sheet Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px">
+        <div>
+          <h2 style="font-size:15pt;font-weight:700;margin:0" id="signoffCompName">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>
+          <div style="font-size:9pt;margin-top:2px" id="signoffCompAddr">ที่อยู่: -</div>
+        </div>
+        <div style="text-align:right">
+          <h3 style="font-size:13pt;font-weight:700;margin:0;color:#1e3a8a">ใบสรุปการจ่ายเงินเดือนพนักงาน (Payroll Summary Sheet)</h3>
+          <div style="font-size:10pt;font-weight:700;margin-top:2px">ประจำงวดเดือน: <span id="signoffPeriodDisplay">-</span></div>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <table style="width:100%;border-collapse:collapse;font-size:7.5pt;margin-bottom:14px" id="signoffTable">
+        <thead>
+          <tr style="background:#f1f5f9;border-top:1.5px solid #000;border-bottom:1.5px solid #000">
+            <th style="padding:4px 3px;text-align:center;width:25px">#</th>
+            <th style="padding:4px 3px;text-align:left;width:55px">รหัส</th>
+            <th style="padding:4px 3px;text-align:left;width:115px">ชื่อ-นามสกุล</th>
+            <th style="padding:4px 3px;text-align:left;width:65px">แผนก</th>
+            <th style="padding:4px 3px;text-align:right;width:65px">เงินเดือนฐาน</th>
+            <th style="padding:4px 3px;text-align:right;width:55px">OT (40฿)</th>
+            <th style="padding:4px 3px;text-align:right;width:55px">เบี้ยขยัน</th>
+            <th style="padding:4px 3px;text-align:right;width:55px">โบนัส</th>
+            <th style="padding:4px 3px;text-align:right;width:65px">หักขาด/ลา/สาย</th>
+            <th style="padding:4px 3px;text-align:right;width:70px;font-weight:700">Gross</th>
+            <th style="padding:4px 3px;text-align:right;width:55px">ประกันสังคม</th>
+            <th style="padding:4px 3px;text-align:right;width:55px">กองทุน PF</th>
+            <th style="padding:4px 3px;text-align:right;width:50px">ภาษี</th>
+            <th style="padding:4px 3px;text-align:right;width:55px">หักอื่นๆ</th>
+            <th style="padding:4px 3px;text-align:right;width:65px;font-weight:700">รวมหัก</th>
+            <th style="padding:4px 3px;text-align:right;width:75px;font-weight:700">สุทธิ (Net)</th>
+            <th style="padding:4px 3px;text-align:left;width:105px">เลขที่บัญชี / ธนาคาร</th>
+          </tr>
+        </thead>
+        <tbody id="signoffTableBody"></tbody>
+        <tfoot id="signoffTableFoot"></tfoot>
+      </table>
+
+      <!-- 3-Party Signatures Section -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;text-align:center;margin-top:24px;font-size:8.5pt;page-break-inside:avoid">
+        <div style="border:1px solid #94a3b8;border-radius:4px;padding:12px 8px">
+          <div style="font-weight:700;margin-bottom:36px">1. ผู้จัดทำ (เจ้าหน้าที่ HR / Payroll)</div>
+          <div style="border-top:1px dashed #64748b;width:160px;margin:0 auto;padding-top:4px">( ................................................... )</div>
+          <div style="color:#64748b;font-size:7.5pt;margin-top:2px">วันที่: ...... / ...... / ............</div>
+        </div>
+        <div style="border:1px solid #94a3b8;border-radius:4px;padding:12px 8px">
+          <div style="font-weight:700;margin-bottom:36px">2. ผู้ตรวจสอบ (หัวหน้าฝ่ายบัญชี-การเงิน)</div>
+          <div style="border-top:1px dashed #64748b;width:160px;margin:0 auto;padding-top:4px">( ................................................... )</div>
+          <div style="color:#64748b;font-size:7.5pt;margin-top:2px">วันที่: ...... / ...... / ............</div>
+        </div>
+        <div style="border:1px solid #94a3b8;border-radius:4px;padding:12px 8px">
+          <div style="font-weight:700;margin-bottom:36px">3. ผู้อนุมัติจ่าย (กรรมการผู้จัดการ / MD)</div>
+          <div style="border-top:1px dashed #64748b;width:160px;margin:0 auto;padding-top:4px">( ................................................... )</div>
+          <div style="color:#64748b;font-size:7.5pt;margin-top:2px">วันที่: ...... / ...... / ............</div>
+        </div>
       </div>
     </div>
   </div>
