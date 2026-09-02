@@ -196,6 +196,13 @@ function applyRolePermissions() {
   exportBtns.forEach(function(b) {
     b.style.display = canExportCsv ? 'inline-flex' : 'none';
   });
+
+  // 9. Save & View Payslip Dual Buttons (Hide if no salary or payslip view permission)
+  var canViewPayslipStrict = hasPermission('view_payslip') && hasPermission('view_salary');
+  var btnInpSlip = document.getElementById('btnInputSaveAndPayslip');
+  var btnEmpSlip = document.getElementById('btnEmpSaveAndPayslip');
+  if (btnInpSlip) btnInpSlip.style.display = canViewPayslipStrict ? 'inline-flex' : 'none';
+  if (btnEmpSlip) btnEmpSlip.style.display = canViewPayslipStrict ? 'inline-flex' : 'none';
 }
 
 /**
@@ -537,7 +544,7 @@ function renderPayrollTable() {
 
   var workDays = State.workingDays > 0 ? State.workingDays : 30;
   var canViewSalary = hasPermission('view_salary');
-  var canViewPayslip = hasPermission('view_payslip');
+  var canViewPayslip = hasPermission('view_payslip') && hasPermission('view_salary');
 
   var h = '';
   list.forEach(function(row) {
@@ -1668,6 +1675,10 @@ function deleteEmployee(empId) {
 
 // PAYSLIP MODAL
 function viewPayslip(empId) {
+  if (!hasPermission('view_salary') || !hasPermission('view_payslip')) {
+    showToast('คุณไม่มีสิทธิ์เข้าถึงใบแจ้งยอดเงินเดือน (Payslip)', 'warning');
+    return;
+  }
   var row = State.payrollList.find(function(x) { return x.empId === empId; });
   if (!row) return;
 
