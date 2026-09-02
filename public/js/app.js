@@ -2867,9 +2867,9 @@ function openActivityLogModal() {
 // ==============================================================================
 // MONTHLY PAYROLL SUMMARY SIGN-OFF SHEET CONTROLLER
 // ==============================================================================
-function printMonthlyPayrollSummary() {
+function openMonthlyPayrollSummaryModal() {
   if (!hasPermission('view_salary')) {
-    showToast('คุณไม่มีสิทธิ์พิมพ์ใบสรุปยอดเงินเดือน', 'warning');
+    showToast('คุณไม่มีสิทธิ์ดูใบสรุปยอดเงินเดือน', 'warning');
     return;
   }
   if (!State.payrollList || State.payrollList.length === 0) {
@@ -2912,46 +2912,50 @@ function printMonthlyPayrollSummary() {
     var bankInfo = (r.bankName || emp.bankName || '-') + ' ' + (r.bankAccount || emp.bankAccount || '-');
 
     h += '<tr style="border-bottom:1px solid #e2e8f0">' +
-      '<td style="padding:3px;text-align:center">' + (idx + 1) + '</td>' +
-      '<td style="padding:3px;font-family:monospace;font-weight:700">' + esc(r.empId) + '</td>' +
-      '<td style="padding:3px;font-weight:700">' + esc(r.name) + '</td>' +
-      '<td style="padding:3px">' + esc(r.department || '-') + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(base) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(ot) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(allow) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(bon) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(lDed) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace;font-weight:700">' + fmt(grs) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sso) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace;color:#2563eb">' + fmt(pf) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace">' + fmt(tax) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(othDed) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace;font-weight:700;color:#dc2626">' + fmt(totDed) + '</td>' +
-      '<td style="padding:3px;text-align:right;font-family:monospace;font-weight:700;color:#15803d">' + fmt(net) + '</td>' +
-      '<td style="padding:3px;font-size:7pt;color:#475569">' + esc(bankInfo) + '</td>' +
+      '<td style="padding:4px 3px;text-align:center">' + (idx + 1) + '</td>' +
+      '<td style="padding:4px 3px;font-family:monospace;font-weight:700">' + esc(r.empId) + '</td>' +
+      '<td style="padding:4px 3px;font-weight:700">' + esc(r.name) + '</td>' +
+      '<td style="padding:4px 3px">' + esc(r.department || '-') + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace">' + fmt(base) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace">' + fmt(ot) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace">' + fmt(allow) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace">' + fmt(bon) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(lDed) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace;font-weight:700">' + fmt(grs) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sso) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace;color:#2563eb">' + fmt(pf) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace">' + fmt(tax) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(othDed) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace;font-weight:700;color:#dc2626">' + fmt(totDed) + '</td>' +
+      '<td style="padding:4px 3px;text-align:right;font-family:monospace;font-weight:700;color:#15803d">' + fmt(net) + '</td>' +
+      '<td style="padding:4px 3px;font-size:10px;color:#475569">' + esc(bankInfo) + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = h;
 
   if (tfoot) {
-    tfoot.innerHTML = '<tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #000;border-bottom:2px solid #000">' +
-      '<td colspan="4" style="padding:5px 3px;text-align:center">รวมยอดทั้งสิ้น (' + State.payrollList.length + ' คน)</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumBase) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumOt) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumAllow) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumBonus) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumLeaveDed) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumGross) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumSso) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#2563eb">' + fmt(sumPf) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace">' + fmt(sumTax) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumOtherDed) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumTotDed) + '</td>' +
-      '<td style="padding:5px 3px;text-align:right;font-family:monospace;color:#15803d">' + fmt(sumNet) + '</td>' +
+    tfoot.innerHTML = '<tr style="background:#f1f5f9;font-weight:700;border-top:2px solid #0f172a;border-bottom:2px solid #0f172a">' +
+      '<td colspan="4" style="padding:6px 3px;text-align:center">รวมยอดทั้งสิ้น (' + State.payrollList.length + ' คน)</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace">' + fmt(sumBase) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace">' + fmt(sumOt) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace">' + fmt(sumAllow) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace">' + fmt(sumBonus) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumLeaveDed) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace">' + fmt(sumGross) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumSso) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace;color:#2563eb">' + fmt(sumPf) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace">' + fmt(sumTax) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumOtherDed) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace;color:#dc2626">' + fmt(sumTotDed) + '</td>' +
+      '<td style="padding:6px 3px;text-align:right;font-family:monospace;color:#15803d">' + fmt(sumNet) + '</td>' +
       '<td></td>' +
     '</tr>';
   }
 
+  openModal('payrollSignoffModal');
+}
+
+function printMonthlyPayrollSummaryDocument() {
   document.body.classList.remove('printing-payslip');
   document.body.classList.remove('printing-history');
   document.body.classList.remove('printing-yearly-summary');
@@ -2964,6 +2968,10 @@ function printMonthlyPayrollSummary() {
   setTimeout(function() {
     document.body.classList.remove('printing-payroll-summary');
   }, 1000);
+}
+
+function printMonthlyPayrollSummary() {
+  openMonthlyPayrollSummaryModal();
 }
 
 // ==============================================================================
