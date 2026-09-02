@@ -470,6 +470,9 @@ function renderPayrollTable() {
   }
 
   var workDays = State.workingDays > 0 ? State.workingDays : 30;
+  var canViewSalary = hasPermission('view_salary');
+  var canViewPayslip = hasPermission('view_payslip');
+
   var h = '';
   list.forEach(function(row) {
     var baseSal = Number(row.baseSalary) || 0;
@@ -480,22 +483,24 @@ function renderPayrollTable() {
       '<td class="font-bold">' + esc(row.name) + '</td>' +
       '<td><span class="period-pill">' + esc(row.department || '-') + '</span> ' + esc(row.position || '') + '</td>' +
       '<td class="text-muted" style="font-size:11px">' + esc(row.bankName || '-') + '<br>' + esc(row.bankAccount || '-') + '</td>' +
-      '<td class="text-right font-mono font-bold">' + fmt(baseSal) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + fmt(dailyRate) + '</td>' +
+      '<td class="text-right font-mono font-bold">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (row.otHours || 0) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(row.otPay) + '</td>' +
-      '<td class="text-right font-mono text-green font-bold">' + fmt(row.allowance) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(row.bonus) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + fmt(row.leaveDeduction) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(row.grossPay) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(row.sso) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue">' + fmt(row.pf) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(row.tax) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(row.advanceDeduct) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(row.otherDeduct) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(row.totalDeductions) + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:13px">' + fmt(row.netPay) + '</td>' +
-      '<td class="text-center"><button type="button" class="btn btn-primary btn-sm" onclick="viewPayslip(\'' + esc(row.empId) + '\')"><i class="fa-solid fa-print"></i> สลิป</button></td>' +
+      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(row.otPay) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-green font-bold">' + (canViewSalary ? fmt(row.allowance) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.bonus) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + (canViewSalary ? fmt(row.leaveDeduction) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + (canViewSalary ? fmt(row.grossPay) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.sso) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue">' + (canViewSalary ? fmt(row.pf) : '฿***') + '</td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.tax) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(row.advanceDeduct) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(row.otherDeduct) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(row.totalDeductions) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:13px">' + (canViewSalary ? fmt(row.netPay) : '฿***') + '</td>' +
+      '<td class="text-center">' +
+        (canViewPayslip ? '<button type="button" class="btn btn-primary btn-sm" onclick="viewPayslip(\'' + esc(row.empId) + '\')"><i class="fa-solid fa-print"></i> สลิป</button>' : '<span class="text-muted">-</span>') +
+      '</td>' +
     '</tr>';
   });
   tbody.innerHTML = h;
@@ -1381,8 +1386,11 @@ function onInputSalaryChanged() {
 function updateModalDailyRate(sal) {
   var days = State.workingDays > 0 ? State.workingDays : 30;
   var daily = days > 0 ? Math.round(sal / days * 100) / 100 : 0;
-  document.getElementById('miModalWorkingDays').textContent = days;
-  document.getElementById('miModalDailyRate').textContent = fmt(daily);
+  var canViewSalary = hasPermission('view_salary');
+  if (document.getElementById('miModalWorkingDays')) document.getElementById('miModalWorkingDays').textContent = days;
+  if (document.getElementById('miModalDailyRate')) {
+    document.getElementById('miModalDailyRate').textContent = canViewSalary ? fmt(daily) : '฿***';
+  }
 }
 
 function saveInputRecordForm(e, openPayslipAfter) {
