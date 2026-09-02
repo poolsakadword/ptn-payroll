@@ -126,7 +126,7 @@ function applyRolePermissions() {
   if (btnPrintBatch) btnPrintBatch.style.display = canPrintHistory ? 'inline-flex' : 'none';
 
   // 8. Export CSV Buttons
-  var exportBtns = document.querySelectorAll('button[onclick*="exportToCSV"], button[onclick*="exportActiveHistoryCsv"], button[onclick*="exportAllEmployeeHistory"]');
+  var exportBtns = document.querySelectorAll('button[onclick*="exportToCSV"], button[onclick*="exportActiveHistoryCsv"], button[onclick*="exportAllEmployeeHistory"], button[onclick*="exportTtbPayrollCsv"], button[onclick*="exportTtbDirectCreditTxt"]');
   exportBtns.forEach(function(b) {
     b.style.display = canExportCsv ? 'inline-flex' : 'none';
   });
