@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=5.3">
+  <link rel="stylesheet" href="css/style.css?v=5.4">
   <!-- PWA & Mobile Web App Meta -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1e3a8a">
@@ -262,13 +262,16 @@
               <div class="card-title">บันทึกข้อมูลประจำงวด (Monthly Input)</div>
               <div class="card-sub">ดึงค่าตั้งต้น รหัส ชื่อ เงินเดือนฐาน PF ประกันสังคม และภาษีอัตโนมัติ (อัตรา OT 40 บาท)</div>
             </div>
-            <div class="toolbar">
+            <div class="toolbar" style="flex-wrap:wrap;gap:8px">
               <div class="search-box">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="inputSearchInput" placeholder="ค้นหาบันทึกงวด (รหัส, ชื่อ)..." oninput="renderInputTable()">
               </div>
               <button type="button" class="btn btn-yellow" onclick="batchPopulateEmployees()">
                 <i class="fa-solid fa-users-gear"></i> ดึงพนักงานทุกคนเข้างวดนี้
+              </button>
+              <button type="button" class="btn btn-slate" style="background:#059669;color:#ffffff;border-color:#059669;font-weight:700" onclick="openImportAttendanceModal()" title="นำเข้าข้อมูลวันขาด ลากิจ ลาป่วย และ OT จากไฟล์ Excel หรือ CSV">
+                <i class="fa-solid fa-file-import"></i> นำเข้าเวลาจาก Excel/CSV
               </button>
               <button type="button" class="btn btn-slate" onclick="exportToCSV('input')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
@@ -869,7 +872,7 @@
               <label>ที่อยู่</label>
               <input type="text" id="mAddress">
             </div>
-            <div class="form-row-2">
+            <div class="form-row-3">
               <div class="form-group">
                 <label>แผนก</label>
                 <input type="text" id="mDepartment">
@@ -877,6 +880,14 @@
               <div class="form-group">
                 <label>ตำแหน่ง</label>
                 <input type="text" id="mPosition">
+              </div>
+              <div class="form-group">
+                <label style="font-weight:700;color:#1e3a8a"><i class="fa-solid fa-user-check"></i> สถานะการทำงาน *</label>
+                <select id="mStatus" style="font-weight:700">
+                  <option value="Active">🟢 ทำงานอยู่ (Active)</option>
+                  <option value="Resigned">🔴 ลาออกแล้ว (Resigned)</option>
+                  <option value="Suspended">🟡 พักงาน (Suspended)</option>
+                </select>
               </div>
             </div>
             <div id="empModalFinancialSection">
@@ -1144,8 +1155,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=5.3"></script>
-  <script src="js/app.js?v=5.3"></script>
+  <script src="js/config.js?v=5.4"></script>
+  <script src="js/app.js?v=5.4"></script>
   <!-- AI PAYROLL ASSISTANT FLOATING BUTTON & DRAWER -->
   <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" onclick="toggleAiChat()">
     <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>
