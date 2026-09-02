@@ -2628,3 +2628,236 @@ function handleSendAiMessage(e) {
     body.scrollTop = body.scrollHeight;
   });
 }
+
+
+// ==============================================================================
+// TTB BANK PAYROLL EXPORT & 50 TWI TAX CERTIFICATE
+// ==============================================================================
+
+// Bank Code Mapping Table for Thai Banks
+var THAI_BANK_CODES = {
+  'ttb': '011',
+  'tmb': '011',
+  'ทหารไทย': '011',
+  'ธนชาต': '011',
+  'ทหารไทยธนชาต': '011',
+  'kbank': '004',
+  'กสิกร': '004',
+  'กสิกรไทย': '004',
+  'scb': '014',
+  'ไทยพาณิชย์': '014',
+  'bbl': '002',
+  'กรุงเทพ': '002',
+  'ktb': '006',
+  'กรุงไทย': '006',
+  'bay': '025',
+  'krungsri': '025',
+  'กรุงศรี': '025',
+  'gsb': '030',
+  'ออมสิน': '030',
+  'baac': '034',
+  'ธกส': '034'
+};
+
+function getBankCode(bankName) {
+  if (!bankName) return '011'; // default to TTB
+  var clean = bankName.toLowerCase().replace(/[^a-z0-9ก-๙]/g, '');
+  for (var key in THAI_BANK_CODES) {
+    if (clean.indexOf(key) >= 0) return THAI_BANK_CODES[key];
+  }
+  return '011';
+}
+
+function exportTtbPayrollCsv() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  if (!State.payrollList || State.payrollList.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var csv = '\uFEFF';
+  // Official ttb business one CSV Headers
+  csv += 'Receiving Bank Code,Account Number,Beneficiary Name,Transfer Amount,Citizen ID,Remark,Charge Type\n';
+
+  var periodText = 'เงินเดือน ' + State.period.replace(/\s+/g, '_');
+  State.payrollList.forEach(function(r) {
+    var emp = State.employees.find(function(e) { return e.empId === r.empId; }) || {};
+    var bankCode = getBankCode(r.bankName || emp.bankName);
+    var accNum = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '');
+    var netAmt = Number(r.netPay) > 0 ? Number(r.netPay).toFixed(2) : '0.00';
+
+    var line = [
+      bankCode,
+      accNum,
+      '"' + (r.name || '').replace(/"/g, '""') + '"',
+      netAmt,
+      citizen,
+      '"' + periodText + '"',
+      'OUR'
+    ];
+    csv += line.join(',') + '\n';
+  });
+
+  var filename = 'TTB_Payroll_' + State.period.replace(/\s+/g, '_') + '.csv';
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน TTB (CSV) สำเร็จ');
+}
+
+function exportTtbDirectCreditTxt() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  if (!State.payrollList || State.payrollList.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var totalAmt = 0;
+  var lines = [];
+  var d = new Date();
+  var dateStr = d.getFullYear().toString() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+
+  // Header Record: H
+  lines.push('H' + 'PTNPAYROLL'.padEnd(20, ' ') + dateStr + String(State.payrollList.length).padStart(6, '0'));
+
+  // Detail Records: D
+  State.payrollList.forEach(function(r, idx) {
+    var emp = State.employees.find(function(e) { return e.empId === r.empId; }) || {};
+    var bankCode = getBankCode(r.bankName || emp.bankName);
+    var accNum = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '').padEnd(15, ' ');
+    var netAmtCents = Math.round((Number(r.netPay) || 0) * 100);
+    totalAmt += (Number(r.netPay) || 0);
+    var amtStr = String(netAmtCents).padStart(12, '0');
+    var empName = (r.name || '').padEnd(50, ' ');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, ' ');
+
+    lines.push('D' + String(idx+1).padStart(6, '0') + bankCode + accNum + amtStr + citizen + empName);
+  });
+
+  // Trailer Record: T
+  var totalCents = Math.round(totalAmt * 100);
+  lines.push('T' + String(State.payrollList.length).padStart(6, '0') + String(totalCents).padStart(15, '0'));
+
+  var txtContent = lines.join('\r\n');
+  var filename = 'TTB_DIRECT_CREDIT_' + State.period.replace(/\s+/g, '_') + '.txt';
+  var blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์ TTB Direct Credit (.txt) สำเร็จ');
+}
+
+// 50 TWI TAX CERTIFICATE CONTROLLER
+function open50TwiModalFromHistory() {
+  var empId = document.getElementById('histEmpSelect') ? document.getElementById('histEmpSelect').value : '';
+  if (!empId) {
+    showToast('กรุณาเลือกพนักงานที่ต้องการพิมพ์ใบ 50 ทวิ', 'warning');
+    return;
+  }
+  var yrSel = document.getElementById('histYearSelect');
+  var yr = yrSel ? yrSel.value : '';
+  if (!yr || yr === 'ALL') {
+    yr = String(new Date().getFullYear() + 543);
+  }
+
+  showToast('กำลังเตรียมเอกสาร 50 ทวิ ของ ' + empId + '...', 'info');
+  callApi('get50TwiData', { empId: empId, year: yr })
+    .then(function(r) {
+      if (!r.success) {
+        showToast(r.message || 'ไม่พบข้อมูล 50 ทวิ', 'error');
+        return;
+      }
+      var c = r.company || {};
+      var e = r.employee || {};
+      var t = r.totals || {};
+
+      document.getElementById('twiYearDisplay').textContent = r.year;
+      document.getElementById('twiCompName').textContent = c.name;
+      document.getElementById('twiCompTax').textContent = c.taxId;
+      document.getElementById('twiCompAddr').textContent = c.address;
+
+      document.getElementById('twiEmpName').textContent = e.fullName;
+      document.getElementById('twiEmpId').textContent = e.empId;
+      document.getElementById('twiEmpCitizen').textContent = e.citizenId || '-';
+      document.getElementById('twiEmpAddr').textContent = e.address || '-';
+      document.getElementById('twiEmpDeptPos').textContent = (e.department || '-') + ' / ' + (e.position || '-');
+
+      document.getElementById('twiTableGross').textContent = fmt(t.totalGross);
+      document.getElementById('twiTableTax').textContent = fmt(t.totalTax);
+      document.getElementById('twiTotalGross').textContent = fmt(t.totalGross);
+      document.getElementById('twiTotalTax').textContent = fmt(t.totalTax);
+      document.getElementById('twiTotalSso').textContent = fmt(t.totalSso);
+      document.getElementById('twiTotalPf').textContent = fmt(t.totalPf);
+
+      var d = new Date();
+      var thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      document.getElementById('twiIssueDate').textContent = d.getDate() + ' ' + thaiMonths[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+
+      openModal('twi50Modal');
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function print50TwiDocument() {
+  document.body.classList.remove('printing-payslip');
+  document.body.classList.remove('printing-history');
+  document.body.classList.remove('printing-yearly-summary');
+  document.body.classList.remove('printing-batch-history');
+  document.body.classList.add('printing-50twi');
+
+  window.print();
+
+  setTimeout(function() {
+    document.body.classList.remove('printing-50twi');
+  }, 1000);
+}
+
+// AUDIT TRAIL MODAL CONTROLLER
+function openActivityLogModal() {
+  showToast('กำลังโหลดบันทึกประวัติการใช้งาน...', 'info');
+  callApi('getActivityLogs')
+    .then(function(r) {
+      var tbody = document.getElementById('activityLogTableBody');
+      if (!tbody) return;
+      var logs = r.logs || [];
+      if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:20px">ยังไม่มีบันทึกประวัติการใช้งาน</td></tr>';
+      } else {
+        var h = '';
+        logs.forEach(function(l) {
+          var actionBadgeClass = 'blue';
+          if (l.action === 'LOGIN') actionBadgeClass = 'green';
+          else if (l.action === 'PERIOD_CLOSE') actionBadgeClass = 'red';
+          else if (l.action === 'USER_SAVE') actionBadgeClass = 'purple';
+
+          h += '<tr>' +
+            '<td class="font-mono text-muted" style="font-size:11px">' + esc(l.timestamp) + '</td>' +
+            '<td class="font-bold">' + esc(l.username) + '</td>' +
+            '<td><span class="period-pill" style="font-size:10.5px">' + esc(l.action) + '</span></td>' +
+            '<td>' + esc(l.details) + '</td>' +
+          '</tr>';
+        });
+        tbody.innerHTML = h;
+      }
+      openModal('activityLogModal');
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}

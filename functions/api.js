@@ -1,3 +1,42 @@
+
+// ==============================================================================
+// SECURITY & AUDIT TRAIL HELPERS
+// ==============================================================================
+async function sha256Hex(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function hashUserPassword(password) {
+  const salt = 'PTN_PAYROLL_SECURE_SALT_2026';
+  const hashed = await sha256Hex(password + ':' + salt);
+  return 'sha256:' + hashed;
+}
+
+async function verifyUserPassword(inputPassword, storedPassword) {
+  if (!storedPassword) return false;
+  if (storedPassword.startsWith('sha256:')) {
+    const salt = 'PTN_PAYROLL_SECURE_SALT_2026';
+    const inputHashed = 'sha256:' + await sha256Hex(inputPassword + ':' + salt);
+    return inputHashed === storedPassword;
+  }
+  // Fallback / legacy plaintext match
+  return inputPassword === storedPassword;
+}
+
+async function logSystemActivity(db, username, action, details) {
+  try {
+    await db.prepare('CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, username TEXT, action TEXT, details TEXT)').run().catch(() => {});
+    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    await db.prepare('INSERT INTO activity_logs (timestamp, username, action, details) VALUES (?, ?, ?, ?)').bind(now, username || 'System', action, details || '').run();
+  } catch(e) {
+    console.error('Failed to log activity:', e);
+  }
+}
+
 function getDefaultRolePermissions(role) {
   if (role === 'Admin / HR' || role === 'Admin' || role === 'Super Admin') {
     return ['all'];
@@ -110,9 +149,16 @@ async function handleAction(db, action, params) {
       // Ensure permissions column exists
       await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
 
-      // Check strictly against D1 users database (No hardcoded credentials)
+      // Check strictly against D1 users database (Using Secure Password Verification)
       const userRow = await db.prepare('SELECT * FROM users WHERE LOWER(username) = ?').bind(u).first();
-      if (userRow && userRow.password === p) {
+      const isPasswordValid = userRow ? await verifyUserPassword(p, userRow.password) : false;
+      if (userRow && isPasswordValid) {
+        // Auto-upgrade legacy plaintext password to secure SHA-256 hash
+        if (!userRow.password.startsWith('sha256:')) {
+          const newHashed = await hashUserPassword(p);
+          await db.prepare('UPDATE users SET password = ? WHERE username = ?').bind(newHashed, userRow.username).run().catch(() => {});
+        }
+        await logSystemActivity(db, userRow.username, 'LOGIN', 'เข้าสู่ระบบสำเร็จ');
         let perms = [];
         try {
           perms = userRow.permissions ? JSON.parse(userRow.permissions) : getDefaultRolePermissions(userRow.role);
@@ -904,6 +950,60 @@ async function handleAction(db, action, params) {
       };
     }
 
+        // 13. AUDIT TRAIL / ACTIVITY LOGS
+    case 'getActivityLogs': {
+      await db.prepare('CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, username TEXT, action TEXT, details TEXT)').run().catch(() => {});
+      const logs = (await db.prepare('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 100').all()).results || [];
+      return { success: true, logs: logs };
+    }
+
+    // 14. 50 TWI TAX CERTIFICATE DATA
+    case 'get50TwiData': {
+      const empId = params.empId;
+      const year = params.year || (new Date().getFullYear() + 543).toString();
+      if (!empId) return { success: false, message: 'Missing empId' };
+
+      const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
+      if (!emp) return { success: false, message: 'Employee not found' };
+
+      const compName = (await db.prepare('SELECT value FROM settings WHERE key = "CompanyName"').first())?.value || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+      const compAddr = (await db.prepare('SELECT value FROM settings WHERE key = "Address"').first())?.value || 'กรุงเทพมหานคร';
+      const compTax = (await db.prepare('SELECT value FROM settings WHERE key = "TaxId"').first())?.value || '0105557000000';
+
+      const calcs = (await db.prepare('SELECT * FROM payroll_calcs WHERE emp_id = ? ORDER BY period ASC').bind(empId).all()).results || [];
+      const yearCalcs = year === 'ALL' ? calcs : calcs.filter(c => c.period && c.period.includes(year));
+
+      const totalGross = yearCalcs.reduce((a, b) => a + Number(b.gross_pay || 0), 0);
+      const totalTax = yearCalcs.reduce((a, b) => a + Number(b.tax || 0), 0);
+      const totalSso = yearCalcs.reduce((a, b) => a + Number(b.sso || 0), 0);
+      const totalPf = yearCalcs.reduce((a, b) => a + Number(b.pf || 0), 0);
+
+      return {
+        success: true,
+        year: year,
+        company: {
+          name: compName,
+          address: compAddr,
+          taxId: compTax
+        },
+        employee: {
+          empId: emp.emp_id,
+          fullName: emp.full_name,
+          citizenId: emp.citizen_id || '',
+          address: emp.address || '',
+          department: emp.department || '',
+          position: emp.position || ''
+        },
+        totals: {
+          periodsCount: yearCalcs.length,
+          totalGross: totalGross,
+          totalTax: totalTax,
+          totalSso: totalSso,
+          totalPf: totalPf
+        }
+      };
+    }
+
     case 'saveCompanyInfo': {
       const cfg = params.settings || {};
       if (cfg.companyName) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CompanyName", ?)').bind(cfg.companyName).run();
@@ -919,11 +1019,13 @@ async function handleAction(db, action, params) {
       const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
       const val = `CLOSED|${timeStr}|${params.username || 'Admin'}`;
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_Status_${period}`, val).run();
+      await logSystemActivity(db, params.username || 'Admin', 'PERIOD_CLOSE', `ปิดงวดประจำเดือน ${period}`);
       return { success: true, period: period, isClosed: true, message: `ปิดงวดประจำเดือน ${period} เรียบร้อยแล้ว (ล็อคผลการคำนวณ)` };
     }
 
     case 'reopenPeriod': {
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, "OPEN")').bind(`Period_Status_${period}`).run();
+      await logSystemActivity(db, params.username || 'Admin', 'PERIOD_REOPEN', `ปลดล็อคเปิดงวดประจำเดือน ${period}`);
       return { success: true, period: period, isClosed: false, message: `ปลดล็อคและเปิดงวดประจำเดือน ${period} เรียบร้อยแล้ว` };
     }
 
@@ -937,7 +1039,13 @@ async function handleAction(db, action, params) {
         await db.prepare('DELETE FROM users WHERE username = ?').bind(origUser).run();
       }
       const permsJson = JSON.stringify(u.permissions || getDefaultRolePermissions(u.role));
-      await db.prepare('INSERT OR REPLACE INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)').bind(u.username, u.password, u.role || 'User', permsJson).run();
+      const hashedPass = (u.password && !u.password.startsWith('sha256:')) ? await hashUserPassword(u.password) : (u.password || '');
+      if (hashedPass) {
+        await db.prepare('INSERT OR REPLACE INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)').bind(u.username, hashedPass, u.role || 'User', permsJson).run();
+      } else {
+        await db.prepare('UPDATE users SET role = ?, permissions = ? WHERE username = ?').bind(u.role || 'User', permsJson, u.username).run();
+      }
+      await logSystemActivity(db, params.currentUsername || 'Admin', 'USER_SAVE', `บันทึก/แก้ไขผู้ใช้: ${u.username} (${u.role})`);
       return { success: true, message: 'บันทึกผู้ใช้งานและกำหนดสิทธิ์เรียบร้อยแล้ว' };
     }
 
