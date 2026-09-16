@@ -586,34 +586,34 @@ function renderEmployeesTable() {
   var canDelEmp = hasPermission('del_emp');
   var isGeneralUser = !canViewSalary;
 
-  // Adjust table header based on role
+  // Adjust table header based on role (Including Status column)
   if (thead) {
     if (isGeneralUser) {
       thead.innerHTML = '<tr>' +
-        '<th style="width:90px">รหัส</th>' +
+        '<th style="width:85px">รหัส</th>' +
         '<th>ชื่อ-นามสกุล</th>' +
-        '<th style="width:100px">ชื่อเล่น</th>' +
+        '<th style="width:90px">ชื่อเล่น</th>' +
+        '<th>แผนก / ตำแหน่ง</th>' +
+        '<th class="text-center" style="width:130px">สถานะ</th>' +
         '<th>วันเกิด / อายุ</th>' +
-        '<th>บัตรประชาชน</th>' +
         '<th>เบอร์โทร</th>' +
         '<th>ที่อยู่</th>' +
-        '<th>แผนก / ตำแหน่ง</th>' +
         '<th>ธนาคาร / เลขบัญชี</th>' +
         '<th>วันเริ่มงาน</th>' +
         '<th class="text-center" style="width:90px">จัดการ</th>' +
       '</tr>';
     } else {
       thead.innerHTML = '<tr>' +
-        '<th style="width:90px">รหัส</th>' +
+        '<th style="width:85px">รหัส</th>' +
         '<th>ชื่อ-นามสกุล</th>' +
-        '<th style="width:100px">ชื่อเล่น</th>' +
-        '<th>ที่อยู่</th>' +
+        '<th style="width:90px">ชื่อเล่น</th>' +
         '<th>แผนก / ตำแหน่ง</th>' +
-        '<th class="text-right" style="width:110px">เงินเดือนฐาน</th>' +
-        '<th class="text-right" style="width:70px">PF %</th>' +
-        '<th class="text-right text-red font-bold" style="width:110px">SSO (Default) 🔴</th>' +
-        '<th class="text-right text-red font-bold" style="width:100px">ภาษี (Default) 🔴</th>' +
-        '<th class="text-center" style="width:120px">จัดการ</th>' +
+        '<th class="text-center" style="width:130px">สถานะ</th>' +
+        '<th class="text-right" style="width:105px">เงินเดือนฐาน</th>' +
+        '<th class="text-right" style="width:65px">PF %</th>' +
+        '<th class="text-right text-red font-bold" style="width:100px">SSO (Default)</th>' +
+        '<th class="text-right text-red font-bold" style="width:95px">ภาษี (Default)</th>' +
+        '<th class="text-center" style="width:125px">จัดการ</th>' +
       '</tr>';
     }
   }
@@ -650,21 +650,36 @@ function renderEmployeesTable() {
   list.forEach(function(e) {
     var birthText = e.birthDate ? (e.birthDate + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
 
+    // Individual Employee Status Badge calculation
+    var stBadge = '<span class="period-pill" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0;font-size:11px">🟢 ทำงานอยู่</span>';
+    if (e.status === 'Probation') {
+      var daysLeft = getProbationDaysRemaining(e);
+      var probText = daysLeft !== null ? ('ทดลองงาน (' + (daysLeft > 0 ? ('เหลือ ' + daysLeft + ' วัน') : 'ครบกำหนด') + ')') : 'ทดลองงาน';
+      var probBg = daysLeft !== null && daysLeft <= 15 ? '#fee2e2' : '#ffedd5';
+      var probCol = daysLeft !== null && daysLeft <= 15 ? '#b91c1c' : '#c2410c';
+      var probBrd = daysLeft !== null && daysLeft <= 15 ? '#fecaca' : '#fed7aa';
+      stBadge = '<span class="period-pill" style="background:' + probBg + ';color:' + probCol + ';border-color:' + probBrd + ';font-size:11px;font-weight:700">🟠 ' + esc(probText) + '</span>';
+    } else if (e.status === 'Resigned') {
+      stBadge = '<span class="period-pill" style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;font-size:11px">🔴 ลาออกแล้ว</span>';
+    } else if (e.status === 'Suspended') {
+      stBadge = '<span class="period-pill" style="background:#fef3c7;color:#b45309;border-color:#fde68a;font-size:11px">🟡 พักงาน</span>';
+    }
+
     if (isGeneralUser) {
       // General User view: 11 columns, NO salary, NO delete button
       h += '<tr>' +
         '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
         '<td class="font-bold">' + esc(e.fullName) + '</td>' +
         '<td style="color:#2563eb;font-weight:600">' + esc(e.nickname || '-') + '</td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
+        '<td class="text-center">' + stBadge + '</td>' +
         '<td>' + esc(birthText) + '</td>' +
-        '<td class="font-mono">' + esc(e.citizenId || '-') + '</td>' +
         '<td class="font-mono">' + esc(e.phone || '-') + '</td>' +
         '<td>' + esc(e.address || '-') + '</td>' +
-        '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
         '<td>' + esc(e.bankName || '-') + '<br><span class="text-muted font-mono" style="font-size:11px">' + esc(e.bankAccount || '-') + '</span></td>' +
         '<td>' + esc(e.joinDate || '-') + '</td>' +
         '<td class="text-center nowrap">' +
-          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
+          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'" + esc(e.empId) + "\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
         '</td>' +
       '</tr>';
     } else {
@@ -673,15 +688,16 @@ function renderEmployeesTable() {
         '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
         '<td class="font-bold">' + esc(e.fullName) + '</td>' +
         '<td style="color:#2563eb;font-weight:600">' + esc(e.nickname || '-') + '</td>' +
-        '<td>' + esc(e.address || '-') + '</td>' +
         '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
+        '<td class="text-center">' + stBadge + '</td>' +
         '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
         '<td class="text-right font-mono">' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '<span class="text-muted" style="font-size:11px">ไม่หัก (0%)</span>') + '</td>' +
         '<td class="text-right font-mono text-red font-bold">' + (Number(e.defaultSso) > 0 ? fmt(e.defaultSso) : '<span class="text-muted" style="font-size:11px">ไม่หัก (฿0)</span>') + '</td>' +
         '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
         '<td class="text-center nowrap">' +
-          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' : '') +
-          (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
+          (e.status === 'Probation' ? '<button type="button" class="btn-icon edit" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-weight:700" onclick="passProbation(\'' + esc(e.empId) + '\')" title="อนุมัติผ่านโปร"><i class="fa-solid fa-check"></i> ผ่านโปร</button> ' : '') +
+          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'" + esc(e.empId) + "\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' : '') +
+          (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'" + esc(e.empId) + "\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
           (!canEditEmp && !canDelEmp ? '<span class="text-muted">-</span>' : '') +
         '</td>' +
       '</tr>';
@@ -1514,6 +1530,10 @@ function openEditEmployeeModal(empId) {
   document.getElementById('mBankAccount').value = e.bankAccount || '';
   document.getElementById('mJoinDate').value = e.joinDate || '';
   document.getElementById('mRemark').value = e.remark || '';
+  if (document.getElementById('mStatus')) document.getElementById('mStatus').value = e.status || 'Active';
+  if (document.getElementById('mProbationDays')) document.getElementById('mProbationDays').value = e.probationDays || 119;
+  if (document.getElementById('mProbationEndDate')) document.getElementById('mProbationEndDate').value = e.probationEndDate || '';
+  onEmployeeStatusChanged();
   var hasPf = (e.pfRate !== undefined && e.pfRate !== null && Number(e.pfRate) > 0);
   var hasPfCheck = document.getElementById('mHasPf');
   if (hasPfCheck) hasPfCheck.checked = hasPf;

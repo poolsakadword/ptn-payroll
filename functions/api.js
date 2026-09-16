@@ -205,6 +205,10 @@ async function handleAction(db, action, params) {
       }
 
       // Employees
+      await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
       const employees = (empQuery.results || []).map(e => ({
         empId: e.emp_id,
@@ -224,6 +228,9 @@ async function handleAction(db, action, params) {
         pfRate: (e.pf_rate !== null && e.pf_rate !== undefined && !isNaN(Number(e.pf_rate))) ? Number(e.pf_rate) : 0.05,
         defaultSso: (e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 0,
         defaultTax: Number(e.default_tax) || 0,
+        status: e.status || 'Active',
+        probationDays: Number(e.probation_days) || 119,
+        probationEndDate: e.probation_end_date || '',
         remark: e.remark || ''
       }));
 
