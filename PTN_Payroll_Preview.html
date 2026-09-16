@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=5.4">
+  <link rel="stylesheet" href="css/style.css?v=5.5">
   <!-- PWA & Mobile Web App Meta -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1e3a8a">
@@ -883,11 +883,39 @@
               </div>
               <div class="form-group">
                 <label style="font-weight:700;color:#1e3a8a"><i class="fa-solid fa-user-check"></i> สถานะการทำงาน *</label>
-                <select id="mStatus" style="font-weight:700">
+                <select id="mStatus" onchange="onEmployeeStatusChanged()" style="font-weight:700">
                   <option value="Active">🟢 ทำงานอยู่ (Active)</option>
+                  <option value="Probation">🟠 ช่วงทดลองงาน (Probation)</option>
                   <option value="Resigned">🔴 ลาออกแล้ว (Resigned)</option>
                   <option value="Suspended">🟡 พักงาน (Suspended)</option>
                 </select>
+              </div>
+            </div>
+
+            <!-- Probation Details Configuration Section -->
+            <div id="probationConfigSection" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:var(--radius-md);padding:12px 14px;margin-bottom:12px">
+              <div style="font-weight:700;color:#c2410c;font-size:12px;margin-bottom:8px">
+                <i class="fa-solid fa-stopwatch"></i> การตั้งค่าช่วงทดลองงาน (Probation Details)
+              </div>
+              <div class="form-row-3">
+                <div class="form-group">
+                  <label>ระยะเวลาทดลองงาน (วัน)</label>
+                  <select id="mProbationDays" onchange="calculateProbationEndDate()" style="font-weight:700">
+                    <option value="119">119 วัน (มาตรฐานความปลอดภัยสูงสุด)</option>
+                    <option value="90">90 วัน (3 เดือน)</option>
+                    <option value="60">60 วัน (2 เดือน)</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>วันครบกำหนดทดลองงาน</label>
+                  <input type="date" id="mProbationEndDate" readonly style="background:#fef3c7;color:#9a3412;font-weight:700">
+                </div>
+                <div class="form-group">
+                  <label>สถานะเวลาที่เหลือ</label>
+                  <div id="mProbationCountdownText" style="padding:7px 10px;background:#ffffff;border:1.5px solid #fed7aa;border-radius:var(--radius-md);font-size:11.5px;font-weight:700;color:#c2410c;text-align:center">
+                    -
+                  </div>
+                </div>
               </div>
             </div>
             <div id="empModalFinancialSection">
@@ -941,7 +969,7 @@
             <div class="form-row-2">
               <div class="form-group">
                 <label>วันเริ่มงาน</label>
-                <input type="date" id="mJoinDate">
+                <input type="date" id="mJoinDate" onchange="calculateProbationEndDate()">
               </div>
               <div class="form-group">
                 <label><i class="fa-solid fa-comment-dots" style="color:#64748b"></i> หมายเหตุ</label>
@@ -1155,8 +1183,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=5.4"></script>
-  <script src="js/app.js?v=5.4"></script>
+  <script src="js/config.js?v=5.5"></script>
+  <script src="js/app.js?v=5.5"></script>
   <!-- AI PAYROLL ASSISTANT FLOATING BUTTON & DRAWER -->
   <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" onclick="toggleAiChat()">
     <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>

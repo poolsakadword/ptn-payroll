@@ -1635,6 +1635,8 @@ function saveEmployeeForm(e, openPayslipAfter) {
     department: document.getElementById('mDepartment').value.trim(),
     position: document.getElementById('mPosition').value.trim(),
     status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
+    probationDays: (document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119),
+    probationEndDate: (document.getElementById('mProbationEndDate') ? document.getElementById('mProbationEndDate').value : ''),
     baseSalary: baseSal,
     bankName: document.getElementById('mBankName').value.trim(),
     bankAccount: document.getElementById('mBankAccount').value.trim(),
@@ -3211,6 +3213,142 @@ function resetIdleTimer() {
 ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'].forEach(function(evt) {
   window.addEventListener(evt, resetIdleTimer, { passive: true });
 });
+
+
+// ==============================================================================
+// PROBATION MANAGEMENT CONTROLLER (V5.5)
+// ==============================================================================
+function getProbationDaysRemaining(emp) {
+  if (!emp) return null;
+  var endDateStr = emp.probationEndDate;
+  if (!endDateStr && emp.joinDate) {
+    var probDays = Number(emp.probationDays) || 119;
+    var jd = new Date(emp.joinDate);
+    jd.setDate(jd.getDate() + probDays);
+    endDateStr = jd.toISOString().substring(0, 10);
+  }
+  if (!endDateStr) return null;
+
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  var target = new Date(endDateStr);
+  target.setHours(0,0,0,0);
+  var diffTime = target.getTime() - today.getTime();
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+}
+
+function onEmployeeStatusChanged() {
+  var st = document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active';
+  var sec = document.getElementById('probationConfigSection');
+  if (sec) {
+    sec.style.display = (st === 'Probation') ? 'block' : 'none';
+  }
+  if (st === 'Probation') {
+    calculateProbationEndDate();
+  }
+}
+
+function calculateProbationEndDate() {
+  var joinDateVal = document.getElementById('mJoinDate') ? document.getElementById('mJoinDate').value : '';
+  var daysVal = document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119;
+  var endInp = document.getElementById('mProbationEndDate');
+  var txt = document.getElementById('mProbationCountdownText');
+
+  if (!joinDateVal) {
+    if (endInp) endInp.value = '';
+    if (txt) txt.textContent = 'กรุณาระบุวันเริ่มงาน';
+    return;
+  }
+
+  var jd = new Date(joinDateVal);
+  if (isNaN(jd.getTime())) return;
+
+  jd.setDate(jd.getDate() + daysVal);
+  var endIso = jd.toISOString().substring(0, 10);
+  if (endInp) endInp.value = endIso;
+
+  var today = new Date();
+  today.setHours(0,0,0,0);
+  jd.setHours(0,0,0,0);
+  var diffDays = Math.ceil((jd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (txt) {
+    if (diffDays > 0) {
+      txt.innerHTML = '<span style="color:#c2410c">⏳ เหลือเวลาอีก <strong>' + diffDays + ' วัน</strong></span>';
+    } else if (diffDays === 0) {
+      txt.innerHTML = '<span style="color:#b91c1c;font-weight:700">🚨 ครบกำหนดวันนี้!</span>';
+    } else {
+      txt.innerHTML = '<span style="color:#b91c1c">⚠️ เกินกำหนดแล้ว ' + Math.abs(diffDays) + ' วัน</span>';
+    }
+  }
+}
+
+function passProbation(empId) {
+  if (!empId) return;
+  var emp = State.employees.find(function(e) { return e.empId === empId; }) || {};
+  var name = emp.fullName || empId;
+
+  if (!confirm('ยืนยันอนุมัติให้ ' + name + ' (' + empId + ') ผ่านการทดลองงาน ปรับเป็นพนักงานประจำใช่หรือไม่?')) {
+    return;
+  }
+
+  showToast('กำลังปรับสถานะผ่านทดลองงาน...', 'info');
+  callApi('passProbation', {
+    empId: empId,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+  .then(function(r) {
+    if (!r.success) {
+      showToast(r.message || 'ไม่สามารถปรับสถานะได้', 'error');
+      return;
+    }
+    showToast(r.message, 'success');
+    loadAppData();
+  })
+  .catch(function(err) {
+    showToast('Error: ' + err.message, 'error');
+  });
+}
+
+function updateProbationDashboardAlerts() {
+  var banner = document.getElementById('probationAlertBanner');
+  var listDiv = document.getElementById('probationAlertList');
+  var countSpan = document.getElementById('probationAlertCount');
+  if (!banner || !listDiv) return;
+
+  var probEmps = (State.employees || []).filter(function(e) {
+    return e.status === 'Probation';
+  });
+
+  if (probEmps.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  if (countSpan) countSpan.textContent = probEmps.length;
+  var h = '';
+  probEmps.forEach(function(e) {
+    var daysLeft = getProbationDaysRemaining(e);
+    var statusText = daysLeft !== null ? (daysLeft > 0 ? ('เหลืออีก ' + daysLeft + ' วัน') : 'ครบกำหนดแล้ว') : 'ช่วงทดลองงาน';
+    var isUrgent = daysLeft !== null && daysLeft <= 30;
+
+    h += '<div style="background:#ffffff;border:1.5px solid ' + (isUrgent ? '#fca5a5' : '#fed7aa') + ';border-radius:var(--radius-md);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
+      '<div>' +
+        '<div style="font-weight:700;font-size:12.5px;color:#0f172a">' + esc(e.fullName) + ' [' + esc(e.empId) + ']</div>' +
+        '<div style="font-size:11px;color:#64748b">' + esc(e.department || '-') + ' / ' + esc(e.position || '-') + ' | เริ่มงาน: ' + esc(e.joinDate || '-') + '</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:8px">' +
+        '<span class="period-pill" style="background:' + (isUrgent ? '#fee2e2' : '#ffedd5') + ';color:' + (isUrgent ? '#b91c1c' : '#c2410c') + ';font-weight:700;font-size:11px">' + statusText + '</span>' +
+        '<button type="button" class="btn btn-success btn-sm" onclick="passProbation(\'' + esc(e.empId) + '\')" title="อนุมัติผ่านโปร ปรับเป็นพนักงานประจำ">' +
+          '<i class="fa-solid fa-check"></i> ผ่านโปร' +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  });
+
+  listDiv.innerHTML = h;
+  banner.style.display = 'block';
+}
 
 
 console.log("1. Testing functions with Admin user (Full Permissions)...");

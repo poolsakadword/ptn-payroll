@@ -1047,6 +1047,23 @@ async function handleAction(db, action, params) {
       return { success: true, count: importedCount, message: `นำเข้าข้อมูลเวลาสำเร็จ ${importedCount} รายการ และคำนวณเงินเดือนเรียบร้อยแล้ว` };
     }
 
+        // 16. PASS PROBATION ACTION
+    case 'passProbation': {
+      const empId = params.empId;
+      if (!empId) return { success: false, message: 'Missing empId' };
+
+      const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
+      if (!emp) return { success: false, message: 'Employee not found' };
+
+      await db.prepare('UPDATE employees SET status = "Active" WHERE emp_id = ?').bind(empId).run();
+      await logSystemActivity(db, params.username || 'Admin', 'PASS_PROBATION', `อนุมัติผ่านการทดลองงาน: ${empId} (${emp.full_name}) ปรับเป็นสถานะ ทำงานอยู่ (Active)`);
+
+      return {
+        success: true,
+        message: `อนุมัติผ่านการทดลองงานของ ${emp.full_name} (${empId}) เรียบร้อยแล้ว (ปรับเป็นสถานะพนักงานประจำ)`
+      };
+    }
+
     case 'saveCompanyInfo': {
       const cfg = params.settings || {};
       if (cfg.companyName) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CompanyName", ?)').bind(cfg.companyName).run();
