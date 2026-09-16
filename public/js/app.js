@@ -1907,15 +1907,7 @@ function deleteEmployee(empId) {
     .catch(function(e) { showToast(e.message, 'error'); });
 }
 
-// PAYSLIP MODAL
-function viewPayslip(empId) {
-  if (!hasPermission('view_salary') || !hasPermission('view_payslip')) {
-    showToast('คุณไม่มีสิทธิ์เข้าถึงใบแจ้งยอดเงินเดือน (Payslip)', 'warning');
-    return;
-  }
-  var row = State.payrollList.find(function(x) { return x.empId === empId; });
-  if (!row) return;
-
+function populatePayslipModal(row) {
   var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
   var compAddr = State.company.address || '';
   var compPhone = State.company.phone || '';
@@ -1924,7 +1916,7 @@ function viewPayslip(empId) {
   document.getElementById('psCompName').textContent = compName;
   document.getElementById('psCompAddr').textContent = compAddr ? 'ที่อยู่: ' + compAddr : '';
   document.getElementById('psCompTax').textContent = (compTax ? 'เลขประจำตัวผู้เสียภาษี: ' + compTax + ' ' : '') + (compPhone ? 'โทร: ' + compPhone : '');
-  document.getElementById('psPeriod').textContent = row.period;
+  document.getElementById('psPeriod').textContent = row.period || State.period;
   document.getElementById('psEmpId').textContent = row.empId;
   document.getElementById('psEmpName').textContent = row.name;
   document.getElementById('psDeptPos').textContent = (row.department || '-') + ' / ' + (row.position || '-');
@@ -1947,6 +1939,17 @@ function viewPayslip(empId) {
   document.getElementById('psNetPay').textContent = fmt(row.netPay);
 
   openModal('payslipModal');
+}
+
+// PAYSLIP MODAL
+function viewPayslip(empId) {
+  if (!hasPermission('view_salary') || !hasPermission('view_payslip')) {
+    showToast('คุณไม่มีสิทธิ์เข้าถึงใบแจ้งยอดเงินเดือน (Payslip)', 'warning');
+    return;
+  }
+  var row = State.payrollList.find(function(x) { return x.empId === empId; });
+  if (!row) return;
+  populatePayslipModal(row);
 }
 
 function printPayslip() {
@@ -4753,24 +4756,103 @@ window.addEventListener('afterprint', function() {
 });
 
 function open50TwiFromDocCenter() {
+  if (!hasPermission('view_salary')) {
+    showToast('คุณไม่มีสิทธิ์เข้าถึงหนังสือรับรองภาษี 50 ทวิ', 'warning');
+    return;
+  }
   var sel = document.getElementById('docCertEmpSelect');
   var empId = sel ? sel.value : '';
-  if (empId) {
-    if (document.getElementById('histEmpSelect')) document.getElementById('histEmpSelect').value = empId;
-    load50TwiDocument(empId);
-  } else {
+  if (!empId) {
     showToast('กรุณาเลือกพนักงานก่อนพิมพ์ 50 ทวิ', 'warning');
+    return;
   }
+
+  if (document.getElementById('histEmpSelect')) {
+    document.getElementById('histEmpSelect').value = empId;
+  }
+
+  var yr = '';
+  var yrSel = document.getElementById('histYearSelect');
+  if (yrSel && yrSel.value && yrSel.value !== 'ALL') {
+    yr = yrSel.value;
+  } else {
+    yr = String(new Date().getFullYear() + 543);
+  }
+
+  showToast('กำลังเตรียมเอกสาร 50 ทวิ ของ ' + empId + '...', 'info');
+  callApi('get50TwiData', { empId: empId, year: yr })
+    .then(function(r) {
+      if (!r.success) {
+        showToast(r.message || 'ไม่พบข้อมูล 50 ทวิ', 'error');
+        return;
+      }
+      var c = r.company || {};
+      var e = r.employee || {};
+      var t = r.totals || {};
+
+      document.getElementById('twiYearDisplay').textContent = r.year;
+      document.getElementById('twiCompName').textContent = c.name;
+      document.getElementById('twiCompTax').textContent = c.taxId;
+      document.getElementById('twiCompAddr').textContent = c.address;
+
+      document.getElementById('twiEmpName').textContent = e.fullName;
+      document.getElementById('twiEmpId').textContent = e.empId;
+      document.getElementById('twiEmpCitizen').textContent = e.citizenId || '-';
+      document.getElementById('twiEmpAddr').textContent = e.address || '-';
+      document.getElementById('twiEmpDeptPos').textContent = (e.department || '-') + ' / ' + (e.position || '-');
+
+      document.getElementById('twiTableGross').textContent = fmt(t.totalGross);
+      document.getElementById('twiTableTax').textContent = fmt(t.totalTax);
+      document.getElementById('twiTotalGross').textContent = fmt(t.totalGross);
+      document.getElementById('twiTotalTax').textContent = fmt(t.totalTax);
+      document.getElementById('twiTotalSso').textContent = fmt(t.totalSso);
+      document.getElementById('twiTotalPf').textContent = fmt(t.totalPf);
+
+      var d = new Date();
+      var thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      document.getElementById('twiIssueDate').textContent = d.getDate() + ' ' + thaiMonths[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+
+      openModal('twi50Modal');
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
 }
 
 function openPayslipFromDocCenter() {
+  if (!hasPermission('view_salary') || !hasPermission('view_payslip')) {
+    showToast('คุณไม่มีสิทธิ์เข้าถึงใบแจ้งยอดเงินเดือน (Payslip)', 'warning');
+    return;
+  }
   var sel = document.getElementById('docCertEmpSelect');
   var empId = sel ? sel.value : '';
   if (!empId) {
     showToast('กรุณาเลือกพนักงานก่อนดูสลิป', 'warning');
     return;
   }
-  openPayslip(empId);
+
+  var row = (State.payrollList || []).find(function(x) { return x.empId === empId; });
+  if (row) {
+    populatePayslipModal(row);
+    return;
+  }
+
+  showToast('กำลังโหลดสลิปเงินเดือนของ ' + empId + '...', 'info');
+  callApi('getEmployeeHistory', { empId: empId })
+    .then(function(r) {
+      if (r.success && r.historyList && r.historyList.length > 0) {
+        var latestRow = r.historyList[0];
+        var emp = (State.employees || []).find(function(e) { return e.empId === empId; }) || {};
+        latestRow.bankName = latestRow.bankName || emp.bankName;
+        latestRow.bankAccount = latestRow.bankAccount || emp.bankAccount;
+        populatePayslipModal(latestRow);
+      } else {
+        showToast('ไม่พบข้อมูลการจ่ายเงินเดือนของพนักงานท่านนี้ (ยังไม่มีการคำนวณเงินเดือน)', 'warning');
+      }
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
 }
 
 // ------------------------------------------------------------------------------
