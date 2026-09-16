@@ -425,10 +425,15 @@ async function handleAction(db, action, params) {
     case 'deleteEmployee': {
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
+      const emp = await db.prepare('SELECT full_name FROM employees WHERE emp_id = ?').bind(empId).first();
+      const empName = emp ? emp.full_name : empId;
+
       await db.prepare('DELETE FROM employees WHERE emp_id = ?').bind(empId).run();
       await db.prepare('DELETE FROM monthly_inputs WHERE emp_id = ?').bind(empId).run();
       await db.prepare('DELETE FROM payroll_calcs WHERE emp_id = ?').bind(empId).run();
-      return { success: true, message: `ลบพนักงาน ${empId} เรียบร้อยแล้ว` };
+
+      await logSystemActivity(db, params.username || 'Admin', 'DELETE_EMPLOYEE', `ลบข้อมูลพนักงาน: ${empId} (${empName}) พร้อมรายการคำนวณเงินเดือน`);
+      return { success: true, message: `ลบพนักงาน ${empName} (${empId}) ออกจากระบบเรียบร้อยแล้ว` };
     }
 
     // 5. MONTHLY INPUT CRUD & BATCH POPULATE
