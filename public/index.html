@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=6.0">
+  <link rel="stylesheet" href="css/style.css?v=6.1">
   <!-- PWA & Mobile Web App Meta -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1e3a8a">
@@ -424,90 +424,201 @@
         </div>
       </div>
 
-      <!-- 5. EMPLOYEE HISTORY & YEARLY SUMMARY TAB -->
+      <!-- 5. EMPLOYEE HISTORY & ANNUAL HUB (V6.1) -->
       <div class="tab-content" id="tab-history">
         <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">ประวัติการทำงานและรายงานสรุปยอดเงินเดือนประจำปี</div>
-              <div class="card-sub">ตรวจสอบประวัติรายเดือนรายบุคคล และรายงานสรุปรวมเงินได้ทั้งปีของพนักงานทุกคน</div>
+          <div class="card-header" style="flex-direction:column;align-items:stretch;gap:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+              <div>
+                <div class="card-title" style="display:flex;align-items:center;gap:8px">
+                  <i class="fa-solid fa-chart-line" style="color:var(--primary)"></i> ประวัติการทำงานและรายงานเงินได้สะสมประจำปี (Work History &amp; Annual Hub)
+                </div>
+                <div class="card-sub">ตรวจสอบประวัติรายงวด 12 เดือน สถิติขาดลาสะสม เงินสะสมกองทุน PF และหนังสือรับรอง 50 ทวิ</div>
+              </div>
+
+              <!-- Mode Switcher -->
+              <div style="display:inline-flex;background:var(--border-light);padding:2px;border-radius:var(--radius-md);border:1px solid var(--border)">
+                <button type="button" id="btnHistModeIndividual" class="btn btn-primary btn-sm" style="padding:5px 12px;font-size:12px" onclick="switchHistoryViewMode('individual')">
+                  <i class="fa-solid fa-user-clock"></i> ประวัติรายบุคคล (12 งวด)
+                </button>
+                <button type="button" id="btnHistModeYearly" class="btn btn-slate btn-sm" style="padding:5px 12px;font-size:12px" onclick="switchHistoryViewMode('yearly')">
+                  <i class="fa-solid fa-table-list"></i> สรุปทุกคนทั้งปี (Matrix)
+                </button>
+              </div>
             </div>
-            <div class="toolbar" style="flex-wrap:wrap;gap:8px">
-              <!-- Mode Switch Buttons -->
-              <div style="display:inline-flex;background:#e2e8f0;padding:3px;border-radius:8px;gap:2px">
-                <button type="button" id="btnHistModeYearly" class="btn btn-primary btn-sm" onclick="switchHistoryViewMode('yearly')">
-                  <i class="fa-solid fa-table-list"></i> สรุปทุกคนทั้งปี (1 แถว/คน)
+
+            <!-- CONTROL TOOLBAR -->
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <!-- Left controls: Year & Employee Picker -->
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div style="display:inline-flex;align-items:center;gap:6px">
+                  <label style="font-size:12px;font-weight:700;color:var(--primary)"><i class="fa-solid fa-calendar"></i> ปี:</label>
+                  <select id="histYearSelect" class="period-select" onchange="onHistoryYearChanged()" style="font-weight:700"></select>
+                </div>
+
+                <div id="histEmpSelectGroup" style="display:flex;align-items:center;gap:6px">
+                  <label style="font-size:12px;font-weight:700;color:var(--primary)"><i class="fa-solid fa-user-tag"></i> เลือกพนักงาน:</label>
+                  <select id="histEmpSelect" class="period-select" style="min-width:240px;font-weight:700" onchange="onHistoryEmpChanged()"></select>
+                </div>
+
+                <div class="search-box" id="histSearchBox" style="display:none;margin:0">
+                  <i class="fa-solid fa-magnifying-glass"></i>
+                  <input type="text" id="historySearchInput" placeholder="ค้นหา (รหัส, ชื่อ, แผนก)..." oninput="filterHistoryTable()">
+                </div>
+              </div>
+
+              <!-- Right Actions: Print & Export -->
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <button type="button" id="btnHistPrint50Twi" class="btn btn-slate" style="background:#4338ca;color:#fff;border-color:#4338ca;font-weight:700" onclick="open50TwiModalFromHistory()">
+                  <i class="fa-solid fa-file-shield"></i> พิมพ์ใบ 50 ทวิ (ภาษี)
                 </button>
-                <button type="button" id="btnHistModeIndividual" class="btn btn-slate btn-sm" onclick="switchHistoryViewMode('individual')">
-                  <i class="fa-solid fa-user"></i> รายละเอียดรายคน (12 งวด)
+                <button type="button" class="btn btn-primary" onclick="printActiveHistoryReport()" style="font-weight:700">
+                  <i class="fa-solid fa-print"></i> พิมพ์รายงาน (A4)
+                </button>
+                <button type="button" class="btn btn-slate" onclick="printAllEmployeesBatch()">
+                  <i class="fa-solid fa-print"></i> พิมพ์ประวัติทุกคน (แยกคนละหน้า)
+                </button>
+                <button type="button" class="btn btn-slate" onclick="exportActiveHistoryCsv()">
+                  <i class="fa-solid fa-file-csv"></i> Export CSV
                 </button>
               </div>
-
-              <!-- Year Filter -->
-              <div style="display:inline-flex;align-items:center;gap:6px">
-                <label style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-calendar"></i> ปี:</label>
-                <select id="histYearSelect" class="period-select" onchange="onHistoryYearChanged()"></select>
-              </div>
-
-              <!-- Individual Emp Select (Shown only in individual mode) -->
-              <div id="histEmpSelectGroup" style="display:none;align-items:center;gap:6px">
-                <label style="font-size:12px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-user"></i> เลือกพนักงาน:</label>
-                <select id="histEmpSelect" class="period-select" style="min-width:240px" onchange="onHistoryEmpChanged()"></select>
-              </div>
-
-              <div class="search-box">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="historySearchInput" placeholder="ค้นหาชื่อ/แผนก/รหัส..." oninput="filterHistoryTable()">
-              </div>
-
-              <!-- Action Buttons -->
-              <button type="button" class="btn btn-primary" onclick="printActiveHistoryReport()">
-                <i class="fa-solid fa-print"></i> พิมพ์รายงาน (A4)
-              </button>
-              <button type="button" class="btn btn-slate" onclick="printAllEmployeesBatch()">
-                <i class="fa-solid fa-print"></i> พิมพ์ประวัติทุกคน (แยกคนละหน้า A4)
-              </button>
-              <button type="button" id="btnHistPrint50Twi" class="btn btn-slate" style="background:#4338ca;color:#fff;border-color:#4338ca" onclick="open50TwiModalFromHistory()">
-                <i class="fa-solid fa-file-shield"></i> พิมพ์ใบ 50 ทวิ (ภาษี)
-              </button>
-              <button type="button" class="btn btn-slate" onclick="exportActiveHistoryCsv()">
-                <i class="fa-solid fa-file-csv"></i> Export CSV
-              </button>
             </div>
           </div>
 
           <!-- HIDDEN BATCH PRINT CONTAINER -->
           <div id="histBatchPrintArea" style="display:none"></div>
 
-          <!-- VIEW 1: YEARLY SUMMARY MATRIX (1 ROW PER EMPLOYEE) -->
-          <div id="histYearlyViewArea" style="padding:20px">
-            <!-- Yearly Grand Stat Cards -->
-            <div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(210px,1fr));margin-bottom:16px">
+          <!-- 1. INDIVIDUAL DETAILED VIEW (MODE 1) -->
+          <div id="histContentArea" style="padding:18px">
+            <!-- Premium Employee Bio Profile Banner -->
+            <div id="histEmpBioCard" style="background:linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);color:#ffffff;border-radius:var(--radius-xl);padding:20px 24px;margin-bottom:18px;box-shadow:0 10px 15px -3px rgba(15,23,42,0.3);position:relative;overflow:hidden">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;position:relative;z-index:10">
+                <div style="display:flex;align-items:center;gap:14px">
+                  <div id="histEmpAvatarInitials" style="width:54px;height:54px;border-radius:16px;background:rgba(255,255,255,0.12);border:1.5px solid rgba(255,255,255,0.2);color:#ffffff;font-weight:900;font-size:18px;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 2px 4px rgba(0,0,0,0.2)">
+                    -
+                  </div>
+                  <div>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                      <span id="histEmpIdBadge" style="padding:2px 8px;border-radius:6px;background:rgba(59,130,246,0.3);border:1px solid rgba(96,165,250,0.4);color:#bfdbfe;font-family:monospace;font-size:12px;font-weight:700">EMP---</span>
+                      <span id="histEmpNicknameBadge" style="padding:2px 8px;border-radius:6px;background:rgba(16,185,129,0.3);border:1px solid rgba(52,211,153,0.4);color:#a7f3d0;font-size:12px;font-weight:700">ชื่อเล่น: -</span>
+                      <span id="histEmpStatusBadge" class="period-pill" style="background:#059669;color:#ffffff;border:none;font-size:11px">🟢 พนักงานประจำ</span>
+                    </div>
+                    <h2 id="histEmpCardName" style="font-size:18px;font-weight:800;margin:4px 0 2px;color:#ffffff">-</h2>
+                    <div style="font-size:12px;color:#cbd5e1;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                      <span id="histEmpCardDept"><i class="fa-solid fa-briefcase" style="color:#94a3b8;margin-right:4px"></i> -</span>
+                      <span id="histEmpTenureText"><i class="fa-solid fa-calendar-check" style="color:#94a3b8;margin-right:4px"></i> เริ่มงาน: -</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Right Bio Details -->
+                <div style="display:flex;gap:20px;border-left:1px solid rgba(255,255,255,0.15);padding-left:20px;font-size:11.5px">
+                  <div>
+                    <div style="color:#94a3b8;font-size:10.5px">เลขบัตรประชาชน</div>
+                    <div id="histEmpCardCitizen" style="font-family:monospace;font-weight:700;margin-top:2px">-</div>
+                    <div style="color:#94a3b8;font-size:10.5px;margin-top:6px">เบอร์โทรศัพท์</div>
+                    <div id="histEmpCardPhone" style="font-family:monospace;font-weight:700;margin-top:2px">-</div>
+                  </div>
+                  <div>
+                    <div style="color:#94a3b8;font-size:10.5px">ธนาคารรับเงินเดือน</div>
+                    <div id="histEmpCardBank" style="font-weight:700;color:#34d399;margin-top:2px">-</div>
+                    <div style="color:#94a3b8;font-size:10.5px;margin-top:6px">เลขที่บัญชี</div>
+                    <div id="histEmpCardAccount" style="font-family:monospace;font-weight:700;color:#93c5fd;margin-top:2px">-</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- YTD Annual Performance & Attendance Scorecards (4 Cards) -->
+            <div class="stats-grid" style="margin-bottom:18px">
               <div class="stat-card blue">
                 <div>
-                  <div class="stat-label">พนักงานในรายงานประจำปี</div>
-                  <div class="stat-value" id="statYearlyEmps">0 คน</div>
+                  <div class="stat-label">เงินได้สะสมทั้งปี (YTD Gross)</div>
+                  <div class="stat-value text-blue" id="histYtdGross">฿0.00</div>
+                </div>
+                <div class="stat-icon blue"><i class="fa-solid fa-sack-dollar"></i></div>
+              </div>
+              <div class="stat-card purple">
+                <div>
+                  <div class="stat-label">กองทุนสะสม PF ทั้งปี</div>
+                  <div class="stat-value text-purple" id="histYtdPf">฿0.00</div>
+                </div>
+                <div class="stat-icon purple"><i class="fa-solid fa-piggy-bank"></i></div>
+              </div>
+              <div class="stat-card orange">
+                <div>
+                  <div class="stat-label">สถิติขาด/ลา/OT สะสมทั้งปี</div>
+                  <div class="stat-value text-orange" id="histYtdAttendance" style="font-size:14px;font-weight:700">ขาด 0 | ลา 0 | OT 0 ชม.</div>
+                </div>
+                <div class="stat-icon orange"><i class="fa-solid fa-clock-rotate-left"></i></div>
+              </div>
+              <div class="stat-card green">
+                <div>
+                  <div class="stat-label">รับสุทธิสะสมทั้งปี (YTD Net)</div>
+                  <div class="stat-value text-green" id="histYtdNet">฿0.00</div>
+                </div>
+                <div class="stat-icon green"><i class="fa-solid fa-wallet"></i></div>
+              </div>
+            </div>
+
+            <!-- 12-Month History Table -->
+            <div class="table-wrapper">
+              <table class="data-table">
+                <thead id="historyTableHead">
+                  <tr>
+                    <th style="width:115px">งวดเดือน</th>
+                    <th class="text-right" style="width:105px">เงินเดือนฐาน</th>
+                    <th class="text-right" style="width:60px">ขาด</th>
+                    <th class="text-right" style="width:60px">ลากิจ</th>
+                    <th class="text-right" style="width:60px">ลาป่วย</th>
+                    <th class="text-right text-red" style="width:75px">หักสาย</th>
+                    <th class="text-right text-blue" style="width:85px">OT (ชม./฿)</th>
+                    <th class="text-right text-green" style="width:80px">เบี้ยขยัน</th>
+                    <th class="text-right" style="width:70px">โบนัส</th>
+                    <th class="text-right font-bold text-blue bg-blue-light" style="width:115px">เงินได้รวม (Gross)</th>
+                    <th class="text-right text-red font-bold" style="width:90px">SSO</th>
+                    <th class="text-right text-blue font-bold" style="width:90px">กองทุน PF</th>
+                    <th class="text-right" style="width:75px">ภาษี</th>
+                    <th class="text-right text-red font-bold" style="width:95px">รวมหัก</th>
+                    <th class="text-right font-bold text-green bg-green-light" style="width:115px">สุทธิ (Net)</th>
+                    <th class="text-center" style="width:80px">สลิป</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+                <tfoot id="historyTableFoot" style="background:#eff6ff;font-weight:700;border-top:2px solid #93c5fd"></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <!-- 2. YEARLY SUMMARY MATRIX VIEW (MODE 2) -->
+          <div id="histYearlyViewArea" style="display:none;padding:18px">
+            <!-- Yearly Grand Stat Cards -->
+            <div class="stats-grid" style="margin-bottom:18px">
+              <div class="stat-card blue">
+                <div>
+                  <div class="stat-label">พนักงานในรายงานทั้งปี</div>
+                  <div class="stat-value text-blue" id="statYearlyEmps">0 คน</div>
                 </div>
                 <div class="stat-icon blue"><i class="fa-solid fa-users"></i></div>
               </div>
               <div class="stat-card green">
                 <div>
                   <div class="stat-label">รวมเงินได้ทั้งปี (Total Gross)</div>
-                  <div class="stat-value" id="statYearlyGross">฿0.00</div>
+                  <div class="stat-value text-green" id="statYearlyGross">฿0.00</div>
                 </div>
                 <div class="stat-icon green"><i class="fa-solid fa-sack-dollar"></i></div>
               </div>
               <div class="stat-card red">
                 <div>
                   <div class="stat-label">รวมหักสะสมทั้งปี (Total Deductions)</div>
-                  <div class="stat-value" id="statYearlyDeductions">฿0.00</div>
+                  <div class="stat-value text-red" id="statYearlyDeductions">฿0.00</div>
                 </div>
                 <div class="stat-icon red"><i class="fa-solid fa-receipt"></i></div>
               </div>
               <div class="stat-card purple">
                 <div>
                   <div class="stat-label">รวมเงินได้สุทธิทั้งปี (Total Net Pay)</div>
-                  <div class="stat-value" id="statYearlyNet">฿0.00</div>
+                  <div class="stat-value text-purple" id="statYearlyNet">฿0.00</div>
                 </div>
                 <div class="stat-icon purple"><i class="fa-solid fa-hand-holding-dollar"></i></div>
               </div>
@@ -526,7 +637,7 @@
                 <thead id="yearlySummaryTableHead">
                   <tr>
                     <th style="width:45px" class="text-center">#</th>
-                    <th style="width:90px">รหัส</th>
+                    <th style="width:85px">รหัส</th>
                     <th style="width:160px">ชื่อ-นามสกุล</th>
                     <th style="width:90px">แผนก</th>
                     <th class="text-center" style="width:70px">งวดคำนวณ</th>
@@ -568,59 +679,6 @@
                 <div style="border-top:1px solid #94a3b8;padding-top:4px">กรรมการผู้มีอำนาจลงนาม</div>
                 <div style="font-size:10px;color:#94a3b8">( ................................................... )</div>
               </div>
-            </div>
-          </div>
-
-          <!-- VIEW 2: INDIVIDUAL DETAILED VIEW (12 MONTHS) -->
-          <div id="histContentArea" style="display:none;padding:20px">
-            <!-- Employee Profile Summary Card -->
-            <div style="background:var(--slate-50);border:1.5px solid var(--slate-200);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:20px">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">
-                <div>
-                  <h3 id="histEmpCardName" style="font-size:16px;font-weight:700;color:#0f172a">-</h3>
-                  <p id="histEmpCardDept" style="font-size:12px;color:#64748b">-</p>
-                </div>
-                <div style="display:flex;gap:20px;font-size:11.5px">
-                  <div><span class="text-muted">วันเกิด/อายุ:</span> <strong id="histEmpCardBirthAge">-</strong></div>
-                  <div><span class="text-muted">บัตรประชาชน:</span> <strong id="histEmpCardCitizen">-</strong></div>
-                  <div><span class="text-muted">เบอร์โทร:</span> <strong id="histEmpCardPhone">-</strong></div>
-                  <div><span class="text-muted">ธนาคาร:</span> <strong id="histEmpCardBank">-</strong></div>
-                  <div><span class="text-muted">เงินเดือนฐาน:</span> <strong id="histEmpCardSalary" class="text-blue font-mono">-</strong></div>
-                  <div><span class="text-muted">วันเริ่มงาน:</span> <strong id="histEmpCardJoin">-</strong></div>
-                  <div><span class="text-muted">PF %:</span> <strong id="histEmpCardPf">-</strong></div>
-                </div>
-              </div>
-            </div>
-
-            <!-- History Table with Annual Total Row -->
-            <div class="table-wrapper">
-              <table class="data-table">
-                <thead id="historyTableHead">
-                  <tr>
-                    <th style="width:110px">งวด</th>
-                    <th class="text-right" style="width:105px">เงินเดือนฐาน</th>
-                    <th class="text-right" style="width:65px">ขาด</th>
-                    <th class="text-right" style="width:65px">ลากิจ</th>
-                    <th class="text-right" style="width:65px">ลาป่วย</th>
-                    <th class="text-right text-red" style="width:80px">หักสาย</th>
-                    <th class="text-right" style="width:65px">OT ชม.</th>
-                    <th class="text-right text-blue" style="width:85px">เงิน OT</th>
-                    <th class="text-right text-green" style="width:85px">เบี้ยขยัน</th>
-                    <th class="text-right" style="width:75px">โบนัส</th>
-                    <th class="text-right text-red" style="width:100px">หักขาด/ลา/สาย</th>
-                    <th class="text-right font-bold text-blue bg-blue-light" style="width:105px">Gross</th>
-                    <th class="text-right font-bold text-red" style="width:95px">ประกันสังคม</th>
-                    <th class="text-right text-blue font-bold" style="width:90px">กองทุน PF</th>
-                    <th class="text-right" style="width:75px">ภาษี</th>
-                    <th class="text-right text-red" style="width:85px">หักเงินเบิก</th>
-                    <th class="text-right text-red" style="width:75px">หักอื่นๆ</th>
-                    <th class="text-right font-bold text-red bg-red-light" style="width:100px">รวมหัก</th>
-                    <th class="text-right font-bold text-green bg-green-light" style="width:115px">สุทธิ (Net)</th>
-                  </tr>
-                </thead>
-                <tbody id="historyTableBody"></tbody>
-                <tfoot id="historyTableFoot" style="background:#eff6ff;font-weight:700;border-top:2px solid #93c5fd"></tfoot>
-              </table>
             </div>
           </div>
         </div>
@@ -1248,8 +1306,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=6.0"></script>
-  <script src="js/app.js?v=6.0"></script>
+  <script src="js/config.js?v=6.1"></script>
+  <script src="js/app.js?v=6.1"></script>
   <!-- AI PAYROLL ASSISTANT FLOATING BUTTON & DRAWER -->
   <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" onclick="toggleAiChat()">
     <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>
