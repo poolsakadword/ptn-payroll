@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=6.1">
+  <link rel="stylesheet" href="css/style.css?v=6.2">
   <!-- PWA & Mobile Web App Meta -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#1e3a8a">
@@ -314,35 +314,67 @@
 
       <!-- 4. EMPLOYEES MASTER TAB (HYBRID ENTERPRISE HUB V6.0) -->
       <div class="tab-content" id="tab-employees">
-        <!-- TOP KPI METRIC CARDS -->
-        <div class="stats-grid" style="margin-bottom:16px" id="empKpiStatsGrid">
-          <div class="stat-card blue">
-            <div>
-              <div class="stat-label">พนักงานทั้งหมด (Total)</div>
-              <div class="stat-value text-blue" id="empKpiTotal">0 <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span></div>
+        <!-- TOP SQUARE KPI TILES (STYLE 1 V6.2) -->
+        <div class="square-kpi-grid" id="empKpiStatsGrid">
+          <!-- Tile 1: Total Employees -->
+          <div class="square-kpi-card blue">
+            <div class="square-kpi-top">
+              <div class="square-kpi-icon blue"><i class="fa-solid fa-users"></i></div>
+              <span class="period-pill" style="font-size:10px;padding:1px 6px">ทั้งหมด</span>
             </div>
-            <div class="stat-icon blue"><i class="fa-solid fa-users"></i></div>
+            <div>
+              <div class="square-kpi-title">พนักงานทั้งหมด (Total)</div>
+              <div class="square-kpi-value text-blue" id="empKpiTotal">0 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span></div>
+            </div>
+            <div class="square-kpi-footer">
+              <span><i class="fa-solid fa-circle" style="font-size:6px;color:#2563eb;margin-right:3px"></i> รวมทุกแผนกในบริษัท</span>
+            </div>
           </div>
-          <div class="stat-card green">
-            <div>
-              <div class="stat-label">ทำงานอยู่ (Active)</div>
-              <div class="stat-value text-green" id="empKpiActive">0 <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span></div>
+
+          <!-- Tile 2: Active Employees -->
+          <div class="square-kpi-card green">
+            <div class="square-kpi-top">
+              <div class="square-kpi-icon green"><i class="fa-solid fa-user-check"></i></div>
+              <span class="period-pill" style="background:#ecfdf5;color:#059669;font-size:10px;padding:1px 6px">Active</span>
             </div>
-            <div class="stat-icon green"><i class="fa-solid fa-user-check"></i></div>
+            <div>
+              <div class="square-kpi-title" style="color:#059669">ทำงานอยู่ (ประจำ)</div>
+              <div class="square-kpi-value text-green" id="empKpiActive">0 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span></div>
+            </div>
+            <div class="square-kpi-footer" style="color:#059669">
+              <span><i class="fa-solid fa-check-double" style="margin-right:3px"></i> บรรจุพนักงานประจำ</span>
+            </div>
           </div>
-          <div class="stat-card orange" id="empKpiProbationCard" style="cursor:pointer" onclick="setEmpStatusFilter('Probation')">
-            <div>
-              <div class="stat-label">ช่วงทดลองงาน (Probation)</div>
-              <div class="stat-value text-orange" id="empKpiProbation">0 <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span></div>
+
+          <!-- Tile 3: Probation Employees -->
+          <div class="square-kpi-card orange" id="empKpiProbationCard" style="cursor:pointer;background:#fffaf5" onclick="setEmpStatusFilter('Probation')">
+            <div class="square-kpi-top">
+              <div class="square-kpi-icon orange"><i class="fa-solid fa-stopwatch"></i></div>
+              <span class="period-pill" style="background:#fff7ed;color:#c2410c;border-color:#fed7aa;font-size:10px;padding:1px 6px;font-weight:700">119 วัน</span>
             </div>
-            <div class="stat-icon orange"><i class="fa-solid fa-stopwatch"></i></div>
+            <div>
+              <div class="square-kpi-title" style="color:#c2410c">ช่วงทดลองงาน (Probation)</div>
+              <div class="square-kpi-value text-orange" id="empKpiProbation">0 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span></div>
+            </div>
+            <div class="square-kpi-footer" style="color:#c2410c;font-weight:600">
+              <span><i class="fa-solid fa-bell" style="margin-right:3px"></i> คลิกเพื่อกรองเฉพาะกลุ่มนี้</span>
+            </div>
           </div>
-          <div class="stat-card purple" id="empKpiSalaryCard">
-            <div>
-              <div class="stat-label">ฐานเงินเดือนรวมทั้งสิ้น</div>
-              <div class="stat-value text-purple" id="empKpiTotalSalary">฿0.00</div>
+
+          <!-- Tile 4: Total Salary Base -->
+          <div class="square-kpi-card purple" id="empKpiSalaryCard">
+            <div class="square-kpi-top">
+              <div class="square-kpi-icon purple"><i class="fa-solid fa-money-bill-wave"></i></div>
+              <span class="period-pill" style="background:#f5f3ff;color:#7c3aed;font-size:10px;padding:1px 6px">รายเดือน</span>
             </div>
-            <div class="stat-icon purple"><i class="fa-solid fa-money-bill-wave"></i></div>
+            <div>
+              <div class="square-kpi-title" style="color:#7c3aed">ฐานเงินเดือนรวมทั้งสิ้น</div>
+              <div class="square-kpi-value text-purple" id="empKpiTotalSalary">฿0.00</div>
+            </div>
+            <div class="square-kpi-footer">
+              <span>ยอดจ่ายฐานรวม</span>
+              <span class="font-mono font-bold" style="color:#64748b">ทั้งองค์กร</span>
+            </div>
           </div>
         </div>
 
@@ -529,35 +561,66 @@
               </div>
             </div>
 
-            <!-- YTD Annual Performance & Attendance Scorecards (4 Cards) -->
-            <div class="stats-grid" style="margin-bottom:18px">
-              <div class="stat-card blue">
-                <div>
-                  <div class="stat-label">เงินได้สะสมทั้งปี (YTD Gross)</div>
-                  <div class="stat-value text-blue" id="histYtdGross">฿0.00</div>
+            <!-- YTD ANNUAL SQUARE KPI TILES (STYLE 1 V6.2) -->
+            <div class="square-kpi-grid">
+              <!-- YTD Tile 1: Gross -->
+              <div class="square-kpi-card blue">
+                <div class="square-kpi-top">
+                  <div class="square-kpi-icon blue"><i class="fa-solid fa-sack-dollar"></i></div>
+                  <span class="period-pill" style="background:#eff6ff;color:#1d4ed8;font-size:10px;padding:1px 6px">YTD Gross</span>
                 </div>
-                <div class="stat-icon blue"><i class="fa-solid fa-sack-dollar"></i></div>
+                <div>
+                  <div class="square-kpi-title">เงินได้สะสมทั้งปี (Gross)</div>
+                  <div class="square-kpi-value text-blue" id="histYtdGross">฿0.00</div>
+                </div>
+                <div class="square-kpi-footer">
+                  <span>รวม OT, เบี้ยขยัน, โบนัส</span>
+                </div>
               </div>
-              <div class="stat-card purple">
-                <div>
-                  <div class="stat-label">กองทุนสะสม PF ทั้งปี</div>
-                  <div class="stat-value text-purple" id="histYtdPf">฿0.00</div>
+
+              <!-- YTD Tile 2: PF -->
+              <div class="square-kpi-card purple">
+                <div class="square-kpi-top">
+                  <div class="square-kpi-icon purple"><i class="fa-solid fa-piggy-bank"></i></div>
+                  <span class="period-pill" style="background:#f5f3ff;color:#7c3aed;font-size:10px;padding:1px 6px">PF สะสม</span>
                 </div>
-                <div class="stat-icon purple"><i class="fa-solid fa-piggy-bank"></i></div>
+                <div>
+                  <div class="square-kpi-title" style="color:#7c3aed">กองทุนสะสม PF ทั้งปี</div>
+                  <div class="square-kpi-value text-purple" id="histYtdPf">฿0.00</div>
+                </div>
+                <div class="square-kpi-footer" style="color:#7c3aed">
+                  <span>เงินออมสะสมพนักงาน</span>
+                </div>
               </div>
-              <div class="stat-card orange">
-                <div>
-                  <div class="stat-label">สถิติขาด/ลา/OT สะสมทั้งปี</div>
-                  <div class="stat-value text-orange" id="histYtdAttendance" style="font-size:14px;font-weight:700">ขาด 0 | ลา 0 | OT 0 ชม.</div>
+
+              <!-- YTD Tile 3: Attendance -->
+              <div class="square-kpi-card orange">
+                <div class="square-kpi-top">
+                  <div class="square-kpi-icon orange"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                  <span class="period-pill" style="background:#fff7ed;color:#c2410c;font-size:10px;padding:1px 6px">สถิติเวลา</span>
                 </div>
-                <div class="stat-icon orange"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                <div>
+                  <div class="square-kpi-title" style="color:#c2410c">สถิติขาด/ลา/OT สะสม</div>
+                  <div class="square-kpi-value text-orange" id="histYtdAttendance" style="font-size:14.5px;font-weight:800;margin-top:4px">ขาด 0 | ลา 0 | OT 0 ชม.</div>
+                </div>
+                <div class="square-kpi-footer">
+                  <span>สถิติเวลาทำงานทั้งปี</span>
+                </div>
               </div>
-              <div class="stat-card green">
-                <div>
-                  <div class="stat-label">รับสุทธิสะสมทั้งปี (YTD Net)</div>
-                  <div class="stat-value text-green" id="histYtdNet">฿0.00</div>
+
+              <!-- YTD Tile 4: Net -->
+              <div class="square-kpi-card green">
+                <div class="square-kpi-top">
+                  <div class="square-kpi-icon green"><i class="fa-solid fa-wallet"></i></div>
+                  <span class="period-pill" style="background:#ecfdf5;color:#059669;font-size:10px;padding:1px 6px">YTD Net</span>
                 </div>
-                <div class="stat-icon green"><i class="fa-solid fa-wallet"></i></div>
+                <div>
+                  <div class="square-kpi-title" style="color:#059669">รับสุทธิสะสมทั้งปี (Net)</div>
+                  <div class="square-kpi-value text-green" id="histYtdNet">฿0.00</div>
+                </div>
+                <div class="square-kpi-footer" style="color:#059669">
+                  <span>โอนเข้าบัญชีจริงสะสม</span>
+                </div>
               </div>
             </div>
 
@@ -592,35 +655,54 @@
 
           <!-- 2. YEARLY SUMMARY MATRIX VIEW (MODE 2) -->
           <div id="histYearlyViewArea" style="display:none;padding:18px">
-            <!-- Yearly Grand Stat Cards -->
-            <div class="stats-grid" style="margin-bottom:18px">
-              <div class="stat-card blue">
-                <div>
-                  <div class="stat-label">พนักงานในรายงานทั้งปี</div>
-                  <div class="stat-value text-blue" id="statYearlyEmps">0 คน</div>
+            <!-- YEARLY MATRIX SQUARE KPI TILES (STYLE 1 V6.2) -->
+            <div class="square-kpi-grid">
+              <div class="square-kpi-card blue">
+                <div class="square-kpi-top">
+                  <div class="square-kpi-icon blue"><i class="fa-solid fa-users"></i></div>
+                  <span class="period-pill" style="font-size:10px;padding:1px 6px">พนักงาน</span>
                 </div>
-                <div class="stat-icon blue"><i class="fa-solid fa-users"></i></div>
+                <div>
+                  <div class="square-kpi-title">พนักงานในรายงานทั้งปี</div>
+                  <div class="square-kpi-value text-blue" id="statYearlyEmps">0 <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span></div>
+                </div>
+                <div class="square-kpi-footer"><span>สรุปประจำปี</span></div>
               </div>
-              <div class="stat-card green">
-                <div>
-                  <div class="stat-label">รวมเงินได้ทั้งปี (Total Gross)</div>
-                  <div class="stat-value text-green" id="statYearlyGross">฿0.00</div>
+
+              <div class="square-kpi-card green">
+                <div class="square-kpi-top">
+                  <div class="square-kpi-icon green"><i class="fa-solid fa-sack-dollar"></i></div>
+                  <span class="period-pill" style="background:#ecfdf5;color:#059669;font-size:10px;padding:1px 6px">Total Gross</span>
                 </div>
-                <div class="stat-icon green"><i class="fa-solid fa-sack-dollar"></i></div>
+                <div>
+                  <div class="square-kpi-title" style="color:#059669">รวมเงินได้ทั้งปี (Gross)</div>
+                  <div class="square-kpi-value text-green" id="statYearlyGross">฿0.00</div>
+                </div>
+                <div class="square-kpi-footer"><span>รวมทุกประเภทเงินได้</span></div>
               </div>
-              <div class="stat-card red">
-                <div>
-                  <div class="stat-label">รวมหักสะสมทั้งปี (Total Deductions)</div>
-                  <div class="stat-value text-red" id="statYearlyDeductions">฿0.00</div>
+
+              <div class="square-kpi-card red">
+                <div class="square-kpi-top">
+                  <div class="square-kpi-icon red"><i class="fa-solid fa-receipt"></i></div>
+                  <span class="period-pill" style="background:#fef2f2;color:#dc2626;font-size:10px;padding:1px 6px">Deductions</span>
                 </div>
-                <div class="stat-icon red"><i class="fa-solid fa-receipt"></i></div>
+                <div>
+                  <div class="square-kpi-title" style="color:#dc2626">รวมหักสะสมทั้งปี (Total)</div>
+                  <div class="square-kpi-value text-red" id="statYearlyDeductions">฿0.00</div>
+                </div>
+                <div class="square-kpi-footer"><span>SSO, PF, ภาษี, หักอื่นๆ</span></div>
               </div>
-              <div class="stat-card purple">
-                <div>
-                  <div class="stat-label">รวมเงินได้สุทธิทั้งปี (Total Net Pay)</div>
-                  <div class="stat-value text-purple" id="statYearlyNet">฿0.00</div>
+
+              <div class="square-kpi-card purple">
+                <div class="square-kpi-top">
+                  <div class="square-kpi-icon purple"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+                  <span class="period-pill" style="background:#f5f3ff;color:#7c3aed;font-size:10px;padding:1px 6px">Total Net</span>
                 </div>
-                <div class="stat-icon purple"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+                <div>
+                  <div class="square-kpi-title" style="color:#7c3aed">รวมเงินได้สุทธิทั้งปี (Net)</div>
+                  <div class="square-kpi-value text-purple" id="statYearlyNet">฿0.00</div>
+                </div>
+                <div class="square-kpi-footer"><span>ยอดจ่ายจริงทั้งปี</span></div>
               </div>
             </div>
 
@@ -1306,8 +1388,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=6.1"></script>
-  <script src="js/app.js?v=6.1"></script>
+  <script src="js/config.js?v=6.2"></script>
+  <script src="js/app.js?v=6.2"></script>
   <!-- AI PAYROLL ASSISTANT FLOATING BUTTON & DRAWER -->
   <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" onclick="toggleAiChat()">
     <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>

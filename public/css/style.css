@@ -1168,3 +1168,88 @@ footer {
   }
 
 }
+
+/* =======================================================
+   SQUARE KPI TILES (STYLE 1: MODERN CLEAN MINIMAL V6.2)
+   ======================================================= */
+.square-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+@media (max-width: 900px) {
+  .square-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .square-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.square-kpi-card {
+  background: #ffffff;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+  position: relative;
+  min-height: 124px;
+}
+.square-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: #cbd5e1;
+}
+.square-kpi-card.blue { border-left: 4px solid var(--primary); }
+.square-kpi-card.green { border-left: 4px solid var(--success); }
+.square-kpi-card.orange { border-left: 4px solid var(--warning); }
+.square-kpi-card.purple { border-left: 4px solid var(--accent); }
+.square-kpi-card.red { border-left: 4px solid var(--danger); }
+
+.square-kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.square-kpi-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+}
+.square-kpi-icon.blue { background: #eff6ff; color: #1d4ed8; }
+.square-kpi-icon.green { background: #ecfdf5; color: #059669; }
+.square-kpi-icon.orange { background: #fff7ed; color: #c2410c; }
+.square-kpi-icon.purple { background: #f5f3ff; color: #7c3aed; }
+.square-kpi-icon.red { background: #fef2f2; color: #dc2626; }
+
+.square-kpi-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.square-kpi-value {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+.square-kpi-footer {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-light);
+  padding-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
