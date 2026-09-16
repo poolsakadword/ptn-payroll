@@ -679,7 +679,7 @@ function renderEmployeesTable() {
         '<td>' + esc(e.bankName || '-') + '<br><span class="text-muted font-mono" style="font-size:11px">' + esc(e.bankAccount || '-') + '</span></td>' +
         '<td>' + esc(e.joinDate || '-') + '</td>' +
         '<td class="text-center nowrap">' +
-          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'" + esc(e.empId) + "\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
+          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
         '</td>' +
       '</tr>';
     } else {
@@ -696,8 +696,8 @@ function renderEmployeesTable() {
         '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
         '<td class="text-center nowrap">' +
           (e.status === 'Probation' ? '<button type="button" class="btn-icon edit" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-weight:700" onclick="passProbation(\'' + esc(e.empId) + '\')" title="อนุมัติผ่านโปร"><i class="fa-solid fa-check"></i> ผ่านโปร</button> ' : '') +
-          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'" + esc(e.empId) + "\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' : '') +
-          (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'" + esc(e.empId) + "\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
+          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' : '') +
+          (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
           (!canEditEmp && !canDelEmp ? '<span class="text-muted">-</span>' : '') +
         '</td>' +
       '</tr>';
