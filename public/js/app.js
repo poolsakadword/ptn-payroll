@@ -38,6 +38,12 @@ function applyRolePermissions() {
   var canClosePeriod = hasPermission('close_period');
   var canPrintHistory = hasPermission('print_history');
   var canExportCsv = hasPermission('export_csv');
+  var isAdmin = Boolean(State.currentUser && (
+    String(State.currentUser.username || '').toLowerCase() === 'admin' ||
+    String(State.currentUser.role || '').toLowerCase().indexOf('admin') >= 0 ||
+    hasPermission('all')
+  ));
+  var canViewAnalytics = isAdmin;
 
   // 1. Navigation Tabs Visibility
   var navDash = document.getElementById('navBtn-dashboard');
@@ -45,6 +51,7 @@ function applyRolePermissions() {
   var navInput = document.getElementById('navBtn-input');
   var navEmp = document.getElementById('navBtn-employees');
   var navHistory = document.getElementById('navBtn-history');
+  var navAnalytics = document.getElementById('navBtn-analytics');
   var navCompany = document.getElementById('navBtn-company');
   var navUsers = document.getElementById('navBtn-users');
 
@@ -53,6 +60,7 @@ function applyRolePermissions() {
   if (navInput) navInput.style.display = canViewInputs ? 'inline-flex' : 'none';
   if (navEmp) navEmp.style.display = canViewEmp ? 'inline-flex' : 'none';
   if (navHistory) navHistory.style.display = canViewHistory ? 'inline-flex' : 'none';
+  if (navAnalytics) navAnalytics.style.display = canViewAnalytics ? 'inline-flex' : 'none';
   if (navCompany) navCompany.style.display = canManageCompany ? 'inline-flex' : 'none';
   if (navUsers) navUsers.style.display = canManageUsers ? 'inline-flex' : 'none';
 
@@ -66,6 +74,7 @@ function applyRolePermissions() {
     if (tabId === 'tab-input' && !canViewInputs) allowed = false;
     if (tabId === 'tab-employees' && !canViewEmp) allowed = false;
     if (tabId === 'tab-history' && !canViewHistory) allowed = false;
+    if (tabId === 'tab-analytics' && !canViewAnalytics) allowed = false;
     if (tabId === 'tab-company' && !canManageCompany) allowed = false;
     if (tabId === 'tab-users' && !canManageUsers) allowed = false;
 
@@ -75,6 +84,7 @@ function applyRolePermissions() {
       else if (canViewInputs) switchTab('input');
       else if (canViewPayroll) switchTab('payroll');
       else if (canViewHistory) switchTab('history');
+      else if (canViewAnalytics) switchTab('analytics');
     }
   }
 
@@ -119,11 +129,13 @@ function applyRolePermissions() {
     periodCloseContainer.style.display = 'inline-block';
   }
 
-  // 7. History Print Buttons
+  // 7. History Print & 50 Twi Buttons
   var btnPrintActive = document.querySelector('button[onclick="printActiveHistoryReport()"]');
   if (btnPrintActive) btnPrintActive.style.display = canPrintHistory ? 'inline-flex' : 'none';
   var btnPrintBatch = document.querySelector('button[onclick="printAllEmployeesBatch()"]');
-  if (btnPrintBatch) btnPrintBatch.style.display = canPrintHistory ? 'inline-flex' : 'none';
+  if (btnPrintBatch) btnPrintBatch.style.display = (canPrintHistory && canViewSalary) ? 'inline-flex' : 'none';
+  var btn50Twi = document.getElementById('btnHistPrint50Twi');
+  if (btn50Twi) btn50Twi.style.display = canViewSalary ? 'inline-flex' : 'none';
 
   // 8. Export CSV Buttons
   var exportBtns = document.querySelectorAll('button[onclick*="exportToCSV"], button[onclick*="exportActiveHistoryCsv"], button[onclick*="exportAllEmployeeHistory"], button[onclick*="exportTtbPayrollCsv"], button[onclick*="exportTtbDirectCreditTxt"]');
@@ -219,6 +231,7 @@ function navigateToAuthorizedTab() {
   else if (curId === 'tab-input' && hasPermission('view_inputs')) isAllowed = true;
   else if (curId === 'tab-employees' && hasPermission('view_emp')) isAllowed = true;
   else if (curId === 'tab-history' && hasPermission('view_history')) isAllowed = true;
+  else if (curId === 'tab-analytics' && (String(State.currentUser && State.currentUser.username || '').toLowerCase() === 'admin' || String(State.currentUser && State.currentUser.role || '').toLowerCase().indexOf('admin') >= 0 || hasPermission('all'))) isAllowed = true;
   else if (curId === 'tab-company' && (hasPermission('manage_company') || hasPermission('manage_backup'))) isAllowed = true;
   else if (curId === 'tab-users' && hasPermission('manage_users')) isAllowed = true;
 
@@ -406,6 +419,9 @@ function renderAllViews() {
   renderInputTable();
   renderEmployeesTable();
   renderHistoryTab();
+  if (document.getElementById('tab-analytics') && document.getElementById('tab-analytics').classList.contains('active')) {
+    renderAnalyticsTab(true);
+  }
   renderCompanySettings();
   renderUsersTable();
 }
@@ -1094,17 +1110,36 @@ function onHistoryEmpChanged(silent) {
         });
       }
 
+      var initials = (emp.fullName || '').substring(0, 2);
+      if (document.getElementById('histEmpAvatarInitials')) document.getElementById('histEmpAvatarInitials').textContent = initials || '-';
+      if (document.getElementById('histEmpIdBadge')) document.getElementById('histEmpIdBadge').textContent = emp.empId || 'EMP---';
+      if (document.getElementById('histEmpNicknameBadge')) document.getElementById('histEmpNicknameBadge').textContent = 'ชื่อเล่น: ' + (emp.nickname || '-');
+      
+      var st = emp.status || 'Active';
+      var stBadgeEl = document.getElementById('histEmpStatusBadge');
+      if (stBadgeEl) {
+        if (st === 'Active') {
+          stBadgeEl.textContent = '🟢 พนักงานประจำ';
+          stBadgeEl.style.background = '#059669';
+        } else if (st === 'Probation') {
+          stBadgeEl.textContent = '🟠 ทดลองงาน';
+          stBadgeEl.style.background = '#ea580c';
+        } else if (st === 'Resigned') {
+          stBadgeEl.textContent = '🔴 ลาออกแล้ว';
+          stBadgeEl.style.background = '#dc2626';
+        } else {
+          stBadgeEl.textContent = '🟡 ' + st;
+          stBadgeEl.style.background = '#d97706';
+        }
+      }
+
       if (document.getElementById('histEmpCardName')) document.getElementById('histEmpCardName').textContent = emp.fullName + (emp.nickname ? ' (' + emp.nickname + ')' : '') + ' [' + (emp.empId || '') + ']';
-      if (document.getElementById('histEmpCardDept')) document.getElementById('histEmpCardDept').textContent = (emp.department || '-') + ' / ' + (emp.position || '-');
-      if (document.getElementById('histEmpCardBirthAge')) document.getElementById('histEmpCardBirthAge').textContent = (emp.birthDate || '-') + ' (' + (emp.age || 0) + ' ปี)';
+      if (document.getElementById('histEmpCardDept')) document.getElementById('histEmpCardDept').innerHTML = '<i class="fa-solid fa-briefcase" style="color:#94a3b8;margin-right:4px"></i> ' + esc(emp.department || '-') + ' / ' + esc(emp.position || '-');
+      if (document.getElementById('histEmpTenureText')) document.getElementById('histEmpTenureText').innerHTML = '<i class="fa-solid fa-calendar-check" style="color:#94a3b8;margin-right:4px"></i> เริ่มงาน: ' + esc(emp.joinDate || '-');
       if (document.getElementById('histEmpCardCitizen')) document.getElementById('histEmpCardCitizen').textContent = emp.citizenId || '-';
       if (document.getElementById('histEmpCardPhone')) document.getElementById('histEmpCardPhone').textContent = emp.phone || '-';
-      if (document.getElementById('histEmpCardBank')) document.getElementById('histEmpCardBank').textContent = (emp.bankName || '-') + ' ' + (emp.bankAccount || '-');
-      if (document.getElementById('histEmpCardSalary')) document.getElementById('histEmpCardSalary').textContent = hasPermission('view_salary') ? fmt(emp.baseSalary) : '฿***';
-      if (document.getElementById('histEmpCardJoin')) document.getElementById('histEmpCardJoin').textContent = emp.joinDate || '-';
-      var canViewSalary = hasPermission('view_salary');
-      var pfText = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate)) && Number(emp.pfRate) > 0) ? (Math.round(Number(emp.pfRate) * 100) + '%') : 'ไม่หัก PF';
-      if (document.getElementById('histEmpCardPf')) document.getElementById('histEmpCardPf').textContent = canViewSalary ? pfText : 'ข้อมูลความลับ';
+      if (document.getElementById('histEmpCardBank')) document.getElementById('histEmpCardBank').textContent = emp.bankName || '-';
+      if (document.getElementById('histEmpCardAccount')) document.getElementById('histEmpCardAccount').textContent = emp.bankAccount || '-';
 
       filterHistoryTable();
       if (area) area.style.display = 'block';
@@ -1165,9 +1200,11 @@ function filterHistoryTable() {
     sumDed += totDed; sumNet += net;
 
     var canViewSalary = hasPermission('view_salary');
+    var canViewPayslip = hasPermission('view_payslip');
+    var slipBtn = (canViewSalary && canViewPayslip) ? ('<button type="button" class="btn btn-primary btn-sm" style="padding:2px 8px;font-size:11px" onclick="viewPayslip(\'' + esc(r.empId || '') + '\', \'' + esc(r.period || '') + '\')"><i class="fa-solid fa-file-invoice-dollar"></i> สลิป</button>') : '<span class="text-muted">-</span>';
 
     h += '<tr>' +
-      '<td class="font-bold">' + esc(r.period) + '</td>' +
+      '<td class="font-bold font-mono">' + esc(r.period) + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(base) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red">' + abs + '</td>' +
       '<td class="text-right font-mono">' + lev + '</td>' +
@@ -1182,17 +1219,22 @@ function filterHistoryTable() {
       '<td class="text-right font-mono font-bold text-red">' + (canViewSalary ? fmt(ssoVal) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(pfVal) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(taxVal) : '฿***') + '</td>' +
-      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(adv) : '฿***') + '</td>' +
-      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(oth) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(totDed) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-green bg-green-light">' + (canViewSalary ? fmt(net) : '฿***') + '</td>' +
+      '<td class="text-center no-print-col">' + slipBtn + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = h;
 
+  // Update YTD Top Square KPI Tiles
+  var canViewSalary = hasPermission('view_salary');
+  if (document.getElementById('histYtdGross')) document.getElementById('histYtdGross').textContent = canViewSalary ? fmt(sumGross) : '฿***';
+  if (document.getElementById('histYtdPf')) document.getElementById('histYtdPf').textContent = canViewSalary ? fmt(sumPf) : '฿***';
+  if (document.getElementById('histYtdAttendance')) document.getElementById('histYtdAttendance').textContent = 'ขาด ' + sumAbsent + ' | ลา ' + (sumLeave + sumSick) + ' | OT ' + sumOtHours + ' ชม.';
+  if (document.getElementById('histYtdNet')) document.getElementById('histYtdNet').textContent = canViewSalary ? fmt(sumNet) : '฿***';
+
   // Individual Annual Total Row in tfoot
   if (tfoot) {
-    var canViewSalary = hasPermission('view_salary');
     tfoot.innerHTML = '<tr style="background:#eff6ff;font-weight:700;font-size:12px;border-top:2px solid #60a5fa">' +
       '<td class="font-bold" style="color:#1e40af">รวมสะสม (' + list.length + ' งวด)</td>' +
       '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + (canViewSalary ? fmt(sumBase) : '฿***') + '</td>' +
@@ -1209,10 +1251,9 @@ function filterHistoryTable() {
       '<td class="text-right font-mono font-bold text-red">' + (canViewSalary ? fmt(sumSso) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(sumPf) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(sumTax) : '฿***') + '</td>' +
-      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(sumAdv) : '฿***') + '</td>' +
-      '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(sumOther) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-red bg-red-light" style="font-size:13px">' + (canViewSalary ? fmt(sumDed) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:14px;color:#15803d">' + (canViewSalary ? fmt(sumNet) : '฿***') + '</td>' +
+      '<td class="text-center no-print-col">-</td>' +
     '</tr>';
   }
 }
@@ -1226,37 +1267,75 @@ function printActiveHistoryReport() {
 }
 
 function printYearlySummary() {
-  document.body.classList.remove('printing-payslip');
-  document.body.classList.remove('printing-history');
-  document.body.classList.remove('printing-batch-history');
+  var yrSel = document.getElementById('histYearSelect');
+  var yr = yrSel ? yrSel.value : 'ALL';
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด (PTN PHARMA CENTER CO., LTD.)';
+  var compTax = State.company.taxId || '0105559876543';
+  var count = currentYearlySummaryData ? currentYearlySummaryData.length : 0;
+
+  var d = new Date();
+  var thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var dateStr = d.getDate() + ' ' + thaiMonths[d.getMonth()] + ' ' + (d.getFullYear() + 543) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ' น.';
+
+  if (document.getElementById('yearlyPrintCompName')) document.getElementById('yearlyPrintCompName').textContent = compName;
+  if (document.getElementById('yearlyPrintTaxId')) document.getElementById('yearlyPrintTaxId').textContent = compTax;
+  if (document.getElementById('yearlyPrintYearDisplay')) document.getElementById('yearlyPrintYearDisplay').textContent = yr === 'ALL' ? 'ทั้งหมดทุกปี' : yr;
+  if (document.getElementById('yearlyPrintEmpCount')) document.getElementById('yearlyPrintEmpCount').textContent = count + ' คน';
+  if (document.getElementById('yearlyPrintDate')) document.getElementById('yearlyPrintDate').textContent = dateStr;
+
+  document.body.classList.remove('printing-payslip', 'printing-history', 'printing-batch-history');
   document.body.classList.add('printing-yearly-summary');
 
-  window.print();
-
   setTimeout(function() {
-    document.body.classList.remove('printing-yearly-summary');
-  }, 1000);
+    window.print();
+  }, 50);
 }
 
 function printHistoryReport() {
   var area = document.getElementById('histContentArea');
-  if (!area || area.style.display === 'none') {
+  var sel = document.getElementById('histEmpSelect');
+  var empId = sel ? sel.value : '';
+  if (!area || area.style.display === 'none' || !empId) {
     showToast('กรุณาเลือกพนักงานก่อนพิมพ์รายงานประวัติ', 'warning');
     return;
   }
-  document.body.classList.remove('printing-payslip');
-  document.body.classList.remove('printing-yearly-summary');
-  document.body.classList.remove('printing-batch-history');
+
+  var yrSel = document.getElementById('histYearSelect');
+  var yr = yrSel ? yrSel.value : 'ALL';
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด (PTN PHARMA CENTER CO., LTD.)';
+  var compTax = State.company.taxId || '0105559876543';
+
+  var curEmp = (State.employees || []).find(function(e) { return e.empId === empId; }) || {};
+  var empSummary = (curEmp.empId || empId) + ' - ' + (curEmp.fullName || '') + (curEmp.nickname ? ' (' + curEmp.nickname + ')' : '') + ' | แผนก: ' + (curEmp.department || '-') + ' / ' + (curEmp.position || '-');
+
+  var d = new Date();
+  var thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var dateStr = d.getDate() + ' ' + thaiMonths[d.getMonth()] + ' ' + (d.getFullYear() + 543) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ' น.';
+
+  if (document.getElementById('indivPrintCompName')) document.getElementById('indivPrintCompName').textContent = compName;
+  if (document.getElementById('indivPrintTaxId')) document.getElementById('indivPrintTaxId').textContent = compTax;
+  if (document.getElementById('indivPrintYearDisplay')) document.getElementById('indivPrintYearDisplay').textContent = yr === 'ALL' ? 'ทั้งหมดทุกปี' : yr;
+  if (document.getElementById('indivPrintEmpSummary')) document.getElementById('indivPrintEmpSummary').textContent = empSummary;
+  if (document.getElementById('indivPrintDate')) document.getElementById('indivPrintDate').textContent = dateStr;
+
+  document.body.classList.remove('printing-payslip', 'printing-yearly-summary', 'printing-batch-history');
   document.body.classList.add('printing-history');
 
-  window.print();
-
   setTimeout(function() {
-    document.body.classList.remove('printing-history');
-  }, 1000);
+    window.print();
+  }, 50);
 }
 
+// Clean up print classes automatically when print dialog closes
+window.addEventListener('afterprint', function() {
+  document.body.classList.remove('printing-history', 'printing-yearly-summary', 'printing-batch-history', 'printing-payslip');
+});
+
 function exportActiveHistoryCsv() {
+  if (!hasPermission('view_salary')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกข้อมูลเงินเดือน', 'warning');
+    return;
+  }
   if (currentHistoryMode === 'yearly') {
     exportYearlySummaryCsv();
   } else {
@@ -1443,6 +1522,17 @@ function switchTab(tabId) {
     tabId = 'employees';
   }
 
+  // Analytics tab is strictly restricted to Admin only
+  var isAdminUser = Boolean(
+    String(State.currentUser && State.currentUser.username || '').toLowerCase() === 'admin' ||
+    String(role).toLowerCase().indexOf('admin') >= 0 ||
+    hasPermission('all')
+  );
+  if (tabId === 'analytics' && !isAdminUser) {
+    showToast('ฟีเจอร์วิเคราะห์ข้อมูลสงวนสิทธิ์เฉพาะผู้ดูแลระบบ (Admin) เท่านั้น', 'warning');
+    return;
+  }
+
   document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
   document.querySelectorAll('.nav-tab-btn').forEach(function(el) { el.classList.remove('active'); });
   var target = document.getElementById('tab-' + tabId);
@@ -1452,6 +1542,8 @@ function switchTab(tabId) {
 
   if (tabId === 'history') {
     renderHistoryTab();
+  } else if (tabId === 'analytics') {
+    renderAnalyticsTab();
   }
 }
 
@@ -1847,19 +1939,7 @@ function printPayslip() {
   }, 1000);
 }
 
-function printHistoryReport() {
-  var empId = document.getElementById('histEmpSelect') ? document.getElementById('histEmpSelect').value : '';
-  if (!empId) {
-    showToast('กรุณาเลือกพนักงานก่อนพิมพ์รายงานประวัติ', 'warning');
-    return;
-  }
-  document.body.classList.remove('printing-payslip');
-  document.body.classList.add('printing-history');
-  window.print();
-  setTimeout(function() {
-    document.body.classList.remove('printing-history');
-  }, 1000);
-}
+// (Legacy printHistoryReport removed - using upgraded version in History Controller)
 
 // PERIOD CLOSE / REOPEN
 function closePeriod() {
@@ -2330,50 +2410,7 @@ function onEmpSsoInputChanged() {
   label.textContent = '(' + fmt(val) + ')';
 }
 
-// HISTORY TABLE SEARCH FILTER
-var currentHistoryList = [];
-function filterHistoryTable() {
-  var tbody = document.getElementById('historyTableBody');
-  if (!tbody || !currentHistoryList || currentHistoryList.length === 0) return;
-  var q = (document.getElementById('historySearchInput') ? document.getElementById('historySearchInput').value : '').trim().toLowerCase();
-  var filtered = currentHistoryList.filter(function(c) {
-    if (!q) return true;
-    return (c.period && c.period.toLowerCase().indexOf(q) >= 0) ||
-           (c.department && c.department.toLowerCase().indexOf(q) >= 0) ||
-           (c.position && c.position.toLowerCase().indexOf(q) >= 0);
-  });
-
-  if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="19" class="text-center text-muted" style="padding:28px">ไม่พบประวัติที่ตรงกับคำค้นหา "' + esc(q) + '"</td></tr>';
-    return;
-  }
-
-  var h = '';
-  filtered.forEach(function(c) {
-    h += '<tr>' +
-      '<td class="font-bold text-blue">' + esc(c.period) + '</td>' +
-      '<td class="font-mono font-bold">' + fmt(c.baseSalary) + '</td>' +
-      '<td class="text-right font-mono">' + (c.absentDays || 0) + '</td>' +
-      '<td class="text-right font-mono">' + (c.leaveDays || 0) + '</td>' +
-      '<td class="text-right font-mono">' + (c.sickLeaveDays || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(c.lateDeduct) + '</td>' +
-      '<td class="text-right font-mono">' + (c.otHours || 0) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + fmt(c.otPay) + '</td>' +
-      '<td class="text-right font-mono text-green font-bold">' + fmt(c.allowance) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(c.bonus) + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + fmt(c.leaveDeduction) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(c.grossPay) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(c.sso) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue">' + fmt(c.pf) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(c.tax) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(c.advanceDeduct) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(c.otherDeduct) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(c.totalDeductions) + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light">' + fmt(c.netPay) + '</td>' +
-    '</tr>';
-  });
-  tbody.innerHTML = h;
-}
+// (Legacy filterHistoryTable removed - using upgraded version with privacy guards)
 
 // BACKUP & RESTORE HANDLERS
 function backupDatabase() {
@@ -2506,6 +2543,10 @@ function exportAllEmployeeHistory() {
 }
 
 function printAllEmployeesBatch() {
+  if (!hasPermission('view_salary')) {
+    showToast('คุณไม่มีสิทธิ์พิมพ์รายงานประวัติพนักงานทุกคน', 'warning');
+    return;
+  }
   showToast('กำลังเตรียมเอกสารประวัติพนักงานทุกคนสำหรับพิมพ์...', 'info');
   var yrSel = document.getElementById('histYearSelect');
   var yr = yrSel ? yrSel.value : 'ALL';
@@ -2952,6 +2993,10 @@ function exportTtbDirectCreditTxt() {
 
 // 50 TWI TAX CERTIFICATE CONTROLLER
 function open50TwiModalFromHistory() {
+  if (!hasPermission('view_salary')) {
+    showToast('คุณไม่มีสิทธิ์เข้าถึงหนังสือรับรองภาษี 50 ทวิ', 'warning');
+    return;
+  }
   var empId = document.getElementById('histEmpSelect') ? document.getElementById('histEmpSelect').value : '';
   if (!empId) {
     showToast('กรุณาเลือกพนักงานที่ต้องการพิมพ์ใบ 50 ทวิ', 'warning');
@@ -3468,4 +3513,816 @@ function updateProbationDashboardAlerts() {
 
   listDiv.innerHTML = h;
   banner.style.display = 'block';
+}
+
+
+// ==========================================================================
+// ANALYTICS & EXECUTIVE DECISION HUB MODULE (V6.5)
+// ==========================================================================
+var analyticsTrendChartInstance = null;
+var analyticsDeptChartInstance = null;
+var analyticsOtBarChartInstance = null;
+var cachedAllHistoryData = null;
+var currentAnalyticsCategory = 'ALL';
+
+var THAI_MONTHS_NAMES = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+
+function periodMatchesYear(period, yr) {
+  if (!period || !yr || yr === 'ALL') return true;
+  var p = String(period).trim();
+  var y = String(yr).trim();
+  if (p.indexOf(y) >= 0) return true;
+  var n = Number(y);
+  if (!isNaN(n)) {
+    if (n > 2400) {
+      var ce = String(n - 543);
+      if (p.indexOf(ce) >= 0) return true;
+    } else {
+      var be = String(n + 543);
+      if (p.indexOf(be) >= 0) return true;
+    }
+  }
+  return false;
+}
+
+function getMonthIndexFromPeriod(period) {
+  if (!period) return -1;
+  var p = String(period).trim();
+  for (var i = 0; i < THAI_MONTHS_NAMES.length; i++) {
+    if (p.indexOf(THAI_MONTHS_NAMES[i]) >= 0) {
+      return i;
+    }
+  }
+  if (p.indexOf('-') > 0) {
+    var parts = p.split('-');
+    if (parts.length >= 2) {
+      var m = parseInt(parts[1], 10);
+      if (!isNaN(m) && m >= 1 && m <= 12) return m - 1;
+    }
+  }
+  return -1;
+}
+
+function initAnalyticsYearDropdown() {
+  var sel = document.getElementById('analyticsYearSelect');
+  if (!sel) return;
+
+  var curYear = new Date().getFullYear() + 543;
+  var yearsSet = {};
+  yearsSet[curYear] = true;
+  yearsSet[curYear - 1] = true;
+
+  if (cachedAllHistoryData) {
+    cachedAllHistoryData.forEach(function(r) {
+      if (r.period) {
+        var m = r.period.match(/\d{4}/);
+        if (m) yearsSet[m[0]] = true;
+      }
+    });
+  }
+  if (State.period) {
+    var m2 = State.period.match(/\d{4}/);
+    if (m2) yearsSet[m2[0]] = true;
+  }
+
+  var sortedYears = Object.keys(yearsSet).sort().reverse();
+  var curVal = sel.value;
+  var h = '';
+  sortedYears.forEach(function(y) {
+    var num = Number(y);
+    var label = (num > 2400) ? (y + ' (' + (num - 543) + ')') : (y + ' (' + (num + 543) + ')');
+    h += '<option value="' + y + '">' + label + '</option>';
+  });
+  sel.innerHTML = h;
+  if (curVal && sortedYears.indexOf(curVal) >= 0) {
+    sel.value = curVal;
+  } else if (sortedYears.length > 0) {
+    sel.value = sortedYears[0];
+  }
+}
+
+function renderAnalyticsTab(silent) {
+  var isAdmin = Boolean(State.currentUser && (
+    String(State.currentUser.username || '').toLowerCase() === 'admin' ||
+    String(State.currentUser.role || '').toLowerCase().indexOf('admin') >= 0 ||
+    hasPermission('all')
+  ));
+  if (!isAdmin) {
+    var cont = document.getElementById('tab-analytics');
+    if (cont) {
+      cont.innerHTML = '<div style="padding:60px 20px;text-align:center;color:#64748b;max-width:500px;margin:40px auto;background:#fff;border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05)">' +
+        '<div style="width:64px;height:64px;background:#fee2e2;color:#dc2626;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px"><i class="fa-solid fa-lock"></i></div>' +
+        '<h3 style="font-size:18px;font-weight:800;color:#1e293b;margin-bottom:8px">สงวนสิทธิ์เฉพาะผู้ดูแลระบบ (Admin Only)</h3>' +
+        '<p style="font-size:13px;color:#64748b;line-height:1.6">ฟีเจอร์การวิเคราะห์ข้อมูลและประเมินผลบุคลากร เปิดให้เข้าถึงได้เฉพาะผู้ดูแลระบบที่มีบทบาท Admin เท่านั้น</p>' +
+      '</div>';
+    }
+    return;
+  }
+
+  initAnalyticsYearDropdown();
+  loadAnalyticsData(silent);
+}
+
+function loadAnalyticsData(silent) {
+  var isTabActive = document.getElementById('tab-analytics') && document.getElementById('tab-analytics').classList.contains('active');
+  if (!silent && isTabActive) {
+    showToast('กำลังประมวลผลข้อมูลสถิติและการวิเคราะห์...', 'info');
+  }
+
+  callApi('getAllEmployeeHistory')
+    .then(function(r) {
+      if (!r.success || !r.allHistory) {
+        if (isTabActive) showToast(r.message || 'ไม่สามารถโหลดข้อมูลประวัติได้', 'error');
+        return;
+      }
+
+      var combined = (r.allHistory || []).slice();
+
+      // Ensure current State.period / State.payrollList is integrated if not already in DB
+      if (State.period && State.payrollList && State.payrollList.length > 0) {
+        var hasCurrentPeriod = combined.some(function(x) { return x.period === State.period; });
+        if (!hasCurrentPeriod) {
+          State.payrollList.forEach(function(p) {
+            var inp = (State.inputs || {})[p.empId] || {};
+            combined.push({
+              period: State.period,
+              empId: p.empId,
+              fullName: p.fullName || '',
+              nickname: p.nickname || '',
+              department: p.department || '',
+              position: p.position || '',
+              baseSalary: Number(p.baseSalary) || 0,
+              absentDays: Number(inp.absentDays) || 0,
+              leaveDays: Number(inp.leaveDays) || 0,
+              sickLeaveDays: Number(inp.sickLeaveDays) || 0,
+              lateDeduct: Number(inp.lateDeduct) || 0,
+              otHours: Number(p.otHours) || 0,
+              otRate: Number(p.otRate) || 40,
+              otPay: Number(p.otPay) || 0,
+              allowance: Number(p.allowance) || 0,
+              bonus: Number(p.bonus) || 0,
+              leaveDeduction: Number(p.leaveDeduction) || 0,
+              grossPay: Number(p.grossPay) || 0,
+              sso: Number(p.sso) || 0,
+              pf: Number(p.pf) || 0,
+              tax: Number(p.tax) || 0,
+              advanceDeduct: Number(p.advanceDeduct) || 0,
+              otherDeduct: Number(p.otherDeduct) || 0,
+              totalDeductions: Number(p.totalDeductions) || 0,
+              netPay: Number(p.netPay) || 0
+            });
+          });
+        }
+      }
+
+      cachedAllHistoryData = combined;
+      initAnalyticsYearDropdown();
+      updateAnalyticsDepartmentDropdown(cachedAllHistoryData);
+      computeAndRenderAnalytics();
+    })
+    .catch(function(err) {
+      if (isTabActive) showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function updateAnalyticsDepartmentDropdown(list) {
+  var sel = document.getElementById('analyticsDeptSelect');
+  if (!sel) return;
+  var curVal = sel.value || 'ALL';
+  var depts = {};
+  (list || []).forEach(function(x) {
+    if (x.department && x.department.trim()) depts[x.department.trim()] = true;
+  });
+  (State.employees || []).forEach(function(e) {
+    if (e.department && e.department.trim()) depts[e.department.trim()] = true;
+  });
+  var h = '<option value="ALL">ทุกแผนก (All)</option>';
+  Object.keys(depts).sort().forEach(function(d) {
+    h += '<option value="' + esc(d) + '">' + esc(d) + '</option>';
+  });
+  sel.innerHTML = h;
+  sel.value = curVal;
+}
+
+function onAnalyticsFilterChanged() {
+  computeAndRenderAnalytics();
+}
+
+function computeAndRenderAnalytics() {
+  if (!cachedAllHistoryData) return;
+
+  var yrSel = document.getElementById('analyticsYearSelect');
+  var deptSel = document.getElementById('analyticsDeptSelect');
+  var selYear = yrSel ? yrSel.value : '';
+  var selDept = deptSel ? deptSel.value : 'ALL';
+
+  var list = cachedAllHistoryData;
+  if (selYear && selYear !== 'ALL') {
+    list = list.filter(function(item) {
+      return periodMatchesYear(item.period, selYear);
+    });
+  }
+  if (selDept && selDept !== 'ALL') {
+    list = list.filter(function(item) {
+      return (item.department || '').trim() === selDept.trim();
+    });
+  }
+
+  var totalGross = 0;
+  var totalBase = 0;
+  var totalOtPay = 0;
+  var totalOtHours = 0;
+  var totalPf = 0;
+  var totalAbsent = 0;
+  var totalLeave = 0;
+  var totalSick = 0;
+  var totalLateDeduct = 0;
+  var countAllowanceEarned = 0;
+  var totalPeriodsActive = list.length;
+
+  var monthlyData = [];
+  for (var m = 0; m < 12; m++) {
+    monthlyData.push({ base: 0, gross: 0, ot: 0, count: 0 });
+  }
+
+  var deptGross = {};
+  var deptOt = {};
+
+  list.forEach(function(r) {
+    var g = Number(r.grossPay) || 0;
+    var b = Number(r.baseSalary) || 0;
+    var otP = Number(r.otPay) || 0;
+    var otH = Number(r.otHours) || 0;
+    var pf = Number(r.pf) || 0;
+    var ab = Number(r.absentDays) || 0;
+    var lv = Number(r.leaveDays) || 0;
+    var sk = Number(r.sickLeaveDays) || 0;
+    var ld = Number(r.lateDeduct) || 0;
+    var al = Number(r.allowance) || 0;
+
+    totalGross += g;
+    totalBase += b;
+    totalOtPay += otP;
+    totalOtHours += otH;
+    totalPf += pf;
+    totalAbsent += ab;
+    totalLeave += lv;
+    totalSick += sk;
+    totalLateDeduct += ld;
+    if (al > 0) countAllowanceEarned++;
+
+    var mIdx = getMonthIndexFromPeriod(r.period);
+    if (mIdx >= 0 && mIdx < 12) {
+      monthlyData[mIdx].base += b;
+      monthlyData[mIdx].gross += g;
+      monthlyData[mIdx].ot += otP;
+      monthlyData[mIdx].count++;
+    }
+
+    var d = (r.department || 'ไม่ระบุ').trim();
+    deptGross[d] = (deptGross[d] || 0) + g;
+    deptOt[d] = (deptOt[d] || 0) + otH;
+  });
+
+  var totalEmpDays = totalPeriodsActive * 30;
+  var attendanceRate = 100;
+  if (totalEmpDays > 0) {
+    var deductedDays = totalAbsent + totalLeave + totalSick;
+    attendanceRate = Math.max(0, Math.min(100, ((totalEmpDays - deductedDays) / totalEmpDays) * 100));
+  }
+
+  var activeEmpIds = {};
+  list.forEach(function(x) { activeEmpIds[x.empId] = true; });
+  var empCount = Object.keys(activeEmpIds).length || 1;
+  var avgMonthlyGross = totalPeriodsActive > 0 ? (totalGross / (totalPeriodsActive / empCount || 1)) : 0;
+
+  var elGrossVal = document.getElementById('kpiGrossVal');
+  if (elGrossVal) elGrossVal.textContent = '฿' + fmt(totalGross);
+  var elGrossSub = document.getElementById('kpiGrossSub');
+  if (elGrossSub) elGrossSub.innerHTML = '<i class="fa-solid fa-circle-info" style="color:var(--primary)"></i> เฉลี่ย ฿' + fmt(avgMonthlyGross) + ' / งวด (พนักงาน ' + empCount + ' คน)';
+
+  var elAttendVal = document.getElementById('kpiAttendVal');
+  if (elAttendVal) elAttendVal.textContent = attendanceRate.toFixed(1) + '%';
+  var elAttendSub = document.getElementById('kpiAttendSub');
+  if (elAttendSub) elAttendSub.innerHTML = '<i class="fa-solid fa-award" style="color:var(--success)"></i> รับเบี้ยขยัน ' + countAllowanceEarned + ' ครั้งสะสม';
+
+  var elOtVal = document.getElementById('kpiOtVal');
+  if (elOtVal) elOtVal.textContent = '฿' + fmt(totalOtPay);
+  var elOtSub = document.getElementById('kpiOtSub');
+  if (elOtSub) elOtSub.innerHTML = '<i class="fa-solid fa-clock" style="color:#7c3aed"></i> รวม ' + totalOtHours.toLocaleString() + ' ชม. (เฉลี่ย ฿' + (totalOtHours > 0 ? (totalOtPay/totalOtHours).toFixed(1) : 0) + '/ชม.)';
+
+  var elPfVal = document.getElementById('kpiPfVal');
+  if (elPfVal) elPfVal.textContent = '฿' + fmt(totalPf);
+  var elPfSub = document.getElementById('kpiPfSub');
+  if (elPfSub) elPfSub.innerHTML = '<i class="fa-solid fa-shield-halved" style="color:#d97706"></i> สะสมทั้งปี (บริษัท + สมาชิก)';
+
+  renderAnalyticsTrendChart(monthlyData);
+  renderAnalyticsDeptChart(deptGross);
+  renderAnalyticsOtBarChart(deptOt);
+
+  renderAnalyticsLeaderboard(cachedAllHistoryData, selYear, selDept);
+  renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLateDeduct, totalAbsent, attendanceRate, deptGross, deptOt);
+  renderAnalyticsEmployeeMatrix(cachedAllHistoryData, selYear, selDept);
+}
+
+function renderAnalyticsTrendChart(monthlyData) {
+  var canvas = document.getElementById('analyticsTrendChart');
+  if (!canvas) return;
+  if (typeof Chart === 'undefined') { console.warn('Chart.js not loaded'); return; }
+  var ctx = canvas.getContext('2d');
+
+  if (analyticsTrendChartInstance) {
+    analyticsTrendChartInstance.destroy();
+  }
+
+  var monthNames = ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'];
+  var baseArr = [];
+  var grossArr = [];
+  var otArr = [];
+
+  for (var m = 0; m < 12; m++) {
+    var d = monthlyData[m] || { base: 0, gross: 0, ot: 0 };
+    baseArr.push(d.base);
+    grossArr.push(d.gross);
+    otArr.push(d.ot);
+  }
+
+  analyticsTrendChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: monthNames,
+      datasets: [
+        {
+          label: 'เงินเดือนฐาน (Base Salary)',
+          data: baseArr,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.08)',
+          fill: true,
+          tension: 0.3
+        },
+        {
+          label: 'เงินได้รวมจริง (Gross Pay)',
+          data: grossArr,
+          borderColor: '#059669',
+          backgroundColor: 'rgba(5, 150, 105, 0.04)',
+          borderDash: [4, 4],
+          tension: 0.3
+        },
+        {
+          label: 'ค่าล่วงเวลา (OT Pay)',
+          data: otArr,
+          borderColor: '#d97706',
+          backgroundColor: 'rgba(217, 119, 6, 0.1)',
+          tension: 0.3
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, font: { family: 'Prompt', size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return ctx.dataset.label + ': ฿' + fmt(ctx.parsed.y);
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          ticks: {
+            callback: function(v) { return '฿' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v); },
+            font: { family: 'Prompt', size: 10 }
+          },
+          grid: { color: '#f1f5f9' }
+        },
+        x: { ticks: { font: { family: 'Prompt', size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderAnalyticsDeptChart(deptGross) {
+  var canvas = document.getElementById('analyticsDeptChart');
+  if (!canvas) return;
+  if (typeof Chart === 'undefined') return;
+  var ctx = canvas.getContext('2d');
+
+  if (analyticsDeptChartInstance) {
+    analyticsDeptChartInstance.destroy();
+  }
+
+  var labels = Object.keys(deptGross);
+  var data = labels.map(function(k) { return deptGross[k]; });
+  var palette = ['#2563eb', '#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'];
+
+  analyticsDeptChartInstance = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: labels.length ? labels : ['ไม่มีข้อมูล'],
+      datasets: [{
+        data: data.length ? data : [1],
+        backgroundColor: palette.slice(0, Math.max(1, labels.length)),
+        borderWidth: 2,
+        borderColor: '#ffffff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 10, font: { family: 'Prompt', size: 10 } } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return ctx.label + ': ฿' + fmt(ctx.parsed);
+            }
+          }
+        }
+      },
+      cutout: '65%'
+    }
+  });
+}
+
+function renderAnalyticsOtBarChart(deptOt) {
+  var canvas = document.getElementById('analyticsOtBarChart');
+  if (!canvas) return;
+  if (typeof Chart === 'undefined') return;
+  var ctx = canvas.getContext('2d');
+
+  if (analyticsOtBarChartInstance) {
+    analyticsOtBarChartInstance.destroy();
+  }
+
+  var sorted = Object.keys(deptOt).sort(function(a, b) { return deptOt[b] - deptOt[a]; }).slice(0, 5);
+  var labels = sorted;
+  var data = sorted.map(function(k) { return deptOt[k]; });
+
+  analyticsOtBarChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels.length ? labels : ['ไม่มีข้อมูล'],
+      datasets: [{
+        label: 'ชั่วโมง OT สะสม (ชม.)',
+        data: data.length ? data : [0],
+        backgroundColor: '#3b82f6',
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { font: { family: 'Prompt', size: 10 } }, grid: { color: '#f1f5f9' } },
+        x: { ticks: { font: { family: 'Prompt', size: 11 } }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function renderAnalyticsLeaderboard(allHistory, selYear, selDept) {
+  var tbody = document.getElementById('analyticsLeaderboardBody');
+  if (!tbody) return;
+
+  var list = allHistory;
+  if (selYear && selYear !== 'ALL') {
+    list = list.filter(function(x) { return periodMatchesYear(x.period, selYear); });
+  }
+  if (selDept && selDept !== 'ALL') {
+    list = list.filter(function(x) { return (x.department || '').trim() === selDept.trim(); });
+  }
+
+  var empMap = {};
+  list.forEach(function(r) {
+    if (!empMap[r.empId]) {
+      empMap[r.empId] = {
+        empId: r.empId,
+        fullName: r.fullName,
+        nickname: r.nickname,
+        department: r.department,
+        totalAllowance: 0,
+        totalAbsent: 0,
+        totalLateDeduct: 0,
+        periods: 0
+      };
+    }
+    empMap[r.empId].totalAllowance += Number(r.allowance) || 0;
+    empMap[r.empId].totalAbsent += Number(r.absentDays) || 0;
+    empMap[r.empId].totalLateDeduct += Number(r.lateDeduct) || 0;
+    empMap[r.empId].periods++;
+  });
+
+  var emps = Object.values(empMap);
+  emps.sort(function(a, b) {
+    if (b.totalAllowance !== a.totalAllowance) return b.totalAllowance - a.totalAllowance;
+    if (a.totalAbsent !== b.totalAbsent) return a.totalAbsent - b.totalAbsent;
+    return a.totalLateDeduct - b.totalLateDeduct;
+  });
+
+  var top5 = emps.slice(0, 5);
+  if (top5.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:16px">ไม่มีข้อมูลสถิติ</td></tr>';
+    return;
+  }
+
+  var h = '';
+  top5.forEach(function(e, idx) {
+    var rankClass = idx === 0 ? 'top1' : (idx === 1 ? 'top2' : (idx === 2 ? 'top3' : ''));
+    var nick = e.nickname ? ' (' + esc(e.nickname) + ')' : '';
+    h += '<tr>' +
+      '<td><span class="analytics-rank-badge ' + rankClass + '">' + (idx + 1) + '</span></td>' +
+      '<td><strong>' + esc(e.fullName) + '</strong><span style="font-size:10.5px;color:#64748b">' + nick + '</span></td>' +
+      '<td>' + esc(e.department || '-') + '</td>' +
+      '<td style="text-align:right;font-family:monospace;font-weight:700;color:var(--success)">฿' + fmt(e.totalAllowance) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = h;
+}
+
+function renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLateDeduct, totalAbsent, attendanceRate, deptGross, deptOt) {
+  var container = document.getElementById('analyticsInsightsContainer');
+  if (!container) return;
+
+  var otPercent = totalGross > 0 ? (totalOtPay / totalGross * 100) : 0;
+  var topOtDept = '';
+  var maxOtHours = 0;
+  Object.keys(deptOt).forEach(function(k) {
+    if (deptOt[k] > maxOtHours) {
+      maxOtHours = deptOt[k];
+      topOtDept = k;
+    }
+  });
+
+  var h = '';
+
+  // 1. OT Optimization Insight
+  var otImpact = Math.round(totalOtPay * 0.2);
+  h += '<div class="insight-card-item orange">' +
+    '<div class="insight-card-top">' +
+      '<span class="insight-badge orange"><i class="fa-solid fa-triangle-exclamation"></i> จุดเฝ้าระวัง: ค่าล่วงเวลา (OT สะสม ' + otPercent.toFixed(1) + '%)</span>' +
+      '<span class="insight-impact orange">โอกาสประหยัด: ~฿' + fmt(otImpact) + '</span>' +
+    '</div>' +
+    '<p style="font-size:12px;color:#475569;margin-bottom:6px">' +
+      '<strong>ปัญหาที่พบ:</strong> ' + (topOtDept ? 'แผนก' + esc(topOtDept) + ' มีชั่วโมงทำ OT รวม ' + maxOtHours.toLocaleString() + ' ชม. ' : '') +
+      'สัดส่วนค่าล่วงเวลาคิดเป็น ' + otPercent.toFixed(1) + '% ของต้นทุนค่าจ้างทั้งหมด ซึ่งช่วงปลายงวดมีการเร่งงานกระจุกตัว' +
+    '</p>' +
+    '<div class="insight-action-box orange">' +
+      '<div style="font-weight:700;color:#9a3412;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> แนวทางแก้ไข &amp; ปรับปรุง (Action Plan):</div>' +
+      '<ul style="margin-left:16px;color:#334155;line-height:1.5;font-size:11.5px">' +
+        '<li><strong>ปรับรอบส่งของ/จัดเตรียมสินค้า:</strong> ปรับขยับเวลาตัดรอบงานให้เร็วขึ้น 1 ชม. เพื่อลดการทำ OT ช่วงเย็น</li>' +
+        '<li><strong>เสริมอัตราจ้างพาร์ทไทม์ช่วงพีค:</strong> จ้างรายวันเฉพาะช่วงศุกร์-เสาร์ จะช่วยลดต้นทุน OT รายชั่วโมงได้ถึง 20-25%</li>' +
+      '</ul>' +
+    '</div>' +
+  '</div>';
+
+  // 2. Attendance & Lateness Insight
+  h += '<div class="insight-card-item pink">' +
+    '<div class="insight-card-top">' +
+      '<span class="insight-badge pink"><i class="fa-solid fa-stopwatch"></i> วินัยเวลาทำงาน: การมาสาย &amp; ขาดงาน</span>' +
+      '<span class="insight-impact pink">หักสายสะสม: ฿' + fmt(totalLateDeduct) + '</span>' +
+    '</div>' +
+    '<p style="font-size:12px;color:#475569;margin-bottom:6px">' +
+      '<strong>ปัญหาที่พบ:</strong> มีการขาดงานสะสมรวม ' + totalAbsent + ' วัน และหักสาย ฿' + fmt(totalLateDeduct) + ' บาท พบพนักงานบางรายสูญเสียสิทธิ์เบี้ยขยันจากการมาสายเพียงเล็กน้อย' +
+    '</p>' +
+    '<div class="insight-action-box pink">' +
+      '<div style="font-weight:700;color:#831843;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> แนวทางแก้ไข &amp; ปรับปรุง (Action Plan):</div>' +
+      '<ul style="margin-left:16px;color:#334155;line-height:1.5;font-size:11.5px">' +
+        '<li><strong>จัดกะเวลาเข้างานแบบยืดหยุ่น (Flexible Shift):</strong> เสนอกะ 08:30-17:30 น. สำหรับพนักงานที่เดินทางไกลเพื่อลดปัญหาจราจร</li>' +
+        '<li><strong>ระบบเตือนก่อนหมดสิทธิ์ (Early Warning):</strong> แจ้งเตือนเมื่อพนักงานสายครบ 2 ครั้ง เพื่อให้ระวังตัวและรักษาเบี้ยขยัน</li>' +
+      '</ul>' +
+    '</div>' +
+  '</div>';
+
+  // 3. Retention & Provident Fund
+  h += '<div class="insight-card-item green">' +
+    '<div class="insight-card-top">' +
+      '<span class="insight-badge green"><i class="fa-solid fa-shield-heart"></i> การรักษาบุคลากร: กองทุนสำรองเลี้ยงชีพ (PF)</span>' +
+      '<span class="insight-impact green">อัตราการมาทำงาน ' + attendanceRate.toFixed(1) + '%</span>' +
+    '</div>' +
+    '<p style="font-size:12px;color:#475569;margin-bottom:6px">' +
+      '<strong>โอกาสต่อยอด:</strong> กองทุนสำรองเลี้ยงชีพเป็นเครื่องมือสร้างความภักดีและรักษาพนักงานที่มีคุณภาพให้อยู่กับองค์กรระยะยาว' +
+    '</p>' +
+    '<div class="insight-action-box green">' +
+      '<div style="font-weight:700;color:#14532d;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> ข้อเสนอแนะเชิงรุก (Strategic Recommendation):</div>' +
+      '<ul style="margin-left:16px;color:#334155;line-height:1.5;font-size:11.5px">' +
+        '<li><strong>ส่งเสริมพนักงานใหม่สมัคร PF ทันทีที่ผ่านโปร:</strong> จัดรอบแนะนำสิทธิประโยชน์การออมและเงินสมทบจากบริษัท</li>' +
+      '</ul>' +
+    '</div>' +
+  '</div>';
+
+  container.innerHTML = h;
+}
+
+function renderAnalyticsEmployeeMatrix(allHistory, selYear, selDept) {
+  var tbody = document.getElementById('analyticsMatrixBody');
+  if (!tbody) return;
+
+  var list = allHistory;
+  if (selYear && selYear !== 'ALL') {
+    list = list.filter(function(x) { return periodMatchesYear(x.period, selYear); });
+  }
+  if (selDept && selDept !== 'ALL') {
+    list = list.filter(function(x) { return (x.department || '').trim() === selDept.trim(); });
+  }
+
+  var empMap = {};
+  list.forEach(function(r) {
+    if (!empMap[r.empId]) {
+      empMap[r.empId] = {
+        empId: r.empId,
+        fullName: r.fullName,
+        nickname: r.nickname,
+        department: r.department,
+        baseSalary: Number(r.baseSalary) || 0,
+        totalAbsent: 0,
+        totalLeave: 0,
+        totalSick: 0,
+        totalLateDeduct: 0,
+        lateCount: 0,
+        totalAllowance: 0,
+        totalOtHours: 0,
+        periodsCount: 0
+      };
+    }
+    var e = empMap[r.empId];
+    e.totalAbsent += Number(r.absentDays) || 0;
+    e.totalLeave += Number(r.leaveDays) || 0;
+    e.totalSick += Number(r.sickLeaveDays) || 0;
+    var ld = Number(r.lateDeduct) || 0;
+    e.totalLateDeduct += ld;
+    if (ld > 0) e.lateCount++;
+    e.totalAllowance += Number(r.allowance) || 0;
+    e.totalOtHours += Number(r.otHours) || 0;
+    e.periodsCount++;
+    if (Number(r.baseSalary) > 0) e.baseSalary = Number(r.baseSalary);
+  });
+
+  if (!selDept || selDept === 'ALL') {
+    (State.employees || []).forEach(function(emp) {
+      if (!empMap[emp.empId]) {
+        empMap[emp.empId] = {
+          empId: emp.empId,
+          fullName: emp.fullName,
+          nickname: emp.nickname,
+          department: emp.department,
+          baseSalary: Number(emp.baseSalary) || 0,
+          totalAbsent: 0,
+          totalLeave: 0,
+          totalSick: 0,
+          totalLateDeduct: 0,
+          lateCount: 0,
+          totalAllowance: 0,
+          totalOtHours: 0,
+          periodsCount: 0
+        };
+      }
+    });
+  }
+
+  var emps = Object.values(empMap);
+  if (emps.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:24px">ไม่มีข้อมูลพนักงานในช่วงเวลาที่เลือก</td></tr>';
+    updateMatrixCounters(0, 0, 0, 0, 0);
+    return;
+  }
+
+  emps.sort(function(a, b) {
+    return (a.empId || '').localeCompare(b.empId || '', undefined, { numeric: true });
+  });
+
+  var countAll = emps.length;
+  var countPromo = 0;
+  var countStd = 0;
+  var countWarn = 0;
+  var countTerm = 0;
+
+  var rowsHtml = '';
+
+  emps.forEach(function(e) {
+    var cat = 'STANDARD';
+    var badgeHtml = '';
+    var recText = '';
+    var totalLeaves = e.totalLeave + e.totalSick;
+
+    if (e.totalAbsent >= 4 || (e.totalAbsent >= 3 && e.totalLateDeduct >= 1000)) {
+      cat = 'TERMINATION';
+      countTerm++;
+      badgeHtml = '<span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:20px;font-weight:800;font-size:11px;display:inline-block"><i class="fa-solid fa-triangle-exclamation"></i> 🚨 เข้าข่ายเลิกจ้าง</span>';
+      recText = '<span style="color:#991b1b"><strong>เข้าข่ายความผิดวินัยร้ายแรงตามกฎหมายแรงงาน (มาตรา 119):</strong> ขาดงานเกินเกณฑ์สะสม ' + e.totalAbsent + ' วัน ควรออกหนังสือเตือนขั้นเด็ดขาด หรือรวบรวมหลักฐานพิจารณาพักงาน/เลิกจ้าง</span>';
+    } else if (e.totalAbsent >= 2 || e.totalLateDeduct >= 600 || totalLeaves >= 10 || e.lateCount >= 4) {
+      cat = 'WARNING';
+      countWarn++;
+      badgeHtml = '<span style="background:#fef3c7;color:#92400e;padding:3px 10px;border-radius:20px;font-weight:800;font-size:11px;display:inline-block"><i class="fa-solid fa-circle-exclamation"></i> ⚠️ เฝ้าระวัง / ตักเตือน</span>';
+      recText = '<span style="color:#92400e"><strong>ชะลอการปรับเงินเดือน + ออกหนังสือตักเตือนฉบับที่ 1:</strong> สถิติมาสาย ' + (e.lateCount > 0 ? e.lateCount + ' ครั้ง (฿' + fmt(e.totalLateDeduct) + ')' : '') + (e.totalAbsent > 0 ? ' ขาด ' + e.totalAbsent + ' วัน' : '') + ' ให้หัวหน้างานเรียกทำแผนปรับปรุงพฤติกรรม (PIP) ภายใน 30-60 วัน</span>';
+    } else if (e.totalAbsent === 0 && e.totalLateDeduct === 0 && totalLeaves <= 3 && (e.totalAllowance >= 2000 || e.periodsCount >= 2)) {
+      cat = 'PROMOTION';
+      countPromo++;
+      badgeHtml = '<span style="background:#dcfce7;color:#15803d;padding:3px 10px;border-radius:20px;font-weight:800;font-size:11px;display:inline-block"><i class="fa-solid fa-star"></i> 🌟 เกรด A+ (เด่นมาก)</span>';
+      recText = '<span style="color:#14532d"><strong>เสนอปรับขึ้นเงินเดือน +5% ถึง +7%:</strong> (สถิติมาทำงานสม่ำเสมอ 100% ไม่เคยขาด ไม่เคยสาย ได้เบี้ยขยันสะสม ฿' + fmt(e.totalAllowance) + ') ควรพิจารณาเป็น Talent / ผู้ช่วยหัวหน้างาน</span>';
+    } else {
+      cat = 'STANDARD';
+      countStd++;
+      badgeHtml = '<span style="background:#eff6ff;color:#1d4ed8;padding:3px 10px;border-radius:20px;font-weight:800;font-size:11px;display:inline-block">✓ เกรด B/B+ (ตามเกณฑ์)</span>';
+      recText = '<span style="color:#334155"><strong>เสนอปรับขึ้นเงินเดือนตามเกณฑ์ปกติประจำปี (+2% ถึง +4%):</strong> ปฏิบัติงานตามมาตรฐาน OT สม่ำเสมอ ลาตามสิทธิ์ถูกต้อง</span>';
+    }
+
+    var nick = e.nickname ? ' (' + esc(e.nickname) + ')' : '';
+    var absentStyle = e.totalAbsent > 0 ? 'color:#dc2626;font-weight:800' : 'color:#16a34a';
+    var lateStyle = e.totalLateDeduct > 0 ? 'color:#dc2626;font-weight:800' : 'color:#16a34a';
+
+    rowsHtml += '<tr class="analytics-matrix-row" data-cat="' + cat + '">' +
+      '<td><strong style="color:var(--primary)">' + esc(e.empId) + '</strong></td>' +
+      '<td><strong>' + esc(e.fullName) + '</strong><span style="font-size:10.5px;color:#64748b">' + nick + '</span></td>' +
+      '<td>' + esc(e.department || '-') + '</td>' +
+      '<td style="text-align:right;font-family:monospace;font-weight:700">฿' + fmt(e.baseSalary) + '</td>' +
+      '<td style="text-align:center;font-family:monospace;' + absentStyle + '">' + e.totalAbsent + '</td>' +
+      '<td style="text-align:center;font-family:monospace">' + totalLeaves + '</td>' +
+      '<td style="text-align:center;font-family:monospace;' + lateStyle + '">' + (e.lateCount > 0 ? e.lateCount + ' ครั้ง / ฿' + fmt(e.totalLateDeduct) : '0 / ฿0') + '</td>' +
+      '<td style="text-align:right;font-family:monospace;font-weight:700;color:var(--success)">฿' + fmt(e.totalAllowance) + '</td>' +
+      '<td style="text-align:center">' + badgeHtml + '</td>' +
+      '<td style="font-size:11.5px;line-height:1.4">' + recText + '</td>' +
+    '</tr>';
+  });
+
+  tbody.innerHTML = rowsHtml;
+  updateMatrixCounters(countAll, countPromo, countStd, countWarn, countTerm);
+  applyMatrixCategoryFilter();
+}
+
+function updateMatrixCounters(all, promo, std, warn, term) {
+  var elAll = document.getElementById('matrixCountAll');
+  var elPromo = document.getElementById('matrixCountPromo');
+  var elStd = document.getElementById('matrixCountStd');
+  var elWarn = document.getElementById('matrixCountWarn');
+  var elTerm = document.getElementById('matrixCountTerm');
+
+  if (elAll) elAll.textContent = all;
+  if (elPromo) elPromo.textContent = promo;
+  if (elStd) elStd.textContent = std;
+  if (elWarn) elWarn.textContent = warn;
+  if (elTerm) elTerm.textContent = term;
+
+  var pillPromo = document.getElementById('pillCountPromo');
+  var pillStd = document.getElementById('pillCountStd');
+  var pillWarn = document.getElementById('pillCountWarn');
+  var pillTerm = document.getElementById('pillCountTerm');
+
+  if (pillPromo) pillPromo.textContent = promo;
+  if (pillStd) pillStd.textContent = std;
+  if (pillWarn) pillWarn.textContent = warn;
+  if (pillTerm) pillTerm.textContent = term;
+}
+
+function filterAnalyticsMatrix(cat) {
+  currentAnalyticsCategory = cat;
+  document.querySelectorAll('.analytics-filter-btn').forEach(function(btn) {
+    btn.classList.remove('active');
+  });
+  var activeBtn = document.getElementById('btnFilter-' + cat);
+  if (activeBtn) activeBtn.classList.add('active');
+  applyMatrixCategoryFilter();
+}
+
+function applyMatrixCategoryFilter() {
+  var rows = document.querySelectorAll('.analytics-matrix-row');
+  rows.forEach(function(r) {
+    if (currentAnalyticsCategory === 'ALL' || r.getAttribute('data-cat') === currentAnalyticsCategory) {
+      r.style.display = '';
+    } else {
+      r.style.display = 'none';
+    }
+  });
+}
+
+function printAnalyticsReport() {
+  var yrSel = document.getElementById('analyticsYearSelect');
+  var yr = yrSel ? yrSel.value : '2569';
+  var deptSel = document.getElementById('analyticsDeptSelect');
+  var dept = deptSel ? deptSel.value : 'ALL';
+  var deptText = (dept === 'ALL') ? 'ทุกแผนก' : ('แผนก ' + dept);
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var d = new Date();
+  var thaiShortMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var printDate = d.getDate() + ' ' + thaiShortMonths[d.getMonth()] + ' ' + (d.getFullYear() + 543) + ' ' + String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0') + ' น.';
+
+  if (document.getElementById('analyticsPrintCompName')) document.getElementById('analyticsPrintCompName').textContent = compName;
+  if (document.getElementById('analyticsPrintYearDisplay')) document.getElementById('analyticsPrintYearDisplay').textContent = yr;
+  if (document.getElementById('analyticsPrintDeptDisplay')) document.getElementById('analyticsPrintDeptDisplay').textContent = deptText;
+  if (document.getElementById('analyticsPrintDateDisplay')) document.getElementById('analyticsPrintDateDisplay').textContent = printDate;
+
+  document.body.classList.remove('printing-payslip', 'printing-history', 'printing-yearly-summary', 'printing-batch-history', 'printing-50twi', 'printing-payroll-summary');
+  document.body.classList.add('printing-analytics');
+
+  window.onafterprint = function() {
+    document.body.classList.remove('printing-analytics');
+  };
+
+  setTimeout(function() {
+    window.print();
+  }, 100);
 }
