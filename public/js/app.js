@@ -4544,7 +4544,7 @@ function renderCertModalPaper() {
 
   // Base salary and extra regular allowances
   var baseSal = Number(emp.baseSalary) || 0;
-  var regularAllow = 0; // if regular allowance exists in inputs/employee
+  var regularAllow = 0;
   var totalMonthly = baseSal + regularAllow;
 
   // Tenure calculation
@@ -4598,21 +4598,21 @@ function renderCertModalPaper() {
     var docNoEn = 'PTN-HR-' + String(new Date().getMonth() + 1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0') + '/' + new Date().getFullYear();
 
     h += '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:22px">' +
-      '<div style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:0.5px">PTN PHARMA CENTER CO., LTD.</div>' +
+      '<div style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:0.5px">' + esc(compName) + '</div>' +
       '<div style="font-size:11px;color:#475569;margin-top:4px">Tax Identification No.: ' + esc(compTaxId) + '</div>' +
       '<div style="font-size:11px;color:#64748b">' + esc(compAddress) + ' | Tel: ' + esc(compPhone) + '</div>' +
     '</div>' +
 
     '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:22px">' +
       '<div><strong>Ref No.:</strong> ' + esc(docNoEn) + '</div>' +
-      '<div><strong>Date:</strong> ' + esc(certDate || new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })) + '</div>' +
+      '<div><strong>Date:</strong> <span id="certPaperDate">' + esc(certDate || new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })) + '</span></div>' +
     '</div>' +
 
     '<div style="text-align:center;margin:24px 0 28px">' +
-      '<h2 style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:1px;text-transform:uppercase;margin:0">SALARY &amp; EMPLOYMENT VERIFICATION LETTER</h2>' +
+      '<h2 contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขหัวข้อ" style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:1px;text-transform:uppercase;margin:0">SALARY &amp; EMPLOYMENT VERIFICATION LETTER</h2>' +
     '</div>' +
 
-    '<div style="font-size:13.5px;text-align:justify;line-height:2;color:#1e293b">' +
+    '<div id="certPaperBody" contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขข้อความได้โดยตรง" style="font-size:13.5px;text-align:justify;line-height:2;color:#1e293b">' +
       '<p style="text-indent:2.5rem;margin-bottom:16px">' +
         'This letter is officially issued to certify that <strong>' + esc(emp.fullName || '-') + '</strong>, ' +
         'Identification / Citizen Card No. <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong>, ' +
@@ -4641,8 +4641,8 @@ function renderCertModalPaper() {
       '</div>' +
       '<div style="text-align:center;min-width:240px">' +
         '<div style="height:54px;border-bottom:1px solid #475569;margin-bottom:8px"></div>' +
-        '<div style="font-weight:800;font-size:13.5px;color:#0f172a">( ' + esc(signatoryName) + ' )</div>' +
-        '<div style="font-size:12px;color:#475569;margin-top:2px">' + esc(signatoryTitle) + '</div>' +
+        '<div style="font-weight:800;font-size:13.5px;color:#0f172a">( <span id="certPaperSignName" contenteditable="true" spellcheck="false">' + esc(signatoryName) + '</span> )</div>' +
+        '<div style="font-size:12px;color:#475569;margin-top:2px"><span id="certPaperSignTitle" contenteditable="true" spellcheck="false">' + esc(signatoryTitle) + '</span></div>' +
         '<div style="font-size:11px;color:#64748b">' + esc(compName) + '</div>' +
       '</div>' +
     '</div>' +
@@ -4667,14 +4667,14 @@ function renderCertModalPaper() {
 
     '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:20px">' +
       '<div>ที่ ' + esc(docNoTh) + '</div>' +
-      '<div>วันที่ <strong>' + esc(certDate) + '</strong></div>' +
+      '<div>วันที่ <strong id="certPaperDate">' + esc(certDate) + '</strong></div>' +
     '</div>' +
 
     '<div style="text-align:center;margin:24px 0 28px">' +
-      '<h2 style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:1px;margin:0">หนังสือรับรองเงินเดือนและการทำงาน</h2>' +
+      '<h2 contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขหัวข้อ" style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:1px;margin:0">หนังสือรับรองเงินเดือนและการทำงาน</h2>' +
     '</div>' +
 
-    '<div style="font-size:14px;text-align:justify;line-height:2.1;color:#1e293b">' +
+    '<div id="certPaperBody" contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขข้อความได้โดยตรง" style="font-size:14px;text-align:justify;line-height:2.1;color:#1e293b">' +
       '<p style="text-indent:2.8rem;margin-bottom:16px">' +
         'หนังสือฉบับนี้ให้ไว้เพื่อรับรองว่า <strong>' + esc(emp.fullName || '-') + '</strong> ' +
         'เลขประจำตัวประชาชน <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong> ' +
@@ -4703,8 +4703,8 @@ function renderCertModalPaper() {
       '</div>' +
       '<div style="text-align:center;min-width:240px">' +
         '<div style="height:54px;border-bottom:1px solid #475569;margin-bottom:8px"></div>' +
-        '<div style="font-weight:800;font-size:14px;color:#0f172a">( ' + esc(signatoryName) + ' )</div>' +
-        '<div style="font-size:12px;color:#475569;margin-top:2px">' + esc(signatoryTitle) + '</div>' +
+        '<div style="font-weight:800;font-size:14px;color:#0f172a">( <span id="certPaperSignName" contenteditable="true" spellcheck="false">' + esc(signatoryName) + '</span> )</div>' +
+        '<div style="font-size:12px;color:#475569;margin-top:2px"><span id="certPaperSignTitle" contenteditable="true" spellcheck="false">' + esc(signatoryTitle) + '</span></div>' +
         '<div style="font-size:11px;color:#64748b">' + esc(compName) + '</div>' +
       '</div>' +
     '</div>' +
@@ -4715,6 +4715,27 @@ function renderCertModalPaper() {
   }
 
   paper.innerHTML = h;
+}
+
+function updateSignatoryInPaper() {
+  var name = document.getElementById('modalCertSignName') ? document.getElementById('modalCertSignName').value : '';
+  var title = document.getElementById('modalCertSignTitle') ? document.getElementById('modalCertSignTitle').value : '';
+  var elName = document.getElementById('certPaperSignName');
+  var elTitle = document.getElementById('certPaperSignTitle');
+  if (elName) elName.textContent = name;
+  if (elTitle) elTitle.textContent = title;
+}
+
+function updateDateInPaper() {
+  var d = document.getElementById('modalCertDate') ? document.getElementById('modalCertDate').value : '';
+  var el = document.getElementById('certPaperDate');
+  if (el) el.textContent = d;
+}
+
+function resetCertModalPaper() {
+  if (!confirm('ต้องการคืนค่าข้อความกลับเป็นค่าเริ่มต้นตามฐานข้อมูลใช่หรือไม่? (การแก้ไขที่คุณพิมพ์ไว้บนกระดาษจะถูกรีเซ็ต)')) return;
+  renderCertModalPaper();
+  showToast('คืนค่าข้อความเริ่มต้นเรียบร้อยแล้ว', 'info');
 }
 
 function printSalaryCertificate() {
