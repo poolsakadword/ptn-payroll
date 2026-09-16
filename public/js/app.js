@@ -52,8 +52,11 @@ function applyRolePermissions() {
   var navEmp = document.getElementById('navBtn-employees');
   var navHistory = document.getElementById('navBtn-history');
   var navAnalytics = document.getElementById('navBtn-analytics');
+  var navDocuments = document.getElementById('navBtn-documents');
   var navCompany = document.getElementById('navBtn-company');
   var navUsers = document.getElementById('navBtn-users');
+
+  var canViewDocuments = canViewPayroll || canViewHistory || canManageCompany || hasPermission('view_salary') || hasPermission('all');
 
   if (navDash) navDash.style.display = canViewDash ? 'inline-flex' : 'none';
   if (navPayroll) navPayroll.style.display = canViewPayroll ? 'inline-flex' : 'none';
@@ -61,6 +64,7 @@ function applyRolePermissions() {
   if (navEmp) navEmp.style.display = canViewEmp ? 'inline-flex' : 'none';
   if (navHistory) navHistory.style.display = canViewHistory ? 'inline-flex' : 'none';
   if (navAnalytics) navAnalytics.style.display = canViewAnalytics ? 'inline-flex' : 'none';
+  if (navDocuments) navDocuments.style.display = canViewDocuments ? 'inline-flex' : 'none';
   if (navCompany) navCompany.style.display = canManageCompany ? 'inline-flex' : 'none';
   if (navUsers) navUsers.style.display = canManageUsers ? 'inline-flex' : 'none';
 
@@ -75,6 +79,7 @@ function applyRolePermissions() {
     if (tabId === 'tab-employees' && !canViewEmp) allowed = false;
     if (tabId === 'tab-history' && !canViewHistory) allowed = false;
     if (tabId === 'tab-analytics' && !canViewAnalytics) allowed = false;
+    if (tabId === 'tab-documents' && !canViewDocuments) allowed = false;
     if (tabId === 'tab-company' && !canManageCompany) allowed = false;
     if (tabId === 'tab-users' && !canManageUsers) allowed = false;
 
@@ -1474,6 +1479,12 @@ function renderCompanySettings() {
   document.getElementById('cfgCompanyAddress').value = State.company.address || '';
   document.getElementById('cfgCompanyPhone').value = State.company.phone || '';
   document.getElementById('cfgCompanyTaxId').value = State.company.taxId || '';
+  if (document.getElementById('cfgCompanyBranch')) document.getElementById('cfgCompanyBranch').value = State.company.companyBranch || '00000';
+  if (document.getElementById('cfgEmployerSsoId')) document.getElementById('cfgEmployerSsoId').value = State.company.employerSsoId || '';
+  if (document.getElementById('cfgSignatoryName')) document.getElementById('cfgSignatoryName').value = State.company.signatoryName || '';
+  if (document.getElementById('cfgSignatoryTitle')) document.getElementById('cfgSignatoryTitle').value = State.company.signatoryTitle || '';
+  if (document.getElementById('cfgSignatoryNameEn')) document.getElementById('cfgSignatoryNameEn').value = State.company.signatoryNameEn || '';
+  if (document.getElementById('cfgSignatoryTitleEn')) document.getElementById('cfgSignatoryTitleEn').value = State.company.signatoryTitleEn || '';
 }
 
 function saveCompanySettings(e) {
@@ -1482,7 +1493,13 @@ function saveCompanySettings(e) {
     companyName: document.getElementById('cfgCompanyName').value.trim(),
     address: document.getElementById('cfgCompanyAddress').value.trim(),
     phone: document.getElementById('cfgCompanyPhone').value.trim(),
-    taxId: document.getElementById('cfgCompanyTaxId').value.trim()
+    taxId: document.getElementById('cfgCompanyTaxId').value.trim(),
+    companyBranch: document.getElementById('cfgCompanyBranch') ? document.getElementById('cfgCompanyBranch').value.trim() : '00000',
+    employerSsoId: document.getElementById('cfgEmployerSsoId') ? document.getElementById('cfgEmployerSsoId').value.trim() : '',
+    signatoryName: document.getElementById('cfgSignatoryName') ? document.getElementById('cfgSignatoryName').value.trim() : '',
+    signatoryTitle: document.getElementById('cfgSignatoryTitle') ? document.getElementById('cfgSignatoryTitle').value.trim() : '',
+    signatoryNameEn: document.getElementById('cfgSignatoryNameEn') ? document.getElementById('cfgSignatoryNameEn').value.trim() : '',
+    signatoryTitleEn: document.getElementById('cfgSignatoryTitleEn') ? document.getElementById('cfgSignatoryTitleEn').value.trim() : ''
   };
   callApi('saveCompanyInfo', { settings: d })
     .then(function(r) {
@@ -1544,6 +1561,8 @@ function switchTab(tabId) {
     renderHistoryTab();
   } else if (tabId === 'analytics') {
     renderAnalyticsTab();
+  } else if (tabId === 'documents') {
+    renderDocumentsTab();
   }
 }
 
@@ -4325,4 +4344,980 @@ function printAnalyticsReport() {
   setTimeout(function() {
     window.print();
   }, 100);
+}
+
+
+// ==============================================================================
+// DOCUMENT & STATUTORY COMPLIANCE CENTER CONTROLLER
+// ==============================================================================
+
+// Helper: Convert Number to Thai Baht Text
+function bahtText(num) {
+  num = Number(num) || 0;
+  if (num === 0) return 'ศูนย์บาทถ้วน';
+  var isNeg = num < 0;
+  num = Math.abs(num);
+
+  var parts = num.toFixed(2).split('.');
+  var integerPart = parts[0];
+  var decimalPart = parts[1];
+
+  var digits = ['ศูนย์','หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
+  var units = ['','สิบ','ร้อย','พัน','หมื่น','แสน','ล้าน'];
+
+  function convertGroup(nStr) {
+    var res = '';
+    var len = nStr.length;
+    for (var i = 0; i < len; i++) {
+      var d = parseInt(nStr.charAt(i), 10);
+      var pos = len - i - 1;
+      if (d !== 0) {
+        if (pos === 1 && d === 1) {
+          res += 'สิบ';
+        } else if (pos === 1 && d === 2) {
+          res += 'ยี่สิบ';
+        } else if (pos === 0 && d === 1 && len > 1 && res !== '') {
+          res += 'เอ็ด';
+        } else {
+          res += digits[d] + units[pos];
+        }
+      }
+    }
+    return res;
+  }
+
+  var intText = '';
+  if (integerPart.length > 6) {
+    var high = integerPart.substring(0, integerPart.length - 6);
+    var low = integerPart.substring(integerPart.length - 6);
+    intText = convertGroup(high) + 'ล้าน' + convertGroup(low);
+  } else {
+    intText = convertGroup(integerPart);
+  }
+  if (!intText) intText = 'ศูนย์';
+
+  var decText = '';
+  if (decimalPart === '00') {
+    decText = 'ถ้วน';
+  } else {
+    var decHigh = parseInt(decimalPart.charAt(0), 10);
+    var decLow = parseInt(decimalPart.charAt(1), 10);
+    var decStr = '';
+    if (decHigh !== 0) {
+      if (decHigh === 1) decStr += 'สิบ';
+      else if (decHigh === 2) decStr += 'ยี่สิบ';
+      else decStr += digits[decHigh] + 'สิบ';
+    }
+    if (decLow !== 0) {
+      if (decLow === 1 && decHigh !== 0) decStr += 'เอ็ด';
+      else decStr += digits[decLow];
+    }
+    decText = decStr + 'สตางค์';
+  }
+
+  return (isNeg ? 'ลบ' : '') + intText + 'บาท' + decText;
+}
+
+// Category Switcher
+function switchDocCategory(cat) {
+  var cats = ['cert', 'tax', 'sso', 'bank'];
+  cats.forEach(function(c) {
+    var btn = document.getElementById('btnDocCat' + c.charAt(0).toUpperCase() + c.slice(1));
+    var pnl = document.getElementById('docPanel-' + c);
+    if (btn) {
+      if (c === cat) {
+        btn.classList.remove('btn-slate');
+        btn.classList.add('btn-primary');
+      } else {
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-slate');
+      }
+    }
+    if (pnl) {
+      pnl.style.display = (c === cat) ? 'block' : 'none';
+    }
+  });
+}
+
+// Render Document Center Main Tab
+function renderDocumentsTab() {
+  if (!hasPermission('view_salary') && !hasPermission('all') && !hasPermission('manage_company')) {
+    showToast('คุณไม่มีสิทธิ์เข้าถึงศูนย์เอกสาร', 'warning');
+    return;
+  }
+
+  // 1. Fill Employee Dropdown
+  var empSel = document.getElementById('docCertEmpSelect');
+  if (empSel) {
+    var curVal = empSel.value;
+    var opts = '';
+    (State.employees || []).forEach(function(e) {
+      opts += '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + ' [' + esc(e.department || '-') + ']</option>';
+    });
+    empSel.innerHTML = opts || '<option value="">ไม่มีข้อมูลพนักงาน</option>';
+    if (curVal) empSel.value = curVal;
+  }
+
+  // 2. Set Default Certificate Date
+  var dateInput = document.getElementById('docCertDate');
+  if (dateInput && !dateInput.value) {
+    var d = new Date();
+    var thaiMonthsFull = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+    dateInput.value = d.getDate() + ' ' + thaiMonthsFull[d.getMonth()] + ' ' + (d.getFullYear() + 543);
+  }
+
+  // 3. Render Tax PND 1 Summary & Preview
+  renderPnd1Summary();
+
+  // 4. Render SSO Summary & Preview
+  renderSsoSummary();
+
+  // 5. Update Bank Period
+  if (document.getElementById('bankPeriodDisplay')) {
+    document.getElementById('bankPeriodDisplay').textContent = State.period;
+  }
+}
+
+function onDocCertParamChanged() {
+  // If modal is open, re-render
+  var modal = document.getElementById('salaryCertModal');
+  if (modal && modal.classList.contains('active')) {
+    renderCertModalPaper();
+  }
+}
+
+// ------------------------------------------------------------------------------
+// SALARY & EMPLOYMENT CERTIFICATE CONTROLLER
+// ------------------------------------------------------------------------------
+function openSalaryCertificateModal(targetEmpId) {
+  if (!hasPermission('view_salary') && !hasPermission('all')) {
+    showToast('คุณไม่มีสิทธิ์ออกหนังสือรับรองเงินเดือน', 'warning');
+    return;
+  }
+
+  var sel = document.getElementById('docCertEmpSelect');
+  if (targetEmpId && sel) {
+    sel.value = targetEmpId;
+  }
+
+  var empId = sel ? sel.value : (State.employees && State.employees[0] ? State.employees[0].empId : '');
+  if (!empId) {
+    showToast('กรุณาเลือกพนักงานที่ต้องการออกหนังสือรับรอง', 'warning');
+    return;
+  }
+
+  var lang = document.getElementById('docCertLang') ? document.getElementById('docCertLang').value : 'TH';
+  var signNameInput = document.getElementById('modalCertSignName');
+  var signTitleInput = document.getElementById('modalCertSignTitle');
+  var dateInput = document.getElementById('modalCertDate');
+
+  var defSignName = (lang === 'EN' ? State.company.signatoryNameEn : State.company.signatoryName) || State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง';
+  var defSignTitle = (lang === 'EN' ? State.company.signatoryTitleEn : State.company.signatoryTitle) || State.company.signatoryTitle || 'ผู้จัดการฝ่ายทรัพยากรบุคคล';
+  var curDate = document.getElementById('docCertDate') ? document.getElementById('docCertDate').value : '';
+
+  if (signNameInput) signNameInput.value = defSignName;
+  if (signTitleInput) signTitleInput.value = defSignTitle;
+  if (dateInput) dateInput.value = curDate;
+
+  renderCertModalPaper();
+  openModal('salaryCertModal');
+}
+
+function renderCertModalPaper() {
+  var paper = document.getElementById('salaryCertPaper');
+  if (!paper) return;
+
+  var sel = document.getElementById('docCertEmpSelect');
+  var empId = sel ? sel.value : '';
+  var emp = (State.employees || []).find(function(e) { return e.empId === empId; }) || {};
+
+  var purpose = document.getElementById('docCertPurpose') ? document.getElementById('docCertPurpose').value : 'loan';
+  var lang = document.getElementById('docCertLang') ? document.getElementById('docCertLang').value : 'TH';
+  var certDate = (document.getElementById('modalCertDate') && document.getElementById('modalCertDate').value) ? document.getElementById('modalCertDate').value : (document.getElementById('docCertDate') ? document.getElementById('docCertDate').value : '');
+  var signatoryName = (document.getElementById('modalCertSignName') && document.getElementById('modalCertSignName').value) ? document.getElementById('modalCertSignName').value : (State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง');
+  var signatoryTitle = (document.getElementById('modalCertSignTitle') && document.getElementById('modalCertSignTitle').value) ? document.getElementById('modalCertSignTitle').value : (State.company.signatoryTitle || 'ผู้จัดการฝ่ายทรัพยากรบุคคล');
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var compAddress = State.company.address || '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110';
+  var compTaxId = State.company.taxId || '0105559876543';
+  var compPhone = State.company.phone || '02-123-4567';
+
+  // Base salary and extra regular allowances
+  var baseSal = Number(emp.baseSalary) || 0;
+  var regularAllow = 0; // if regular allowance exists in inputs/employee
+  var totalMonthly = baseSal + regularAllow;
+
+  // Tenure calculation
+  var tenureText = '';
+  var tenureTextEn = '';
+  if (emp.startDate) {
+    try {
+      var sDate = new Date(emp.startDate);
+      var now = new Date();
+      var diffYears = now.getFullYear() - sDate.getFullYear();
+      var diffMonths = now.getMonth() - sDate.getMonth();
+      if (diffMonths < 0) { diffYears--; diffMonths += 12; }
+      if (diffYears > 0 && diffMonths > 0) {
+        tenureText = diffYears + ' ปี ' + diffMonths + ' เดือน';
+        tenureTextEn = diffYears + ' year(s) ' + diffMonths + ' month(s)';
+      } else if (diffYears > 0) {
+        tenureText = diffYears + ' ปี';
+        tenureTextEn = diffYears + ' year(s)';
+      } else {
+        tenureText = (diffMonths || 1) + ' เดือน';
+        tenureTextEn = (diffMonths || 1) + ' month(s)';
+      }
+    } catch(ex) {
+      tenureText = '-';
+      tenureTextEn = '-';
+    }
+  }
+
+  // Format start date nicely
+  var startDateDisplay = emp.startDate || '-';
+  var startDateDisplayEn = emp.startDate || '-';
+  if (emp.startDate && emp.startDate.indexOf('-') > 0) {
+    var parts = emp.startDate.split('-');
+    if (parts.length === 3) {
+      var thaiMonthsFull = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+      var enMonths = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      var mIdx = parseInt(parts[1], 10) - 1;
+      startDateDisplay = parseInt(parts[2], 10) + ' ' + (thaiMonthsFull[mIdx] || '') + ' ' + (parseInt(parts[0], 10) + 543);
+      startDateDisplayEn = (enMonths[mIdx] || '') + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+    }
+  }
+
+  var h = '';
+
+  if (lang === 'EN') {
+    // ENGLISH VERSION
+    var purposeStrEn = 'applying for financial credit / personal loan';
+    if (purpose === 'visa') purposeStrEn = 'applying for a visa to travel abroad';
+    else if (purpose === 'general') purposeStrEn = 'general employment and income verification';
+
+    var docNoEn = 'PTN-HR-' + String(new Date().getMonth() + 1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0') + '/' + new Date().getFullYear();
+
+    h += '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:22px">' +
+      '<div style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:0.5px">PTN PHARMA CENTER CO., LTD.</div>' +
+      '<div style="font-size:11px;color:#475569;margin-top:4px">Tax Identification No.: ' + esc(compTaxId) + '</div>' +
+      '<div style="font-size:11px;color:#64748b">' + esc(compAddress) + ' | Tel: ' + esc(compPhone) + '</div>' +
+    '</div>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:22px">' +
+      '<div><strong>Ref No.:</strong> ' + esc(docNoEn) + '</div>' +
+      '<div><strong>Date:</strong> ' + esc(certDate || new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })) + '</div>' +
+    '</div>' +
+
+    '<div style="text-align:center;margin:24px 0 28px">' +
+      '<h2 style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:1px;text-transform:uppercase;margin:0">SALARY &amp; EMPLOYMENT VERIFICATION LETTER</h2>' +
+    '</div>' +
+
+    '<div style="font-size:13.5px;text-align:justify;line-height:2;color:#1e293b">' +
+      '<p style="text-indent:2.5rem;margin-bottom:16px">' +
+        'This letter is officially issued to certify that <strong>' + esc(emp.fullName || '-') + '</strong>, ' +
+        'Identification / Citizen Card No. <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong>, ' +
+        'is a bona fide permanent employee of <strong>' + esc(compName) + '</strong>, ' +
+        'having been employed with the company since <strong>' + esc(startDateDisplayEn) + '</strong> ' +
+        (tenureTextEn ? '(with continuous service of <strong>' + esc(tenureTextEn) + '</strong>) ' : '') +
+        'to the present date.' +
+      '</p>' +
+      '<p style="text-indent:2.5rem;margin-bottom:16px">' +
+        'Presently, ' + esc(emp.fullName || '-') + ' holds the position of <strong>' + esc(emp.position || '-') + '</strong> ' +
+        'in the <strong>' + esc(emp.department || '-') + ' Department</strong>, ' +
+        'earning a current basic monthly salary of <strong style="font-family:monospace;font-size:14px">THB ' + fmt(baseSal) + '</strong>.' +
+      '</p>' +
+      '<p style="text-indent:2.5rem;margin-bottom:24px">' +
+        'This certificate is issued upon the request of the employee for the sole purpose of <strong>' + esc(purposeStrEn) + '</strong>.' +
+      '</p>' +
+      '<p style="text-indent:2.5rem;margin-bottom:36px">' +
+        'Certified true, accurate, and correct.' +
+      '</p>' +
+    '</div>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:40px;page-break-inside:avoid">' +
+      '<div style="width:120px;height:120px;border:2px dashed #cbd5e1;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8;font-size:10.5px;text-align:center">' +
+        '<i class="fa-solid fa-stamp" style="font-size:24px;margin-bottom:4px;color:#cbd5e1"></i>' +
+        '<span>( Company Seal /<br>Official Stamp )</span>' +
+      '</div>' +
+      '<div style="text-align:center;min-width:240px">' +
+        '<div style="height:54px;border-bottom:1px solid #475569;margin-bottom:8px"></div>' +
+        '<div style="font-weight:800;font-size:13.5px;color:#0f172a">( ' + esc(signatoryName) + ' )</div>' +
+        '<div style="font-size:12px;color:#475569;margin-top:2px">' + esc(signatoryTitle) + '</div>' +
+        '<div style="font-size:11px;color:#64748b">' + esc(compName) + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="text-align:center;font-size:10px;color:#94a3b8;margin-top:36px;border-top:1px solid #f1f5f9;padding-top:10px">' +
+      'This document is valid for 30 days from date of issuance. For verification, please contact HR Department at ' + esc(compPhone) + '.' +
+    '</div>';
+
+  } else {
+    // THAI VERSION (OFFICIAL STANDARD)
+    var purposeStrTh = 'ยื่นขอสินเชื่อ / ธุรกรรมทางการเงินกับสถาบันการเงิน';
+    if (purpose === 'visa') purposeStrTh = 'ยื่นขอวีซ่าเพื่อการเดินทางไปต่างประเทศ';
+    else if (purpose === 'general') purposeStrTh = 'ใช้เป็นหลักฐานรับรองสถานะการทำงานทั่วไป';
+
+    var docNoTh = 'พทน. บค. ' + String(new Date().getMonth() + 1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0') + '/' + (new Date().getFullYear() + 543);
+
+    h += '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:22px">' +
+      '<div style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:0.5px">' + esc(compName) + '</div>' +
+      '<div style="font-size:11px;color:#475569;margin-top:4px">เลขประจำตัวผู้เสียภาษีอากร: <strong style="font-family:monospace">' + esc(compTaxId) + '</strong> | โทรศัพท์: ' + esc(compPhone) + '</div>' +
+      '<div style="font-size:11px;color:#64748b">' + esc(compAddress) + '</div>' +
+    '</div>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:20px">' +
+      '<div>ที่ ' + esc(docNoTh) + '</div>' +
+      '<div>วันที่ <strong>' + esc(certDate) + '</strong></div>' +
+    '</div>' +
+
+    '<div style="text-align:center;margin:24px 0 28px">' +
+      '<h2 style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:1px;margin:0">หนังสือรับรองเงินเดือนและการทำงาน</h2>' +
+    '</div>' +
+
+    '<div style="font-size:14px;text-align:justify;line-height:2.1;color:#1e293b">' +
+      '<p style="text-indent:2.8rem;margin-bottom:16px">' +
+        'หนังสือฉบับนี้ให้ไว้เพื่อรับรองว่า <strong>' + esc(emp.fullName || '-') + '</strong> ' +
+        'เลขประจำตัวประชาชน <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong> ' +
+        'เป็นพนักงานประจำของ <strong>' + esc(compName) + '</strong> จริง ' +
+        'โดยได้เริ่มเข้าปฏิบัติงานตั้งแต่วันที่ <strong>' + esc(startDateDisplay) + '</strong> ' +
+        (tenureText ? 'จนถึงปัจจุบัน รวมระยะเวลาการปฏิบัติงาน <strong>' + esc(tenureText) + '</strong> ' : '') +
+        'ปัจจุบันดำรงตำแหน่ง <strong>' + esc(emp.position || '-') + '</strong> ' +
+        'สังกัดฝ่าย/แผนก <strong>' + esc(emp.department || '-') + '</strong>' +
+      '</p>' +
+      '<p style="text-indent:2.8rem;margin-bottom:16px">' +
+        'ได้รับเงินเดือนในอัตราเดือนละ <strong style="font-family:monospace;font-size:15px">' + fmt(baseSal) + '</strong> บาท ' +
+        '(<strong style="color:#0f172a">' + bahtText(baseSal) + '</strong>)' +
+      '</p>' +
+      '<p style="text-indent:2.8rem;margin-bottom:24px">' +
+        'บริษัทฯ ออกหนังสือรับรองฉบับนี้ให้ไว้ตามความประสงค์ของพนักงาน เพื่อใช้เป็นหลักฐานประกอบการ <strong>' + esc(purposeStrTh) + '</strong> เท่านั้น' +
+      '</p>' +
+      '<p style="text-indent:2.8rem;margin-bottom:36px">' +
+        'ขอรับรองว่าเป็นความจริงทุกประการ' +
+      '</p>' +
+    '</div>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:46px;page-break-inside:avoid">' +
+      '<div style="width:125px;height:125px;border:2px dashed #cbd5e1;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#94a3b8;font-size:11px;text-align:center">' +
+        '<i class="fa-solid fa-stamp" style="font-size:26px;margin-bottom:4px;color:#cbd5e1"></i>' +
+        '<span>(ประทับตราสำคัญ<br>ของบริษัท)</span>' +
+      '</div>' +
+      '<div style="text-align:center;min-width:240px">' +
+        '<div style="height:54px;border-bottom:1px solid #475569;margin-bottom:8px"></div>' +
+        '<div style="font-weight:800;font-size:14px;color:#0f172a">( ' + esc(signatoryName) + ' )</div>' +
+        '<div style="font-size:12px;color:#475569;margin-top:2px">' + esc(signatoryTitle) + '</div>' +
+        '<div style="font-size:11px;color:#64748b">' + esc(compName) + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="text-align:center;font-size:10px;color:#94a3b8;margin-top:36px;border-top:1px solid #f1f5f9;padding-top:10px">' +
+      'เอกสารนี้มีอายุการใช้งาน 30 วันนับจากวันที่ออกหนังสือ | หากมีข้อสงสัยติดต่อฝ่ายทรัพยากรบุคคล โทร ' + esc(compPhone) + '' +
+    '</div>';
+  }
+
+  paper.innerHTML = h;
+}
+
+function printSalaryCertificate() {
+  document.body.classList.remove('printing-payslip', 'printing-history', 'printing-yearly-summary', 'printing-batch-history', 'printing-50twi', 'printing-payroll-summary', 'printing-analytics');
+  document.body.classList.add('printing-salary-cert');
+
+  setTimeout(function() {
+    window.print();
+  }, 50);
+}
+
+// Clean up print class after print dialog closes
+window.addEventListener('afterprint', function() {
+  document.body.classList.remove('printing-salary-cert');
+});
+
+function open50TwiFromDocCenter() {
+  var sel = document.getElementById('docCertEmpSelect');
+  var empId = sel ? sel.value : '';
+  if (empId) {
+    if (document.getElementById('histEmpSelect')) document.getElementById('histEmpSelect').value = empId;
+    load50TwiDocument(empId);
+  } else {
+    showToast('กรุณาเลือกพนักงานก่อนพิมพ์ 50 ทวิ', 'warning');
+  }
+}
+
+function openPayslipFromDocCenter() {
+  var sel = document.getElementById('docCertEmpSelect');
+  var empId = sel ? sel.value : '';
+  if (!empId) {
+    showToast('กรุณาเลือกพนักงานก่อนดูสลิป', 'warning');
+    return;
+  }
+  openPayslip(empId);
+}
+
+// ------------------------------------------------------------------------------
+// REVENUE DEPARTMENT TAX: ภ.ง.ด. 1 CONTROLLER
+// ------------------------------------------------------------------------------
+function renderPnd1Summary() {
+  var list = State.payrollList || [];
+  var compTax = State.company.taxId || '0105559876543';
+  var branch = State.company.companyBranch || '00000';
+
+  if (document.getElementById('pnd1PeriodDisplay')) {
+    document.getElementById('pnd1PeriodDisplay').textContent = State.period;
+  }
+
+  var count = 0;
+  var sumIncome = 0;
+  var sumTax = 0;
+
+  var lines = [];
+  list.forEach(function(r, idx) {
+    var gross = Number(r.grossPay) || 0;
+    var tax = Number(r.tax) || 0;
+    if (gross > 0) {
+      count++;
+      sumIncome += gross;
+      sumTax += tax;
+
+      var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+      var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, '0');
+      var names = (r.name || '').split(' ');
+      var firstName = names[0] || '';
+      var lastName = names.slice(1).join(' ') || '';
+      var prefix = 'นาย';
+      if (firstName.indexOf('นางสาว') === 0) { prefix = 'นางสาว'; firstName = firstName.replace('นางสาว',''); }
+      else if (firstName.indexOf('นาง') === 0) { prefix = 'นาง'; firstName = firstName.replace('นาง',''); }
+      else if (firstName.indexOf('นาย') === 0) { prefix = 'นาย'; firstName = firstName.replace('นาย',''); }
+
+      var d = new Date();
+      var payDateStr = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+
+      lines.push((idx+1) + '|' + compTax + '|' + branch + '|' + citizen + '|' + prefix + '|' + firstName + '|' + lastName + '|' + (emp.address || compTax) + '|' + payDateStr + '|1|0.00|' + gross.toFixed(2) + '|' + tax.toFixed(2) + '|1');
+    }
+  });
+
+  if (document.getElementById('pnd1EmpCount')) document.getElementById('pnd1EmpCount').textContent = count + ' คน';
+  if (document.getElementById('pnd1TotalIncome')) document.getElementById('pnd1TotalIncome').textContent = fmt(sumIncome) + ' บาท';
+  if (document.getElementById('pnd1TotalTax')) document.getElementById('pnd1TotalTax').textContent = fmt(sumTax) + ' บาท';
+
+  lines.push('TOTAL|' + compTax + '|' + branch + '|' + count + '|' + sumIncome.toFixed(2) + '|' + sumTax.toFixed(2));
+
+  var previewArea = document.getElementById('pnd1FilePreview');
+  if (previewArea) {
+    previewArea.textContent = lines.slice(0, 10).join('\n') + (lines.length > 10 ? '\n... (และอีก ' + (lines.length - 10) + ' รายการ)' : '');
+  }
+}
+
+function exportPnd1TextFile() {
+  if (!hasPermission('view_salary') && !hasPermission('all')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์ภาษี ภ.ง.ด. 1', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var compTax = State.company.taxId || '0105559876543';
+  var branch = State.company.companyBranch || '00000';
+  var count = 0, sumIncome = 0, sumTax = 0;
+  var lines = [];
+
+  list.forEach(function(r, idx) {
+    var gross = Number(r.grossPay) || 0;
+    var tax = Number(r.tax) || 0;
+    if (gross > 0) {
+      count++;
+      sumIncome += gross;
+      sumTax += tax;
+
+      var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+      var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, '0');
+      var names = (r.name || '').split(' ');
+      var firstName = names[0] || '';
+      var lastName = names.slice(1).join(' ') || '';
+      var prefix = 'นาย';
+      if (firstName.indexOf('นางสาว') === 0) { prefix = 'นางสาว'; firstName = firstName.replace('นางสาว',''); }
+      else if (firstName.indexOf('นาง') === 0) { prefix = 'นาง'; firstName = firstName.replace('นาง',''); }
+      else if (firstName.indexOf('นาย') === 0) { prefix = 'นาย'; firstName = firstName.replace('นาย',''); }
+
+      var d = new Date();
+      var payDateStr = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+
+      lines.push((count) + '|' + compTax + '|' + branch + '|' + citizen + '|' + prefix + '|' + firstName + '|' + lastName + '|' + (emp.address || '-') + '|' + payDateStr + '|1|0.00|' + gross.toFixed(2) + '|' + tax.toFixed(2) + '|1');
+    }
+  });
+
+  lines.push('TOTAL|' + compTax + '|' + branch + '|' + count + '|' + sumIncome.toFixed(2) + '|' + sumTax.toFixed(2));
+
+  var txtContent = lines.join('\r\n');
+  var filename = 'PND1_' + State.period.replace(/\s+/g, '_') + '.txt';
+  var blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์ Text ภ.ง.ด. 1 สำเร็จ (พร้อมยื่น RD e-Filing)');
+}
+
+// ------------------------------------------------------------------------------
+// SOCIAL SECURITY: สปส. 1-10 CONTROLLER
+// ------------------------------------------------------------------------------
+function renderSsoSummary() {
+  var list = State.payrollList || [];
+  var ssoAcc = State.company.employerSsoId || '10-1234567-8';
+  var branch = State.company.companyBranch || '0000';
+
+  if (document.getElementById('ssoEmployerDisplay')) document.getElementById('ssoEmployerDisplay').textContent = ssoAcc;
+  if (document.getElementById('ssoBranchDisplay')) document.getElementById('ssoBranchDisplay').textContent = branch;
+
+  var count = 0;
+  var sumWages = 0;
+  var sumSso = 0;
+
+  var lines = [];
+  // Header: Account(10) + Branch(4) + Period(MMYYYY) + Count(6) + TotalContribution(9)
+  var d = new Date();
+  var ssoPeriod = String(d.getMonth()+1).padStart(2,'0') + (d.getFullYear() + 543);
+  var cleanAcc = ssoAcc.replace(/[^0-9]/g, '').padEnd(10, '0');
+  var cleanBranch = branch.replace(/[^0-9]/g, '').padStart(4, '0');
+
+  list.forEach(function(r) {
+    var base = Number(r.baseSalary) || 0;
+    var sso = Number(r.sso) || 0;
+    if (sso > 0) {
+      count++;
+      var wage = Math.min(Math.max(base, 1650), 15000);
+      sumWages += wage;
+      sumSso += sso;
+
+      var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+      var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, '0');
+      var names = (r.name || '').split(' ');
+      var firstName = (names[0] || '').padEnd(20, ' ');
+      var lastName = (names.slice(1).join(' ') || '').padEnd(20, ' ');
+      var wageCents = String(Math.round(wage * 100)).padStart(9, '0');
+      var ssoCents = String(Math.round(sso * 100)).padStart(7, '0');
+
+      lines.push('2' + citizen + firstName + lastName + wageCents + ssoCents + ssoCents);
+    }
+  });
+
+  var totalSsoContrib = sumSso * 2; // employee + employer
+  var header = '1' + cleanAcc + cleanBranch + ssoPeriod + String(count).padStart(6, '0') + String(Math.round(totalSsoContrib * 100)).padStart(10, '0');
+  lines.unshift(header);
+
+  if (document.getElementById('ssoEmpCount')) document.getElementById('ssoEmpCount').textContent = count + ' คน';
+  if (document.getElementById('ssoEmployeeSum')) document.getElementById('ssoEmployeeSum').textContent = fmt(sumSso) + ' บาท';
+  if (document.getElementById('ssoTotalSum')) document.getElementById('ssoTotalSum').textContent = fmt(totalSsoContrib) + ' บาท';
+
+  var previewArea = document.getElementById('ssoFilePreview');
+  if (previewArea) {
+    previewArea.textContent = lines.slice(0, 10).join('\n') + (lines.length > 10 ? '\n... (และอีก ' + (lines.length - 10) + ' รายการ)' : '');
+  }
+}
+
+function exportSso1_10TextFile() {
+  if (!hasPermission('view_salary') && !hasPermission('all')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์ สปส. 1-10', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var ssoAcc = State.company.employerSsoId || '10-1234567-8';
+  var branch = State.company.companyBranch || '0000';
+  var d = new Date();
+  var ssoPeriod = String(d.getMonth()+1).padStart(2,'0') + (d.getFullYear() + 543);
+  var cleanAcc = ssoAcc.replace(/[^0-9]/g, '').padEnd(10, '0');
+  var cleanBranch = branch.replace(/[^0-9]/g, '').padStart(4, '0');
+
+  var count = 0, sumSso = 0;
+  var lines = [];
+
+  list.forEach(function(r) {
+    var base = Number(r.baseSalary) || 0;
+    var sso = Number(r.sso) || 0;
+    if (sso > 0) {
+      count++;
+      var wage = Math.min(Math.max(base, 1650), 15000);
+      sumSso += sso;
+
+      var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+      var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, '0');
+      var names = (r.name || '').split(' ');
+      var firstName = (names[0] || '').padEnd(20, ' ');
+      var lastName = (names.slice(1).join(' ') || '').padEnd(20, ' ');
+      var wageCents = String(Math.round(wage * 100)).padStart(9, '0');
+      var ssoCents = String(Math.round(sso * 100)).padStart(7, '0');
+
+      lines.push('2' + citizen + firstName + lastName + wageCents + ssoCents + ssoCents);
+    }
+  });
+
+  var totalSsoContrib = sumSso * 2;
+  var header = '1' + cleanAcc + cleanBranch + ssoPeriod + String(count).padStart(6, '0') + String(Math.round(totalSsoContrib * 100)).padStart(10, '0');
+  lines.unshift(header);
+
+  var txtContent = lines.join('\r\n');
+  var filename = 'SSO_1_10_' + State.period.replace(/\s+/g, '_') + '.txt';
+  var blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์ Text สปส. 1-10 สำเร็จ (พร้อมยื่น SSO e-Service)');
+}
+
+// ------------------------------------------------------------------------------
+// MULTI-BANK PAYROLL EXPORT CONTROLLER (KBANK, SCB, BBL, KTB)
+// ------------------------------------------------------------------------------
+
+// 1. KBANK
+function exportKbankPayrollCsv() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var csv = '\uFEFF';
+  csv += 'CustRef,BeneficiaryName,BankCode,AccountNo,Amount,CitizenID,PayType,Remark\n';
+
+  list.forEach(function(r) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var bCode = getBankCode(r.bankName || emp.bankName);
+    var acc = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '');
+    var netAmt = Number(r.netPay) > 0 ? Number(r.netPay).toFixed(2) : '0.00';
+
+    csv += [
+      r.empId,
+      '"' + (r.name || '').replace(/"/g, '""') + '"',
+      bCode,
+      acc,
+      netAmt,
+      citizen,
+      '01',
+      '"เงินเดือน ' + State.period + '"'
+    ].join(',') + '\n';
+  });
+
+  var filename = 'KBANK_PAYROLL_' + State.period.replace(/\s+/g, '_') + '.csv';
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน KBANK (CSV) สำเร็จ');
+}
+
+function exportKbankPayrollTxt() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var lines = [];
+  var d = new Date();
+  var dateStr = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+
+  // KBANK Header
+  lines.push('H' + 'KBANK' + dateStr + String(list.length).padStart(6, '0'));
+
+  list.forEach(function(r, idx) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var bCode = getBankCode(r.bankName || emp.bankName);
+    var acc = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '').padEnd(15, ' ');
+    var amtCents = String(Math.round((Number(r.netPay) || 0) * 100)).padStart(12, '0');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, ' ');
+    var name = (r.name || '').padEnd(50, ' ');
+
+    lines.push('D' + String(idx+1).padStart(6, '0') + bCode + acc + amtCents + citizen + name);
+  });
+
+  lines.push('T' + String(list.length).padStart(6, '0'));
+
+  var txtContent = lines.join('\r\n');
+  var filename = 'KBANK_PAYROLL_' + State.period.replace(/\s+/g, '_') + '.txt';
+  var blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน KBANK (TXT) สำเร็จ');
+}
+
+// 2. SCB
+function exportScbPayrollCsv() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var csv = '\uFEFF';
+  csv += 'RecordType,BankCode,AccountNumber,Amount,BeneficiaryName,CitizenID,RefNo,FeeType\n';
+
+  list.forEach(function(r) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var bCode = getBankCode(r.bankName || emp.bankName);
+    var acc = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '');
+    var netAmt = Number(r.netPay) > 0 ? Number(r.netPay).toFixed(2) : '0.00';
+
+    csv += [
+      'D',
+      bCode,
+      acc,
+      netAmt,
+      '"' + (r.name || '').replace(/"/g, '""') + '"',
+      citizen,
+      r.empId,
+      'OUR'
+    ].join(',') + '\n';
+  });
+
+  var filename = 'SCB_PAYROLL_' + State.period.replace(/\s+/g, '_') + '.csv';
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน SCB (CSV) สำเร็จ');
+}
+
+function exportScbPayrollTxt() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var lines = [];
+  var d = new Date();
+  var dateStr = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+
+  lines.push('H' + 'SCBPAYROLL'.padEnd(20, ' ') + dateStr + String(list.length).padStart(6, '0'));
+  list.forEach(function(r, idx) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var bCode = getBankCode(r.bankName || emp.bankName);
+    var acc = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '').padEnd(15, ' ');
+    var amtCents = String(Math.round((Number(r.netPay) || 0) * 100)).padStart(12, '0');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, ' ');
+    var name = (r.name || '').padEnd(50, ' ');
+
+    lines.push('D' + String(idx+1).padStart(6, '0') + bCode + acc + amtCents + citizen + name);
+  });
+  lines.push('T' + String(list.length).padStart(6, '0'));
+
+  var txtContent = lines.join('\r\n');
+  var filename = 'SCB_PAYROLL_' + State.period.replace(/\s+/g, '_') + '.txt';
+  var blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน SCB (TXT) สำเร็จ');
+}
+
+// 3. BBL
+function exportBblPayrollCsv() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var csv = '\uFEFF';
+  csv += 'TransactionDate,BankCode,AccountNumber,Amount,BeneficiaryName,CitizenID,Reference\n';
+  var d = new Date();
+  var dateStr = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+
+  list.forEach(function(r) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var bCode = getBankCode(r.bankName || emp.bankName);
+    var acc = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '');
+    var netAmt = Number(r.netPay) > 0 ? Number(r.netPay).toFixed(2) : '0.00';
+
+    csv += [
+      dateStr,
+      bCode,
+      acc,
+      netAmt,
+      '"' + (r.name || '').replace(/"/g, '""') + '"',
+      citizen,
+      r.empId
+    ].join(',') + '\n';
+  });
+
+  var filename = 'BBL_PAYROLL_' + State.period.replace(/\s+/g, '_') + '.csv';
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน BBL (CSV) สำเร็จ');
+}
+
+function exportBblPayrollTxt() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var lines = [];
+  var d = new Date();
+  var dateStr = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+
+  lines.push('H' + 'BBLPAYROLL'.padEnd(20, ' ') + dateStr + String(list.length).padStart(6, '0'));
+  list.forEach(function(r, idx) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var bCode = getBankCode(r.bankName || emp.bankName);
+    var acc = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '').padEnd(15, ' ');
+    var amtCents = String(Math.round((Number(r.netPay) || 0) * 100)).padStart(12, '0');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, ' ');
+    var name = (r.name || '').padEnd(50, ' ');
+
+    lines.push('D' + String(idx+1).padStart(6, '0') + bCode + acc + amtCents + citizen + name);
+  });
+  lines.push('T' + String(list.length).padStart(6, '0'));
+
+  var txtContent = lines.join('\r\n');
+  var filename = 'BBL_PAYROLL_' + State.period.replace(/\s+/g, '_') + '.txt';
+  var blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน BBL (TXT) สำเร็จ');
+}
+
+// 4. KTB
+function exportKtbPayrollCsv() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var csv = '\uFEFF';
+  csv += 'VendorCode,BankCode,AccountNumber,AccountName,Amount,NationalID,Ref1\n';
+
+  list.forEach(function(r) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var bCode = getBankCode(r.bankName || emp.bankName);
+    var acc = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '');
+    var netAmt = Number(r.netPay) > 0 ? Number(r.netPay).toFixed(2) : '0.00';
+
+    csv += [
+      r.empId,
+      bCode,
+      acc,
+      '"' + (r.name || '').replace(/"/g, '""') + '"',
+      netAmt,
+      citizen,
+      '"' + State.period + '"'
+    ].join(',') + '\n';
+  });
+
+  var filename = 'KTB_PAYROLL_' + State.period.replace(/\s+/g, '_') + '.csv';
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน KTB (CSV) สำเร็จ');
+}
+
+function exportKtbPayrollTxt() {
+  if (!hasPermission('view_salary') || !hasPermission('export_csv')) {
+    showToast('คุณไม่มีสิทธิ์ส่งออกไฟล์โอนเงินเดือน', 'warning');
+    return;
+  }
+  var list = State.payrollList || [];
+  if (list.length === 0) {
+    showToast('ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + State.period, 'warning');
+    return;
+  }
+
+  var lines = [];
+  var d = new Date();
+  var dateStr = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+
+  lines.push('H' + 'KTBPAYROLL'.padEnd(20, ' ') + dateStr + String(list.length).padStart(6, '0'));
+  list.forEach(function(r, idx) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var bCode = getBankCode(r.bankName || emp.bankName);
+    var acc = String(r.bankAccount || emp.bankAccount || '').replace(/[^0-9]/g, '').padEnd(15, ' ');
+    var amtCents = String(Math.round((Number(r.netPay) || 0) * 100)).padStart(12, '0');
+    var citizen = String(emp.citizenId || '').replace(/[^0-9]/g, '').padEnd(13, ' ');
+    var name = (r.name || '').padEnd(50, ' ');
+
+    lines.push('D' + String(idx+1).padStart(6, '0') + bCode + acc + amtCents + citizen + name);
+  });
+  lines.push('T' + String(list.length).padStart(6, '0'));
+
+  var txtContent = lines.join('\r\n');
+  var filename = 'KTB_PAYROLL_' + State.period.replace(/\s+/g, '_') + '.txt';
+  var blob = new Blob([txtContent], { type: 'text/plain;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดไฟล์โอนเงินเดือน KTB (TXT) สำเร็จ');
 }

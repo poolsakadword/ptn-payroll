@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=6.6">
+  <link rel="stylesheet" href="css/style.css?v=6.7">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- PWA & Mobile Web App Meta -->
   <link rel="manifest" href="manifest.json">
@@ -86,6 +86,9 @@
         </button>
         <button type="button" class="nav-tab-btn" id="navBtn-analytics" onclick="switchTab('analytics')">
           <i class="fa-solid fa-chart-line"></i> วิเคราะห์ข้อมูล (Analytics)
+        </button>
+        <button type="button" class="nav-tab-btn" id="navBtn-documents" onclick="switchTab('documents')">
+          <i class="fa-solid fa-folder-open"></i> ศูนย์เอกสาร &amp; ส่งออก
         </button>
         <button type="button" class="nav-tab-btn" id="navBtn-company" onclick="switchTab('company')">
           <i class="fa-solid fa-building"></i> ข้อมูลบริษัท
@@ -1036,6 +1039,311 @@
         </div>
       </div>
 
+
+      <!-- 5.5 DOCUMENTS & COMPLIANCE TAB -->
+      <div class="tab-content" id="tab-documents">
+        <div class="card" style="margin-bottom:20px">
+          <div class="card-header" style="flex-direction:column;align-items:stretch;gap:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+              <div>
+                <div class="card-title" style="display:flex;align-items:center;gap:8px">
+                  <i class="fa-solid fa-folder-open" style="color:var(--primary)"></i> ศูนย์เอกสารและนำส่งราชการ (Document &amp; Statutory Compliance Center)
+                </div>
+                <div class="card-sub">ออกหนังสือรับรองเงินเดือน, ไฟล์ยื่นภาษี ภ.ง.ด. 1 e-Filing, ไฟล์ส่งเงินสมทบ ปกส. สปส. 1-10 และไฟล์โอนเงินเดือนธนาคารพาณิชย์</div>
+              </div>
+
+              <!-- Document Category Switcher -->
+              <div style="display:inline-flex;background:var(--border-light);padding:3px;border-radius:var(--radius-md);border:1px solid var(--border);flex-wrap:wrap;gap:4px">
+                <button type="button" id="btnDocCatCert" class="btn btn-primary btn-sm" style="padding:5px 12px;font-size:12px;font-weight:700" onclick="switchDocCategory('cert')">
+                  <i class="fa-solid fa-file-signature"></i> 1. หนังสือรับรองเงินเดือน
+                </button>
+                <button type="button" id="btnDocCatTax" class="btn btn-slate btn-sm" style="padding:5px 12px;font-size:12px;font-weight:700" onclick="switchDocCategory('tax')">
+                  <i class="fa-solid fa-landmark"></i> 2. ภาษี ภ.ง.ด. 1
+                </button>
+                <button type="button" id="btnDocCatSso" class="btn btn-slate btn-sm" style="padding:5px 12px;font-size:12px;font-weight:700" onclick="switchDocCategory('sso')">
+                  <i class="fa-solid fa-shield-halved"></i> 3. ประกันสังคม สปส. 1-10
+                </button>
+                <button type="button" id="btnDocCatBank" class="btn btn-slate btn-sm" style="padding:5px 12px;font-size:12px;font-weight:700" onclick="switchDocCategory('bank')">
+                  <i class="fa-solid fa-building-columns"></i> 4. ไฟล์โอน 5 ธนาคาร
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL 1: SALARY & EMPLOYMENT CERTIFICATE -->
+          <div id="docPanel-cert" class="doc-panel" style="padding:22px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border-light)">
+              <div>
+                <h3 style="font-size:15px;font-weight:700;color:var(--text-dark);margin:0;display:flex;align-items:center;gap:7px">
+                  <i class="fa-solid fa-certificate" style="color:#2563eb"></i> ออกหนังสือรับรองเงินเดือนและการทำงาน (Salary &amp; Employment Certificate)
+                </h3>
+                <p style="font-size:12px;color:var(--text-muted);margin:3px 0 0">
+                  รองรับการออกเอกสาร A4 ทางการ ทั้งภาษาไทยและภาษาอังกฤษ (สำหรับยื่นขอสินเชื่อ, สมัครบัตรเครดิต, หรือยื่นขอวีซ่า)
+                </p>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button type="button" class="btn btn-primary" onclick="openSalaryCertificateModal()" style="font-weight:700">
+                  <i class="fa-solid fa-eye"></i> ดูพรีวิว &amp; พิมพ์หนังสือรับรอง (A4)
+                </button>
+              </div>
+            </div>
+
+            <!-- Parameters selection row -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;background:#f8fafc;padding:16px;border-radius:10px;border:1px solid #e2e8f0;margin-bottom:20px">
+              <div class="form-group" style="margin:0">
+                <label style="font-size:11.5px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-user"></i> เลือกพนักงาน:</label>
+                <select id="docCertEmpSelect" class="period-select" style="width:100%;font-weight:600" onchange="onDocCertParamChanged()"></select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label style="font-size:11.5px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-bullseye"></i> วัตถุประสงค์ในการออกหนังสือ:</label>
+                <select id="docCertPurpose" class="period-select" style="width:100%;font-weight:600" onchange="onDocCertParamChanged()">
+                  <option value="loan">เพื่อยื่นขอสินเชื่อ / บัตรเครดิต กับสถาบันการเงิน</option>
+                  <option value="visa">เพื่อใช้ประกอบการยื่นขอวีซ่า (Visa Application)</option>
+                  <option value="general">เพื่อใช้เป็นหลักฐานรับรองสถานะการทำงานทั่วไป</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label style="font-size:11.5px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-language"></i> ภาษาของเอกสาร:</label>
+                <select id="docCertLang" class="period-select" style="width:100%;font-weight:600" onchange="onDocCertParamChanged()">
+                  <option value="TH">ภาษาไทย (Official Thai)</option>
+                  <option value="EN">English (Verification Letter)</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin:0">
+                <label style="font-size:11.5px;font-weight:700;color:#1e3a8a"><i class="fa-solid fa-calendar"></i> วันที่ออกเอกสาร:</label>
+                <input type="text" id="docCertDate" class="period-select" style="width:100%;font-weight:600" oninput="onDocCertParamChanged()">
+              </div>
+            </div>
+
+            <!-- Other Employee Documents Quick Access -->
+            <h4 style="font-size:13px;font-weight:700;color:var(--text-dark);margin:16px 0 10px">เอกสารสำคัญอื่นๆ ของพนักงาน</h4>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));gap:14px">
+              <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div style="font-weight:700;font-size:13px;color:#1e293b"><i class="fa-solid fa-file-shield" style="color:#4338ca"></i> หนังสือรับรองภาษี 50 ทวิ</div>
+                  <div style="font-size:11px;color:#64748b">สำหรับยื่นแบบภาษี ภ.ง.ด. 90/91</div>
+                </div>
+                <button type="button" class="btn btn-slate btn-sm" onclick="open50TwiFromDocCenter()"><i class="fa-solid fa-print"></i> พิมพ์ 50 ทวิ</button>
+              </div>
+
+              <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div style="font-weight:700;font-size:13px;color:#1e293b"><i class="fa-solid fa-receipt" style="color:#059669"></i> สลิปเงินเดือน (Payslip)</div>
+                  <div style="font-size:11px;color:#64748b">ใบจ่ายเงินเดือนของพนักงานงวดปัจจุบัน</div>
+                </div>
+                <button type="button" class="btn btn-slate btn-sm" onclick="openPayslipFromDocCenter()"><i class="fa-solid fa-eye"></i> ดูสลิป</button>
+              </div>
+
+              <div style="background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:14px;display:flex;justify-content:space-between;align-items:center">
+                <div>
+                  <div style="font-weight:700;font-size:13px;color:#1e293b"><i class="fa-solid fa-clock-rotate-left" style="color:#2563eb"></i> รายงานประวัติรายบุคคล</div>
+                  <div style="font-size:11px;color:#64748b">ตารางสะสมย้อนหลัง 12 งวด (A4 แนวนอน)</div>
+                </div>
+                <button type="button" class="btn btn-slate btn-sm" onclick="switchTab('history')"><i class="fa-solid fa-arrow-up-right-from-square"></i> ไปหน้าประวัติ</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- PANEL 2: REVENUE DEPARTMENT TAX (ภ.ง.ด. 1) -->
+          <div id="docPanel-tax" class="doc-panel" style="padding:22px;display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border-light)">
+              <div>
+                <h3 style="font-size:15px;font-weight:700;color:var(--text-dark);margin:0;display:flex;align-items:center;gap:7px">
+                  <i class="fa-solid fa-landmark" style="color:#4f46e5"></i> กรมสรรพากร: ไฟล์นำส่งภาษีเงินได้หัก ณ ที่จ่าย (ภ.ง.ด. 1 e-Filing)
+                </h3>
+                <p style="font-size:12px;color:var(--text-muted);margin:3px 0 0">
+                  สร้างและดาวน์โหลดไฟล์ Text (Pipe-delimited) ตามโครงสร้างมาตรฐานกรมสรรพากร เพื่อนำไปอัปโหลดผ่านเว็บ RD e-Filing
+                </p>
+              </div>
+              <button type="button" class="btn btn-primary" onclick="exportPnd1TextFile()" style="background:#4f46e5;border-color:#4f46e5;font-weight:700">
+                <i class="fa-solid fa-download"></i> ดาวน์โหลดไฟล์ Text ภ.ง.ด. 1 (.txt)
+              </button>
+            </div>
+
+            <!-- Tax Summary Cards -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:14px;margin-bottom:18px">
+              <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:10px;padding:14px">
+                <div style="font-size:11.5px;font-weight:700;color:#4338ca">งวดภาษีปัจจุบัน</div>
+                <div style="font-size:18px;font-weight:800;color:#1e1b4b;margin-top:4px" id="pnd1PeriodDisplay">-</div>
+                <div style="font-size:11px;color:#6366f1;margin-top:2px">ยื่นแบบภายในวันที่ 7-15 ของเดือนถัดไป</div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+                <div style="font-size:11.5px;font-weight:700;color:#64748b">จำนวนผู้มีเงินได้ ม.40(1)</div>
+                <div style="font-size:18px;font-weight:800;color:#0f172a;margin-top:4px" id="pnd1EmpCount">-</div>
+                <div style="font-size:11px;color:#64748b;margin-top:2px">เฉพาะพนักงานที่มีเงินได้ในงวด</div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+                <div style="font-size:11.5px;font-weight:700;color:#64748b">เงินได้พึงประเมินรวมทั้งสิ้น</div>
+                <div style="font-size:18px;font-weight:800;color:#0f172a;margin-top:4px" id="pnd1TotalIncome">-</div>
+                <div style="font-size:11px;color:#64748b;margin-top:2px">ยอดรวมก่อนหักค่าใช้จ่าย/ลดหย่อน</div>
+              </div>
+              <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:14px">
+                <div style="font-size:11.5px;font-weight:700;color:#dc2626">ภาษีหัก ณ ที่จ่ายนำส่งรวม</div>
+                <div style="font-size:18px;font-weight:800;color:#991b1b;margin-top:4px" id="pnd1TotalTax">-</div>
+                <div style="font-size:11px;color:#b91c1c;margin-top:2px">ยอดภาษีสุทธิที่ต้องนำส่งสรรพากร</div>
+              </div>
+            </div>
+
+            <!-- Text file preview container -->
+            <div style="background:#0f172a;border-radius:10px;padding:14px 16px;color:#f8fafc;font-family:monospace;font-size:11.5px">
+              <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155;padding-bottom:8px;margin-bottom:8px;color:#94a3b8;font-size:11px">
+                <span><i class="fa-solid fa-code text-blue"></i> โครงสร้างไฟล์ตัวอย่าง: PND1_XXXXXX.txt (RD e-Filing Pipe-Delimited)</span>
+                <span style="color:#4ade80">UTF-8 Format</span>
+              </div>
+              <pre id="pnd1FilePreview" style="margin:0;overflow-x:auto;white-space:pre-wrap;line-height:1.6;color:#cbd5e1">กำลังสร้างตัวอย่างไฟล์ ภ.ง.ด. 1...</pre>
+            </div>
+          </div>
+
+          <!-- PANEL 3: SOCIAL SECURITY SSO (สปส. 1-10) -->
+          <div id="docPanel-sso" class="doc-panel" style="padding:22px;display:none">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border-light)">
+              <div>
+                <h3 style="font-size:15px;font-weight:700;color:var(--text-dark);margin:0;display:flex;align-items:center;gap:7px">
+                  <i class="fa-solid fa-shield-halved" style="color:#059669"></i> สำนักงานประกันสังคม: ไฟล์นำส่งเงินสมทบ (สปส. 1-10 e-Service)
+                </h3>
+                <p style="font-size:12px;color:var(--text-muted);margin:3px 0 0">
+                  ไฟล์ Text นำส่งข้อมูลเงินสมทบผู้ประกันตน ม.33 ส่วนที่ 1 (ใบสรุปยอด) และส่วนที่ 2 (รายชื่อลูกจ้าง) เพื่อยื่นผ่านระบบ SSO e-Service
+                </p>
+              </div>
+              <button type="button" class="btn btn-primary" onclick="exportSso1_10TextFile()" style="background:#059669;border-color:#059669;font-weight:700">
+                <i class="fa-solid fa-download"></i> ดาวน์โหลดไฟล์ Text สปส. 1-10 (.txt)
+              </button>
+            </div>
+
+            <!-- SSO Summary Cards -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(210px, 1fr));gap:14px;margin-bottom:18px">
+              <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px">
+                <div style="font-size:11.5px;font-weight:700;color:#15803d">เลขที่บัญชีนายจ้าง (10 หลัก)</div>
+                <div style="font-size:18px;font-weight:800;font-family:monospace;color:#14532d;margin-top:4px" id="ssoEmployerDisplay">-</div>
+                <div style="font-size:11px;color:#16a34a;margin-top:2px">สาขา: <span id="ssoBranchDisplay">0000</span></div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+                <div style="font-size:11.5px;font-weight:700;color:#64748b">จำนวนผู้ประกันตน</div>
+                <div style="font-size:18px;font-weight:800;color:#0f172a;margin-top:4px" id="ssoEmpCount">-</div>
+                <div style="font-size:11px;color:#64748b;margin-top:2px">อัตราสมทบ 5% (เพดาน 750 บ.)</div>
+              </div>
+              <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px">
+                <div style="font-size:11.5px;font-weight:700;color:#64748b">เงินสมทบส่วนของลูกจ้าง</div>
+                <div style="font-size:18px;font-weight:800;color:#0f172a;margin-top:4px" id="ssoEmployeeSum">-</div>
+                <div style="font-size:11px;color:#64748b;margin-top:2px">หักจากเงินเดือนพนักงาน</div>
+              </div>
+              <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px">
+                <div style="font-size:11.5px;font-weight:700;color:#166534">เงินสมทบรวมนำส่ง (ลูกจ้าง+นายจ้าง)</div>
+                <div style="font-size:18px;font-weight:800;color:#14532d;margin-top:4px" id="ssoTotalSum">-</div>
+                <div style="font-size:11px;color:#15803d;margin-top:2px">ยอดรวมที่ต้องชำระ ปกส.</div>
+              </div>
+            </div>
+
+            <!-- SSO Text Preview -->
+            <div style="background:#0f172a;border-radius:10px;padding:14px 16px;color:#f8fafc;font-family:monospace;font-size:11.5px">
+              <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #334155;padding-bottom:8px;margin-bottom:8px;color:#94a3b8;font-size:11px">
+                <span><i class="fa-solid fa-code text-green"></i> โครงสร้างไฟล์ตัวอย่าง: SSO_XXXXXX.txt (SSO Diskette / e-Service Format)</span>
+                <span style="color:#4ade80">Fixed-Width 80-100 Bytes</span>
+              </div>
+              <pre id="ssoFilePreview" style="margin:0;overflow-x:auto;white-space:pre-wrap;line-height:1.6;color:#cbd5e1">กำลังสร้างตัวอย่างไฟล์ สปส. 1-10...</pre>
+            </div>
+          </div>
+
+          <!-- PANEL 4: MULTI-BANK PAYROLL FILES -->
+          <div id="docPanel-bank" class="doc-panel" style="padding:22px;display:none">
+            <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border-light)">
+              <h3 style="font-size:15px;font-weight:700;color:var(--text-dark);margin:0;display:flex;align-items:center;gap:7px">
+                <i class="fa-solid fa-building-columns" style="color:#d97706"></i> ศูนย์ส่งออกไฟล์โอนเงินเดือน 5 ธนาคารพาณิชย์ (Multi-Bank Payroll Clearing)
+              </h3>
+              <p style="font-size:12px;color:var(--text-muted);margin:3px 0 0">
+                ดาวน์โหลดไฟล์โอนเงินเดือนแบบกลุ่มตามมาตรฐาน Corporate Banking สำหรับงวด <strong id="bankPeriodDisplay" style="color:#1e3a8a">-</strong>
+              </p>
+            </div>
+
+            <!-- 5 Banks Grid -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px">
+              
+              <!-- 1. TTB -->
+              <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:16px;display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="background:#1e40af;color:#fff;font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:6px">TTB</span>
+                    <span style="font-size:11px;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 8px;border-radius:20px">มาตรฐานองค์กร</span>
+                  </div>
+                  <h4 style="font-size:14px;font-weight:700;color:#0f172a;margin:0">ธนาคารทหารไทยธนชาต</h4>
+                  <p style="font-size:11.5px;color:#64748b;margin:4px 0 12px">ttb business one (รองรับทั้งไฟล์ CSV และ TXT Direct Credit)</p>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button type="button" class="btn btn-primary btn-sm" style="flex:1" onclick="exportTtbPayrollCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                  <button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="exportTtbDirectCreditTxt()"><i class="fa-solid fa-file-lines"></i> TXT</button>
+                </div>
+              </div>
+
+              <!-- 2. KBANK -->
+              <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:16px;display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="background:#047857;color:#fff;font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:6px">KBANK</span>
+                    <span style="font-size:11px;font-weight:700;color:#047857;background:#d1fae5;padding:2px 8px;border-radius:20px">พร้อมใช้งาน</span>
+                  </div>
+                  <h4 style="font-size:14px;font-weight:700;color:#0f172a;margin:0">ธนาคารกสิกรไทย</h4>
+                  <p style="font-size:11.5px;color:#64748b;margin:4px 0 12px">K-Cash Connect Plus (ไฟล์ Payroll CSV / Direct Credit TXT)</p>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button type="button" class="btn btn-primary btn-sm" style="flex:1;background:#059669;border-color:#059669" onclick="exportKbankPayrollCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                  <button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="exportKbankPayrollTxt()"><i class="fa-solid fa-file-lines"></i> TXT</button>
+                </div>
+              </div>
+
+              <!-- 3. SCB -->
+              <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:16px;display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="background:#6b21a8;color:#fff;font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:6px">SCB</span>
+                    <span style="font-size:11px;font-weight:700;color:#6b21a8;background:#f3e8ff;padding:2px 8px;border-radius:20px">พร้อมใช้งาน</span>
+                  </div>
+                  <h4 style="font-size:14px;font-weight:700;color:#0f172a;margin:0">ธนาคารไทยพาณิชย์</h4>
+                  <p style="font-size:11.5px;color:#64748b;margin:4px 0 12px">SCB Business Anywhere / Business Net (Payroll File)</p>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button type="button" class="btn btn-primary btn-sm" style="flex:1;background:#7c3aed;border-color:#7c3aed" onclick="exportScbPayrollCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                  <button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="exportScbPayrollTxt()"><i class="fa-solid fa-file-lines"></i> TXT</button>
+                </div>
+              </div>
+
+              <!-- 4. BBL -->
+              <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:16px;display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="background:#1e3a8a;color:#fff;font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:6px">BBL</span>
+                    <span style="font-size:11px;font-weight:700;color:#1e3a8a;background:#dbeafe;padding:2px 8px;border-radius:20px">พร้อมใช้งาน</span>
+                  </div>
+                  <h4 style="font-size:14px;font-weight:700;color:#0f172a;margin:0">ธนาคารกรุงเทพ</h4>
+                  <p style="font-size:11.5px;color:#64748b;margin:4px 0 12px">Bualuang iCash (Direct Credit Payroll Format)</p>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button type="button" class="btn btn-primary btn-sm" style="flex:1;background:#1d4ed8;border-color:#1d4ed8" onclick="exportBblPayrollCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                  <button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="exportBblPayrollTxt()"><i class="fa-solid fa-file-lines"></i> TXT</button>
+                </div>
+              </div>
+
+              <!-- 5. KTB -->
+              <div style="background:#ffffff;border:1px solid #cbd5e1;border-radius:12px;padding:16px;display:flex;flex-direction:column;justify-content:space-between">
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <span style="background:#0284c7;color:#fff;font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:6px">KTB</span>
+                    <span style="font-size:11px;font-weight:700;color:#0284c7;background:#e0f2fe;padding:2px 8px;border-radius:20px">พร้อมใช้งาน</span>
+                  </div>
+                  <h4 style="font-size:14px;font-weight:700;color:#0f172a;margin:0">ธนาคารกรุงไทย</h4>
+                  <p style="font-size:11.5px;color:#64748b;margin:4px 0 12px">Krungthai Corporate Online (KTB Payroll Direct Credit)</p>
+                </div>
+                <div style="display:flex;gap:8px">
+                  <button type="button" class="btn btn-primary btn-sm" style="flex:1;background:#0284c7;border-color:#0284c7" onclick="exportKtbPayrollCsv()"><i class="fa-solid fa-file-csv"></i> CSV</button>
+                  <button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="exportKtbPayrollTxt()"><i class="fa-solid fa-file-lines"></i> TXT</button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
 <!-- 6. COMPANY SETTINGS TAB -->
       <div class="tab-content" id="tab-company">
         <div class="card" style="max-width:680px;margin:0 auto">
@@ -1061,8 +1369,38 @@
                   <input type="text" id="cfgCompanyPhone">
                 </div>
                 <div class="form-group">
-                  <label>เลขประจำตัวผู้เสียภาษี</label>
+                  <label>เลขประจำตัวผู้เสียภาษี (13 หลัก)</label>
                   <input type="text" id="cfgCompanyTaxId">
+                </div>
+              </div>
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label>รหัสสาขาภาษี (5 หลัก เช่น 00000)</label>
+                  <input type="text" id="cfgCompanyBranch" placeholder="00000">
+                </div>
+                <div class="form-group">
+                  <label>เลขที่บัญชีนายจ้าง ประกันสังคม (10 หลัก)</label>
+                  <input type="text" id="cfgEmployerSsoId" placeholder="10-1234567-8">
+                </div>
+              </div>
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label><i class="fa-solid fa-file-signature text-blue"></i> ผู้มีอำนาจลงนาม (ภาษาไทย)</label>
+                  <input type="text" id="cfgSignatoryName" placeholder="เช่น นางสาวประภัสสร เกียรติดำรง">
+                </div>
+                <div class="form-group">
+                  <label>ตำแหน่งผู้มีอำนาจลงนาม (ภาษาไทย)</label>
+                  <input type="text" id="cfgSignatoryTitle" placeholder="เช่น ผู้จัดการฝ่ายทรัพยากรบุคคล">
+                </div>
+              </div>
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label><i class="fa-solid fa-file-signature text-blue"></i> Authorized Signatory (English)</label>
+                  <input type="text" id="cfgSignatoryNameEn" placeholder="e.g. Ms. Praphassorn Kiatdamrong">
+                </div>
+                <div class="form-group">
+                  <label>Signatory Title (English)</label>
+                  <input type="text" id="cfgSignatoryTitleEn" placeholder="e.g. HR Manager / Managing Director">
                 </div>
               </div>
               <button type="submit" class="btn btn-primary" style="justify-content:center;padding:11px">
@@ -1659,7 +1997,7 @@
   </div>
 
   <script src="js/config.js?v=6.5"></script>
-  <script src="js/app.js?v=6.6"></script>
+  <script src="js/app.js?v=6.7"></script>
   <!-- AI PAYROLL ASSISTANT FLOATING BUTTON & DRAWER -->
   <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" onclick="toggleAiChat()">
     <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>
@@ -1967,6 +2305,49 @@
         <button type="button" class="btn btn-slate" onclick="closeModal('payrollSignoffModal')">ปิดหน้าต่าง</button>
         <button type="button" class="btn btn-primary" style="background:#1e40af;font-weight:700" onclick="printMonthlyPayrollSummaryDocument()">
           <i class="fa-solid fa-print"></i> พิมพ์เอกสาร (A4 แนวนอน)
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- SALARY & EMPLOYMENT CERTIFICATE MODAL (A4) -->
+  <div class="modal-overlay" id="salaryCertModal">
+    <div class="modal-card wide" style="max-width:860px;width:95vw">
+      <div class="modal-header">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px">
+          <i class="fa-solid fa-file-signature text-blue"></i>
+          <span>พิมพ์หนังสือรับรองเงินเดือนและการทำงาน (A4)</span>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('salaryCertModal')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      
+      <!-- On-the-fly override controls -->
+      <div style="padding:12px 20px;background:#f1f5f9;border-bottom:1px solid #e2e8f0;display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <label style="font-weight:700;color:#1e3a8a">ผู้ลงนาม:</label>
+          <input type="text" id="modalCertSignName" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600" oninput="renderCertModalPaper()">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <label style="font-weight:700;color:#1e3a8a">ตำแหน่ง:</label>
+          <input type="text" id="modalCertSignTitle" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600" oninput="renderCertModalPaper()">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <label style="font-weight:700;color:#1e3a8a">วันที่:</label>
+          <input type="text" id="modalCertDate" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:600" oninput="renderCertModalPaper()">
+        </div>
+      </div>
+
+      <div class="modal-body" style="max-height:75vh;overflow-y:auto;padding:24px;background:#cbd5e1;display:flex;justify-content:center">
+        <!-- A4 Printable Paper Sheet -->
+        <div id="salaryCertPaper" class="salary-cert-paper" style="width:100%;max-width:700px;min-height:960px;background:#fff;box-shadow:0 8px 24px rgba(0,0,0,0.15);padding:48px 52px;position:relative;border-radius:2px;font-family:'Prompt',sans-serif;color:#1e293b;line-height:1.75">
+          <!-- Will be filled by renderCertModalPaper() -->
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center">
+        <button type="button" class="btn btn-slate" onclick="closeModal('salaryCertModal')">ปิดหน้าต่าง</button>
+        <button type="button" class="btn btn-primary" onclick="printSalaryCertificate()" style="font-weight:700;padding:8px 20px">
+          <i class="fa-solid fa-print"></i> พิมพ์หนังสือรับรอง (A4)
         </button>
       </div>
     </div>

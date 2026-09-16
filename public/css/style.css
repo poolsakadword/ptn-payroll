@@ -613,7 +613,7 @@ footer {
   footer,
   #toastContainer,
   #loginScreen,
-  .modal-overlay:not(#payslipModal),
+  .modal-overlay:not(#payslipModal):not(#salaryCertModal),
   .modal-header,
   .modal-footer,
   .modal-close-btn,
@@ -1441,6 +1441,52 @@ footer {
     break-inside: avoid !important;
   }
 
+  /* 5. PRINTING SALARY & EMPLOYMENT CERTIFICATE (A4 PORTRAIT) */
+  body.printing-salary-cert {
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  body.printing-salary-cert @page {
+    size: A4 portrait;
+    margin: 15mm 15mm;
+  }
+  body.printing-salary-cert .modal-overlay:not(#salaryCertModal) {
+    display: none !important;
+  }
+  body.printing-salary-cert #appShell,
+  body.printing-salary-cert #salaryCertModal,
+  body.printing-salary-cert #salaryCertModal .modal-card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+  }
+  body.printing-salary-cert #salaryCertPaper {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm 15mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    font-size: 14px !important;
+    line-height: 1.85 !important;
+  }
+  body.printing-salary-cert #salaryCertPaper * {
+    visibility: visible !important;
+  }
+
 }
 
 /* =======================================================
@@ -1881,4 +1927,13 @@ footer {
 .insight-action-box.orange { border: 1px solid #ffedd5; }
 .insight-action-box.pink { border: 1px solid #fce7f3; }
 .insight-action-box.green { border: 1px solid #dcfce7; }
+
+/* DOCUMENT & COMPLIANCE CENTER */
+.doc-panel {
+  animation: fadeIn 0.2s ease;
+}
+.salary-cert-paper {
+  font-family: 'Sarabun', 'Prompt', sans-serif;
+}
+
 

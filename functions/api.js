@@ -180,7 +180,13 @@ async function handleAction(db, action, params) {
         companyName: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
         address: '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110',
         phone: '02-123-4567',
-        taxId: '0105559876543'
+        taxId: '0105559876543',
+        signatoryName: 'นางสาวประภัสสร เกียรติดำรง',
+        signatoryTitle: 'ผู้จัดการฝ่ายทรัพยากรบุคคล',
+        signatoryNameEn: 'Ms. Praphassorn Kiatdamrong',
+        signatoryTitleEn: 'HR Manager',
+        employerSsoId: '10-1234567-8',
+        companyBranch: '00000'
       };
       let isClosed = false;
       let closedInfo = '';
@@ -191,6 +197,12 @@ async function handleAction(db, action, params) {
         if (row.key === 'Address') settingsMap.address = row.value;
         if (row.key === 'Phone') settingsMap.phone = row.value;
         if (row.key === 'TaxId') settingsMap.taxId = row.value;
+        if (row.key === 'SignatoryName') settingsMap.signatoryName = row.value;
+        if (row.key === 'SignatoryTitle') settingsMap.signatoryTitle = row.value;
+        if (row.key === 'SignatoryNameEn') settingsMap.signatoryNameEn = row.value;
+        if (row.key === 'SignatoryTitleEn') settingsMap.signatoryTitleEn = row.value;
+        if (row.key === 'EmployerSsoId') settingsMap.employerSsoId = row.value;
+        if (row.key === 'CompanyBranch') settingsMap.companyBranch = row.value;
         if (row.key === `Period_Status_${period}`) {
           if (row.value && row.value.startsWith('CLOSED')) {
             isClosed = true;
@@ -1098,6 +1110,12 @@ async function handleAction(db, action, params) {
       if (cfg.address !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("Address", ?)').bind(cfg.address).run();
       if (cfg.phone !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("Phone", ?)').bind(cfg.phone).run();
       if (cfg.taxId !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("TaxId", ?)').bind(cfg.taxId).run();
+      if (cfg.signatoryName !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("SignatoryName", ?)').bind(cfg.signatoryName).run();
+      if (cfg.signatoryTitle !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("SignatoryTitle", ?)').bind(cfg.signatoryTitle).run();
+      if (cfg.signatoryNameEn !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("SignatoryNameEn", ?)').bind(cfg.signatoryNameEn).run();
+      if (cfg.signatoryTitleEn !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("SignatoryTitleEn", ?)').bind(cfg.signatoryTitleEn).run();
+      if (cfg.employerSsoId !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("EmployerSsoId", ?)').bind(cfg.employerSsoId).run();
+      if (cfg.companyBranch !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CompanyBranch", ?)').bind(cfg.companyBranch).run();
       return { success: true, message: 'บันทึกข้อมูลบริษัทเรียบร้อยแล้ว' };
     }
 
