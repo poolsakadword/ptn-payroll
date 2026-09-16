@@ -641,10 +641,52 @@ function renderInputTable() {
   tbody.innerHTML = h;
 }
 
-// 4. EMPLOYEE MASTER RENDERER
+// 4. HYBRID EMPLOYEE MASTER RENDERER (V6.0)
+var currentEmpViewMode = 'table'; // 'table' or 'cards'
+var currentEmpStatusFilter = 'all'; // 'all', 'Active', 'Probation', 'Resigned'
+
+function switchEmpViewMode(mode) {
+  currentEmpViewMode = mode;
+  var btnT = document.getElementById('btnEmpViewTable');
+  var btnC = document.getElementById('btnEmpViewCards');
+  var tableArea = document.getElementById('empTableViewArea');
+  var cardsArea = document.getElementById('empCardsViewArea');
+
+  if (mode === 'table') {
+    if (btnT) { btnT.className = 'btn btn-primary btn-sm'; }
+    if (btnC) { btnC.className = 'btn btn-slate btn-sm'; }
+    if (tableArea) tableArea.style.display = 'block';
+    if (cardsArea) cardsArea.style.display = 'none';
+  } else {
+    if (btnC) { btnC.className = 'btn btn-primary btn-sm'; }
+    if (btnT) { btnT.className = 'btn btn-slate btn-sm'; }
+    if (tableArea) tableArea.style.display = 'none';
+    if (cardsArea) cardsArea.style.display = 'grid';
+  }
+  renderEmployeesTable();
+}
+
+function setEmpStatusFilter(status) {
+  currentEmpStatusFilter = status;
+  var btns = {
+    all: document.getElementById('btnEmpFilterAll'),
+    Active: document.getElementById('btnEmpFilterActive'),
+    Probation: document.getElementById('btnEmpFilterProbation'),
+    Resigned: document.getElementById('btnEmpFilterResigned')
+  };
+
+  Object.keys(btns).forEach(function(k) {
+    if (btns[k]) {
+      btns[k].className = (k === status) ? 'btn btn-primary btn-sm' : 'btn btn-slate btn-sm';
+    }
+  });
+  renderEmployeesTable();
+}
+
 function renderEmployeesTable() {
   var tbody = document.getElementById('employeesTableBody');
   var thead = document.getElementById('employeesTableHead');
+  var cardsDiv = document.getElementById('empCardsViewArea');
   if (!tbody) return;
 
   var canViewSalary = hasPermission('view_salary');
@@ -652,41 +694,52 @@ function renderEmployeesTable() {
   var canDelEmp = hasPermission('del_emp');
   var isGeneralUser = !canViewSalary;
 
-  // Adjust table header based on role (Including Status column)
-  if (thead) {
-    if (isGeneralUser) {
-      thead.innerHTML = '<tr>' +
-        '<th style="width:85px">รหัส</th>' +
-        '<th>ชื่อ-นามสกุล</th>' +
-        '<th style="width:90px">ชื่อเล่น</th>' +
-        '<th>แผนก / ตำแหน่ง</th>' +
-        '<th class="text-center" style="width:130px">สถานะ</th>' +
-        '<th>วันเกิด / อายุ</th>' +
-        '<th>เบอร์โทร</th>' +
-        '<th>ที่อยู่</th>' +
-        '<th>ธนาคาร / เลขบัญชี</th>' +
-        '<th>วันเริ่มงาน</th>' +
-        '<th class="text-center" style="width:90px">จัดการ</th>' +
-      '</tr>';
-    } else {
-      thead.innerHTML = '<tr>' +
-        '<th style="width:85px">รหัส</th>' +
-        '<th>ชื่อ-นามสกุล</th>' +
-        '<th style="width:90px">ชื่อเล่น</th>' +
-        '<th>แผนก / ตำแหน่ง</th>' +
-        '<th class="text-center" style="width:130px">สถานะ</th>' +
-        '<th class="text-right" style="width:105px">เงินเดือนฐาน</th>' +
-        '<th class="text-right" style="width:65px">PF %</th>' +
-        '<th class="text-right text-red font-bold" style="width:100px">SSO (Default)</th>' +
-        '<th class="text-right text-red font-bold" style="width:95px">ภาษี (Default)</th>' +
-        '<th class="text-center" style="width:125px">จัดการ</th>' +
-      '</tr>';
-    }
+  // 1. Calculate and Update Top KPI Metrics
+  var emps = State.employees || [];
+  var totalEmps = emps.length;
+  var activeCount = 0;
+  var probCount = 0;
+  var resignedCount = 0;
+  var totalBaseSalary = 0;
+
+  var deptSet = {};
+  (State.employees || []).forEach(function(e) {
+    var st = e.status || 'Active';
+    if (st === 'Active') activeCount++;
+    else if (st === 'Probation') probCount++;
+    else if (st === 'Resigned') resignedCount++;
+    totalBaseSalary += Number(e.baseSalary) || 0;
+    if (e.department) deptSet[e.department] = true;
+  });
+
+  if (document.getElementById('empKpiTotal')) document.getElementById('empKpiTotal').innerHTML = totalEmps + ' <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span>';
+  if (document.getElementById('empKpiActive')) document.getElementById('empKpiActive').innerHTML = activeCount + ' <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span>';
+  if (document.getElementById('empKpiProbation')) document.getElementById('empKpiProbation').innerHTML = probCount + ' <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span>';
+  if (document.getElementById('empKpiTotalSalary')) {
+    document.getElementById('empKpiTotalSalary').textContent = canViewSalary ? fmt(totalBaseSalary) : '฿***';
   }
 
-  // Populate employee select dropdowns
+  // Update filter pill counts
+  if (document.getElementById('countFilterAll')) document.getElementById('countFilterAll').textContent = totalEmps;
+  if (document.getElementById('countFilterActive')) document.getElementById('countFilterActive').textContent = activeCount;
+  if (document.getElementById('countFilterProbation')) document.getElementById('countFilterProbation').textContent = probCount;
+  if (document.getElementById('countFilterResigned')) document.getElementById('countFilterResigned').textContent = resignedCount;
+
+  // Populate department filter dropdown
+  var deptSel = document.getElementById('empDeptFilter');
+  if (deptSel && (!deptSel.options || deptSel.options.length <= 1)) {
+    var curVal = deptSel.value;
+    var dOpts = '<option value="">ทุกแผนก</option>';
+    Object.keys(deptSet).sort().forEach(function(d) {
+      dOpts += '<option value="' + esc(d) + '">' + esc(d) + '</option>';
+    });
+    deptSel.innerHTML = dOpts;
+    deptSel.value = curVal;
+  }
+
+  // Populate employee select dropdowns for inputs and history
   var sel = '<option value="">-- เลือกรหัสพนักงาน --</option>';
-  State.employees.forEach(function(e) {
+  (State.employees || []).forEach(function(e) {
     var nickDisplay = e.nickname ? ' (' + e.nickname + ')' : '';
     var empPf = (e.pfRate !== null && e.pfRate !== undefined && !isNaN(Number(e.pfRate))) ? Number(e.pfRate) : 0;
     var empSso = (e.defaultSso !== null && e.defaultSso !== undefined && !isNaN(Number(e.defaultSso))) ? Number(e.defaultSso) : 0;
@@ -697,80 +750,193 @@ function renderEmployeesTable() {
   var histSel = document.getElementById('histEmpSelect');
   if (histSel) histSel.innerHTML = sel;
 
+  // Filter list by status, department, and search query
   var q = (document.getElementById('empSearchInput') ? document.getElementById('empSearchInput').value : '').trim().toLowerCase();
-  var list = State.employees.filter(function(e) {
+  var selectedDept = deptSel ? deptSel.value : '';
+
+  var list = emps.filter(function(e) {
+    var st = e.status || 'Active';
+    if (currentEmpStatusFilter !== 'all' && st !== currentEmpStatusFilter) return false;
+    if (selectedDept && e.department !== selectedDept) return false;
     if (!q) return true;
     return (e.empId && e.empId.toLowerCase().indexOf(q) >= 0) ||
            (e.fullName && e.fullName.toLowerCase().indexOf(q) >= 0) ||
            (e.nickname && e.nickname.toLowerCase().indexOf(q) >= 0) ||
+           (e.phone && e.phone.toLowerCase().indexOf(q) >= 0) ||
            (e.department && e.department.toLowerCase().indexOf(q) >= 0) ||
            (e.position && e.position.toLowerCase().indexOf(q) >= 0);
   });
 
+  // Adjust table header based on role
+  if (thead) {
+    if (isGeneralUser) {
+      thead.innerHTML = '<tr>' +
+        '<th style="width:85px">รหัส</th>' +
+        '<th>พนักงาน</th>' +
+        '<th>แผนก / ตำแหน่ง</th>' +
+        '<th class="text-center" style="width:130px">สถานะ</th>' +
+        '<th>วันเกิด / อายุ</th>' +
+        '<th>เบอร์โทรศัพท์</th>' +
+        '<th>ธนาคาร / เลขบัญชี</th>' +
+        '<th>วันเริ่มงาน</th>' +
+        '<th class="text-center" style="width:90px">จัดการ</th>' +
+      '</tr>';
+    } else {
+      thead.innerHTML = '<tr>' +
+        '<th style="width:85px">รหัส</th>' +
+        '<th>พนักงาน</th>' +
+        '<th>แผนก / ตำแหน่ง</th>' +
+        '<th class="text-center" style="width:130px">สถานะ</th>' +
+        '<th class="text-right" style="width:105px">เงินเดือนฐาน</th>' +
+        '<th class="text-right" style="width:65px">PF %</th>' +
+        '<th class="text-right text-red font-bold" style="width:95px">SSO</th>' +
+        '<th>ธนาคาร / เลขบัญชี</th>' +
+        '<th>วันเริ่มงาน</th>' +
+        '<th class="text-center" style="width:125px">จัดการ</th>' +
+      '</tr>';
+    }
+  }
+
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="' + (isGeneralUser ? '11' : '10') + '" class="text-center text-muted" style="padding:28px">' + (q ? 'ไม่พบพนักงานที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลในทะเบียนพนักงาน') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + (isGeneralUser ? '9' : '10') + '" class="text-center text-muted" style="padding:32px">' + (q ? 'ไม่พบพนักงานที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ไม่มีรายการพนักงานในหมวดนี้') + '</td></tr>';
+    if (cardsDiv) cardsDiv.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:36px;color:var(--text-muted);font-size:13px"><i class="fa-solid fa-users-slash" style="font-size:24px;margin-bottom:8px;display:block"></i>ไม่พบข้อมูลพนักงาน</div>';
     return;
   }
 
-  var h = '';
+  var hTable = '';
+  var hCards = '';
+
   list.forEach(function(e) {
     var birthText = e.birthDate ? (e.birthDate + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
+    var initials = (e.fullName || '').substring(0, 2);
 
-    // Individual Employee Status Badge calculation
+    // Status Badge
+    var st = e.status || 'Active';
     var stBadge = '<span class="period-pill" style="background:#dcfce7;color:#15803d;border-color:#bbf7d0;font-size:11px">🟢 ทำงานอยู่</span>';
-    if (e.status === 'Probation') {
+    if (st === 'Probation') {
       var daysLeft = getProbationDaysRemaining(e);
       var probText = daysLeft !== null ? ('ทดลองงาน (' + (daysLeft > 0 ? ('เหลือ ' + daysLeft + ' วัน') : 'ครบกำหนด') + ')') : 'ทดลองงาน';
       var probBg = daysLeft !== null && daysLeft <= 15 ? '#fee2e2' : '#ffedd5';
       var probCol = daysLeft !== null && daysLeft <= 15 ? '#b91c1c' : '#c2410c';
       var probBrd = daysLeft !== null && daysLeft <= 15 ? '#fecaca' : '#fed7aa';
       stBadge = '<span class="period-pill" style="background:' + probBg + ';color:' + probCol + ';border-color:' + probBrd + ';font-size:11px;font-weight:700">🟠 ' + esc(probText) + '</span>';
-    } else if (e.status === 'Resigned') {
+    } else if (st === 'Resigned') {
       stBadge = '<span class="period-pill" style="background:#fee2e2;color:#b91c1c;border-color:#fecaca;font-size:11px">🔴 ลาออกแล้ว</span>';
-    } else if (e.status === 'Suspended') {
+    } else if (st === 'Suspended') {
       stBadge = '<span class="period-pill" style="background:#fef3c7;color:#b45309;border-color:#fde68a;font-size:11px">🟡 พักงาน</span>';
     }
 
+    // Bank Badge & Color
+    var bName = e.bankName || 'กสิกรไทย';
+    var bankPill = '<span class="period-pill" style="font-size:10.5px">' + esc(bName) + '</span>';
+    if (bName.indexOf('กสิกร') >= 0) bankPill = '<span class="period-pill" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-size:10.5px">KBANK</span>';
+    else if (bName.indexOf('ไทยพาณิชย์') >= 0) bankPill = '<span class="period-pill" style="background:#f5f3ff;color:#7c3aed;border-color:#ddd6fe;font-size:10.5px">SCB</span>';
+    else if (bName.indexOf('กรุงเทพ') >= 0) bankPill = '<span class="period-pill" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-size:10.5px">BBL</span>';
+    else if (bName.indexOf('ทหารไทย') >= 0 || bName.indexOf('TTB') >= 0) bankPill = '<span class="period-pill" style="background:#fff7ed;color:#c2410c;border-color:#fed7aa;font-size:10.5px">TTB</span>';
+
+    // 1. Render Table Row
     if (isGeneralUser) {
-      // General User view: 11 columns, NO salary, NO delete button
-      h += '<tr>' +
-        '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
-        '<td class="font-bold">' + esc(e.fullName) + '</td>' +
-        '<td style="color:#2563eb;font-weight:600">' + esc(e.nickname || '-') + '</td>' +
-        '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
+      hTable += '<tr>' +
+        '<td class="font-mono font-bold text-blue">' + esc(e.empId) + '</td>' +
+        '<td>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>' +
+            '<div>' +
+              '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#2563eb;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + '</div>' +
+              '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + esc(e.phone || '-') + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div></td>' +
         '<td class="text-center">' + stBadge + '</td>' +
         '<td>' + esc(birthText) + '</td>' +
         '<td class="font-mono">' + esc(e.phone || '-') + '</td>' +
-        '<td>' + esc(e.address || '-') + '</td>' +
-        '<td>' + esc(e.bankName || '-') + '<br><span class="text-muted font-mono" style="font-size:11px">' + esc(e.bankAccount || '-') + '</span></td>' +
+        '<td>' + bankPill + '<div class="font-mono" style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.bankAccount || '-') + '</div></td>' +
         '<td>' + esc(e.joinDate || '-') + '</td>' +
         '<td class="text-center nowrap">' +
           (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
         '</td>' +
       '</tr>';
     } else {
-      // Admin / HR view: 10 columns with salary, PF, SSO, Tax, and Delete button
-      h += '<tr>' +
-        '<td class="font-mono font-bold">' + esc(e.empId) + '</td>' +
-        '<td class="font-bold">' + esc(e.fullName) + '</td>' +
-        '<td style="color:#2563eb;font-weight:600">' + esc(e.nickname || '-') + '</td>' +
-        '<td><span class="period-pill">' + esc(e.department || '-') + '</span> ' + esc(e.position || '') + '</td>' +
+      hTable += '<tr>' +
+        '<td class="font-mono font-bold text-blue">' + esc(e.empId) + '</td>' +
+        '<td>' +
+          '<div style="display:flex;align-items:center;gap:8px">' +
+            '<div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>' +
+            '<div>' +
+              '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#2563eb;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + '</div>' +
+              '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + esc(e.phone || '-') + '</div>' +
+            '</div>' +
+          '</div>' +
+        '</td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div></td>' +
         '<td class="text-center">' + stBadge + '</td>' +
         '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
-        '<td class="text-right font-mono">' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '<span class="text-muted" style="font-size:11px">ไม่หัก (0%)</span>') + '</td>' +
-        '<td class="text-right font-mono text-red font-bold">' + (Number(e.defaultSso) > 0 ? fmt(e.defaultSso) : '<span class="text-muted" style="font-size:11px">ไม่หัก (฿0)</span>') + '</td>' +
-        '<td class="text-right font-mono text-red font-bold">' + fmt(e.defaultTax || 0) + '</td>' +
+        '<td class="text-right font-mono">' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '<span class="text-muted" style="font-size:11px">0%</span>') + '</td>' +
+        '<td class="text-right font-mono text-red font-bold">' + (Number(e.defaultSso) > 0 ? fmt(e.defaultSso) : '<span class="text-muted" style="font-size:11px">฿0</span>') + '</td>' +
+        '<td>' + bankPill + '<div class="font-mono font-bold text-blue" style="font-size:11px;margin-top:2px">' + esc(e.bankAccount || '-') + '</div></td>' +
+        '<td>' + esc(e.joinDate || '-') + '</td>' +
         '<td class="text-center nowrap">' +
-          (e.status === 'Probation' ? '<button type="button" class="btn-icon edit" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-weight:700" onclick="passProbation(\'' + esc(e.empId) + '\')" title="อนุมัติผ่านโปร"><i class="fa-solid fa-check"></i> ผ่านโปร</button> ' : '') +
+          (st === 'Probation' ? '<button type="button" class="btn-icon edit" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-weight:700" onclick="passProbation(\'' + esc(e.empId) + '\')" title="อนุมัติผ่านโปร"><i class="fa-solid fa-check"></i> ผ่านโปร</button> ' : '') +
           (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' : '') +
           (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
           (!canEditEmp && !canDelEmp ? '<span class="text-muted">-</span>' : '') +
         '</td>' +
       '</tr>';
     }
+
+    // 2. Render Profile Card
+    hCards += '<div style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:12px;transition:all 0.2s ease" class="emp-profile-card">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          '<div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)">' + esc(initials) + '</div>' +
+          '<div>' +
+            '<div style="display:flex;align-items:center;gap:6px">' +
+              '<span style="font-family:monospace;font-size:12px;font-weight:700;color:#2563eb">' + esc(e.empId) + '</span>' +
+              (e.nickname ? ('<span class="period-pill" style="background:#eff6ff;color:#1d4ed8;font-size:10px;padding:1px 6px">ชื่อเล่น: ' + esc(e.nickname) + '</span>') : '') +
+            '</div>' +
+            '<div style="font-weight:700;font-size:13.5px;color:var(--text-main);margin-top:2px">' + esc(e.fullName) + '</div>' +
+          '</div>' +
+        '</div>' +
+        stBadge +
+      '</div>' +
+
+      '<div style="background:#f8fafc;border-radius:var(--radius-md);padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:11.5px">' +
+        '<div>' +
+          '<span style="color:#64748b;font-size:10.5px;display:block">แผนก / ตำแหน่ง</span>' +
+          '<span style="font-weight:700;color:#0f172a">' + esc(e.department || '-') + '</span>' +
+          '<span style="color:#64748b;display:block;font-size:10.5px">' + esc(e.position || '-') + '</span>' +
+        '</div>' +
+        '<div>' +
+          '<span style="color:#64748b;font-size:10.5px;display:block">เงินเดือนฐาน &amp; PF</span>' +
+          '<span style="font-weight:800;color:#1d4ed8">' + (canViewSalary ? fmt(e.baseSalary) : '฿***') + '</span>' +
+          '<span style="color:#64748b;display:block;font-size:10.5px">PF: ' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '0%') + '</span>' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="font-size:11px;color:#64748b;padding-top:4px;border-top:1px dashed #e2e8f0;display:flex;flex-direction:column;gap:4px">' +
+        '<div style="display:flex;justify-content:space-between">' +
+          '<span><i class="fa-solid fa-phone" style="color:#94a3b8;margin-right:4px"></i> ' + esc(e.phone || '-') + '</span>' +
+          '<span><i class="fa-solid fa-calendar-check" style="color:#94a3b8;margin-right:4px"></i> เริ่มงาน: ' + esc(e.joinDate || '-') + '</span>' +
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+          '<span><i class="fa-solid fa-building-columns" style="color:#94a3b8;margin-right:4px"></i> ' + esc(e.bankName || '-') + '</span>' +
+          '<span class="font-mono font-bold" style="color:#1e40af">' + esc(e.bankAccount || '-') + '</span>' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="display:flex;align-items:center;gap:6px;padding-top:6px">' +
+        (st === 'Probation' ? '<button type="button" class="btn btn-success btn-sm" style="flex:1" onclick="passProbation(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-check"></i> ผ่านโปร</button>' : '') +
+        (canEditEmp ? '<button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไขประวัติ</button>' : '') +
+        (canDelEmp ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;padding:4px 8px" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i></button>' : '') +
+      '</div>' +
+    '</div>';
   });
-  tbody.innerHTML = h;
+
+  tbody.innerHTML = hTable;
+  if (cardsDiv) cardsDiv.innerHTML = hCards;
 }
+
 
 // =======================================================
 // 5. EMPLOYEE HISTORY & YEARLY SUMMARY
@@ -833,7 +999,7 @@ function renderHistoryTab(silent) {
   if (sel) {
     var curVal = sel.value;
     var h = '<option value="">-- เลือกพนักงาน --</option>';
-    State.employees.forEach(function(e) {
+    (State.employees || []).forEach(function(e) {
       var nick = e.nickname ? ' (' + e.nickname + ')' : '';
       h += '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nick + '</option>';
     });
@@ -1812,7 +1978,7 @@ function exportToCSV(type) {
     var isUserRole = (State.currentUser && State.currentUser.role === 'User');
     if (isUserRole) {
       csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,วันเกิด,อายุ,บัตรประชาชน,เบอร์โทร,ที่อยู่,แผนก,ตำแหน่ง,ธนาคาร,เลขบัญชี,วันเริ่มงาน\n';
-      State.employees.forEach(function(e) {
+      (State.employees || []).forEach(function(e) {
         csv += [
           e.empId,
           '"' + (e.fullName || '').replace(/"/g, '""') + '"',
@@ -1831,7 +1997,7 @@ function exportToCSV(type) {
       });
     } else {
       csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร,หมายเหตุ\n';
-      State.employees.forEach(function(e) {
+      (State.employees || []).forEach(function(e) {
         csv += [
           e.empId,
           '"' + (e.fullName || '').replace(/"/g, '""') + '"',
@@ -2429,7 +2595,7 @@ function printAllEmployeesBatch() {
 
       // Group by empId
       var grouped = {};
-      State.employees.forEach(function(e) {
+      (State.employees || []).forEach(function(e) {
         grouped[e.empId] = { emp: e, rows: [] };
       });
 
@@ -3087,7 +3253,7 @@ function downloadAttendanceTemplateCsv() {
   csv += 'รหัสพนักงาน,ชื่อ-นามสกุล,แผนก,ขาด(วัน),ลากิจ(วัน),ลาป่วย(วัน),หักสาย(บาท),ชั่วโมงOT,เบี้ยขยัน\n';
 
   var emps = State.employees.filter(function(e) { return e.status !== 'Resigned'; });
-  emps.forEach(function(e) {
+  (State.employees || []).forEach(function(e) {
     csv += [
       e.empId,
       '"' + (e.fullName || '').replace(/"/g, '""') + '"',
