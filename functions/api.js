@@ -394,17 +394,33 @@ async function handleAction(db, action, params) {
       const ssoVal = (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750;
       const taxVal = Number(emp.defaultTax) || 0;
 
+      await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+
+      let probEndDate = emp.probationEndDate || '';
+      const probDays = Number(emp.probationDays) || 119;
+      if (emp.status === 'Probation' && emp.joinDate && !probEndDate) {
+        try {
+          const jd = new Date(emp.joinDate);
+          jd.setDate(jd.getDate() + probDays);
+          probEndDate = jd.toISOString().substring(0, 10);
+        } catch(err) {}
+      }
+      const statusVal = emp.status || 'Active';
+
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
         emp.bankName || '', emp.bankAccount || '', emp.birthDate || '', Number(emp.age) || 0,
         emp.joinDate || '',
         pfRateVal, ssoVal,
-        taxVal, emp.remark || ''
+        taxVal, emp.remark || '',
+        statusVal, probDays, probEndDate
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period
