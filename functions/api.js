@@ -258,6 +258,26 @@ async function handleAction(db, action, params) {
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
       await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
+      // Device Locks (PTN Time Integration)
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS employee_devices (
+          emp_id TEXT PRIMARY KEY,
+          device_id TEXT NOT NULL,
+          device_name TEXT,
+          bound_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run().catch(() => {});
+      const deviceRows = await db.prepare('SELECT emp_id, device_id, device_name, bound_at FROM employee_devices').all().catch(() => ({ results: [] }));
+      const deviceMap = {};
+      for (const d of deviceRows.results || []) {
+        deviceMap[d.emp_id] = {
+          deviceId: d.device_id,
+          deviceName: d.device_name,
+          boundAt: d.bound_at
+        };
+      }
+
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
       const employees = (empQuery.results || []).map(e => ({
         empId: e.emp_id,
@@ -280,7 +300,9 @@ async function handleAction(db, action, params) {
         status: e.status || 'Active',
         probationDays: Number(e.probation_days) || 119,
         probationEndDate: e.probation_end_date || '',
-        remark: e.remark || ''
+        remark: e.remark || '',
+        isDeviceBound: !!deviceMap[e.emp_id],
+        boundDevice: deviceMap[e.emp_id] || null
       }));
 
       // Monthly Inputs
@@ -517,6 +539,22 @@ async function handleAction(db, action, params) {
 
       await logSystemActivity(db, params.username || 'Admin', 'DELETE_EMPLOYEE', `ลบข้อมูลพนักงาน: ${empId} (${empName}) พร้อมรายการคำนวณเงินเดือน`);
       return { success: true, message: `ลบพนักงาน ${empName} (${empId}) ออกจากระบบเรียบร้อยแล้ว` };
+    }
+
+    case 'resetEmployeeDevice': {
+      const empId = params.empId;
+      if (!empId) return { success: false, message: 'Missing empId' };
+
+      const emp = await db.prepare('SELECT full_name FROM employees WHERE emp_id = ?').bind(empId).first();
+      const empName = emp ? emp.full_name : empId;
+
+      await db.prepare('DELETE FROM employee_devices WHERE emp_id = ?').bind(empId).run();
+      await logSystemActivity(db, params.username || 'Admin', 'RESET_DEVICE_LOCK', `ปลดล็อกอุปกรณ์ประจำตัว (Device Lock) ของพนักงาน: ${empId} (${empName}) จากระบบ PTN Payroll`);
+
+      return {
+        success: true,
+        message: `ปลดล็อกอุปกรณ์ของพนักงาน [${empId}] ${empName} เรียบร้อยแล้ว พนักงานสามารถเลือกหรือผูกเครื่องใหม่ได้ทันที`
+      };
     }
 
     // 5. MONTHLY INPUT CRUD & BATCH POPULATE

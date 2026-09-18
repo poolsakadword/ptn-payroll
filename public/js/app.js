@@ -846,6 +846,10 @@ function renderEmployeesTable() {
     else if (bName.indexOf('กรุงเทพ') >= 0) bankPill = '<span class="period-pill" style="background:#eff6ff;color:#1d4ed8;border-color:#bfdbfe;font-size:10.5px">BBL</span>';
     else if (bName.indexOf('ทหารไทย') >= 0 || bName.indexOf('TTB') >= 0) bankPill = '<span class="period-pill" style="background:#fff7ed;color:#c2410c;border-color:#fed7aa;font-size:10.5px">TTB</span>';
 
+    // Device Lock Badge & Button (PTN Time Integration)
+    var devBadge = e.isDeviceBound ? (' <span class="period-pill" style="background:#eff6ff;color:#0284c7;border-color:#bae6fd;font-size:10px;padding:1px 6px" title="ผูกเครื่องแล้ว: ' + esc(e.boundDevice?.deviceName || 'Mobile Web') + '">📱 ผูกเครื่อง</span>') : '';
+    var devUnlockBtn = e.isDeviceBound ? ('<button type="button" class="btn-icon" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\', \'' + esc(e.fullName) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button> ') : '';
+
     // 1. Render Table Row
     if (isGeneralUser) {
       hTable += '<tr>' +
@@ -854,7 +858,7 @@ function renderEmployeesTable() {
           '<div style="display:flex;align-items:center;gap:8px">' +
             '<div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>' +
             '<div>' +
-              '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#2563eb;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + '</div>' +
+              '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#2563eb;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + devBadge + '</div>' +
               '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + esc(e.phone || '-') + '</div>' +
             '</div>' +
           '</div>' +
@@ -866,6 +870,7 @@ function renderEmployeesTable() {
         '<td>' + bankPill + '<div class="font-mono" style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.bankAccount || '-') + '</div></td>' +
         '<td>' + esc(e.joinDate || '-') + '</td>' +
         '<td class="text-center nowrap">' +
+          devUnlockBtn +
           (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
         '</td>' +
       '</tr>';
@@ -876,7 +881,7 @@ function renderEmployeesTable() {
           '<div style="display:flex;align-items:center;gap:8px">' +
             '<div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>' +
             '<div>' +
-              '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#2563eb;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + '</div>' +
+              '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#2563eb;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + devBadge + '</div>' +
               '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + esc(e.phone || '-') + '</div>' +
             '</div>' +
           '</div>' +
@@ -889,10 +894,11 @@ function renderEmployeesTable() {
         '<td>' + bankPill + '<div class="font-mono font-bold text-blue" style="font-size:11px;margin-top:2px">' + esc(e.bankAccount || '-') + '</div></td>' +
         '<td>' + esc(e.joinDate || '-') + '</td>' +
         '<td class="text-center nowrap">' +
+          devUnlockBtn +
           (st === 'Probation' ? '<button type="button" class="btn-icon edit" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-weight:700" onclick="passProbation(\'' + esc(e.empId) + '\')" title="อนุมัติผ่านโปร"><i class="fa-solid fa-check"></i> ผ่านโปร</button> ' : '') +
           (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' : '') +
           (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
-          (!canEditEmp && !canDelEmp ? '<span class="text-muted">-</span>' : '') +
+          (!canEditEmp && !canDelEmp && !e.isDeviceBound ? '<span class="text-muted">-</span>' : '') +
         '</td>' +
       '</tr>';
     }
@@ -906,6 +912,7 @@ function renderEmployeesTable() {
             '<div style="display:flex;align-items:center;gap:6px">' +
               '<span style="font-family:monospace;font-size:12px;font-weight:700;color:#2563eb">' + esc(e.empId) + '</span>' +
               (e.nickname ? ('<span class="period-pill" style="background:#eff6ff;color:#1d4ed8;font-size:10px;padding:1px 6px">ชื่อเล่น: ' + esc(e.nickname) + '</span>') : '') +
+              devBadge +
             '</div>' +
             '<div style="font-weight:700;font-size:13.5px;color:var(--text-main);margin-top:2px">' + esc(e.fullName) + '</div>' +
           '</div>' +
@@ -938,6 +945,7 @@ function renderEmployeesTable() {
       '</div>' +
 
       '<div style="display:flex;align-items:center;gap:6px;padding-top:6px">' +
+        devUnlockBtn +
         (st === 'Probation' ? '<button type="button" class="btn btn-success btn-sm" style="flex:1" onclick="passProbation(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-check"></i> ผ่านโปร</button>' : '') +
         (canEditEmp ? '<button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไขประวัติ</button>' : '') +
         (canDelEmp ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;padding:4px 8px" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i></button>' : '') +
@@ -947,6 +955,45 @@ function renderEmployeesTable() {
 
   tbody.innerHTML = hTable;
   if (cardsDiv) cardsDiv.innerHTML = hCards;
+}
+
+// REMOTE RESET DEVICE (Method 3: Remote Reset from Payroll)
+function remoteResetDevice(empId, empName) {
+  Swal.fire({
+    title: 'ปลดล็อกเครื่องพนักงาน?',
+    html: '<div style="font-size:13px;text-align:left;color:#475569;line-height:1.6">' +
+      '<p>ต้องการปลดล็อกอุปกรณ์ประจำตัวของ <b>[' + esc(empId) + '] ' + esc(empName) + '</b> ใช่หรือไม่?</p>' +
+      '<p style="margin-top:10px;font-size:12px;color:#0369a1;background:#f0f9ff;border:1px solid #bae6fd;padding:10px;border-radius:8px">💡 <b>ผลลัพธ์:</b> เมื่อปลดล็อกแล้ว พนักงานจะสามารถเลือกหรือผูกเข้ากับโทรศัพท์เครื่องใหม่ในระบบ PTN Time ได้ทันที</p>' +
+      '</div>',
+    icon: 'question',
+    showCancelButton: true,
+    confirmButtonText: '<i class="fa-solid fa-unlock"></i> ใช่, ปลดล็อกทันที',
+    cancelButtonText: 'ยกเลิก',
+    confirmButtonColor: '#dc2626'
+  }).then(function(res) {
+    if (res.isConfirmed) {
+      callApi({
+        action: 'resetEmployeeDevice',
+        empId: empId,
+        username: State.currentUser ? State.currentUser.username : 'Admin'
+      }).then(function(data) {
+        if (data.success) {
+          showToast(data.message, 'success');
+          // Update local state
+          var found = (State.employees || []).find(function(x) { return x.empId === empId; });
+          if (found) {
+            found.isDeviceBound = false;
+            found.boundDevice = null;
+          }
+          renderEmployeesTable();
+        } else {
+          showToast(data.message || 'ปลดล็อกไม่สำเร็จ', 'error');
+        }
+      }).catch(function(err) {
+        showToast('Error: ' + err.message, 'error');
+      });
+    }
+  });
 }
 
 
