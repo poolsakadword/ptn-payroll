@@ -54,6 +54,16 @@ function hasPermission(permKey) {
   return perms.indexOf(permKey) >= 0;
 }
 
+function isSuperAdmin() {
+  if (!State.currentUser) return false;
+  var u = State.currentUser.username ? String(State.currentUser.username).trim().toLowerCase() : '';
+  var r = State.currentUser.role ? String(State.currentUser.role).trim().toLowerCase() : '';
+  if (u === 'admin') return true;
+  if (r.indexOf('super') >= 0) return true;
+  if (r === 'admin / hr' || r === 'admin') return true;
+  return false;
+}
+
 function applyRolePermissions() {
   if (!State.currentUser) return;
 
@@ -103,7 +113,7 @@ function applyRolePermissions() {
   var navUsers = document.getElementById('navBtn-users');
 
   var canViewDocuments = canViewPayroll || canViewHistory || canManageCompany || hasPermission('view_salary') || hasPermission('all');
-  var canViewAttendance = canViewPayroll || canViewInputs || canViewHistory || isAdmin;
+  var canViewAttendance = isSuperAdmin();
 
   if (navDash) navDash.style.display = canViewDash ? 'inline-flex' : 'none';
   if (navPayroll) navPayroll.style.display = canViewPayroll ? 'inline-flex' : 'none';
@@ -295,6 +305,7 @@ function navigateToAuthorizedTab() {
   else if (curId === 'tab-input' && hasPermission('view_inputs')) isAllowed = true;
   else if (curId === 'tab-employees' && hasPermission('view_emp')) isAllowed = true;
   else if (curId === 'tab-history' && hasPermission('view_history')) isAllowed = true;
+  else if (curId === 'tab-attendance' && isSuperAdmin()) isAllowed = true;
   else if (curId === 'tab-analytics' && (String(State.currentUser && State.currentUser.username || '').toLowerCase() === 'admin' || String(State.currentUser && State.currentUser.role || '').toLowerCase().indexOf('admin') >= 0 || hasPermission('all'))) isAllowed = true;
   else if (curId === 'tab-company' && (hasPermission('manage_company') || hasPermission('manage_backup'))) isAllowed = true;
   else if (curId === 'tab-users' && hasPermission('manage_users')) isAllowed = true;
@@ -1689,6 +1700,12 @@ function switchTab(tabId) {
     return;
   }
 
+  // Attendance tab is strictly restricted to Super Admin only
+  if (tabId === 'attendance' && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: ระบบลงเวลาสงวนสิทธิ์เฉพาะ Super Admin เท่านั้น', 'warning');
+    return;
+  }
+
   document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.remove('active'); });
   document.querySelectorAll('.nav-tab-btn').forEach(function(el) { el.classList.remove('active'); });
   var target = document.getElementById('tab-' + tabId);
@@ -2531,7 +2548,7 @@ function onRoleTemplateChanged() {
     'perm_manage_users', 'perm_company_settings', 'perm_backup_restore'
   ];
 
-  if (role === 'Admin / HR' || role === 'Admin') {
+  if (role === 'Super Admin' || role === 'Admin / HR' || role === 'Admin') {
     allPerms.forEach(function(p) {
       var el = document.getElementById(p);
       if (el) el.checked = true;
@@ -5729,19 +5746,53 @@ function exportKtbPayrollTxt() {
 var _payrollMasterQrInterval = null;
 var _payrollMasterQrSecondsLeft = 60;
 var _payrollMasterQrObj = null;
+var _currentAttendanceLogs = [];
+var _currentAttendanceSettings = {};
+
+function calcHaversineDistanceMeters(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  var R = 6371e3;
+  var p1 = (lat1 * Math.PI) / 180;
+  var p2 = (lat2 * Math.PI) / 180;
+  var dp = ((lat2 - lat1) * Math.PI) / 180;
+  var dl = ((lon2 - lon1) * Math.PI) / 180;
+  var a = Math.sin(dp / 2) * Math.sin(dp / 2) + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) * Math.sin(dl / 2);
+  var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c);
+}
 
 function loadTimeAttendanceDashboard() {
-  var logsBody = document.getElementById('attLogsTableBody');
-  if (logsBody) {
-    logsBody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงานและรูปถ่าย...</td></tr>';
+  if (!isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: หน้าลงเวลาสงวนสิทธิ์เฉพาะ Super Admin เท่านั้น', 'warning');
+    switchTab('dashboard');
+    return;
   }
 
-  callApi('getTimeAttendanceDashboard')
+  var filterInput = document.getElementById('attFilterDate');
+  if (filterInput && !filterInput.value) {
+    var nowUtc = new Date();
+    var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    filterInput.value = bangkok.toISOString().substring(0, 10);
+  }
+  var filterDate = filterInput ? filterInput.value : '';
+
+  var logsBody = document.getElementById('attLogsTableBody');
+  if (logsBody) {
+    logsBody.innerHTML = '<tr><td colspan="12" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงานและรูปถ่าย...</td></tr>';
+  }
+
+  callApi('getTimeAttendanceDashboard', {
+    date: filterDate,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
     .then(function(r) {
       if (!r || !r.success) {
         showToast(r && r.message ? r.message : 'ไม่สามารถโหลดข้อมูลเวลาทำงานได้', 'error');
         return;
       }
+
+      _currentAttendanceLogs = r.logsToday || [];
+      _currentAttendanceSettings = r.settings || {};
 
       // 1. Update KPI
       if (r.kpi) {
@@ -5757,8 +5808,8 @@ function loadTimeAttendanceDashboard() {
 
       // 2. Subtitle date
       var subTitle = document.getElementById('attLogsSubTitle');
-      if (subTitle && r.today) {
-        subTitle.textContent = 'บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตน ประจำวันที่ ' + r.today;
+      if (subTitle && (r.date || r.today)) {
+        subTitle.textContent = 'บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตน ประจำวันที่ ' + (r.date || r.today);
       }
 
       // 3. Settings Form Values
@@ -5806,14 +5857,29 @@ function loadTimeAttendanceDashboard() {
       }
 
       // 4. Render Tables & Approvals
-      renderTimeAttendanceTodayLogs(r.logsToday || []);
+      renderTimeAttendanceTodayLogs(_currentAttendanceLogs);
       renderTimeAttendanceApprovals(r.pendingLeaves || [], r.pendingOts || [], r.pendingAdvances || []);
+
+      // Reset selection
+      var masterCb = document.getElementById('attSelectAllLogs');
+      if (masterCb) masterCb.checked = false;
+      updateAttendanceBatchToolbar();
     })
     .catch(function(err) {
       if (logsBody) {
-        logsBody.innerHTML = '<tr><td colspan="11" class="text-center text-red" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '</td></tr>';
+        logsBody.innerHTML = '<tr><td colspan="12" class="text-center text-red" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '</td></tr>';
       }
     });
+}
+
+function setAttendanceFilterToday() {
+  var filterInput = document.getElementById('attFilterDate');
+  if (filterInput) {
+    var nowUtc = new Date();
+    var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    filterInput.value = bangkok.toISOString().substring(0, 10);
+  }
+  loadTimeAttendanceDashboard();
 }
 
 function renderTimeAttendanceTodayLogs(logs) {
@@ -5821,7 +5887,7 @@ function renderTimeAttendanceTodayLogs(logs) {
   if (!tbody) return;
 
   if (!logs || logs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ยังไม่มีพนักงานลงเวลาเข้างานในวันนี้</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ไม่พบข้อมูลการลงเวลาในวันที่เลือก</td></tr>';
     return;
   }
 
@@ -5829,12 +5895,12 @@ function renderTimeAttendanceTodayLogs(logs) {
   logs.forEach(function(l, idx) {
     var inPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
     if (l.in_photo_url) {
-      inPhotoHtml = '<img src="' + l.in_photo_url + '" alt="IN" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:2px solid #10b981;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + (l.full_name || l.emp_id) + '\', \'เวลาเข้า: ' + (l.clock_in || '-') + ' น. | พิกัด: ' + (l.in_lat ? l.in_lat.toFixed(4) + ', ' + l.in_lng.toFixed(4) : '-') + '\')">';
+      inPhotoHtml = '<img src="' + l.in_photo_url + '" alt="IN" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #10b981;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + (l.full_name || l.emp_id) + '\', \'เวลาเข้า: ' + (l.clock_in || '-') + ' น. | พิกัด: ' + (l.in_lat ? l.in_lat.toFixed(4) + ', ' + l.in_lng.toFixed(4) : '-') + '\')" title="คลิกเพื่อดูรูปขยาย">';
     }
 
     var outPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
     if (l.out_photo_url) {
-      outPhotoHtml = '<img src="' + l.out_photo_url + '" alt="OUT" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:2px solid #ef4444;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + (l.full_name || l.emp_id) + '\', \'เวลาออก: ' + (l.clock_out || '-') + ' น. | พิกัด: ' + (l.out_lat ? l.out_lat.toFixed(4) + ', ' + l.out_lng.toFixed(4) : '-') + '\')">';
+      outPhotoHtml = '<img src="' + l.out_photo_url + '" alt="OUT" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #ef4444;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + (l.full_name || l.emp_id) + '\', \'เวลาออก: ' + (l.clock_out || '-') + ' น. | พิกัด: ' + (l.out_lat ? l.out_lat.toFixed(4) + ', ' + l.out_lng.toFixed(4) : '-') + '\')" title="คลิกเพื่อดูรูปขยาย">';
     }
 
     var lateBadge = '';
@@ -5852,32 +5918,279 @@ function renderTimeAttendanceTodayLogs(logs) {
     var statusHtml = '';
     if (l.status === 'GEOFENCE_FAIL') {
       statusHtml = '<span style="background:#fef2f2;color:#b91c1c;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #fecaca;font-weight:600"><i class="fa-solid fa-location-dot"></i> นอกพิกัด</span>';
+    } else if (l.status === 'SUNDAY_WORK') {
+      statusHtml = '<span style="background:#eff6ff;color:#1d4ed8;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #bfdbfe;font-weight:600">วันอาทิตย์</span>';
     } else {
       statusHtml = '<span style="background:#f0fdf4;color:#15803d;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #bbf7d0;font-weight:600"><i class="fa-solid fa-check"></i> ในสาขา</span>';
     }
 
     var nameDisplay = (l.full_name || '-') + (l.nickname ? ' (' + l.nickname + ')' : '');
 
-    html += '<tr>' +
+    html += '<tr id="attLogRow_' + l.id + '">' +
+      '<td class="text-center" style="padding:4px">' +
+        '<input type="checkbox" class="att-log-checkbox" value="' + l.id + '" onchange="onAttendanceCheckboxChanged()" style="cursor:pointer;accent-color:#2563eb;width:15px;height:15px">' +
+      '</td>' +
       '<td class="text-center font-bold" style="color:#64748b">' + (idx + 1) + '</td>' +
-      '<td class="text-center" style="padding:6px 4px">' + inPhotoHtml + '</td>' +
-      '<td class="text-center" style="padding:6px 4px">' + outPhotoHtml + '</td>' +
-      '<td class="font-bold" style="color:#1e40af">' + (l.emp_id || '-') + '</td>' +
-      '<td><div style="font-weight:700;color:#0f172a">' + nameDisplay + '</div><div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div></td>' +
+      '<td class="text-center" style="padding:4px">' + inPhotoHtml + '</td>' +
+      '<td class="text-center" style="padding:4px">' + outPhotoHtml + '</td>' +
+      '<td class="font-bold" style="color:#1e40af;cursor:pointer" onclick="viewAttendanceLogDetail(' + l.id + ')" title="ดูรายละเอียด">' + (l.emp_id || '-') + '</td>' +
+      '<td>' +
+        '<div style="font-weight:700;color:#0f172a;cursor:pointer;display:inline-block" onclick="viewAttendanceLogDetail(' + l.id + ')" title="คลิกเพื่อดูรายละเอียดเชิงลึก">' +
+          nameDisplay + ' <i class="fa-solid fa-circle-info text-blue" style="font-size:11px;opacity:0.7"></i>' +
+        '</div>' +
+        '<div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div>' +
+      '</td>' +
       '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
-      '<td class="text-center font-bold text-green" style="font-size:13px">' + (l.clock_in ? l.clock_in + ' น.' : '-') + '</td>' +
-      '<td class="text-center font-bold text-red" style="font-size:13px">' + (l.clock_out ? l.clock_out + ' น.' : '-') + '</td>' +
+      '<td class="text-center font-bold text-green" style="font-size:12.5px">' + (l.clock_in ? l.clock_in + ' น.' : '-') + '</td>' +
+      '<td class="text-center font-bold text-red" style="font-size:12.5px">' + (l.clock_out ? l.clock_out + ' น.' : '-') + '</td>' +
       '<td class="text-center">' + lateBadge + hrsText + '</td>' +
       '<td class="text-center">' + statusHtml + '</td>' +
-      '<td class="text-center" style="padding:4px">' +
-        '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;border-radius:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(l.emp_id) + '\', \'' + esc(l.full_name || '') + '\')" title="ดึงข้อมูล OT, ลา และเบิกเงินของ ' + esc(l.full_name || l.emp_id) + ' เข้าสู่งวดเงินเดือนนี้">' +
-          '<i class="fa-solid fa-cloud-arrow-down"></i> ดึงเข้างวด' +
-        '</button>' +
+      '<td class="text-center" style="padding:4px;white-space:nowrap">' +
+        '<div style="display:inline-flex;gap:4px">' +
+          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:4px" onclick="viewAttendanceLogDetail(' + l.id + ')" title="ดูรายละเอียดการลงเวลา">' +
+            '<i class="fa-solid fa-eye text-blue"></i>' +
+          '</button>' +
+          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;border-radius:4px" onclick="openEditAttendanceLogModal(' + l.id + ')" title="แก้ไขเวลาเข้า-ออก">' +
+            '<i class="fa-solid fa-pen-to-square"></i>' +
+          '</button>' +
+          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:4px" onclick="deleteSingleAttendanceLog(' + l.id + ', \'' + esc(l.full_name || l.emp_id) + '\')" title="ลบรายการนี้">' +
+            '<i class="fa-solid fa-trash-can"></i>' +
+          '</button>' +
+          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 7px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;border-radius:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(l.emp_id) + '\', \'' + esc(l.full_name || '') + '\')" title="ดึงข้อมูลเข้าสู่คำนวณเงินเดือน">' +
+            '<i class="fa-solid fa-cloud-arrow-down"></i>' +
+          '</button>' +
+        '</div>' +
       '</td>' +
       '</tr>';
   });
 
   tbody.innerHTML = html;
+}
+
+// BATCH OPERATIONS & CHECKBOXES
+function toggleSelectAllAttendanceLogs(master) {
+  var cbs = document.querySelectorAll('.att-log-checkbox');
+  cbs.forEach(function(cb) {
+    cb.checked = master.checked;
+  });
+  updateAttendanceBatchToolbar();
+}
+
+function onAttendanceCheckboxChanged() {
+  updateAttendanceBatchToolbar();
+}
+
+function updateAttendanceBatchToolbar() {
+  var cbs = document.querySelectorAll('.att-log-checkbox:checked');
+  var count = cbs.length;
+  var bar = document.getElementById('attBatchToolbar');
+  var countDisplay = document.getElementById('attSelectedCount');
+  if (countDisplay) countDisplay.textContent = count;
+  if (bar) {
+    bar.style.display = count > 0 ? 'flex' : 'none';
+  }
+  var allCbs = document.querySelectorAll('.att-log-checkbox');
+  var master = document.getElementById('attSelectAllLogs');
+  if (master) {
+    master.checked = (allCbs.length > 0 && count === allCbs.length);
+  }
+}
+
+function deselectAllAttendanceLogs() {
+  var master = document.getElementById('attSelectAllLogs');
+  if (master) master.checked = false;
+  var cbs = document.querySelectorAll('.att-log-checkbox');
+  cbs.forEach(function(cb) { cb.checked = false; });
+  updateAttendanceBatchToolbar();
+}
+
+function batchDeleteAttendanceLogs() {
+  var cbs = document.querySelectorAll('.att-log-checkbox:checked');
+  var ids = Array.from(cbs).map(function(cb) { return Number(cb.value); });
+  if (ids.length === 0) {
+    showToast('กรุณาเลือกรายการที่ต้องการลบอย่างน้อย 1 รายการ', 'warning');
+    return;
+  }
+
+  if (!confirm('ยืนยันลบรายการลงเวลาทำงานที่เลือกทั้งหมด ' + ids.length + ' รายการ ใช่หรือไม่? (ไม่สามารถกู้คืนได้)')) return;
+
+  callApi('batchDeleteAttendanceLogs', {
+    ids: ids,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      showToast(r.message || 'ลบรายการลงเวลาเรียบร้อยแล้ว');
+      loadTimeAttendanceDashboard();
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการลบรายการ', 'error');
+    });
+}
+
+function deleteSingleAttendanceLog(id, name) {
+  if (!confirm('ยืนยันลบข้อมูลการลงเวลาของ "' + (name || 'พนักงาน') + '" ใช่หรือไม่? (ไม่สามารถกู้คืนได้)')) return;
+
+  callApi('deleteAttendanceLog', {
+    id: id,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      showToast(r.message || 'ลบรายการบันทึกเวลาเรียบร้อยแล้ว');
+      closeModal('modalAttendanceDetail');
+      loadTimeAttendanceDashboard();
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการลบรายการ', 'error');
+    });
+}
+
+// ATTENDANCE DETAIL MODAL CONTROLLER
+function viewAttendanceLogDetail(id) {
+  var log = (_currentAttendanceLogs || []).find(function(x) { return x.id === Number(id); });
+  if (!log) {
+    showToast('ไม่พบข้อมูลรายการลงเวลานี้', 'error');
+    return;
+  }
+
+  var offLat = Number(_currentAttendanceSettings.office_lat || 13.727896);
+  var offLng = Number(_currentAttendanceSettings.office_lng || 100.524123);
+
+  // 1. Employee header
+  var nameDisplay = (log.full_name || '-') + (log.nickname ? ' (' + log.nickname + ')' : '');
+  document.getElementById('dtlEmpName').textContent = nameDisplay;
+  document.getElementById('dtlEmpId').textContent = log.emp_id || '-';
+  document.getElementById('dtlEmpDept').textContent = 'แผนก: ' + (log.department || '-');
+  document.getElementById('dtlEmpPosition').textContent = 'ตำแหน่ง: ' + (log.position || '-');
+  document.getElementById('dtlDate').textContent = log.date || '-';
+
+  var badgeHtml = '';
+  if (log.status === 'GEOFENCE_FAIL') {
+    badgeHtml = '<span style="background:#fef2f2;color:#b91c1c;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #fecaca;font-weight:700"><i class="fa-solid fa-triangle-exclamation"></i> นอกพิกัดสาขา</span>';
+  } else if (log.status === 'SUNDAY_WORK') {
+    badgeHtml = '<span style="background:#eff6ff;color:#1d4ed8;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #bfdbfe;font-weight:700"><i class="fa-solid fa-calendar-check"></i> ทำงานวันอาทิตย์</span>';
+  } else if ((Number(log.late_minutes) || 0) > 0) {
+    badgeHtml = '<span style="background:#fff7ed;color:#c2410c;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #fed7aa;font-weight:700"><i class="fa-solid fa-clock"></i> มาสาย ' + log.late_minutes + ' นาที</span>';
+  } else {
+    badgeHtml = '<span style="background:#f0fdf4;color:#15803d;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #bbf7d0;font-weight:700"><i class="fa-solid fa-check"></i> ปกติ (ในสาขา)</span>';
+  }
+  document.getElementById('dtlStatusBadge').innerHTML = badgeHtml;
+
+  // 2. In section
+  document.getElementById('dtlClockInTime').textContent = log.clock_in ? log.clock_in + ' น.' : 'ยังไม่บันทึก';
+  var inPhotoBox = document.getElementById('dtlInPhotoContainer');
+  if (log.in_photo_url) {
+    inPhotoBox.innerHTML = '<img src="' + log.in_photo_url + '" alt="IN" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + log.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + esc(nameDisplay) + '\', \'เวลาเข้า: ' + (log.clock_in || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+  } else {
+    inPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:12px">ไม่มีรูปถ่ายเข้างาน</span>';
+  }
+
+  if (log.in_lat && log.in_lng) {
+    var inDist = calcHaversineDistanceMeters(log.in_lat, log.in_lng, offLat, offLng);
+    document.getElementById('dtlInCoords').textContent = log.in_lat.toFixed(6) + ', ' + log.in_lng.toFixed(6);
+    document.getElementById('dtlInDistance').textContent = inDist !== null ? (inDist + ' เมตร จากสาขา') : '-';
+    document.getElementById('dtlInMapLink').innerHTML = '<a href="https://www.google.com/maps?q=' + log.in_lat + ',' + log.in_lng + '" target="_blank" style="color:#1d4ed8;font-weight:700;text-decoration:underline"><i class="fa-solid fa-map-location-dot"></i> ดูพิกัดบน Google Maps</a>';
+  } else {
+    document.getElementById('dtlInCoords').textContent = 'ไม่มีข้อมูล GPS';
+    document.getElementById('dtlInDistance').textContent = '-';
+    document.getElementById('dtlInMapLink').innerHTML = '<span style="color:#94a3b8">ไม่ได้บันทึกพิกัด</span>';
+  }
+
+  // 3. Out section
+  document.getElementById('dtlClockOutTime').textContent = log.clock_out ? log.clock_out + ' น.' : 'ยังไม่บันทึก';
+  var outPhotoBox = document.getElementById('dtlOutPhotoContainer');
+  if (log.out_photo_url) {
+    outPhotoBox.innerHTML = '<img src="' + log.out_photo_url + '" alt="OUT" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + log.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + esc(nameDisplay) + '\', \'เวลาออก: ' + (log.clock_out || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+  } else {
+    outPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:12px">ไม่มีรูปถ่ายออกงาน</span>';
+  }
+
+  if (log.out_lat && log.out_lng) {
+    var outDist = calcHaversineDistanceMeters(log.out_lat, log.out_lng, offLat, offLng);
+    document.getElementById('dtlOutCoords').textContent = log.out_lat.toFixed(6) + ', ' + log.out_lng.toFixed(6);
+    document.getElementById('dtlOutDistance').textContent = outDist !== null ? (outDist + ' เมตร จากสาขา') : '-';
+    document.getElementById('dtlOutMapLink').innerHTML = '<a href="https://www.google.com/maps?q=' + log.out_lat + ',' + log.out_lng + '" target="_blank" style="color:#b91c1c;font-weight:700;text-decoration:underline"><i class="fa-solid fa-map-location-dot"></i> ดูพิกัดบน Google Maps</a>';
+  } else {
+    document.getElementById('dtlOutCoords').textContent = 'ไม่มีข้อมูล GPS';
+    document.getElementById('dtlOutDistance').textContent = '-';
+    document.getElementById('dtlOutMapLink').innerHTML = '<span style="color:#94a3b8">ไม่ได้บันทึกพิกัด</span>';
+  }
+
+  // 4. Summary strip
+  document.getElementById('dtlWorkHours').textContent = (log.work_hours || 0) + ' ชม.';
+  document.getElementById('dtlLateMinutes').textContent = (log.late_minutes || 0) + ' นาที';
+  document.getElementById('dtlOtHours').textContent = (log.ot_hours || 0) + ' ชม.';
+  document.getElementById('dtlRemark').textContent = log.remark || '-';
+
+  // 5. Wire action buttons
+  var btnDel = document.getElementById('btnDetailDeleteLog');
+  if (btnDel) {
+    btnDel.onclick = function() {
+      deleteSingleAttendanceLog(log.id, nameDisplay);
+    };
+  }
+
+  var btnEdit = document.getElementById('btnDetailEditLog');
+  if (btnEdit) {
+    btnEdit.onclick = function() {
+      closeModal('modalAttendanceDetail');
+      openEditAttendanceLogModal(log.id);
+    };
+  }
+
+  openModal('modalAttendanceDetail');
+}
+
+// ATTENDANCE EDIT MODAL CONTROLLER
+function openEditAttendanceLogModal(id) {
+  var log = (_currentAttendanceLogs || []).find(function(x) { return x.id === Number(id); });
+  if (!log) {
+    showToast('ไม่พบข้อมูลรายการลงเวลานี้', 'error');
+    return;
+  }
+
+  var nameDisplay = (log.full_name || '-') + (log.nickname ? ' (' + log.nickname + ')' : '');
+  document.getElementById('editAttId').value = log.id;
+  document.getElementById('editAttEmpDisplay').innerHTML = '<i class="fa-solid fa-user text-blue"></i> ' + esc(nameDisplay) + ' (' + esc(log.emp_id || '') + ') - ' + esc(log.department || '-') + ' / ' + esc(log.position || '-');
+  document.getElementById('editAttDate').value = log.date || '';
+  document.getElementById('editAttStatus').value = log.status || 'NORMAL';
+  document.getElementById('editAttClockIn').value = log.clock_in || '';
+  document.getElementById('editAttClockOut').value = log.clock_out || '';
+  document.getElementById('editAttLateMinutes').value = log.late_minutes || 0;
+  document.getElementById('editAttWorkHours').value = log.work_hours || 0;
+  document.getElementById('editAttRemark').value = log.remark || '';
+
+  openModal('modalAttendanceEdit');
+}
+
+function saveAttendanceLogEditForm(e) {
+  if (e) e.preventDefault();
+
+  var id = Number(document.getElementById('editAttId').value);
+  var clockIn = document.getElementById('editAttClockIn').value.trim();
+  var clockOut = document.getElementById('editAttClockOut').value.trim();
+  var lateMinutes = Number(document.getElementById('editAttLateMinutes').value) || 0;
+  var workHours = Number(document.getElementById('editAttWorkHours').value) || 0;
+  var status = document.getElementById('editAttStatus').value;
+  var remark = document.getElementById('editAttRemark').value.trim();
+
+  callApi('updateAttendanceLog', {
+    id: id,
+    clockIn: clockIn,
+    clockOut: clockOut,
+    lateMinutes: lateMinutes,
+    workHours: workHours,
+    status: status,
+    remark: remark,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      showToast(r.message || 'บันทึกการแก้ไขข้อมูลสำเร็จ');
+      closeModal('modalAttendanceEdit');
+      loadTimeAttendanceDashboard();
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
+    });
 }
 
 function renderTimeAttendanceApprovals(leaves, ots, advances) {

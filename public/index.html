@@ -428,32 +428,58 @@
           
           <!-- LEFT COLUMN: TODAY'S LOGS & SELFIES -->
           <div class="card">
-            <div class="card-header">
+            <div class="card-header" style="flex-wrap:wrap;gap:12px">
               <div>
-                <div class="card-title"><i class="fa-solid fa-camera text-blue"></i> ข้อมูลการลงเวลา &amp; รูปถ่ายเซลฟี่ประจำวัน</div>
-                <div class="card-sub" id="attLogsSubTitle">บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตนวันนี้</div>
+                <div class="card-title"><i class="fa-solid fa-camera text-blue"></i> ข้อมูลการลงเวลา &amp; รูปถ่ายเซลฟี่</div>
+                <div class="card-sub" id="attLogsSubTitle">บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตน</div>
               </div>
-              <div class="toolbar">
-                <button type="button" class="btn btn-slate btn-sm" onclick="loadTimeAttendanceDashboard()">
-                  <i class="fa-solid fa-rotate-right"></i> รีเฟรช
+              <div class="toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <label style="font-size:12px;font-weight:700;color:#334155"><i class="fa-regular fa-calendar text-blue"></i> วันที่:</label>
+                  <input type="date" id="attFilterDate" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600" onchange="loadTimeAttendanceDashboard()">
+                </div>
+                <button type="button" class="btn btn-slate btn-sm" onclick="setAttendanceFilterToday()" title="กลับไปดูวันนี้">
+                  วันนี้
+                </button>
+                <button type="button" class="btn btn-slate btn-sm" onclick="loadTimeAttendanceDashboard()" title="รีเฟรชข้อมูล">
+                  <i class="fa-solid fa-rotate-right"></i>
                 </button>
               </div>
             </div>
+
+            <!-- BATCH ACTION TOOLBAR (Hidden by default) -->
+            <div id="attBatchToolbar" style="display:none;padding:8px 16px;background:#fef2f2;border-bottom:1.5px solid #fecaca;align-items:center;justify-content:space-between;gap:10px">
+              <div style="font-size:12px;font-weight:700;color:#991b1b;display:flex;align-items:center;gap:6px">
+                <i class="fa-solid fa-check-double"></i> เลือกแล้ว <span id="attSelectedCount" style="font-size:13px;color:#dc2626;font-weight:800">0</span> รายการ
+              </div>
+              <div style="display:flex;gap:8px">
+                <button type="button" class="btn btn-sm" style="background:#fee2e2;color:#b91c1c;border:1px solid #f87171;font-weight:700" onclick="batchDeleteAttendanceLogs()">
+                  <i class="fa-solid fa-trash-can"></i> ลบรายการที่เลือก
+                </button>
+                <button type="button" class="btn btn-sm btn-slate" onclick="deselectAllAttendanceLogs()">
+                  ยกเลิก
+                </button>
+              </div>
+            </div>
+
             <div class="table-wrapper">
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th style="width:50px" class="text-center">ลำดับ</th>
-                    <th style="width:65px" class="text-center">รูปเข้า</th>
-                    <th style="width:65px" class="text-center">รูปออก</th>
-                    <th style="width:85px">รหัส</th>
+                    <th style="width:36px" class="text-center">
+                      <input type="checkbox" id="attSelectAllLogs" onchange="toggleSelectAllAttendanceLogs(this)" title="เลือกทั้งหมด" style="cursor:pointer;accent-color:#2563eb;width:15px;height:15px">
+                    </th>
+                    <th style="width:38px" class="text-center">#</th>
+                    <th style="width:55px" class="text-center">รูปเข้า</th>
+                    <th style="width:55px" class="text-center">รูปออก</th>
+                    <th style="width:75px">รหัส</th>
                     <th>ชื่อ-นามสกุล</th>
-                    <th style="width:95px">แผนก</th>
-                    <th style="width:75px" class="text-center text-green">เข้างาน</th>
-                    <th style="width:75px" class="text-center text-red">ออกงาน</th>
-                    <th style="width:85px" class="text-center">สาย/ชม.</th>
-                    <th style="width:90px" class="text-center">สถานะ</th>
-                    <th style="width:95px" class="text-center">งวดเงินเดือน</th>
+                    <th style="width:85px">แผนก</th>
+                    <th style="width:70px" class="text-center text-green">เข้างาน</th>
+                    <th style="width:70px" class="text-center text-red">ออกงาน</th>
+                    <th style="width:75px" class="text-center">สาย/ชม.</th>
+                    <th style="width:75px" class="text-center">สถานะ</th>
+                    <th style="width:130px" class="text-center">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody id="attLogsTableBody">
@@ -2278,7 +2304,8 @@
             <div class="form-group">
               <label style="font-weight:700;color:#0f172a"><i class="fa-solid fa-id-badge" style="color:#2563eb"></i> เทมเพลตสิทธิ์ (Role Template)</label>
               <select id="mRole" onchange="onRoleTemplateChanged()" style="font-weight:600">
-                <option value="Admin / HR">👑 Admin (ผู้ดูแลระบบสูงสุด - ทุกสิทธิ์)</option>
+                <option value="Super Admin">👑 Super Admin (ผู้ดูแลระบบสูงสุด - ทุกสิทธิ์รวมระบบลงเวลา)</option>
+                <option value="Admin / HR">👑 Admin / HR (ผู้ดูแลระบบ - คิดเงินเดือน)</option>
                 <option value="HR Payroll">💼 HR Payroll (ฝ่ายบุคคลคิดเงินเดือน)</option>
                 <option value="HR Time Attendance">⏱️ HR Attendance (ฝ่ายบุคคลบันทึกเวลา/ซ่อนเงินเดือน)</option>
                 <option value="Accounting / Finance">📊 Accounting / Finance (ฝ่ายการเงิน-บัญชี/รายงาน)</option>
@@ -2785,6 +2812,189 @@
       <div class="modal-footer" style="display:flex;justify-content:flex-end">
         <button type="button" class="btn btn-slate" onclick="closeModal('modalAttendancePhotoPreview')">ปิด</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ATTENDANCE DETAIL MODAL -->
+  <div class="modal-overlay" id="modalAttendanceDetail">
+    <div class="modal-card wide" style="max-width:720px;width:95vw">
+      <div class="modal-header">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px">
+          <i class="fa-solid fa-id-card text-blue"></i>
+          <span>รายละเอียดการลงเวลาทำงาน</span>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalAttendanceDetail')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="padding:18px;max-height:80vh;overflow-y:auto">
+        <!-- Employee Header Summary -->
+        <div style="background:linear-gradient(135deg, #f8fafc 0%, #eff6ff 100%);border:1.5px solid #dbeafe;border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div>
+            <div style="font-size:16px;font-weight:800;color:#0f172a;display:flex;align-items:center;gap:8px">
+              <span id="dtlEmpName">-</span>
+              <span id="dtlEmpId" class="font-mono" style="font-size:12px;color:#2563eb;background:#dbeafe;padding:2px 8px;border-radius:6px;font-weight:700">-</span>
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px">
+              <span id="dtlEmpDept">-</span> &bull; <span id="dtlEmpPosition">-</span>
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:12px;font-weight:700;color:#334155"><i class="fa-regular fa-calendar text-blue"></i> <span id="dtlDate">-</span></div>
+            <div id="dtlStatusBadge" style="margin-top:4px">-</div>
+          </div>
+        </div>
+
+        <!-- 2 Columns: Clock In vs Clock Out -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px">
+          <!-- IN COLUMN -->
+          <div style="background:#fff;border:1.5px solid #bbf7d0;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #dcfce7;padding-bottom:8px">
+              <span style="font-size:13px;font-weight:800;color:#166534;display:flex;align-items:center;gap:6px">
+                <i class="fa-solid fa-arrow-right-to-bracket text-green"></i> เข้างาน (IN)
+              </span>
+              <span id="dtlClockInTime" style="font-size:15px;font-weight:800;color:#15803d;font-family:monospace">-</span>
+            </div>
+
+            <!-- In Photo -->
+            <div style="text-align:center">
+              <div id="dtlInPhotoContainer" style="width:100%;height:180px;background:#f8fafc;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                <span style="color:#94a3b8;font-size:12px">ไม่มีรูปถ่ายเข้างาน</span>
+              </div>
+            </div>
+
+            <!-- In GPS Info -->
+            <div style="font-size:12px;color:#334155;background:#f0fdf4;border:1px solid #dcfce7;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px">
+              <div><strong style="color:#166534">พิกัด GPS:</strong> <span id="dtlInCoords" class="font-mono">-</span></div>
+              <div><strong style="color:#166534">ระยะห่าง:</strong> <span id="dtlInDistance">-</span></div>
+              <div id="dtlInMapLink">-</div>
+            </div>
+          </div>
+
+          <!-- OUT COLUMN -->
+          <div style="background:#fff;border:1.5px solid #fecaca;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #fee2e2;padding-bottom:8px">
+              <span style="font-size:13px;font-weight:800;color:#991b1b;display:flex;align-items:center;gap:6px">
+                <i class="fa-solid fa-arrow-right-from-bracket text-red"></i> ออกงาน (OUT)
+              </span>
+              <span id="dtlClockOutTime" style="font-size:15px;font-weight:800;color:#b91c1c;font-family:monospace">-</span>
+            </div>
+
+            <!-- Out Photo -->
+            <div style="text-align:center">
+              <div id="dtlOutPhotoContainer" style="width:100%;height:180px;background:#f8fafc;border:2px dashed #cbd5e1;border-radius:10px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                <span style="color:#94a3b8;font-size:12px">ไม่มีรูปถ่ายออกงาน</span>
+              </div>
+            </div>
+
+            <!-- Out GPS Info -->
+            <div style="font-size:12px;color:#334155;background:#fef2f2;border:1px solid #fee2e2;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:4px">
+              <div><strong style="color:#991b1b">พิกัด GPS:</strong> <span id="dtlOutCoords" class="font-mono">-</span></div>
+              <div><strong style="color:#991b1b">ระยะห่าง:</strong> <span id="dtlOutDistance">-</span></div>
+              <div id="dtlOutMapLink">-</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Summary Strip -->
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+          <div>
+            <div style="font-size:11px;color:#64748b;font-weight:600">ชั่วโมงทำงานจริง</div>
+            <div id="dtlWorkHours" style="font-size:14px;font-weight:800;color:#0f172a">-</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#64748b;font-weight:600">มาสาย (นาที)</div>
+            <div id="dtlLateMinutes" style="font-size:14px;font-weight:800;color:#c2410c">-</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#64748b;font-weight:600">ชั่วโมง OT</div>
+            <div id="dtlOtHours" style="font-size:14px;font-weight:800;color:#2563eb">-</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#64748b;font-weight:600">หมายเหตุ</div>
+            <div id="dtlRemark" style="font-size:12px;color:#475569;white-space:pre-wrap">-</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <button type="button" class="btn btn-slate" onclick="closeModal('modalAttendanceDetail')">ปิดหน้าต่าง</button>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="btn" id="btnDetailDeleteLog" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;font-weight:700">
+            <i class="fa-solid fa-trash-can"></i> ลบรายการนี้
+          </button>
+          <button type="button" class="btn btn-primary" id="btnDetailEditLog" style="font-weight:700">
+            <i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลนี้
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ATTENDANCE EDIT MODAL -->
+  <div class="modal-overlay" id="modalAttendanceEdit">
+    <div class="modal-card" style="max-width:560px;width:95vw">
+      <div class="modal-header">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px">
+          <i class="fa-solid fa-pen-to-square text-blue"></i>
+          <span>แก้ไขข้อมูลการลงเวลาทำงาน</span>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalAttendanceEdit')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="saveAttendanceLogEditForm(event)">
+        <input type="hidden" id="editAttId">
+        <div class="modal-body" style="padding:18px;display:flex;flex-direction:column;gap:12px">
+          <div id="editAttEmpDisplay" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:13px;font-weight:700;color:#1e40af">
+            -
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">วันที่ลงเวลา</label>
+              <input type="date" id="editAttDate" readonly style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;background:#f8fafc;font-weight:600">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#64748b">สถานะการลงเวลา *</label>
+              <select id="editAttStatus" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:600">
+                <option value="NORMAL">ปกติ (ในสาขา)</option>
+                <option value="LATE">มาสาย</option>
+                <option value="GEOFENCE_FAIL">นอกพิกัดสาขา</option>
+                <option value="SUNDAY_WORK">ทำงานวันอาทิตย์</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#15803d">เวลาเข้างาน (Clock In)</label>
+              <input type="text" id="editAttClockIn" placeholder="เช่น 09:30:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#b91c1c">เวลาออกงาน (Clock Out)</label>
+              <input type="text" id="editAttClockOut" placeholder="เช่น 19:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#c2410c">มาสาย (นาที)</label>
+              <input type="number" id="editAttLateMinutes" min="0" value="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#2563eb">ชั่วโมงทำงาน</label>
+              <input type="number" id="editAttWorkHours" step="0.1" min="0" value="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+            </div>
+          </div>
+
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#64748b">หมายเหตุ / เหตุผลการแก้ไข</label>
+            <input type="text" id="editAttRemark" placeholder="ระบุเหตุผลการปรับปรุงเวลา" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" class="btn btn-slate" onclick="closeModal('modalAttendanceEdit')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary" style="font-weight:700">
+            <i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

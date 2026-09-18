@@ -71,6 +71,21 @@ function getDefaultRolePermissions(role) {
   }
 }
 
+async function isUserSuperAdmin(db, username) {
+  if (!username) return false;
+  const u = String(username).trim().toLowerCase();
+  if (u === 'admin') return true;
+  const row = await db.prepare('SELECT role, permissions FROM users WHERE LOWER(username) = ?').bind(u).first();
+  if (!row) return false;
+  const r = String(row.role || '').toLowerCase();
+  if (r.includes('super') || r === 'admin / hr' || r === 'admin') return true;
+  try {
+    const perms = row.permissions ? JSON.parse(row.permissions) : [];
+    if (perms.includes('all') && (r.includes('admin') || u === 'admin')) return true;
+  } catch(e) {}
+  return false;
+}
+
 /**
  * ==============================================================================
  * PTN Payroll System V4.0 - Clean Enterprise Cloudflare D1 Backend
@@ -900,9 +915,16 @@ async function handleAction(db, action, params) {
 
     // 5.2 TIME ATTENDANCE ADMIN DASHBOARD (CENTRALIZED IN PAYROLL)
     case 'getTimeAttendanceDashboard': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: หน้าลงเวลาสงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      }
+
       const nowUtc = new Date();
       const bangkokTime = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
       const today = bangkokTime.toISOString().substring(0, 10);
+      const filterDate = params.date || today;
 
       // Ensure tables exist
       await db.prepare(`
@@ -927,14 +949,14 @@ async function handleAction(db, action, params) {
         )
       `).run().catch(() => {});
 
-      // 1. Logs Today with Employee Info
+      // 1. Logs for Selected Date (or Today) with Employee Info
       const logsQuery = await db.prepare(`
         SELECT l.*, e.full_name, e.nickname, e.department, e.position
         FROM time_logs l
         LEFT JOIN employees e ON l.emp_id = e.emp_id
         WHERE l.date = ?
         ORDER BY l.clock_in DESC
-      `).bind(today).all().catch(() => ({ results: [] }));
+      `).bind(filterDate).all().catch(() => ({ results: [] }));
       const logsToday = logsQuery.results || [];
 
       // 2. Pending Leaves
@@ -984,6 +1006,7 @@ async function handleAction(db, action, params) {
       return {
         success: true,
         today,
+        date: filterDate,
         logsToday,
         pendingLeaves,
         pendingOts,
@@ -1000,8 +1023,11 @@ async function handleAction(db, action, params) {
 
     // 5.3 HANDLE ATTENDANCE APPROVALS (LEAVE, OT, ADVANCE)
     case 'handleAttendanceApproval': {
-      const { type, id, decision, rejectionReason } = params;
       const approverId = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, approverId);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      const { type, id, decision, rejectionReason } = params;
       const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
 
       if (type === 'leave') {
@@ -1041,6 +1067,10 @@ async function handleAction(db, action, params) {
 
     // 5.5 SAVE ATTENDANCE SETTINGS
     case 'saveAttendanceSettings': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
       const newSettings = params.settings || {};
       for (const [k, v] of Object.entries(newSettings)) {
         await db.prepare(`
@@ -1048,8 +1078,68 @@ async function handleAction(db, action, params) {
           ON CONFLICT(key) DO UPDATE SET value = excluded.value
         `).bind(k, String(v)).run().catch(() => {});
       }
-      await logSystemActivity(db, params.username || 'Admin', 'UPDATE_ATTENDANCE_SETTINGS', 'อัปเดตการตั้งค่าเวลากะงานและพิกัด GPS');
+      await logSystemActivity(db, callerUser, 'UPDATE_ATTENDANCE_SETTINGS', 'อัปเดตการตั้งค่าเวลากะงานและพิกัด GPS');
       return { success: true, message: 'บันทึกการตั้งค่าระบบลงเวลาเรียบร้อยแล้ว' };
+    }
+
+    // 5.6 UPDATE TIME LOG
+    case 'updateAttendanceLog': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      const { id, clockIn, clockOut, lateMinutes, workHours, status, remark } = params;
+      if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการแก้ไข' };
+
+      await db.prepare(`
+        UPDATE time_logs
+        SET clock_in = ?, clock_out = ?, late_minutes = ?, work_hours = ?, status = ?, remark = ?
+        WHERE id = ?
+      `).bind(
+        clockIn || null,
+        clockOut || null,
+        Number(lateMinutes) || 0,
+        Number(workHours) || 0,
+        status || 'NORMAL',
+        remark || '',
+        id
+      ).run();
+
+      await logSystemActivity(db, callerUser, 'UPDATE_TIME_LOG', `แก้ไขข้อมูลการลงเวลา ID: ${id}`);
+      return { success: true, message: 'บันทึกการแก้ไขข้อมูลการลงเวลาเรียบร้อยแล้ว' };
+    }
+
+    // 5.7 DELETE TIME LOG
+    case 'deleteAttendanceLog': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      const { id } = params;
+      if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการลบ' };
+
+      await db.prepare('DELETE FROM time_logs WHERE id = ?').bind(id).run();
+      await logSystemActivity(db, callerUser, 'DELETE_TIME_LOG', `ลบข้อมูลการลงเวลา ID: ${id}`);
+      return { success: true, message: 'ลบรายการบันทึกเวลาเรียบร้อยแล้ว' };
+    }
+
+    // 5.8 BATCH DELETE TIME LOGS
+    case 'batchDeleteAttendanceLogs': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      const ids = Array.isArray(params.ids) ? params.ids : [];
+      if (ids.length === 0) return { success: false, message: 'กรุณาเลือกรายการที่ต้องการลบ' };
+
+      let deletedCount = 0;
+      for (const id of ids) {
+        const res = await db.prepare('DELETE FROM time_logs WHERE id = ?').bind(id).run().catch(() => {});
+        if (res) deletedCount++;
+      }
+
+      await logSystemActivity(db, callerUser, 'BATCH_DELETE_TIME_LOGS', `ลบข้อมูลการลงเวลาจำนวน ${deletedCount} รายการ`);
+      return { success: true, count: deletedCount, message: `ลบข้อมูลการลงเวลาสำเร็จ ${deletedCount} รายการ` };
     }
 
     // 6. PROCESS PAYROLL
