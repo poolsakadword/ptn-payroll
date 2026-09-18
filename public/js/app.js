@@ -619,10 +619,11 @@ function renderInputTable() {
   });
 
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="19" class="text-center text-muted" style="padding:32px">' +
+    tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:32px">' +
       '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> ' + (q ? 'ไม่พบข้อมูลที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กดปุ่มสีเหลือง <strong>"👥 ดึงพนักงานทุกคนเข้างวดนี้"</strong> ด้านบนเพื่อนำเข้าข้อมูลอัตโนมัติ</div>' +
     '</td></tr>';
+    updateInputBatchToolbar();
     return;
   }
 
@@ -638,6 +639,9 @@ function renderInputTable() {
     var canEditInputs = hasPermission('edit_inputs');
 
     h += '<tr>' +
+      '<td class="text-center" style="width:40px">' +
+        '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' +
+      '</td>' +
       '<td class="text-center font-mono">' + (i.no || (idx + 1)) + '</td>' +
       '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
       (function() {
@@ -669,6 +673,68 @@ function renderInputTable() {
     '</tr>';
   });
   tbody.innerHTML = h;
+  updateInputBatchToolbar();
+}
+
+// BATCH OPERATIONS ON MONTHLY INPUTS
+function toggleSelectAllInputs(master) {
+  var cbs = document.querySelectorAll('.input-row-checkbox');
+  cbs.forEach(function(cb) {
+    cb.checked = master.checked;
+  });
+  updateInputBatchToolbar();
+}
+
+function onInputCheckboxChanged() {
+  updateInputBatchToolbar();
+}
+
+function updateInputBatchToolbar() {
+  var cbs = document.querySelectorAll('.input-row-checkbox:checked');
+  var count = cbs.length;
+  var bar = document.getElementById('inputBatchToolbar');
+  var countDisplay = document.getElementById('inputSelectedCount');
+  if (countDisplay) countDisplay.textContent = count;
+  if (bar) {
+    bar.style.display = count > 0 ? 'flex' : 'none';
+  }
+  var allCbs = document.querySelectorAll('.input-row-checkbox');
+  var master = document.getElementById('inputSelectAll');
+  if (master) {
+    master.checked = (allCbs.length > 0 && count === allCbs.length);
+  }
+}
+
+function deselectAllInputRecords() {
+  var master = document.getElementById('inputSelectAll');
+  if (master) master.checked = false;
+  var cbs = document.querySelectorAll('.input-row-checkbox');
+  cbs.forEach(function(cb) { cb.checked = false; });
+  updateInputBatchToolbar();
+}
+
+function batchDeleteInputRecords() {
+  var cbs = document.querySelectorAll('.input-row-checkbox:checked');
+  var empIds = Array.from(cbs).map(function(cb) { return cb.value; });
+  if (empIds.length === 0) {
+    showToast('กรุณาเลือกรายการที่ต้องการลบอย่างน้อย 1 รายการ', 'warning');
+    return;
+  }
+
+  if (!confirm('ยืนยันลบข้อมูลประจำงวด ' + State.period + ' ที่เลือกทั้งหมด ' + empIds.length + ' รายการ ใช่หรือไม่? (ไม่สามารถกู้คืนได้)')) return;
+
+  callApi('batchDeleteInputRecords', {
+    empIds: empIds,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      showToast(r.message || 'ลบข้อมูลประจำงวดเรียบร้อยแล้ว');
+      deselectAllInputRecords();
+      loadAppData();
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการลบรายการ', 'error');
+    });
 }
 
 // 4. HYBRID EMPLOYEE MASTER RENDERER (V6.0)
@@ -2069,9 +2135,13 @@ function saveInputRecordForm(e, openPayslipAfter) {
 
 function deleteInputRecord(empId) {
   if (!confirm('ยืนยันลบข้อมูลประจำงวดของ ' + empId + ' ใช่หรือไม่?')) return;
-  callApi('deleteInputRecord', { empId: empId })
+  callApi('deleteInputRecord', {
+    empId: empId,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
     .then(function(r) {
       showToast(r.message || 'ลบข้อมูลสำเร็จ');
+      deselectAllInputRecords();
       loadAppData();
     })
     .catch(function(e) { showToast(e.message, 'error'); });

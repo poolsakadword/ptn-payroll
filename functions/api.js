@@ -619,7 +619,25 @@ async function handleAction(db, action, params) {
       if (!empId) return { success: false, message: 'Missing empId' };
       await db.prepare('DELETE FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, empId).run();
       await db.prepare('DELETE FROM payroll_calcs WHERE period = ? AND emp_id = ?').bind(period, empId).run();
+      await calculateAndSavePayroll(db, period).catch(() => {});
+      await logSystemActivity(db, params.username || 'Admin', 'DELETE_INPUT_RECORD', `ลบข้อมูลประจำงวด ${period} ของ ${empId}`);
       return { success: true, message: `ลบข้อมูลประจำงวด ${period} ของ ${empId} เรียบร้อยแล้ว` };
+    }
+
+    case 'batchDeleteInputRecords': {
+      const empIds = Array.isArray(params.empIds) ? params.empIds : [];
+      if (empIds.length === 0) return { success: false, message: 'กรุณาเลือกรายการที่ต้องการลบ' };
+
+      let deletedCount = 0;
+      for (const empId of empIds) {
+        await db.prepare('DELETE FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, empId).run().catch(() => {});
+        await db.prepare('DELETE FROM payroll_calcs WHERE period = ? AND emp_id = ?').bind(period, empId).run().catch(() => {});
+        deletedCount++;
+      }
+
+      await calculateAndSavePayroll(db, period).catch(() => {});
+      await logSystemActivity(db, params.username || 'Admin', 'BATCH_DELETE_INPUTS', `ลบข้อมูลประจำงวด ${period} จำนวน ${deletedCount} รายการ`);
+      return { success: true, count: deletedCount, message: `ลบข้อมูลประจำงวดสำเร็จ ${deletedCount} รายการ` };
     }
 
     case 'populateEmployeesToPeriod': {
