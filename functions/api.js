@@ -967,6 +967,18 @@ async function handleAction(db, action, params) {
         )
       `).run().catch(() => {});
 
+      // Safe schema migrations for break tracking columns
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out TEXT").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in TEXT").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_photo_url TEXT").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_photo_url TEXT").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_lat REAL").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_lng REAL").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_lat REAL").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_lng REAL").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_minutes INTEGER DEFAULT 0").run().catch(() => {});
+      await db.prepare("ALTER TABLE time_logs ADD COLUMN overbreak_minutes INTEGER DEFAULT 0").run().catch(() => {});
+
       // 1. Logs for Selected Date (or Today) with Employee Info
       const logsQuery = await db.prepare(`
         SELECT l.*, e.full_name, e.nickname, e.department, e.position
@@ -1017,7 +1029,9 @@ async function handleAction(db, action, params) {
       // Settings
       const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
       const attSettings = {
-        allow_direct_gps: 'true'
+        allow_direct_gps: 'true',
+        break_tracking_mode: 'AUTO_DEDUCT',
+        break_duration_minutes: 60
       };
       for (const r of setRows.results || []) attSettings[r.key] = r.value;
 
@@ -1106,16 +1120,20 @@ async function handleAction(db, action, params) {
       const isSuper = await isUserSuperAdmin(db, callerUser);
       if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
 
-      const { id, clockIn, clockOut, lateMinutes, workHours, status, remark } = params;
+      const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, status, remark } = params;
       if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการแก้ไข' };
 
       await db.prepare(`
         UPDATE time_logs
-        SET clock_in = ?, clock_out = ?, late_minutes = ?, work_hours = ?, status = ?, remark = ?
+        SET clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, overbreak_minutes = ?, late_minutes = ?, work_hours = ?, status = ?, remark = ?
         WHERE id = ?
       `).bind(
         clockIn || null,
         clockOut || null,
+        breakOut || null,
+        breakIn || null,
+        breakMinutes !== undefined && breakMinutes !== null ? Number(breakMinutes) : 0,
+        overbreakMinutes !== undefined && overbreakMinutes !== null ? Number(overbreakMinutes) : 0,
         Number(lateMinutes) || 0,
         Number(workHours) || 0,
         status || 'NORMAL',

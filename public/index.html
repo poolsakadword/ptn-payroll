@@ -565,7 +565,7 @@
                     </div>
                   </div>
 
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
                     <div>
                       <label style="font-size:11px;font-weight:600;color:#64748b">พิกัด Lat</label>
                       <input type="number" step="0.000001" id="attSetLat" value="13.727896" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
@@ -573,6 +573,24 @@
                     <div>
                       <label style="font-size:11px;font-weight:600;color:#64748b">พิกัด Lng</label>
                       <input type="number" step="0.000001" id="attSetLng" value="100.524123" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
+                    </div>
+                  </div>
+
+                  <!-- Break Tracking Mode Setting -->
+                  <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;margin-top:6px;display:flex;flex-direction:column;gap:8px">
+                    <div style="font-size:11.5px;font-weight:700;color:#166534;display:flex;align-items:center;gap:6px">
+                      <i class="fa-solid fa-mug-hot text-emerald-600"></i> รูปแบบการบันทึกเวลาพัก (Break Tracking System)
+                    </div>
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#334155">โหมดระบบลงเวลาพัก</label>
+                      <select id="attSetBreakMode" style="width:100%;padding:6px 8px;border:1.5px solid #10b981;border-radius:6px;font-size:12px;font-weight:700;background:#fff;color:#065f46">
+                        <option value="AUTO_DEDUCT">📌 โหมด 1: หักเวลาพักอัตโนมัติ (ระบบ 2 ครั้ง: เข้าเช้า - ออกเย็น หักพัก 1 ชม.)</option>
+                        <option value="BREAK_PUNCH">☕ โหมด 2: สแกนลงเวลาพักจริง (ระบบ 4 ครั้ง: เช้า - ออกพัก - เข้าพัก - เย็น)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#334155">ระยะเวลาพักมาตรฐาน (นาที)</label>
+                      <input type="number" id="attSetBreakDuration" value="60" min="15" max="180" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;background:#fff" required>
                     </div>
                   </div>
                 </div>
@@ -2916,6 +2934,52 @@
           </div>
         </div>
 
+        <!-- Break Tracking Details (Break OUT vs Break IN) -->
+        <div id="dtlBreakSection" style="margin-bottom:16px;background:#f8fafc;border:1.5px solid #fed7aa;border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #ffedd5;padding-bottom:6px">
+            <span style="font-size:13px;font-weight:800;color:#9a3412;display:flex;align-items:center;gap:6px">
+              <i class="fa-solid fa-mug-hot text-amber-600"></i> รายละเอียดการพักระหว่างวัน (Break Tracking)
+            </span>
+            <span id="dtlBreakDurationBadge" style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa">-</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <!-- Break OUT -->
+            <div style="background:#fff;border:1px solid #fde68a;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:12px;font-weight:700;color:#b45309">☕ ออกไปพัก (Break OUT)</span>
+                <span id="dtlBreakOutTime" style="font-size:13px;font-weight:800;color:#b45309;font-family:monospace">-</span>
+              </div>
+              <div style="text-align:center">
+                <div id="dtlBreakOutPhotoContainer" style="width:100%;height:140px;background:#fffbeb;border:1.5px dashed #fcd34d;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                  <span style="color:#94a3b8;font-size:11px">ไม่มีรูปถ่ายออกพัก</span>
+                </div>
+              </div>
+              <div style="font-size:11px;color:#475569;background:#fffbeb;padding:6px 8px;border-radius:6px">
+                <div><b>พิกัด:</b> <span id="dtlBreakOutCoords" class="font-mono">-</span></div>
+                <div id="dtlBreakOutMapLink">-</div>
+              </div>
+            </div>
+
+            <!-- Break IN -->
+            <div style="background:#fff;border:1px solid #99f6e4;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <span style="font-size:12px;font-weight:700;color:#0f766e">💼 กลับเข้าทำงาน (Break IN)</span>
+                <span id="dtlBreakInTime" style="font-size:13px;font-weight:800;color:#0f766e;font-family:monospace">-</span>
+              </div>
+              <div style="text-align:center">
+                <div id="dtlBreakInPhotoContainer" style="width:100%;height:140px;background:#f0fdfa;border:1.5px dashed #5eead4;border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                  <span style="color:#94a3b8;font-size:11px">ไม่มีรูปถ่ายเข้าหลังพัก</span>
+                </div>
+              </div>
+              <div style="font-size:11px;color:#475569;background:#f0fdfa;padding:6px 8px;border-radius:6px">
+                <div><b>พิกัด:</b> <span id="dtlBreakInCoords" class="font-mono">-</span></div>
+                <div id="dtlBreakInMapLink">-</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Summary Strip -->
         <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
           <div>
@@ -2991,6 +3055,22 @@
             <div>
               <label style="font-size:11px;font-weight:700;color:#b91c1c">เวลาออกงาน (Clock Out)</label>
               <input type="text" id="editAttClockOut" placeholder="เช่น 19:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+            </div>
+          </div>
+
+          <!-- Break Times in Edit Modal -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #e2e8f0">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#b45309">ออกพัก (Break OUT)</label>
+              <input type="text" id="editAttBreakOut" placeholder="เช่น 13:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#0f766e">เข้าหลังพัก (Break IN)</label>
+              <input type="text" id="editAttBreakIn" placeholder="เช่น 14:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#334155">เวลาพักรวม (นาที)</label>
+              <input type="number" id="editAttBreakMinutes" min="0" value="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
             </div>
           </div>
 

@@ -5924,6 +5924,10 @@ function loadTimeAttendanceDashboard() {
         }
         if (setOtRounding && r.settings.ot_rounding_mode) setOtRounding.value = r.settings.ot_rounding_mode;
         if (setQrMode && r.settings.qr_mode) setQrMode.value = r.settings.qr_mode;
+        var setBreakMode = document.getElementById('attSetBreakMode');
+        var setBreakDuration = document.getElementById('attSetBreakDuration');
+        if (setBreakMode && r.settings.break_tracking_mode) setBreakMode.value = r.settings.break_tracking_mode;
+        if (setBreakDuration && r.settings.break_duration_minutes !== undefined) setBreakDuration.value = r.settings.break_duration_minutes;
       }
 
       // 4. Render Tables & Approvals
@@ -6009,6 +6013,7 @@ function renderTimeAttendanceTodayLogs(logs) {
           nameDisplay + ' <i class="fa-solid fa-circle-info text-blue" style="font-size:11px;opacity:0.7"></i>' +
         '</div>' +
         '<div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div>' +
+        (l.break_out ? '<div style="font-size:10.5px;color:#b45309;font-weight:700;margin-top:2px"><i class="fa-solid fa-mug-hot"></i> พัก ' + l.break_out + (l.break_in ? ' - ' + l.break_in : ' (กำลังพัก)') + (l.break_minutes > 0 ? ' (' + l.break_minutes + 'น.)' : '') + '</div>' : '') +
       '</td>' +
       '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
       '<td class="text-center font-bold text-green" style="font-size:12.5px">' + (l.clock_in ? l.clock_in + ' น.' : '-') + '</td>' +
@@ -6185,6 +6190,81 @@ function viewAttendanceLogDetail(id) {
     document.getElementById('dtlOutMapLink').innerHTML = '<span style="color:#94a3b8">ไม่ได้บันทึกพิกัด</span>';
   }
 
+  // 3.5 Break section
+  var breakSec = document.getElementById('dtlBreakSection');
+  var breakBadge = document.getElementById('dtlBreakDurationBadge');
+  var bOutTime = document.getElementById('dtlBreakOutTime');
+  var bInTime = document.getElementById('dtlBreakInTime');
+  var bOutPhotoBox = document.getElementById('dtlBreakOutPhotoContainer');
+  var bInPhotoBox = document.getElementById('dtlBreakInPhotoContainer');
+  var bOutCoords = document.getElementById('dtlBreakOutCoords');
+  var bOutMap = document.getElementById('dtlBreakOutMapLink');
+  var bInCoords = document.getElementById('dtlBreakInCoords');
+  var bInMap = document.getElementById('dtlBreakInMapLink');
+
+  if (log.break_out || log.break_in || _currentAttendanceSettings.break_tracking_mode === 'BREAK_PUNCH') {
+    if (breakSec) breakSec.style.display = 'flex';
+    if (bOutTime) bOutTime.textContent = log.break_out ? log.break_out + ' น.' : 'ยังไม่บันทึก';
+    if (bInTime) bInTime.textContent = log.break_in ? log.break_in + ' น.' : 'ยังไม่บันทึก';
+
+    if (breakBadge) {
+      if (log.break_minutes > 0) {
+        breakBadge.textContent = 'พัก ' + log.break_minutes + ' นาที' + (log.overbreak_minutes > 0 ? ' (เกิน ' + log.overbreak_minutes + ' น.)' : '');
+        breakBadge.style.color = log.overbreak_minutes > 0 ? '#b91c1c' : '#047857';
+        breakBadge.style.borderColor = log.overbreak_minutes > 0 ? '#fca5a5' : '#a7f3d0';
+        breakBadge.style.background = log.overbreak_minutes > 0 ? '#fef2f2' : '#ecfdf5';
+      } else if (log.break_out) {
+        breakBadge.textContent = 'กำลังพักผ่อนอยู่';
+        breakBadge.style.color = '#c2410c';
+        breakBadge.style.background = '#fff7ed';
+        breakBadge.style.borderColor = '#fed7aa';
+      } else {
+        breakBadge.textContent = 'ยังไม่พัก';
+        breakBadge.style.color = '#64748b';
+        breakBadge.style.background = '#f8fafc';
+        breakBadge.style.borderColor = '#cbd5e1';
+      }
+    }
+
+    if (bOutPhotoBox) {
+      if (log.break_out_photo_url) {
+        bOutPhotoBox.innerHTML = '<img src="' + log.break_out_photo_url + '" alt="BREAK_OUT" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + log.break_out_photo_url + '\', \'รูปถ่ายออกพัก: ' + esc(nameDisplay) + '\', \'เวลาออกพัก: ' + (log.break_out || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+      } else {
+        bOutPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:11px">ไม่มีรูปถ่ายออกพัก</span>';
+      }
+    }
+
+    if (bInPhotoBox) {
+      if (log.break_in_photo_url) {
+        bInPhotoBox.innerHTML = '<img src="' + log.break_in_photo_url + '" alt="BREAK_IN" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + log.break_in_photo_url + '\', \'รูปถ่ายเข้าหลังพัก: ' + esc(nameDisplay) + '\', \'เวลาเข้าหลังพัก: ' + (log.break_in || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+      } else {
+        bInPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:11px">ไม่มีรูปถ่ายเข้าหลังพัก</span>';
+      }
+    }
+
+    if (bOutCoords) {
+      if (log.break_out_lat && log.break_out_lng) {
+        bOutCoords.textContent = log.break_out_lat.toFixed(6) + ', ' + log.break_out_lng.toFixed(6);
+        if (bOutMap) bOutMap.innerHTML = '<a href="https://www.google.com/maps?q=' + log.break_out_lat + ',' + log.break_out_lng + '" target="_blank" style="color:#b45309;font-weight:700;text-decoration:underline"><i class="fa-solid fa-map-location-dot"></i> ดูพิกัดบนแผนที่</a>';
+      } else {
+        bOutCoords.textContent = 'ไม่มีพิกัด';
+        if (bOutMap) bOutMap.innerHTML = '<span style="color:#94a3b8">-</span>';
+      }
+    }
+
+    if (bInCoords) {
+      if (log.break_in_lat && log.break_in_lng) {
+        bInCoords.textContent = log.break_in_lat.toFixed(6) + ', ' + log.break_in_lng.toFixed(6);
+        if (bInMap) bInMap.innerHTML = '<a href="https://www.google.com/maps?q=' + log.break_in_lat + ',' + log.break_in_lng + '" target="_blank" style="color:#0f766e;font-weight:700;text-decoration:underline"><i class="fa-solid fa-map-location-dot"></i> ดูพิกัดบนแผนที่</a>';
+      } else {
+        bInCoords.textContent = 'ไม่มีพิกัด';
+        if (bInMap) bInMap.innerHTML = '<span style="color:#94a3b8">-</span>';
+      }
+    }
+  } else {
+    if (breakSec) breakSec.style.display = 'none';
+  }
+
   // 4. Summary strip
   document.getElementById('dtlWorkHours').textContent = (log.work_hours || 0) + ' ชม.';
   document.getElementById('dtlLateMinutes').textContent = (log.late_minutes || 0) + ' นาที';
@@ -6225,6 +6305,9 @@ function openEditAttendanceLogModal(id) {
   document.getElementById('editAttStatus').value = log.status || 'NORMAL';
   document.getElementById('editAttClockIn').value = log.clock_in || '';
   document.getElementById('editAttClockOut').value = log.clock_out || '';
+  document.getElementById('editAttBreakOut').value = log.break_out || '';
+  document.getElementById('editAttBreakIn').value = log.break_in || '';
+  document.getElementById('editAttBreakMinutes').value = log.break_minutes || 0;
   document.getElementById('editAttLateMinutes').value = log.late_minutes || 0;
   document.getElementById('editAttWorkHours').value = log.work_hours || 0;
   document.getElementById('editAttRemark').value = log.remark || '';
@@ -6238,6 +6321,9 @@ function saveAttendanceLogEditForm(e) {
   var id = Number(document.getElementById('editAttId').value);
   var clockIn = document.getElementById('editAttClockIn').value.trim();
   var clockOut = document.getElementById('editAttClockOut').value.trim();
+  var breakOut = document.getElementById('editAttBreakOut').value.trim();
+  var breakIn = document.getElementById('editAttBreakIn').value.trim();
+  var breakMinutes = Number(document.getElementById('editAttBreakMinutes').value) || 0;
   var lateMinutes = Number(document.getElementById('editAttLateMinutes').value) || 0;
   var workHours = Number(document.getElementById('editAttWorkHours').value) || 0;
   var status = document.getElementById('editAttStatus').value;
@@ -6247,6 +6333,9 @@ function saveAttendanceLogEditForm(e) {
     id: id,
     clockIn: clockIn,
     clockOut: clockOut,
+    breakOut: breakOut,
+    breakIn: breakIn,
+    breakMinutes: breakMinutes,
     lateMinutes: lateMinutes,
     workHours: workHours,
     status: status,
@@ -6390,6 +6479,8 @@ function saveAttendanceSettingsFromPayroll(e) {
   var otStart = document.getElementById('attSetOtStart') ? document.getElementById('attSetOtStart').value : '19:00';
   var otRounding = document.getElementById('attSetOtRounding') ? document.getElementById('attSetOtRounding').value : 'HALF_HOUR';
   var qrMode = document.getElementById('attSetQrMode') ? document.getElementById('attSetQrMode').value : 'HYBRID';
+  var breakMode = document.getElementById('attSetBreakMode') ? document.getElementById('attSetBreakMode').value : 'AUTO_DEDUCT';
+  var breakDuration = document.getElementById('attSetBreakDuration') ? Number(document.getElementById('attSetBreakDuration').value) : 60;
 
   var settings = {
     shift_start: sStart,
@@ -6409,7 +6500,9 @@ function saveAttendanceSettingsFromPayroll(e) {
     advance_daily_rate: advRate,
     ot_start_time: otStart,
     ot_rounding_mode: otRounding,
-    qr_mode: qrMode
+    qr_mode: qrMode,
+    break_tracking_mode: breakMode,
+    break_duration_minutes: breakDuration
   };
 
   callApi('saveAttendanceSettings', {
