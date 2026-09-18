@@ -17,9 +17,11 @@ Write-Host "========================================================" -Foregroun
 $choice = Read-Host "เลือกตัวเลือก (1, 2, 3 หรือ 4)"
 
 if ($choice -eq "1") {
-    Write-Host "`n[1/2] กำลังเตรียมการ Deploy ไปยัง Cloudflare Pages..." -ForegroundColor Green
-    npx wrangler pages deploy public --project-name=ptn-payroll
-    Write-Host "`n[2/2] การ Deploy ไปยัง Cloudflare Pages เสร็จสิ้นเรียบร้อย!" -ForegroundColor Green
+    Write-Host "`n[1/3] กำลัง Deploy ไปยัง Cloudflare Pages (Branch: main)..." -ForegroundColor Green
+    npx.cmd wrangler pages deploy public --project-name=ptn-payroll --branch=main
+    Write-Host "`n[2/3] กำลัง Deploy ไปยัง Cloudflare Pages (Branch: master)..." -ForegroundColor Green
+    npx.cmd wrangler pages deploy public --project-name=ptn-payroll --branch=master
+    Write-Host "`n[3/3] การ Deploy ไปยังทั้ง 2 URL (main & master) เสร็จสิ้นสมบูรณ์!" -ForegroundColor Green
 }
 elseif ($choice -eq "2") {
     Write-Host "`n[1/3] ตรวจสอบการ Login ของ GitHub CLI..." -ForegroundColor Green
