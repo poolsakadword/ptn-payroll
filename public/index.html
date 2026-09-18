@@ -619,6 +619,64 @@
                       <input type="checkbox" id="attSetAllowDirectGps" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
                       <span>เปิดให้ลงเวลาด้วย GPS โดยตรง (กรณีไม่มีป้ายหรือจอ QR Code)</span>
                     </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;color:#0369a1;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:6px 8px;cursor:pointer">
+                      <input type="checkbox" id="attSetEnableFaceDetect" checked style="width:16px;height:16px;accent-color:#0284c7;cursor:pointer">
+                      <span>🤖 บังคับตรวจจับใบหน้าก่อนถ่ายรูป (AI Face Detection)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
+
+                <!-- SECTION 2.1: DEVICE UNLOCK METHODS -->
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-lock-open text-sky-600"></i> ช่องทางปลดล็อกเครื่องประจำตัว (Device Unlock Methods)
+                  </div>
+                  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:10px">
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetUnlockPassword" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>วิธีที่ 1: ปลดล็อกด้วยรหัสผ่านหัวหน้างาน/HR (Supervisor Password)</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetUnlockQr" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>วิธีที่ 2: ปลดล็อกด้วย Master QR Code หน้าจอหัวหน้างาน</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetUnlockRemote" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>วิธีที่ 3: ปลดล็อกระยะไกลผ่านระบบ Payroll (Remote Reset by HR)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
+
+                <!-- SECTION 2.2: LEAVE TYPES CONFIGURATION -->
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-calendar-check text-indigo-600"></i> ประเภทการลาที่เปิดให้พนักงานยื่น (Leave Types in PTN Time)
+                  </div>
+                  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:10px">
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetLeaveTypeSickWithCert" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>ลาป่วยมีใบรับรองแพทย์</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetLeaveTypeSickNoCert" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>ลาป่วยไม่มีใบรับรองแพทย์</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetLeaveTypeBusiness" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>ลากิจส่วนตัว</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetLeaveTypeAnnual" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>ลาพักร้อน</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetLeaveTypeWithoutPay" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>ลาไม่รับค่าจ้าง</span>
+                    </label>
                   </div>
                 </div>
 
@@ -634,12 +692,25 @@
                       <label style="font-size:11px;font-weight:600;color:#64748b">วันเปิดให้ยื่นเบิกเงิน</label>
                       <select id="attSetAdvanceDay" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
                         <option value="SATURDAY">เฉพาะวันเสาร์</option>
+                        <option value="FRIDAY">เฉพาะวันศุกร์</option>
+                        <option value="FRIDAY_SATURDAY">วันศุกร์และวันเสาร์</option>
                         <option value="ANY">ทุกวันตลอดสัปดาห์</option>
                       </select>
                     </div>
                     <div>
                       <label style="font-size:11px;font-weight:600;color:#64748b">อัตราเบิก (บาท/วันทำงาน)</label>
                       <input type="number" id="attSetAdvanceDailyRate" value="250" min="0" max="5000" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                    </div>
+                  </div>
+
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">เวลาเริ่มเปิดรับเบิกเงิน</label>
+                      <input type="time" id="attSetAdvanceStartTime" value="09:00" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                    </div>
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">เวลาปิดรับเบิกเงิน</label>
+                      <input type="time" id="attSetAdvanceEndTime" value="18:00" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
                     </div>
                   </div>
 
@@ -2073,6 +2144,36 @@
       <form onsubmit="saveEmployeeForm(event)">
         <div class="modal-body">
           <input type="hidden" id="empOrigId">
+          <!-- Employee Profile Photo Section -->
+          <div style="display:flex;align-items:center;gap:18px;padding:12px 16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:var(--radius-lg);margin-bottom:16px">
+            <div style="position:relative;width:76px;height:76px;flex-shrink:0">
+              <div id="mPhotoPreviewBox" style="width:76px;height:76px;border-radius:18px;background:#e2e8f0;border:2px solid #cbd5e1;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 2px 5px rgba(0,0,0,0.06);cursor:pointer" onclick="document.getElementById('mPhotoInput').click()" title="คลิกเพื่อเลือกรูปภาพ">
+                <i class="fa-solid fa-user" id="mPhotoPlaceholderIcon" style="font-size:32px;color:#94a3b8"></i>
+                <img id="mPhotoPreviewImg" src="" alt="Employee Photo" style="display:none;width:100%;height:100%;object-fit:cover">
+              </div>
+              <button type="button" onclick="document.getElementById('mPhotoInput').click()" style="position:absolute;bottom:-4px;right:-4px;width:26px;height:26px;border-radius:50%;background:#2563eb;color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:11px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2)" title="อัปโหลด / ถ่ายรูป">
+                <i class="fa-solid fa-camera"></i>
+              </button>
+            </div>
+            <div style="flex:1">
+              <div style="font-weight:700;font-size:13.5px;color:var(--text-main);display:flex;align-items:center;gap:6px">
+                <i class="fa-solid fa-image" style="color:#2563eb"></i> รูปถ่ายพนักงาน
+              </div>
+              <div style="font-size:12px;color:#64748b;margin-top:2px;line-height:1.4">
+                รองรับไฟล์ภาพ JPG, PNG, WebP หรือถ่ายจากกล้องมือถือ (ระบบย่อขนาดให้อัตโนมัติ)
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+                <input type="file" id="mPhotoInput" accept="image/*" style="display:none" onchange="handleEmployeePhotoSelect(event)">
+                <input type="hidden" id="mPhotoUrl">
+                <button type="button" class="btn btn-slate btn-sm" onclick="document.getElementById('mPhotoInput').click()" style="font-size:12px;padding:4px 10px">
+                  <i class="fa-solid fa-arrow-up-from-bracket"></i> เลือกรูปภาพ / ถ่ายภาพ
+                </button>
+                <button type="button" class="btn btn-sm" id="mPhotoRemoveBtn" onclick="removeEmployeePhoto()" style="display:none;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;font-size:12px;padding:4px 10px">
+                  <i class="fa-solid fa-trash-can"></i> ลบรูป
+                </button>
+              </div>
+            </div>
+          </div>
           <div class="form-grid">
             <div class="form-row-3">
               <div class="form-group">

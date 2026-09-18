@@ -934,13 +934,22 @@ function renderEmployeesTable() {
     var devBadge = e.isDeviceBound ? (' <span class="period-pill" style="background:#eff6ff;color:#0284c7;border-color:#bae6fd;font-size:10px;padding:1px 6px" title="ผูกเครื่องแล้ว: ' + esc(e.boundDevice?.deviceName || 'Mobile Web') + '">📱 ผูกเครื่อง</span>') : '';
     var devUnlockBtn = e.isDeviceBound ? ('<button type="button" class="btn-icon" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\', \'' + esc(e.fullName) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button> ') : '';
 
+    // Avatar HTML for Table & Card
+    var avatarTableHtml = e.photoUrl
+      ? ('<img src="' + esc(e.photoUrl) + '" alt="' + esc(e.fullName) + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid #cbd5e1;background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\\'>' + esc(initials) + '</div>\'">')
+      : ('<div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>');
+
+    var avatarCardHtml = e.photoUrl
+      ? ('<img src="' + esc(e.photoUrl) + '" alt="' + esc(e.fullName) + '" style="width:42px;height:42px;border-radius:12px;object-fit:cover;flex-shrink:0;border:1.5px solid #cbd5e1;box-shadow:0 2px 4px rgba(0,0,0,0.1);background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)\\\'>' + esc(initials) + '</div>\'">')
+      : ('<div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)">' + esc(initials) + '</div>');
+
     // 1. Render Table Row
     if (isGeneralUser) {
       hTable += '<tr>' +
         '<td class="font-mono font-bold text-blue">' + esc(e.empId) + '</td>' +
         '<td>' +
           '<div style="display:flex;align-items:center;gap:8px">' +
-            '<div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>' +
+            avatarTableHtml +
             '<div>' +
               '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#2563eb;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + devBadge + '</div>' +
               '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + esc(e.phone || '-') + '</div>' +
@@ -963,7 +972,7 @@ function renderEmployeesTable() {
         '<td class="font-mono font-bold text-blue">' + esc(e.empId) + '</td>' +
         '<td>' +
           '<div style="display:flex;align-items:center;gap:8px">' +
-            '<div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>' +
+            avatarTableHtml +
             '<div>' +
               '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#2563eb;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + devBadge + '</div>' +
               '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + esc(e.phone || '-') + '</div>' +
@@ -991,7 +1000,7 @@ function renderEmployeesTable() {
     hCards += '<div style="background:#ffffff;border:1.5px solid #e2e8f0;border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:12px;transition:all 0.2s ease" class="emp-profile-card">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
         '<div style="display:flex;align-items:center;gap:10px">' +
-          '<div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)">' + esc(initials) + '</div>' +
+          avatarCardHtml +
           '<div>' +
             '<div style="display:flex;align-items:center;gap:6px">' +
               '<span style="font-family:monospace;font-size:12px;font-weight:700;color:#2563eb">' + esc(e.empId) + '</span>' +
@@ -1304,7 +1313,14 @@ function onHistoryEmpChanged(silent) {
       }
 
       var initials = (emp.fullName || '').substring(0, 2);
-      if (document.getElementById('histEmpAvatarInitials')) document.getElementById('histEmpAvatarInitials').textContent = initials || '-';
+      var histAvatarEl = document.getElementById('histEmpAvatarInitials');
+      if (histAvatarEl) {
+        if (emp.photoUrl) {
+          histAvatarEl.innerHTML = '<img src="' + esc(emp.photoUrl) + '" alt="' + esc(emp.fullName) + '" style="width:100%;height:100%;border-radius:16px;object-fit:cover">';
+        } else {
+          histAvatarEl.textContent = initials || '-';
+        }
+      }
       if (document.getElementById('histEmpIdBadge')) document.getElementById('histEmpIdBadge').textContent = emp.empId || 'EMP---';
       if (document.getElementById('histEmpNicknameBadge')) document.getElementById('histEmpNicknameBadge').textContent = 'ชื่อเล่น: ' + (emp.nickname || '-');
       
@@ -2147,6 +2163,80 @@ function deleteInputRecord(empId) {
     .catch(function(e) { showToast(e.message, 'error'); });
 }
 
+// EMPLOYEE PROFILE PHOTO MANAGEMENT
+function updateEmployeePhotoPreview(url) {
+  var img = document.getElementById('mPhotoPreviewImg');
+  var icon = document.getElementById('mPhotoPlaceholderIcon');
+  var removeBtn = document.getElementById('mPhotoRemoveBtn');
+  var hiddenInput = document.getElementById('mPhotoUrl');
+  var fileInput = document.getElementById('mPhotoInput');
+
+  if (fileInput) fileInput.value = '';
+  if (hiddenInput) hiddenInput.value = url || '';
+
+  if (url) {
+    if (img) { img.src = url; img.style.display = 'block'; }
+    if (icon) icon.style.display = 'none';
+    if (removeBtn) removeBtn.style.display = 'inline-flex';
+  } else {
+    if (img) { img.src = ''; img.style.display = 'none'; }
+    if (icon) icon.style.display = 'block';
+    if (removeBtn) removeBtn.style.display = 'none';
+  }
+}
+
+function removeEmployeePhoto() {
+  updateEmployeePhotoPreview('');
+}
+
+function handleEmployeePhotoSelect(e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  if (!file.type.match(/^image\//)) {
+    showToast('กรุณาเลือกไฟล์รูปภาพเท่านั้น (JPG, PNG, WebP)', 'error');
+    return;
+  }
+
+  var reader = new FileReader();
+  reader.onload = function(evt) {
+    var rawDataUrl = evt.target.result;
+    compressEmployeePhoto(rawDataUrl, 400, 400, 0.82, function(compressedUrl) {
+      updateEmployeePhotoPreview(compressedUrl);
+      showToast('อัปโหลดและปรับขนาดรูปภาพสำเร็จ');
+    });
+  };
+  reader.readAsDataURL(file);
+}
+
+function compressEmployeePhoto(dataUrl, maxW, maxH, quality, callback) {
+  var img = new Image();
+  img.onload = function() {
+    var w = img.width;
+    var h = img.height;
+    if (w > maxW || h > maxH) {
+      if (w / h > maxW / maxH) {
+        h = Math.round((h * maxW) / w);
+        w = maxW;
+      } else {
+        w = Math.round((w * maxH) / h);
+        h = maxH;
+      }
+    }
+    var canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    var compressed = canvas.toDataURL('image/jpeg', quality || 0.82);
+    callback(compressed);
+  };
+  img.onerror = function() {
+    callback(dataUrl);
+  };
+  img.src = dataUrl;
+}
+
 // EMPLOYEE MASTER MODAL
 function openAddEmployeeModal() {
   var isGeneralUser = (State.currentUser && String(State.currentUser.role).trim().toLowerCase() === 'user');
@@ -2161,6 +2251,7 @@ function openAddEmployeeModal() {
     var el = document.getElementById(id);
     if (el) el.value = '';
   });
+  updateEmployeePhotoPreview('');
   document.getElementById('mBankName').value = 'กสิกรไทย (KBANK)';
   document.getElementById('mBaseSalary').value = '';
   var hasPfCheck = document.getElementById('mHasPf');
@@ -2206,6 +2297,7 @@ function openEditEmployeeModal(empId) {
   document.getElementById('mBankAccount').value = e.bankAccount || '';
   document.getElementById('mJoinDate').value = e.joinDate || '';
   document.getElementById('mRemark').value = e.remark || '';
+  updateEmployeePhotoPreview(e.photoUrl || '');
   if (document.getElementById('mStatus')) document.getElementById('mStatus').value = e.status || 'Active';
   if (document.getElementById('mProbationDays')) document.getElementById('mProbationDays').value = e.probationDays || 119;
   if (document.getElementById('mProbationEndDate')) document.getElementById('mProbationEndDate').value = e.probationEndDate || '';
@@ -2257,6 +2349,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
     empId: document.getElementById('mEmpId').value.trim(),
     fullName: document.getElementById('mFullName').value.trim(),
     nickname: document.getElementById('mNickname').value.trim(),
+    photoUrl: document.getElementById('mPhotoUrl') ? document.getElementById('mPhotoUrl').value : '',
     birthDate: document.getElementById('mBirthDate').value,
     age: Number(document.getElementById('mAge').value) || 0,
     citizenId: document.getElementById('mCitizenId').value.trim(),
@@ -5917,8 +6010,30 @@ function loadTimeAttendanceDashboard() {
         if (setToggleOt) setToggleOt.checked = (r.settings.enable_ot_requests !== 'false');
         if (setToggleAdvance) setToggleAdvance.checked = (r.settings.enable_advance_requests !== 'false');
         if (setToggleDirectGps) setToggleDirectGps.checked = (r.settings.allow_direct_gps !== 'false');
+        var setToggleFaceDetect = document.getElementById('attSetEnableFaceDetect');
+        if (setToggleFaceDetect) setToggleFaceDetect.checked = (r.settings.enable_face_detection !== 'false');
+        var setUnlockPassword = document.getElementById('attSetUnlockPassword');
+        var setUnlockQr = document.getElementById('attSetUnlockQr');
+        var setUnlockRemote = document.getElementById('attSetUnlockRemote');
+        if (setUnlockPassword) setUnlockPassword.checked = (r.settings.unlock_method_password !== 'false');
+        if (setUnlockQr) setUnlockQr.checked = (r.settings.unlock_method_qr !== 'false');
+        if (setUnlockRemote) setUnlockRemote.checked = (r.settings.unlock_method_remote !== 'false');
+        var setLeaveSickCert = document.getElementById('attSetLeaveTypeSickWithCert');
+        var setLeaveSickNoCert = document.getElementById('attSetLeaveTypeSickNoCert');
+        var setLeaveBusiness = document.getElementById('attSetLeaveTypeBusiness');
+        var setLeaveAnnual = document.getElementById('attSetLeaveTypeAnnual');
+        var setLeaveWithoutPay = document.getElementById('attSetLeaveTypeWithoutPay');
+        if (setLeaveSickCert) setLeaveSickCert.checked = (r.settings.leave_type_sick_with_cert !== 'false');
+        if (setLeaveSickNoCert) setLeaveSickNoCert.checked = (r.settings.leave_type_sick_no_cert !== 'false');
+        if (setLeaveBusiness) setLeaveBusiness.checked = (r.settings.leave_type_business === 'true');
+        if (setLeaveAnnual) setLeaveAnnual.checked = (r.settings.leave_type_annual === 'true');
+        if (setLeaveWithoutPay) setLeaveWithoutPay.checked = (r.settings.leave_type_without_pay === 'true');
         if (setAdvDay && r.settings.advance_day_of_week) setAdvDay.value = r.settings.advance_day_of_week;
         if (setAdvRate && r.settings.advance_daily_rate !== undefined) setAdvRate.value = r.settings.advance_daily_rate;
+        var setAdvStartTime = document.getElementById('attSetAdvanceStartTime');
+        var setAdvEndTime = document.getElementById('attSetAdvanceEndTime');
+        if (setAdvStartTime && r.settings.advance_start_time) setAdvStartTime.value = r.settings.advance_start_time;
+        if (setAdvEndTime && r.settings.advance_end_time) setAdvEndTime.value = r.settings.advance_end_time;
         if (setOtStart && (r.settings.ot_start_time || r.settings.shift_end || r.settings.work_end_time)) {
           setOtStart.value = r.settings.ot_start_time || r.settings.shift_end || r.settings.work_end_time;
         }
@@ -6473,9 +6588,21 @@ function saveAttendanceSettingsFromPayroll(e) {
   var enableOt = document.getElementById('attSetEnableOt') ? (document.getElementById('attSetEnableOt').checked ? 'true' : 'false') : 'true';
   var enableAdv = document.getElementById('attSetEnableAdvance') ? (document.getElementById('attSetEnableAdvance').checked ? 'true' : 'false') : 'true';
   var allowDirectGps = document.getElementById('attSetAllowDirectGps') ? (document.getElementById('attSetAllowDirectGps').checked ? 'true' : 'false') : 'true';
+  var enableFaceDetect = document.getElementById('attSetEnableFaceDetect') ? (document.getElementById('attSetEnableFaceDetect').checked ? 'true' : 'false') : 'true';
+  var unlockPassword = document.getElementById('attSetUnlockPassword') ? (document.getElementById('attSetUnlockPassword').checked ? 'true' : 'false') : 'true';
+  var unlockQr = document.getElementById('attSetUnlockQr') ? (document.getElementById('attSetUnlockQr').checked ? 'true' : 'false') : 'true';
+  var unlockRemote = document.getElementById('attSetUnlockRemote') ? (document.getElementById('attSetUnlockRemote').checked ? 'true' : 'false') : 'true';
   
+  var leaveSickCert = document.getElementById('attSetLeaveTypeSickWithCert') ? (document.getElementById('attSetLeaveTypeSickWithCert').checked ? 'true' : 'false') : 'true';
+  var leaveSickNoCert = document.getElementById('attSetLeaveTypeSickNoCert') ? (document.getElementById('attSetLeaveTypeSickNoCert').checked ? 'true' : 'false') : 'true';
+  var leaveBusiness = document.getElementById('attSetLeaveTypeBusiness') ? (document.getElementById('attSetLeaveTypeBusiness').checked ? 'true' : 'false') : 'false';
+  var leaveAnnual = document.getElementById('attSetLeaveTypeAnnual') ? (document.getElementById('attSetLeaveTypeAnnual').checked ? 'true' : 'false') : 'false';
+  var leaveWithoutPay = document.getElementById('attSetLeaveTypeWithoutPay') ? (document.getElementById('attSetLeaveTypeWithoutPay').checked ? 'true' : 'false') : 'false';
+
   var advDay = document.getElementById('attSetAdvanceDay') ? document.getElementById('attSetAdvanceDay').value : 'SATURDAY';
   var advRate = document.getElementById('attSetAdvanceDailyRate') ? Number(document.getElementById('attSetAdvanceDailyRate').value) : 250;
+  var advStartTime = document.getElementById('attSetAdvanceStartTime') ? document.getElementById('attSetAdvanceStartTime').value : '09:00';
+  var advEndTime = document.getElementById('attSetAdvanceEndTime') ? document.getElementById('attSetAdvanceEndTime').value : '18:00';
   var otStart = document.getElementById('attSetOtStart') ? document.getElementById('attSetOtStart').value : '19:00';
   var otRounding = document.getElementById('attSetOtRounding') ? document.getElementById('attSetOtRounding').value : 'HALF_HOUR';
   var qrMode = document.getElementById('attSetQrMode') ? document.getElementById('attSetQrMode').value : 'HYBRID';
@@ -6496,8 +6623,19 @@ function saveAttendanceSettingsFromPayroll(e) {
     enable_ot_requests: enableOt,
     enable_advance_requests: enableAdv,
     allow_direct_gps: allowDirectGps,
+    enable_face_detection: enableFaceDetect,
+    unlock_method_password: unlockPassword,
+    unlock_method_qr: unlockQr,
+    unlock_method_remote: unlockRemote,
+    leave_type_sick_with_cert: leaveSickCert,
+    leave_type_sick_no_cert: leaveSickNoCert,
+    leave_type_business: leaveBusiness,
+    leave_type_annual: leaveAnnual,
+    leave_type_without_pay: leaveWithoutPay,
     advance_day_of_week: advDay,
     advance_daily_rate: advRate,
+    advance_start_time: advStartTime,
+    advance_end_time: advEndTime,
     ot_start_time: otStart,
     ot_rounding_mode: otRounding,
     qr_mode: qrMode,

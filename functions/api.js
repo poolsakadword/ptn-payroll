@@ -279,6 +279,7 @@ async function handleAction(db, action, params) {
       await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
       await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
       // Device Locks (PTN Time Integration)
@@ -306,6 +307,7 @@ async function handleAction(db, action, params) {
         empId: e.emp_id,
         fullName: e.full_name || '',
         nickname: e.nickname || '',
+        photoUrl: e.photo_url || '',
         citizenId: e.citizen_id || '',
         phone: e.phone || '',
         address: e.address || '',
@@ -508,6 +510,7 @@ async function handleAction(db, action, params) {
       await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
       await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
       let probEndDate = emp.probationEndDate || '';
@@ -521,10 +524,18 @@ async function handleAction(db, action, params) {
       }
       const statusVal = emp.status || 'Active';
 
+      let photoUrlVal = emp.photoUrl;
+      if (photoUrlVal === undefined && (origId || emp.empId)) {
+        const existingEmp = await db.prepare('SELECT photo_url FROM employees WHERE emp_id = ?').bind(origId || emp.empId).first();
+        photoUrlVal = existingEmp?.photo_url || '';
+      } else {
+        photoUrlVal = photoUrlVal || '';
+      }
+
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -532,7 +543,8 @@ async function handleAction(db, action, params) {
         emp.joinDate || '',
         pfRateVal, ssoVal,
         taxVal, emp.remark || '',
-        statusVal, probDays, probEndDate
+        statusVal, probDays, probEndDate,
+        photoUrlVal
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period
@@ -1031,7 +1043,18 @@ async function handleAction(db, action, params) {
       const attSettings = {
         allow_direct_gps: 'true',
         break_tracking_mode: 'AUTO_DEDUCT',
-        break_duration_minutes: 60
+        break_duration_minutes: 60,
+        enable_face_detection: 'true',
+        unlock_method_password: 'true',
+        unlock_method_qr: 'true',
+        unlock_method_remote: 'true',
+        advance_start_time: '09:00',
+        advance_end_time: '18:00',
+        leave_type_sick_with_cert: 'true',
+        leave_type_sick_no_cert: 'true',
+        leave_type_business: 'false',
+        leave_type_annual: 'false',
+        leave_type_without_pay: 'false'
       };
       for (const r of setRows.results || []) attSettings[r.key] = r.value;
 
@@ -1221,6 +1244,7 @@ async function handleAction(db, action, params) {
           empId: e.emp_id,
           fullName: e.full_name,
           nickname: e.nickname || '',
+          photoUrl: e.photo_url || '',
           department: e.department || '',
           position: e.position || '',
           bankName: e.bank_name || '',
@@ -1257,6 +1281,7 @@ async function handleAction(db, action, params) {
             empId: c.emp_id,
             fullName: c.full_name || emp.full_name || '',
             nickname: emp.nickname || '',
+            photoUrl: emp.photo_url || '',
             department: c.department || emp.department || '',
             position: c.position || emp.position || '',
             bankName: c.bank_name || emp.bank_name || '',
@@ -1437,6 +1462,7 @@ async function handleAction(db, action, params) {
           empId: emp.emp_id,
           fullName: emp.full_name,
           nickname: emp.nickname || '',
+          photoUrl: emp.photo_url || '',
           citizenId: emp.citizen_id,
           phone: emp.phone,
           address: emp.address,
@@ -1841,14 +1867,15 @@ async function handleAction(db, action, params) {
         await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
         await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
         await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+        await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
 
         await db.prepare('DELETE FROM employees').run();
         for (const e of data.employees) {
           if (e.emp_id && e.full_name) {
             await db.prepare(`
               INSERT OR REPLACE INTO employees 
-              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, remark)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               e.emp_id, e.full_name, e.nickname || '', e.citizen_id || '', e.phone || '', e.address || '',
               e.department || '', e.position || '', Number(e.base_salary) || 0,
@@ -1860,6 +1887,7 @@ async function handleAction(db, action, params) {
               e.status || 'Active',
               Number(e.probation_days) || 119,
               e.probation_end_date || '',
+              e.photo_url || '',
               e.remark || ''
             ).run();
           }

@@ -30,6 +30,11 @@ CREATE TABLE IF NOT EXISTS employees (
   pf_rate REAL DEFAULT 0.05,
   default_sso REAL DEFAULT 750,
   default_tax REAL DEFAULT 0,
+  nickname TEXT,
+  status TEXT DEFAULT 'Active',
+  probation_days INTEGER DEFAULT 119,
+  probation_end_date TEXT,
+  photo_url TEXT,
   remark TEXT
 );
 
