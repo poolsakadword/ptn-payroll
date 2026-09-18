@@ -667,6 +667,7 @@ async function handleAction(db, action, params) {
       let nextNo = 0;
 
       for (const emp of employees) {
+        if (emp.status === 'Resigned') continue;
         nextNo++;
         added++;
         const baseSal = Number(emp.base_salary) || 0;
