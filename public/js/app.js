@@ -650,7 +650,10 @@ function renderInputTable() {
       '<td class="text-right font-mono text-red font-bold">' + fmt(i.advanceDeduct || 0) + '</td>' +
       '<td class="text-right font-mono text-red">' + fmt(i.otherDeduct || 0) + '</td>' +
       '<td class="text-center">' +
-        (canEditInputs ? '<button type="button" class="btn-icon edit" onclick="openEditInputModal(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> <button type="button" class="btn-icon del" onclick="deleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '<span class="text-muted">-</span>') +
+        (canEditInputs ?
+          '<button type="button" class="btn-icon" style="color:#0284c7;background:#e0f2fe;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(i.empId) + '\', \'' + esc(i.empName || '') + '\')" title="ดึงข้อมูล OT, วันลา และยอดเบิกเงินของ ' + esc(i.empName || i.empId) + ' จาก PTN Time"><i class="fa-solid fa-rotate"></i> ดึงเฉพาะคนนี้</button> ' +
+          '<button type="button" class="btn-icon edit" onclick="openEditInputModal(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
+          '<button type="button" class="btn-icon del" onclick="deleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '<span class="text-muted">-</span>') +
       '</td>' +
     '</tr>';
   });
@@ -1756,6 +1759,73 @@ function syncFromPtnTime() {
       alert('เกิดข้อผิดพลาด: ' + e.message);
       showToast(e.message, 'error');
     });
+}
+
+// SYNC INDIVIDUAL EMPLOYEE ATTENDANCE, LEAVE, OT & ADVANCE FROM PTN TIME
+function syncFromPtnTimeForEmp(empId, empName) {
+  if (!empId) return Promise.resolve(null);
+  var nameStr = empName ? (' (' + empName + ')') : '';
+  if (State.isClosed) {
+    if (!confirm('คำเตือน: งวด ' + State.period + ' ถูกปิดงวดแล้ว ต้องการดึงข้อมูลของ [' + empId + ']' + nameStr + ' หรือไม่?')) {
+      return Promise.resolve(null);
+    }
+  } else {
+    if (!confirm('ต้องการดึงข้อมูล OT, วันลา และยอดเบิกเงินล่วงหน้าของ [' + empId + ']' + nameStr + ' จากระบบ PTN Time เข้าสู่งวด ' + State.period + ' ใช่หรือไม่?')) {
+      return Promise.resolve(null);
+    }
+  }
+
+  showToast('กำลังดึงข้อมูลของ ' + empId + ' จาก PTN Time...', 'info');
+  return callApi('syncFromPtnTime', {
+    period: State.period,
+    empId: empId,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (r && r.success) {
+        showToast(r.message || 'ดึงข้อมูลสำเร็จ');
+        loadAppData();
+        return r;
+      } else {
+        alert('เกิดข้อผิดพลาด: ' + (r ? r.message : 'ไม่สามารถดึงข้อมูลได้'));
+        showToast((r && r.message) || 'ดึงข้อมูลไม่สำเร็จ', 'error');
+        return null;
+      }
+    })
+    .catch(function(e) {
+      alert('เกิดข้อผิดพลาด: ' + e.message);
+      showToast(e.message, 'error');
+      return null;
+    });
+}
+
+// SYNC BUTTON HANDLER INSIDE MONTHLY INPUT MODAL
+function syncCurrentEmpFromModal() {
+  var empId = (document.getElementById('miEmpId') ? document.getElementById('miEmpId').value : '').trim();
+  var empName = (document.getElementById('miEmpName') ? document.getElementById('miEmpName').value : '').trim();
+  if (!empId) {
+    showToast('กรุณาเลือกรหัสพนักงานก่อนดึงข้อมูล', 'warning');
+    return;
+  }
+  syncFromPtnTimeForEmp(empId, empName).then(function(r) {
+    if (r && r.success) {
+      // Refresh modal form values from the freshly synced record
+      setTimeout(function() {
+        var rRecord = State.inputRecords.find(function(x) { return x.empId === empId; });
+        if (rRecord) {
+          if (document.getElementById('miOtHours')) document.getElementById('miOtHours').value = rRecord.otHours || 0;
+          if (document.getElementById('miAdvanceDeduct')) document.getElementById('miAdvanceDeduct').value = rRecord.advanceDeduct || 0;
+          if (document.getElementById('miSickLeaveDays')) document.getElementById('miSickLeaveDays').value = rRecord.sickLeaveDays || 0;
+          if (document.getElementById('miUnpaidSickLeaveDays')) {
+            document.getElementById('miUnpaidSickLeaveDays').value = rRecord.unpaidSickLeaveDays || 0;
+          }
+          if (document.getElementById('miLeaveDays')) document.getElementById('miLeaveDays').value = rRecord.leaveDays || 0;
+          updateSickQuotaBadge();
+          showToast('อัปเดตข้อมูลในแบบฟอร์มเรียบร้อยแล้ว');
+        }
+      }, 500);
+    }
+  });
 }
 
 // INPUT MODAL
@@ -5663,7 +5733,7 @@ var _payrollMasterQrObj = null;
 function loadTimeAttendanceDashboard() {
   var logsBody = document.getElementById('attLogsTableBody');
   if (logsBody) {
-    logsBody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงานและรูปถ่าย...</td></tr>';
+    logsBody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงานและรูปถ่าย...</td></tr>';
   }
 
   callApi('getTimeAttendanceDashboard')
@@ -5739,7 +5809,7 @@ function loadTimeAttendanceDashboard() {
     })
     .catch(function(err) {
       if (logsBody) {
-        logsBody.innerHTML = '<tr><td colspan="10" class="text-center text-red" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '</td></tr>';
+        logsBody.innerHTML = '<tr><td colspan="11" class="text-center text-red" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '</td></tr>';
       }
     });
 }
@@ -5749,7 +5819,7 @@ function renderTimeAttendanceTodayLogs(logs) {
   if (!tbody) return;
 
   if (!logs || logs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ยังไม่มีพนักงานลงเวลาเข้างานในวันนี้</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ยังไม่มีพนักงานลงเวลาเข้างานในวันนี้</td></tr>';
     return;
   }
 
@@ -5797,6 +5867,11 @@ function renderTimeAttendanceTodayLogs(logs) {
       '<td class="text-center font-bold text-red" style="font-size:13px">' + (l.clock_out ? l.clock_out + ' น.' : '-') + '</td>' +
       '<td class="text-center">' + lateBadge + hrsText + '</td>' +
       '<td class="text-center">' + statusHtml + '</td>' +
+      '<td class="text-center" style="padding:4px">' +
+        '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:#e0f2fe;color:#0284c7;border:1px solid #bae6fd;border-radius:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(l.emp_id) + '\', \'' + esc(l.full_name || '') + '\')" title="ดึงข้อมูล OT, ลา และเบิกเงินของ ' + esc(l.full_name || l.emp_id) + ' เข้าสู่งวดเงินเดือนนี้">' +
+          '<i class="fa-solid fa-cloud-arrow-down"></i> ดึงเข้างวด' +
+        '</button>' +
+      '</td>' +
       '</tr>';
   });
 

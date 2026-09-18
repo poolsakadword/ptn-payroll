@@ -664,11 +664,12 @@ async function handleAction(db, action, params) {
       };
     }
 
-    // 5.1 SYNC ATTENDANCE, LEAVES, OT & ADVANCE FROM PTN TIME
+    // 5.1 SYNC ATTENDANCE, LEAVES, OT & ADVANCE FROM PTN TIME (ALL OR INDIVIDUAL)
     case 'syncFromPtnTime': {
       const dates = getCutoffDatesForPeriod(period);
       const startDate = dates.startDate;
       const endDate = dates.endDate;
+      const targetEmpId = params.empId ? String(params.empId).trim() : null;
 
       await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
@@ -676,13 +677,20 @@ async function handleAction(db, action, params) {
       let advMap = {};
       let totalAdvAmount = 0;
       try {
-        const advQuery = await db.prepare(`
+        let advSql = `
           SELECT emp_id, SUM(amount) as total_amt
           FROM advance_requests
           WHERE status = 'APPROVED'
             AND (request_date BETWEEN ? AND ? OR period = ?)
-          GROUP BY emp_id
-        `).bind(startDate, endDate, period).all();
+        `;
+        let advBinds = [startDate, endDate, period];
+        if (targetEmpId) {
+          advSql += ` AND emp_id = ?`;
+          advBinds.push(targetEmpId);
+        }
+        advSql += ` GROUP BY emp_id`;
+
+        const advQuery = await db.prepare(advSql).bind(...advBinds).all();
         for (const row of (advQuery.results || [])) {
           const amt = Number(row.total_amt) || 0;
           advMap[row.emp_id] = amt;
@@ -696,13 +704,20 @@ async function handleAction(db, action, params) {
       let otMap = {};
       let totalOtHours = 0;
       try {
-        const otQuery = await db.prepare(`
+        let otSql = `
           SELECT emp_id, SUM(COALESCE(actual_hours, planned_hours)) as total_hours
           FROM ot_requests
           WHERE status = 'APPROVED'
             AND (date BETWEEN ? AND ?)
-          GROUP BY emp_id
-        `).bind(startDate, endDate).all();
+        `;
+        let otBinds = [startDate, endDate];
+        if (targetEmpId) {
+          otSql += ` AND emp_id = ?`;
+          otBinds.push(targetEmpId);
+        }
+        otSql += ` GROUP BY emp_id`;
+
+        const otQuery = await db.prepare(otSql).bind(...otBinds).all();
         for (const row of (otQuery.results || [])) {
           const hrs = Number(row.total_hours) || 0;
           otMap[row.emp_id] = hrs;
@@ -714,12 +729,19 @@ async function handleAction(db, action, params) {
 
       // Also check time_logs if any ot_hours recorded directly
       try {
-        const timeLogOtQuery = await db.prepare(`
+        let timeLogOtSql = `
           SELECT emp_id, SUM(ot_hours) as log_ot
           FROM time_logs
           WHERE date BETWEEN ? AND ? AND ot_hours > 0
-          GROUP BY emp_id
-        `).bind(startDate, endDate).all();
+        `;
+        let timeLogOtBinds = [startDate, endDate];
+        if (targetEmpId) {
+          timeLogOtSql += ` AND emp_id = ?`;
+          timeLogOtBinds.push(targetEmpId);
+        }
+        timeLogOtSql += ` GROUP BY emp_id`;
+
+        const timeLogOtQuery = await db.prepare(timeLogOtSql).bind(...timeLogOtBinds).all();
         for (const row of (timeLogOtQuery.results || [])) {
           const logOt = Number(row.log_ot) || 0;
           if (logOt > (otMap[row.emp_id] || 0)) {
@@ -733,13 +755,20 @@ async function handleAction(db, action, params) {
       let leaveMap = {};
       let totalLeaveCount = 0;
       try {
-        const leaveQuery = await db.prepare(`
+        let leaveSql = `
           SELECT emp_id, leave_type, SUM(days_count) as total_days
           FROM leave_requests
           WHERE status = 'APPROVED'
             AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?))
-          GROUP BY emp_id, leave_type
-        `).bind(startDate, endDate, startDate, endDate).all();
+        `;
+        let leaveBinds = [startDate, endDate, startDate, endDate];
+        if (targetEmpId) {
+          leaveSql += ` AND emp_id = ?`;
+          leaveBinds.push(targetEmpId);
+        }
+        leaveSql += ` GROUP BY emp_id, leave_type`;
+
+        const leaveQuery = await db.prepare(leaveSql).bind(...leaveBinds).all();
         for (const row of (leaveQuery.results || [])) {
           if (!leaveMap[row.emp_id]) {
             leaveMap[row.emp_id] = { sickCert: 0, sickNoCert: 0, business: 0 };
@@ -758,12 +787,24 @@ async function handleAction(db, action, params) {
         console.warn('leave_requests query note:', e);
       }
 
-      // 4. Merge into monthly_inputs for every employee
-      const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
-      const employees = empQuery.results || [];
-      const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
-      const existingMap = {};
-      for (const row of existingInput.results || []) existingMap[row.emp_id] = row;
+      // 4. Merge into monthly_inputs (For single employee or all employees)
+      let employees = [];
+      let existingMap = {};
+
+      if (targetEmpId) {
+        const singleEmp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(targetEmpId).first();
+        if (!singleEmp) {
+          return { success: false, message: `ไม่พบข้อมูลพนักงานรหัส ${targetEmpId}` };
+        }
+        employees = [singleEmp];
+        const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, targetEmpId).first();
+        if (existingInput) existingMap[targetEmpId] = existingInput;
+      } else {
+        const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
+        employees = empQuery.results || [];
+        const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
+        for (const row of (existingInput.results || [])) existingMap[row.emp_id] = row;
+      }
 
       const defOtRow = await db.prepare('SELECT value FROM settings WHERE key = "DefaultOtRate"').first().catch(() => null);
       const fallbackOtRate = (defOtRow && defOtRow.value && !isNaN(Number(defOtRow.value))) ? Number(defOtRow.value) : 40;
@@ -771,8 +812,20 @@ async function handleAction(db, action, params) {
       let syncedCount = 0;
       let nextNo = 0;
 
+      if (targetEmpId) {
+        const exist = existingMap[targetEmpId];
+        if (exist && exist.no) {
+          nextNo = exist.no;
+        } else {
+          const maxNoRow = await db.prepare('SELECT COALESCE(MAX(no), 0) as max_no FROM monthly_inputs WHERE period = ?').bind(period).first();
+          nextNo = (maxNoRow ? Number(maxNoRow.max_no) : 0) + 1;
+        }
+      }
+
       for (const emp of employees) {
-        nextNo++;
+        if (!targetEmpId) {
+          nextNo++;
+        }
         syncedCount++;
         const baseSal = Number(emp.base_salary) || 0;
         const pfRate = (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05;
@@ -809,6 +862,27 @@ async function handleAction(db, action, params) {
       }
 
       await calculateAndSavePayroll(db, period);
+
+      if (targetEmpId) {
+        const empName = employees[0].full_name || targetEmpId;
+        const empAdv = advMap[targetEmpId] || 0;
+        const empOt = otMap[targetEmpId] || 0;
+        const empL = leaveMap[targetEmpId] || {};
+        const empLeaveTotal = (empL.sickCert || 0) + (empL.sickNoCert || 0) + (empL.business || 0);
+        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time เฉพาะพนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน)`);
+
+        return {
+          success: true,
+          period: period,
+          empId: targetEmpId,
+          empName: empName,
+          advAmount: empAdv,
+          otHours: empOt,
+          leaveTotal: empLeaveTotal,
+          message: `ดึงข้อมูลของ [${targetEmpId}] ${empName} เข้าสู่งวด ${period} สำเร็จเรียบร้อย! (ยอดเบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน)`
+        };
+      }
+
       await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม.)`);
 
       return {

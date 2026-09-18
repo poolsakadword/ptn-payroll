@@ -453,10 +453,11 @@
                     <th style="width:75px" class="text-center text-red">ออกงาน</th>
                     <th style="width:85px" class="text-center">สาย/ชม.</th>
                     <th style="width:90px" class="text-center">สถานะ</th>
+                    <th style="width:95px" class="text-center">งวดเงินเดือน</th>
                   </tr>
                 </thead>
                 <tbody id="attLogsTableBody">
-                  <tr><td colspan="10" class="text-center text-muted" style="padding:24px">กำลังโหลดข้อมูล...</td></tr>
+                  <tr><td colspan="11" class="text-center text-muted" style="padding:24px">กำลังโหลดข้อมูล...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1842,8 +1843,13 @@
 
           <!-- Working Days & Rate Banner -->
           <div style="background:linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);border:1.5px solid #bfdbfe;border-radius:var(--radius-md);padding:10px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-            <span style="font-size:12.5px;font-weight:700;color:#1e40af"><i class="fa-solid fa-business-time"></i> วันทำงานในงวด: <strong id="miModalWorkingDays" style="color:#1d4ed8">30</strong> วัน</span>
-            <span style="font-size:12.5px;color:#1e40af">อัตราค่าจ้างวันละ: <strong id="miModalDailyRate" class="font-mono font-bold" style="color:#1d4ed8;font-size:14px">฿0.00</strong></span>
+            <div>
+              <span style="font-size:12.5px;font-weight:700;color:#1e40af;margin-right:16px"><i class="fa-solid fa-business-time"></i> วันทำงานในงวด: <strong id="miModalWorkingDays" style="color:#1d4ed8">30</strong> วัน</span>
+              <span style="font-size:12.5px;color:#1e40af">อัตราค่าจ้างวันละ: <strong id="miModalDailyRate" class="font-mono font-bold" style="color:#1d4ed8;font-size:14px">฿0.00</strong></span>
+            </div>
+            <button type="button" class="btn btn-sm" id="btnSyncCurrentEmpModal" onclick="syncCurrentEmpFromModal()" style="background:#0284c7;color:#fff;border-color:#0284c7;font-size:12px;padding:4px 12px;font-weight:700;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,0.08)" title="ดึงข้อมูล OT, วันลา และยอดเบิกเงินล่วงหน้าของพนักงานคนนี้จากระบบ PTN Time เข้าสู่งวดนี้ทันที">
+              <i class="fa-solid fa-rotate"></i> ดึงจาก PTN Time เฉพาะคนนี้
+            </button>
           </div>
 
           <div class="form-grid">
