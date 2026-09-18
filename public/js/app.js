@@ -1,3 +1,48 @@
+// ==============================================================================
+// GLOBAL PRINT MANAGEMENT & CLEANUP
+// ==============================================================================
+var ALL_PRINT_CLASSES = [
+  'printing-payslip',
+  'printing-salary-cert',
+  'printing-50twi',
+  'printing-payroll-summary',
+  'printing-history',
+  'printing-yearly-summary',
+  'printing-batch-history',
+  'printing-analytics'
+];
+
+function clearAllPrintClasses() {
+  ALL_PRINT_CLASSES.forEach(function(cls) {
+    document.body.classList.remove(cls);
+  });
+}
+
+// Clean up print classes automatically when print dialog closes
+window.addEventListener('afterprint', clearAllPrintClasses);
+
+// Auto-detect active modal when user presses Ctrl+P or triggers browser print
+window.addEventListener('beforeprint', function() {
+  var salaryCertModal = document.getElementById('salaryCertModal');
+  var payslipModal = document.getElementById('payslipModal');
+  var twi50Modal = document.getElementById('twi50Modal');
+  var payrollSignoffModal = document.getElementById('payrollSignoffModal');
+
+  if (salaryCertModal && salaryCertModal.classList.contains('active')) {
+    clearAllPrintClasses();
+    document.body.classList.add('printing-salary-cert');
+  } else if (payslipModal && payslipModal.classList.contains('active')) {
+    clearAllPrintClasses();
+    document.body.classList.add('printing-payslip');
+  } else if (twi50Modal && twi50Modal.classList.contains('active')) {
+    clearAllPrintClasses();
+    document.body.classList.add('printing-50twi');
+  } else if (payrollSignoffModal && payrollSignoffModal.classList.contains('active')) {
+    clearAllPrintClasses();
+    document.body.classList.add('printing-payroll-summary');
+  }
+});
+
 // GLOBAL PERMISSIONS HELPER
 function hasPermission(permKey) {
   if (!State.currentUser) return false;
@@ -175,7 +220,17 @@ var State = {
   payrollList: [],
   stats: { totalEmployees: 0, totalGross: 0, totalDeductions: 0, totalNet: 0 },
   users: [],
-  currentUser: { username: 'Admin', role: 'Admin / HR' }
+  currentUser: { username: 'Admin', role: 'Admin / HR' },
+  payrollDefaults: {
+    defaultOtRate: 40,
+    defaultWorkDays: 30,
+    absentFactor: 1.5,
+    leaveFactor: 1.0,
+    sickLeaveQuota: 10,
+    defaultPfRate: 0.05,
+    defaultProbationDays: 119
+  },
+  annualSickMap: {}
 };
 
 // UTILITIES
@@ -385,6 +440,8 @@ function loadAppData() {
       State.isClosed = r.isClosed || false;
       State.closedInfo = r.closedInfo || '';
       State.company = r.settings || State.company;
+      State.payrollDefaults = r.payrollDefaults || State.payrollDefaults;
+      State.annualSickMap = r.annualSickMap || {};
       State.employees = r.employees || [];
       State.inputRecords = r.inputRecords || [];
       State.payrollList = r.payrollList || [];
@@ -1288,11 +1345,12 @@ function printYearlySummary() {
   if (document.getElementById('yearlyPrintEmpCount')) document.getElementById('yearlyPrintEmpCount').textContent = count + ' คน';
   if (document.getElementById('yearlyPrintDate')) document.getElementById('yearlyPrintDate').textContent = dateStr;
 
-  document.body.classList.remove('printing-payslip', 'printing-history', 'printing-batch-history');
+  clearAllPrintClasses();
   document.body.classList.add('printing-yearly-summary');
 
   setTimeout(function() {
     window.print();
+    setTimeout(clearAllPrintClasses, 1500);
   }, 50);
 }
 
@@ -1323,18 +1381,14 @@ function printHistoryReport() {
   if (document.getElementById('indivPrintEmpSummary')) document.getElementById('indivPrintEmpSummary').textContent = empSummary;
   if (document.getElementById('indivPrintDate')) document.getElementById('indivPrintDate').textContent = dateStr;
 
-  document.body.classList.remove('printing-payslip', 'printing-yearly-summary', 'printing-batch-history');
+  clearAllPrintClasses();
   document.body.classList.add('printing-history');
 
   setTimeout(function() {
     window.print();
+    setTimeout(clearAllPrintClasses, 1500);
   }, 50);
 }
-
-// Clean up print classes automatically when print dialog closes
-window.addEventListener('afterprint', function() {
-  document.body.classList.remove('printing-history', 'printing-yearly-summary', 'printing-batch-history', 'printing-payslip');
-});
 
 function exportActiveHistoryCsv() {
   if (!hasPermission('view_salary')) {
@@ -1485,6 +1539,37 @@ function renderCompanySettings() {
   if (document.getElementById('cfgSignatoryTitle')) document.getElementById('cfgSignatoryTitle').value = State.company.signatoryTitle || '';
   if (document.getElementById('cfgSignatoryNameEn')) document.getElementById('cfgSignatoryNameEn').value = State.company.signatoryNameEn || '';
   if (document.getElementById('cfgSignatoryTitleEn')) document.getElementById('cfgSignatoryTitleEn').value = State.company.signatoryTitleEn || '';
+
+  // Payroll Defaults fields
+  var pd = State.payrollDefaults || {};
+  if (document.getElementById('cfgDefaultOtRate')) document.getElementById('cfgDefaultOtRate').value = pd.defaultOtRate !== undefined ? pd.defaultOtRate : 40;
+  if (document.getElementById('cfgDefaultWorkDays')) document.getElementById('cfgDefaultWorkDays').value = pd.defaultWorkDays !== undefined ? pd.defaultWorkDays : 30;
+  if (document.getElementById('cfgAbsentFactor')) document.getElementById('cfgAbsentFactor').value = pd.absentFactor !== undefined ? pd.absentFactor : 1.5;
+  if (document.getElementById('cfgLeaveFactor')) document.getElementById('cfgLeaveFactor').value = pd.leaveFactor !== undefined ? pd.leaveFactor : 1.0;
+  if (document.getElementById('cfgSickLeaveQuota')) document.getElementById('cfgSickLeaveQuota').value = pd.sickLeaveQuota !== undefined ? pd.sickLeaveQuota : 10;
+  if (document.getElementById('cfgDefaultPfRate')) document.getElementById('cfgDefaultPfRate').value = pd.defaultPfRate !== undefined ? pd.defaultPfRate : 0.05;
+  if (document.getElementById('cfgDefaultProbationDays')) document.getElementById('cfgDefaultProbationDays').value = pd.defaultProbationDays !== undefined ? pd.defaultProbationDays : 119;
+}
+
+function savePayrollDefaults(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  var d = {
+    defaultOtRate: Number(document.getElementById('cfgDefaultOtRate').value) || 40,
+    defaultWorkDays: Number(document.getElementById('cfgDefaultWorkDays').value) || 30,
+    absentFactor: Number(document.getElementById('cfgAbsentFactor').value) || 1.5,
+    leaveFactor: Number(document.getElementById('cfgLeaveFactor').value) || 1.0,
+    sickLeaveQuota: Number(document.getElementById('cfgSickLeaveQuota').value) || 10,
+    defaultPfRate: Number(document.getElementById('cfgDefaultPfRate').value) || 0.05,
+    defaultProbationDays: Number(document.getElementById('cfgDefaultProbationDays').value) || 119
+  };
+  callApi('savePayrollDefaults', { defaults: d })
+    .then(function(r) {
+      showToast(r.message || 'บันทึกค่านโยบายเงินเดือนเรียบร้อยแล้ว');
+      loadAppData();
+    })
+    .catch(function(err) {
+      showToast(err.message, 'error');
+    });
 }
 
 function saveCompanySettings(e) {
@@ -1591,7 +1676,101 @@ function batchPopulateEmployees() {
     .catch(function(e) { showToast(e.message, 'error'); });
 }
 
+// 1-CLICK SYNC ATTENDANCE, LEAVE, OT & SALARY ADVANCES FROM PTN TIME
+function syncFromPtnTime() {
+  if (State.isClosed) {
+    if (!confirm('คำเตือน: งวด ' + State.period + ' ถูกปิดงวดแล้ว ต้องการดึงข้อมูลหรือไม่?')) return;
+  }
+
+  var msg = 'ต้องการดึงข้อมูลบันทึกเวลา, วันลา, ชั่วโมง OT และยอดเบิกเงินล่วงหน้า (รอบตัดวิก 26 - 25) จากระบบ PTN Time เข้าสู่งวด ' + State.period + ' อัตโนมัติใช่หรือไม่?\n\n' +
+            '✨ ระบบจะอัปเดตยอดเบิกเงินล่วงหน้า, OT, วันลา และคำนวณเงินเดือนงวดนี้ให้อัตโนมัติทันที';
+  
+  if (!confirm(msg)) return;
+
+  showToast('กำลังดึงข้อมูลจากระบบ PTN Time (26-25)...');
+  callApi('syncFromPtnTime', { period: State.period })
+    .then(function(r) {
+      if (r.success) {
+        alert('✅ ' + r.message);
+        showToast(r.message);
+        loadAppData();
+      } else {
+        alert('เกิดข้อผิดพลาด: ' + (r.message || 'ไม่สามารถดึงข้อมูลได้'));
+        showToast(r.message, 'error');
+      }
+    })
+    .catch(function(e) {
+      alert('เกิดข้อผิดพลาด: ' + e.message);
+      showToast(e.message, 'error');
+    });
+}
+
 // INPUT MODAL
+// SICK LEAVE ANNUAL QUOTA TRACKING HELPER
+function updateSickQuotaBadge() {
+  var empId = (document.getElementById('miEmpId') ? document.getElementById('miEmpId').value : '').trim();
+  var badge = document.getElementById('miSickQuotaBadge');
+  var alertEl = document.getElementById('miSickQuotaAlert');
+  if (!badge) return;
+
+  var quota = (State.payrollDefaults && State.payrollDefaults.sickLeaveQuota !== undefined) ? Number(State.payrollDefaults.sickLeaveQuota) : 10;
+  var currentSick = Number(document.getElementById('miSickLeaveDays') ? document.getElementById('miSickLeaveDays').value : 0) || 0;
+
+  var origRecord = State.inputRecords.find(function(r) { return r.empId === empId; });
+  var currentPeriodSavedSick = origRecord ? Number(origRecord.sickLeaveDays || 0) : 0;
+  var totalAnnualSaved = (State.annualSickMap && State.annualSickMap[empId] !== undefined) ? Number(State.annualSickMap[empId]) : 0;
+  var priorUsedSick = Math.max(0, totalAnnualSaved - currentPeriodSavedSick);
+
+  var totalProjected = priorUsedSick + currentSick;
+  var remaining = Math.max(0, quota - totalProjected);
+
+  if (totalProjected <= quota) {
+    badge.style.color = '#059669';
+    badge.textContent = 'สิทธิ์ปีนี้: ใช้สะสม ' + totalProjected + '/' + quota + ' วัน (คงเหลือ ' + remaining + ' วัน)';
+    if (alertEl) {
+      if (currentSick > 0) {
+        alertEl.style.display = 'block';
+        alertEl.style.background = '#f0fdf4';
+        alertEl.style.border = '1px solid #bbf7d0';
+        alertEl.style.color = '#166534';
+        alertEl.innerHTML = '<i class="fa-solid fa-circle-check"></i> ลาป่วย ' + currentSick + ' วัน อยู่ในโควตา ' + quota + ' วัน/ปี (ไม่หักค่าจ้าง)';
+      } else {
+        alertEl.style.display = 'none';
+      }
+    }
+  } else {
+    var exceeded = totalProjected - quota;
+    var paidThisPeriod = Math.max(0, currentSick - exceeded);
+    badge.style.color = '#dc2626';
+    badge.textContent = 'สิทธิ์ปีนี้: ใช้สะสม ' + totalProjected + '/' + quota + ' วัน (เกินโควตา ' + exceeded + ' วัน)';
+    if (alertEl) {
+      alertEl.style.display = 'block';
+      alertEl.style.background = '#fef2f2';
+      alertEl.style.border = '1px solid #fecaca';
+      alertEl.style.color = '#991b1b';
+      alertEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> สิทธิ์ลาป่วยฟรีครบ ' + quota + ' วัน/ปีแล้ว! (งวดนี้ได้รับค่าจ้าง ' + paidThisPeriod + ' วัน, ส่วนเกิน ' + exceeded + ' วัน ระบบจะคำนวณหักค่าจ้างอัตโนมัติ)';
+    }
+  }
+}
+
+function onInputSickLeaveChanged() {
+  updateSickQuotaBadge();
+}
+
+function syncInputRulesNotices() {
+  var pd = State.payrollDefaults || {};
+  var absF = pd.absentFactor !== undefined ? pd.absentFactor : 1.5;
+  var levF = pd.leaveFactor !== undefined ? pd.leaveFactor : 1.0;
+  var sQuota = pd.sickLeaveQuota !== undefined ? pd.sickLeaveQuota : 10;
+
+  if (document.getElementById('lblAbsentFactor')) document.getElementById('lblAbsentFactor').textContent = absF;
+  if (document.getElementById('lblLeaveFactor')) document.getElementById('lblLeaveFactor').textContent = levF;
+  if (document.getElementById('lblUnpaidSickFactor')) document.getElementById('lblUnpaidSickFactor').textContent = levF;
+  if (document.getElementById('miLeaveRulesNotice')) {
+    document.getElementById('miLeaveRulesNotice').textContent = 'ขาดหัก ' + absF + 'x | ลากิจหัก ' + levF + 'x | ลาป่วยฟรี ' + sQuota + ' วัน/ปี';
+  }
+}
+
 function openAddInputModal() {
   document.getElementById('inputModalTitle').innerHTML = '<i class="fa-solid fa-calendar-plus"></i> บันทึกข้อมูลประจำงวด';
   document.getElementById('inputOrigEmpId').value = '';
@@ -1604,9 +1783,11 @@ function openAddInputModal() {
   document.getElementById('miAbsentDays').value = '0';
   document.getElementById('miLeaveDays').value = '0';
   document.getElementById('miSickLeaveDays').value = '0';
+  if (document.getElementById('miUnpaidSickLeaveDays')) document.getElementById('miUnpaidSickLeaveDays').value = '0';
   document.getElementById('miLateDeduct').value = '0';
+  var defOt = (State.payrollDefaults && State.payrollDefaults.defaultOtRate) ? State.payrollDefaults.defaultOtRate : 40;
   document.getElementById('miOtHours').value = '0';
-  document.getElementById('miOtRate').value = '40';
+  document.getElementById('miOtRate').value = defOt;
   document.getElementById('miAllowance').value = '0';
   document.getElementById('miBonus').value = '0';
   document.getElementById('miAdvanceDeduct').value = '0';
@@ -1614,6 +1795,8 @@ function openAddInputModal() {
   document.getElementById('miSso').value = '0';
   document.getElementById('miTax').value = '0';
   updateModalDailyRate(0);
+  syncInputRulesNotices();
+  updateSickQuotaBadge();
   openModal('inputModal');
 }
 
@@ -1634,6 +1817,7 @@ function openEditInputModal(empId) {
   document.getElementById('miAbsentDays').value = r.absentDays || 0;
   document.getElementById('miLeaveDays').value = r.leaveDays || 0;
   document.getElementById('miSickLeaveDays').value = r.sickLeaveDays || 0;
+  if (document.getElementById('miUnpaidSickLeaveDays')) document.getElementById('miUnpaidSickLeaveDays').value = r.unpaidSickLeaveDays || 0;
   document.getElementById('miLateDeduct').value = r.lateDeduct || 0;
   document.getElementById('miOtHours').value = r.otHours || 0;
   document.getElementById('miOtRate').value = (r.otRate !== null && r.otRate !== undefined && !isNaN(Number(r.otRate))) ? r.otRate : 40;
@@ -1644,6 +1828,8 @@ function openEditInputModal(empId) {
   document.getElementById('miSso').value = (r.sso !== undefined && r.sso !== null) ? r.sso : 0;
   document.getElementById('miTax').value = r.tax || 0;
   updateModalDailyRate(r.baseSalary || 0);
+  syncInputRulesNotices();
+  updateSickQuotaBadge();
   openModal('inputModal');
 }
 
@@ -1662,9 +1848,11 @@ function onInputEmpSelectChanged() {
     var pf = (pfVal !== null && pfVal !== '' && !isNaN(Number(pfVal))) ? Number(pfVal) : (emp && emp.pfRate !== undefined ? Number(emp.pfRate) : 0);
     document.getElementById('miPfRate').value = pf;
     document.getElementById('miPfAmount').value = pf > 0 ? (Math.round(sal * pf * 100) / 100) : 0;
+    var defOt = (State.payrollDefaults && State.payrollDefaults.defaultOtRate) ? State.payrollDefaults.defaultOtRate : 40;
     if (!document.getElementById('miOtRate').value || Number(document.getElementById('miOtRate').value) === 0) {
-      document.getElementById('miOtRate').value = '40';
+      document.getElementById('miOtRate').value = defOt;
     }
+    updateSickQuotaBadge();
     var ssoVal = opt.getAttribute('data-sso');
     var finalSso = (ssoVal !== null && ssoVal !== '' && !isNaN(Number(ssoVal))) ? Number(ssoVal) : ((emp && emp.defaultSso !== undefined && emp.defaultSso !== null && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 0);
     document.getElementById('miSso').value = finalSso;
@@ -1708,6 +1896,7 @@ function saveInputRecordForm(e, openPayslipAfter) {
     absentDays: Number(document.getElementById('miAbsentDays').value) || 0,
     leaveDays: Number(document.getElementById('miLeaveDays').value) || 0,
     sickLeaveDays: Number(document.getElementById('miSickLeaveDays').value) || 0,
+    unpaidSickLeaveDays: Number(document.getElementById('miUnpaidSickLeaveDays') ? document.getElementById('miUnpaidSickLeaveDays').value : 0) || 0,
     lateDeduct: Number(document.getElementById('miLateDeduct').value) || 0,
     otHours: Number(document.getElementById('miOtHours').value) || 0,
     otRate: Number(document.getElementById('miOtRate').value) || 40,
@@ -1924,6 +2113,10 @@ function populatePayslipModal(row) {
 
   document.getElementById('psBaseSalary').textContent = fmt(row.baseSalary);
   document.getElementById('psOtHours').textContent = row.otHours || 0;
+  if (document.getElementById('psOtRate')) {
+    var rOtRate = (row.otRate !== null && row.otRate !== undefined && !isNaN(Number(row.otRate))) ? Number(row.otRate) : ((State.payrollDefaults && State.payrollDefaults.defaultOtRate) ? State.payrollDefaults.defaultOtRate : 40);
+    document.getElementById('psOtRate').textContent = rOtRate;
+  }
   document.getElementById('psOtPay').textContent = fmt(row.otPay);
   document.getElementById('psAllowance').textContent = fmt(row.allowance);
   document.getElementById('psBonus').textContent = fmt(row.bonus);
@@ -1953,12 +2146,12 @@ function viewPayslip(empId) {
 }
 
 function printPayslip() {
-  document.body.classList.remove('printing-history');
+  clearAllPrintClasses();
   document.body.classList.add('printing-payslip');
-  window.print();
   setTimeout(function() {
-    document.body.classList.remove('printing-payslip');
-  }, 1000);
+    window.print();
+    setTimeout(clearAllPrintClasses, 1500);
+  }, 50);
 }
 
 // (Legacy printHistoryReport removed - using upgraded version in History Controller)
@@ -2704,16 +2897,13 @@ function printAllEmployeesBatch() {
 
       container.innerHTML = html;
 
-      document.body.classList.remove('printing-payslip');
-      document.body.classList.remove('printing-history');
-      document.body.classList.remove('printing-yearly-summary');
+      clearAllPrintClasses();
       document.body.classList.add('printing-batch-history');
 
-      window.print();
-
       setTimeout(function() {
-        document.body.classList.remove('printing-batch-history');
-      }, 1000);
+        window.print();
+        setTimeout(clearAllPrintClasses, 1500);
+      }, 50);
     })
     .catch(function(err) {
       showToast('Error: ' + err.message, 'error');
@@ -3071,17 +3261,13 @@ function open50TwiModalFromHistory() {
 }
 
 function print50TwiDocument() {
-  document.body.classList.remove('printing-payslip');
-  document.body.classList.remove('printing-history');
-  document.body.classList.remove('printing-yearly-summary');
-  document.body.classList.remove('printing-batch-history');
+  clearAllPrintClasses();
   document.body.classList.add('printing-50twi');
 
-  window.print();
-
   setTimeout(function() {
-    document.body.classList.remove('printing-50twi');
-  }, 1000);
+    window.print();
+    setTimeout(clearAllPrintClasses, 1500);
+  }, 50);
 }
 
 // AUDIT TRAIL MODAL CONTROLLER
@@ -3211,18 +3397,13 @@ function openMonthlyPayrollSummaryModal() {
 }
 
 function printMonthlyPayrollSummaryDocument() {
-  document.body.classList.remove('printing-payslip');
-  document.body.classList.remove('printing-history');
-  document.body.classList.remove('printing-yearly-summary');
-  document.body.classList.remove('printing-batch-history');
-  document.body.classList.remove('printing-50twi');
+  clearAllPrintClasses();
   document.body.classList.add('printing-payroll-summary');
 
-  window.print();
-
   setTimeout(function() {
-    document.body.classList.remove('printing-payroll-summary');
-  }, 1000);
+    window.print();
+    setTimeout(clearAllPrintClasses, 1500);
+  }, 50);
 }
 
 function printMonthlyPayrollSummary() {
@@ -4337,15 +4518,12 @@ function printAnalyticsReport() {
   if (document.getElementById('analyticsPrintDeptDisplay')) document.getElementById('analyticsPrintDeptDisplay').textContent = deptText;
   if (document.getElementById('analyticsPrintDateDisplay')) document.getElementById('analyticsPrintDateDisplay').textContent = printDate;
 
-  document.body.classList.remove('printing-payslip', 'printing-history', 'printing-yearly-summary', 'printing-batch-history', 'printing-50twi', 'printing-payroll-summary');
+  clearAllPrintClasses();
   document.body.classList.add('printing-analytics');
-
-  window.onafterprint = function() {
-    document.body.classList.remove('printing-analytics');
-  };
 
   setTimeout(function() {
     window.print();
+    setTimeout(clearAllPrintClasses, 1500);
   }, 100);
 }
 
@@ -4742,18 +4920,14 @@ function resetCertModalPaper() {
 }
 
 function printSalaryCertificate() {
-  document.body.classList.remove('printing-payslip', 'printing-history', 'printing-yearly-summary', 'printing-batch-history', 'printing-50twi', 'printing-payroll-summary', 'printing-analytics');
+  clearAllPrintClasses();
   document.body.classList.add('printing-salary-cert');
 
   setTimeout(function() {
     window.print();
-  }, 50);
+    setTimeout(clearAllPrintClasses, 1500);
+  }, 100);
 }
-
-// Clean up print class after print dialog closes
-window.addEventListener('afterprint', function() {
-  document.body.classList.remove('printing-salary-cert');
-});
 
 function open50TwiFromDocCenter() {
   if (!hasPermission('view_salary')) {

@@ -589,12 +589,18 @@ footer {
 }
 
 /* PRINT STYLES (PAYSLIP, EMPLOYEE HISTORY REPORT & YEARLY SUMMARY) */
-@media print {
-  @page {
-    size: A4 landscape;
-    margin: 8mm 10mm;
-  }
+@page {
+  size: A4 portrait;
+  margin: 10mm;
+}
 
+@page landscapePage {
+  size: A4 landscape;
+  margin: 8mm 10mm;
+}
+
+@media print {
+  /* 1. Global Reset & Print Defaults */
   html, body {
     background: #ffffff !important;
     height: auto !important;
@@ -602,21 +608,24 @@ footer {
     overflow: visible !important;
     margin: 0 !important;
     padding: 0 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
-  /* Universal chrome and widget hide during print */
+  /* 2. Universal Website Chrome & Controls - ALWAYS HIDDEN WHEN PRINTING ANY DOCUMENT */
   header,
   nav,
   .top-header,
   .nav-container,
+  .nav-tabs,
   .period-bar,
   footer,
   #toastContainer,
   #loginScreen,
-  .modal-overlay:not(#payslipModal):not(#salaryCertModal),
   .modal-header,
   .modal-footer,
   .modal-close-btn,
+  .cert-controls-bar,
   .card-header,
   .no-print,
   .ai-chat-btn,
@@ -626,27 +635,9 @@ footer {
   .search-box,
   .btn,
   button,
-  .tab-content:not(.active) {
+  input[type="button"],
+  input[type="submit"] {
     display: none !important;
-  }
-
-  .tab-content.active {
-    display: block !important;
-    overflow: visible !important;
-  }
-
-  /* Keep appShell and main-container open for printed content */
-  #appShell,
-  .main-container {
-    display: block !important;
-    position: static !important;
-    width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #ffffff !important;
-    border: none !important;
-    box-shadow: none !important;
-    overflow: visible !important;
   }
 
   .card {
@@ -657,64 +648,315 @@ footer {
     background: #ffffff !important;
   }
 
-  /* 1. PRINTING PAYSLIP (STRICT 1-PAGE A4 PORTRAIT) */
-  body.printing-payslip {
-    height: auto !important;
-    min-height: 0 !important;
+  /* ========================================================================
+     GROUP A: MODAL PRINT DOCUMENTS (Payslip, Salary Cert, 50 Twi, Sign-off)
+     When printing any modal, the ENTIRE website / background is HIDDEN!
+     ======================================================================== */
+  body.printing-payslip #appShell,
+  body.printing-salary-cert #appShell,
+  body.printing-50twi #appShell,
+  body.printing-payroll-summary #appShell,
+  body.printing-payslip .main-container,
+  body.printing-salary-cert .main-container,
+  body.printing-50twi .main-container,
+  body.printing-payroll-summary .main-container,
+  body.printing-payslip .tab-content,
+  body.printing-salary-cert .tab-content,
+  body.printing-50twi .tab-content,
+  body.printing-payroll-summary .tab-content {
+    display: none !important;
   }
-  body.printing-payslip @page {
-    size: A4 portrait;
-    margin: 8mm 12mm;
+
+  /* ------------------------------------------------------------------------
+     A1. PAYSLIP MODAL PRINT (A4 PORTRAIT)
+     ------------------------------------------------------------------------ */
+  body.printing-payslip > *:not(#payslipModal) {
+    display: none !important;
   }
   body.printing-payslip .modal-overlay:not(#payslipModal) {
     display: none !important;
   }
-  body.printing-payslip #appShell,
-  body.printing-payslip #payslipModal,
+  body.printing-payslip #payslipModal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
   body.printing-payslip #payslipModal .modal-card {
     display: block !important;
     position: static !important;
     width: 100% !important;
     max-width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
     background: #ffffff !important;
+  }
+  body.printing-payslip #payslipModal .modal-card > *:not(.modal-body) {
+    display: none !important;
+  }
+  body.printing-payslip #payslipModal .modal-body {
+    display: block !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
     overflow: visible !important;
+    max-height: none !important;
   }
   body.printing-payslip #payslipContentArea {
     display: block !important;
-    position: static !important;
     width: 100% !important;
     max-width: 760px !important;
     margin: 0 auto !important;
     padding: 0 !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
-    page-break-after: avoid !important;
-    break-after: avoid !important;
   }
   body.printing-payslip #payslipContentArea * {
     visibility: visible !important;
   }
 
-  /* 2. PRINTING EMPLOYEE HISTORY REPORT (INDIVIDUAL - A4 LANDSCAPE) */
-  body.printing-history {
+  /* ------------------------------------------------------------------------
+     A2. SALARY & EMPLOYMENT CERTIFICATE MODAL PRINT (A4 PORTRAIT)
+     ------------------------------------------------------------------------ */
+  body.printing-salary-cert > *:not(#salaryCertModal) {
+    display: none !important;
+  }
+  body.printing-salary-cert .modal-overlay:not(#salaryCertModal) {
+    display: none !important;
+  }
+  body.printing-salary-cert #salaryCertModal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
     height: auto !important;
     min-height: 0 !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
   }
-  body.printing-history @page {
-    size: A4 landscape;
-    margin: 5mm 6mm;
+  body.printing-salary-cert #salaryCertModal .modal-card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    border-radius: 0 !important;
+  }
+  body.printing-salary-cert #salaryCertModal .modal-header,
+  body.printing-salary-cert #salaryCertModal .cert-controls-bar,
+  body.printing-salary-cert #salaryCertModal .modal-footer,
+  body.printing-salary-cert #salaryCertModal .no-print,
+  body.printing-salary-cert #salaryCertModal .modal-card > *:not(.modal-body) {
+    display: none !important;
+  }
+  body.printing-salary-cert #salaryCertModal .modal-body {
+    display: block !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-salary-cert #salaryCertModal .modal-body > *:not(#salaryCertPaper) {
+    display: none !important;
+  }
+  body.printing-salary-cert #salaryCertPaper {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 2mm 5mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    font-size: 14px !important;
+    line-height: 1.9 !important;
+  }
+  body.printing-salary-cert #salaryCertPaper * {
+    visibility: visible !important;
+  }
+  body.printing-salary-cert .salary-cert-paper [contenteditable="true"] {
+    outline: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border: none !important;
+  }
+
+  /* ------------------------------------------------------------------------
+     A3. 50 TWI WITHHOLDING TAX CERTIFICATE MODAL PRINT (A4 PORTRAIT)
+     ------------------------------------------------------------------------ */
+  body.printing-50twi > *:not(#twi50Modal) {
+    display: none !important;
+  }
+  body.printing-50twi .modal-overlay:not(#twi50Modal) {
+    display: none !important;
+  }
+  body.printing-50twi #twi50Modal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-50twi #twi50Modal .modal-card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    border-radius: 0 !important;
+  }
+  body.printing-50twi #twi50Modal .modal-card > *:not(.modal-body) {
+    display: none !important;
+  }
+  body.printing-50twi #twi50Modal .modal-body {
+    display: block !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-50twi #twi50Modal .modal-body > *:not(#twi50PrintArea) {
+    display: none !important;
+  }
+  body.printing-50twi #twi50PrintArea {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 10px 14px !important;
+    border: 1.5px solid #0f172a !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-50twi #twi50PrintArea * {
+    visibility: visible !important;
+  }
+
+  /* ------------------------------------------------------------------------
+     A4. MONTHLY PAYROLL SUMMARY SIGN-OFF SHEET MODAL PRINT (A4 LANDSCAPE)
+     ------------------------------------------------------------------------ */
+  body.printing-payroll-summary {
+    page: landscapePage;
+  }
+  body.printing-payroll-summary > *:not(#payrollSignoffModal) {
+    display: none !important;
+  }
+  body.printing-payroll-summary .modal-overlay:not(#payrollSignoffModal) {
+    display: none !important;
+  }
+  body.printing-payroll-summary #payrollSignoffModal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-payroll-summary #payrollSignoffModal .modal-card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    border-radius: 0 !important;
+  }
+  body.printing-payroll-summary #payrollSignoffModal .modal-card > *:not(.modal-body) {
+    display: none !important;
+  }
+  body.printing-payroll-summary #payrollSignoffModal .modal-body {
+    display: block !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-payroll-summary #payrollSignoffModal .modal-body > *:not(#payrollSignoffPrintArea) {
+    display: none !important;
+  }
+  body.printing-payroll-summary #payrollSignoffPrintArea {
+    display: block !important;
+    width: 100% !important;
+    border: 1.5px solid #0f172a !important;
+    box-shadow: none !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-payroll-summary #payrollSignoffPrintArea * {
+    visibility: visible !important;
+  }
+
+
+  /* ========================================================================
+     GROUP B: TAB PRINT DOCUMENTS (History Individual, Yearly Summary, Analytics)
+     When printing tabs, all modal overlays are ALWAYS HIDDEN!
+     ======================================================================== */
+  body:not(.printing-payslip):not(.printing-salary-cert):not(.printing-50twi):not(.printing-payroll-summary) .modal-overlay {
+    display: none !important;
+  }
+
+  /* ------------------------------------------------------------------------
+     B1. INDIVIDUAL EMPLOYEE HISTORY REPORT (A4 LANDSCAPE)
+     ------------------------------------------------------------------------ */
+  body.printing-history {
+    page: landscapePage;
+  }
+  body.printing-history #appShell,
+  body.printing-history .main-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-history .tab-content:not(#tab-history) {
+    display: none !important;
   }
   body.printing-history #tab-history {
     display: block !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
+    overflow: visible !important;
   }
   body.printing-history #histYearlyViewArea,
   body.printing-history #histBatchPrintArea {
@@ -722,133 +964,88 @@ footer {
   }
   body.printing-history #histContentArea {
     display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
     padding: 0 !important;
+    margin: 0 !important;
   }
   body.printing-history #individualPrintHeaderBanner {
     display: block !important;
+    text-align: center !important;
     margin-bottom: 6px !important;
-    padding-bottom: 4px !important;
   }
-  /* Style Bio Box for print - clean white/slate box */
   body.printing-history #histEmpBioCard {
     display: block !important;
+    margin-bottom: 8px !important;
+    padding: 8px 12px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
     background: #f8fafc !important;
-    color: #0f172a !important;
-    border: 1px solid #cbd5e1 !important;
-    box-shadow: none !important;
-    padding: 5px 10px !important;
-    margin-bottom: 6px !important;
-    border-radius: 4px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
-  body.printing-history #histEmpBioCard #histEmpAvatarInitials {
-    display: none !important;
-  }
-  body.printing-history #histEmpBioCard h2 {
-    color: #0f172a !important;
-    font-size: 12px !important;
-  }
-  body.printing-history #histEmpBioCard span,
-  body.printing-history #histEmpBioCard div {
-    color: #334155 !important;
-  }
-  body.printing-history #histEmpBioCard .period-pill {
-    background: #e2e8f0 !important;
-    color: #0f172a !important;
-    border: 1px solid #cbd5e1 !important;
-  }
-  /* Style square KPI grid for print - compact single row */
   body.printing-history .square-kpi-grid {
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
-    gap: 4px !important;
-    margin-bottom: 6px !important;
+    gap: 8px !important;
+    margin-bottom: 8px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   body.printing-history .square-kpi-card {
+    padding: 6px 10px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
     background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    box-shadow: none !important;
-    padding: 3px 6px !important;
-    border-radius: 4px !important;
   }
-  body.printing-history .square-kpi-icon,
-  body.printing-history .square-kpi-footer {
-    display: none !important;
-  }
-  body.printing-history .square-kpi-title {
-    font-size: 8pt !important;
-    color: #64748b !important;
-  }
-  body.printing-history .square-kpi-value {
-    font-size: 10pt !important;
-    font-weight: 800 !important;
-    margin-top: 1px !important;
-  }
-  /* Style 12-month table - All 17 columns visible in A4 Landscape */
   body.printing-history .table-wrapper {
-    display: block !important;
     overflow: visible !important;
-    max-height: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 0 6px 0 !important;
-    border: 1px solid #cbd5e1 !important;
+    border: none !important;
+    box-shadow: none !important;
   }
-  body.printing-history .data-table,
   body.printing-history #historyTable {
-    display: table !important;
-    font-size: 6.8pt !important;
     width: 100% !important;
-    max-width: 100% !important;
-    table-layout: auto !important;
+    table-layout: fixed !important;
+    font-size: 9.5px !important;
     border-collapse: collapse !important;
   }
-  body.printing-history .data-table th,
-  body.printing-history .data-table td,
   body.printing-history #historyTable th,
   body.printing-history #historyTable td {
-    padding: 2.5px 2px !important;
+    padding: 3px 2px !important;
     border: 0.5pt solid #cbd5e1 !important;
-    line-height: 1.15 !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-    width: auto !important;
-    box-sizing: border-box !important;
   }
-  /* Explicitly hide only the 'สลิป' action column during print */
   body.printing-history .no-print-col,
-  body.printing-history .data-table th.no-print-col,
-  body.printing-history .data-table td.no-print-col,
   body.printing-history #historyTable th.no-print-col,
   body.printing-history #historyTable td.no-print-col {
     display: none !important;
   }
   body.printing-history #individualPrintSignatures {
     display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 30px !important;
-    margin-top: 8px !important;
     page-break-inside: avoid !important;
-    text-align: center !important;
-    font-size: 8.5px !important;
+    break-inside: avoid !important;
+    margin-top: 10px !important;
   }
 
-  /* 3. PRINTING YEARLY SUMMARY REPORT (ALL EMPLOYEES MATRIX - A4 LANDSCAPE) */
+  /* ------------------------------------------------------------------------
+     B2. YEARLY SUMMARY MATRIX (A4 LANDSCAPE)
+     ------------------------------------------------------------------------ */
   body.printing-yearly-summary {
-    height: auto !important;
-    min-height: 0 !important;
+    page: landscapePage;
   }
-  body.printing-yearly-summary @page {
-    size: A4 landscape;
-    margin: 5mm 6mm;
+  body.printing-yearly-summary #appShell,
+  body.printing-yearly-summary .main-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-yearly-summary .tab-content:not(#tab-history) {
+    display: none !important;
   }
   body.printing-yearly-summary #tab-history {
     display: block !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
+    overflow: visible !important;
   }
   body.printing-yearly-summary #histContentArea,
   body.printing-yearly-summary #histBatchPrintArea {
@@ -856,94 +1053,73 @@ footer {
   }
   body.printing-yearly-summary #histYearlyViewArea {
     display: block !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
     padding: 0 !important;
+    margin: 0 !important;
   }
   body.printing-yearly-summary #yearlyPrintHeaderBanner {
     display: block !important;
+    text-align: center !important;
     margin-bottom: 6px !important;
-    padding-bottom: 4px !important;
   }
   body.printing-yearly-summary .square-kpi-grid {
     display: grid !important;
     grid-template-columns: repeat(4, 1fr) !important;
-    gap: 4px !important;
-    margin-bottom: 6px !important;
+    gap: 8px !important;
+    margin-bottom: 8px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
   }
   body.printing-yearly-summary .square-kpi-card {
+    padding: 6px 10px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
     background: #ffffff !important;
-    border: 1px solid #cbd5e1 !important;
-    box-shadow: none !important;
-    padding: 2.5px 5px !important;
-    border-radius: 4px !important;
   }
-  body.printing-yearly-summary .square-kpi-icon,
-  body.printing-yearly-summary .square-kpi-footer {
-    display: none !important;
-  }
-  body.printing-yearly-summary .square-kpi-title {
-    font-size: 7.5pt !important;
-  }
-  body.printing-yearly-summary .square-kpi-value {
-    font-size: 9.5pt !important;
-    font-weight: 800 !important;
-  }
-  /* Style yearly summary table - All 19 columns visible in A4 Landscape */
   body.printing-yearly-summary .table-wrapper {
-    display: block !important;
     overflow: visible !important;
-    max-height: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    border: 1px solid #cbd5e1 !important;
-    margin: 0 0 6px 0 !important;
+    border: none !important;
+    box-shadow: none !important;
   }
-  body.printing-yearly-summary .data-table,
   body.printing-yearly-summary #yearlySummaryTable {
-    display: table !important;
-    font-size: 6.2pt !important;
     width: 100% !important;
-    max-width: 100% !important;
-    table-layout: auto !important;
+    table-layout: fixed !important;
+    font-size: 9.5px !important;
     border-collapse: collapse !important;
   }
-  body.printing-yearly-summary .data-table th,
-  body.printing-yearly-summary .data-table td,
   body.printing-yearly-summary #yearlySummaryTable th,
   body.printing-yearly-summary #yearlySummaryTable td {
-    padding: 2px 1.5px !important;
+    padding: 3px 2px !important;
     border: 0.5pt solid #cbd5e1 !important;
-    line-height: 1.15 !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-    width: auto !important;
-    box-sizing: border-box !important;
   }
   body.printing-yearly-summary #yearlyPrintSignatures {
     display: grid !important;
-    grid-template-columns: repeat(3, 1fr) !important;
-    gap: 30px !important;
-    margin-top: 8px !important;
     page-break-inside: avoid !important;
-    text-align: center !important;
-    font-size: 8.5px !important;
+    break-inside: avoid !important;
+    margin-top: 10px !important;
   }
 
-  /* 4. PRINTING BATCH ALL EMPLOYEES */
+  /* ------------------------------------------------------------------------
+     B3. BATCH PRINT ALL EMPLOYEES (A4 LANDSCAPE)
+     ------------------------------------------------------------------------ */
   body.printing-batch-history {
-    height: auto !important;
+    page: landscapePage;
   }
-  body.printing-batch-history @page {
-    size: A4 landscape;
-    margin: 5mm 6mm;
+  body.printing-batch-history #appShell,
+  body.printing-batch-history .main-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-batch-history .tab-content:not(#tab-history) {
+    display: none !important;
   }
   body.printing-batch-history #tab-history {
     display: block !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
+    overflow: visible !important;
   }
   body.printing-batch-history #histYearlyViewArea,
   body.printing-batch-history #histContentArea {
@@ -951,42 +1127,101 @@ footer {
   }
   body.printing-batch-history #histBatchPrintArea {
     display: block !important;
-    width: 100% !important;
-    margin: 0 !important;
     padding: 0 !important;
   }
   body.printing-batch-history .batch-emp-page {
     page-break-after: always !important;
     break-after: page !important;
-    padding: 6px 0 14px 0 !important;
+    padding: 5mm !important;
   }
   body.printing-batch-history .batch-emp-page:last-child {
     page-break-after: avoid !important;
     break-after: avoid !important;
   }
-  body.printing-batch-history .table-wrapper {
+
+  /* ------------------------------------------------------------------------
+     B4. EXECUTIVE ANALYTICS REPORT (A4 LANDSCAPE)
+     ------------------------------------------------------------------------ */
+  body.printing-analytics {
+    page: landscapePage;
+  }
+  body.printing-analytics #appShell,
+  body.printing-analytics .main-container {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-analytics .tab-content:not(#tab-analytics) {
+    display: none !important;
+  }
+  body.printing-analytics #tab-analytics {
     display: block !important;
     overflow: visible !important;
-    max-height: none !important;
-    width: 100% !important;
   }
-  body.printing-batch-history .data-table {
-    display: table !important;
-    font-size: 6.5pt !important;
-    width: 100% !important;
-    table-layout: auto !important;
-    border-collapse: collapse !important;
+  body.printing-analytics #analyticsPrintHeaderBanner {
+    display: block !important;
+    margin-bottom: 8px !important;
   }
-  body.printing-batch-history .data-table th,
-  body.printing-batch-history .data-table td {
-    padding: 2.5px 2px !important;
-    border: 0.5pt solid #cbd5e1 !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-    width: auto !important;
+  body.printing-analytics .analytics-header,
+  body.printing-analytics .analytics-filter-bar,
+  body.printing-analytics .analytics-filter-btn-group {
+    display: none !important;
+  }
+  body.printing-analytics .analytics-kpi-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 8px !important;
+    margin-bottom: 8px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-analytics .analytics-kpi-card {
+    padding: 8px 10px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    background: #ffffff !important;
+  }
+  body.printing-analytics .analytics-grid-2 {
+    display: grid !important;
+    grid-template-columns: 2fr 1fr !important;
+    gap: 10px !important;
+    margin-bottom: 10px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-analytics .analytics-grid-3 {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr 1.2fr !important;
+    gap: 10px !important;
+    margin-bottom: 10px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-analytics .analytics-card {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    padding: 10px !important;
+  }
+  body.printing-analytics .analytics-chart-box {
+    height: 180px !important;
+  }
+  body.printing-analytics .analytics-matrix-pills {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
+    margin-bottom: 8px !important;
+  }
+  body.printing-analytics .analytics-table th,
+  body.printing-analytics .analytics-table td {
+    padding: 4px 6px !important;
+    border-bottom: 0.5pt solid #cbd5e1 !important;
+    font-size: 10.5px !important;
   }
 }
-
 
 /* ==========================================================================
    AI PAYROLL ASSISTANT WIDGET
@@ -1264,229 +1499,6 @@ footer {
 .ai-send-btn:hover {
   background: #1d4ed8;
   transform: scale(1.05);
-
-  /* 50 TWI WITHHOLDING TAX CERTIFICATE PRINT MODE */
-  body.printing-50twi {
-    background: #ffffff !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    height: auto !important;
-  }
-  body.printing-50twi #appShell,
-  body.printing-50twi header,
-  body.printing-50twi nav,
-  body.printing-50twi .nav-tab-container,
-  body.printing-50twi .period-bar,
-  body.printing-50twi .ai-chat-btn,
-  body.printing-50twi .ai-chat-drawer,
-  body.printing-50twi .modal-overlay:not(#twi50Modal),
-  body.printing-50twi #twi50Modal .modal-header,
-  body.printing-50twi #twi50Modal .modal-footer {
-    display: none !important;
-  }
-  body.printing-50twi #twi50Modal {
-    position: static !important;
-    background: #ffffff !important;
-    display: block !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-  }
-  body.printing-50twi #twi50Modal .modal-card {
-    position: static !important;
-    border: none !important;
-    box-shadow: none !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-  }
-  body.printing-50twi #twi50PrintArea {
-    border: 1.5px solid #000000 !important;
-    padding: 15mm 15mm !important;
-    margin: 0 auto !important;
-    page-break-after: avoid !important;
-    page-break-inside: avoid !important;
-  }
-
-
-  /* MONTHLY PAYROLL SUMMARY SIGN-OFF PRINT MODE */
-  body.printing-payroll-summary {
-    background: #ffffff !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    height: auto !important;
-  }
-  body.printing-payroll-summary @page {
-    size: A4 landscape;
-    margin: 8mm 10mm;
-  }
-  body.printing-payroll-summary #appShell,
-  body.printing-payroll-summary header,
-  body.printing-payroll-summary nav,
-  body.printing-payroll-summary .nav-tab-container,
-  body.printing-payroll-summary .period-bar,
-  body.printing-payroll-summary .ai-chat-btn,
-  body.printing-payroll-summary .ai-chat-drawer,
-  body.printing-payroll-summary .modal-overlay {
-    display: none !important;
-  }
-  body.printing-payroll-summary #payrollSignoffPrintArea {
-    display: block !important;
-    position: static !important;
-    width: 100% !important;
-    background: #ffffff !important;
-  }
-  body.printing-payroll-summary #payrollSignoffPrintArea * {
-    visibility: visible !important;
-  }
-
-  /* 7. PRINTING ANALYTICS & EXECUTIVE REPORT (A4 LANDSCAPE) */
-  body.printing-analytics {
-    background: #ffffff !important;
-    height: auto !important;
-    min-height: 0 !important;
-  }
-  body.printing-analytics @page {
-    size: A4 landscape;
-    margin: 8mm 10mm;
-  }
-  body.printing-analytics #appShell,
-  body.printing-analytics .main-container {
-    display: block !important;
-    background: #ffffff !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    width: 100% !important;
-  }
-  body.printing-analytics .tab-content:not(#tab-analytics) {
-    display: none !important;
-  }
-  body.printing-analytics #tab-analytics {
-    display: block !important;
-    width: 100% !important;
-    background: #ffffff !important;
-    overflow: visible !important;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  body.printing-analytics #analyticsPrintHeaderBanner {
-    display: block !important;
-  }
-  body.printing-analytics .analytics-header,
-  body.printing-analytics .analytics-filter-bar,
-  body.printing-analytics .analytics-filter-btn-group,
-  body.printing-analytics .btn,
-  body.printing-analytics button {
-    display: none !important;
-  }
-  body.printing-analytics .analytics-kpi-grid {
-    display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
-    gap: 10px !important;
-    margin-bottom: 12px !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  body.printing-analytics .analytics-kpi-card {
-    padding: 10px 12px !important;
-    box-shadow: none !important;
-    border: 1px solid #cbd5e1 !important;
-    border-left-width: 4px !important;
-  }
-  body.printing-analytics .analytics-kpi-val {
-    font-size: 18px !important;
-  }
-  body.printing-analytics .analytics-grid-2 {
-    display: grid !important;
-    grid-template-columns: 2fr 1fr !important;
-    gap: 12px !important;
-    margin-bottom: 12px !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  body.printing-analytics .analytics-grid-3 {
-    display: grid !important;
-    grid-template-columns: 1fr 1fr 1.3fr !important;
-    gap: 12px !important;
-    margin-bottom: 14px !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  body.printing-analytics .analytics-card {
-    box-shadow: none !important;
-    border: 1px solid #cbd5e1 !important;
-    padding: 12px !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  body.printing-analytics .analytics-chart-box {
-    height: 190px !important;
-  }
-  body.printing-analytics .analytics-matrix-pills {
-    display: grid !important;
-    grid-template-columns: repeat(4, 1fr) !important;
-    gap: 8px !important;
-    margin-bottom: 10px !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-  body.printing-analytics .analytics-table th,
-  body.printing-analytics .analytics-table td {
-    padding: 5px 6px !important;
-    font-size: 11px !important;
-  }
-  body.printing-analytics .analytics-table tr {
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-  }
-
-  /* 5. PRINTING SALARY & EMPLOYMENT CERTIFICATE (A4 PORTRAIT) */
-  body.printing-salary-cert {
-    height: auto !important;
-    min-height: 0 !important;
-  }
-  body.printing-salary-cert @page {
-    size: A4 portrait;
-    margin: 15mm 15mm;
-  }
-  body.printing-salary-cert .modal-overlay:not(#salaryCertModal) {
-    display: none !important;
-  }
-  body.printing-salary-cert #appShell,
-  body.printing-salary-cert #salaryCertModal,
-  body.printing-salary-cert #salaryCertModal .modal-card {
-    display: block !important;
-    position: static !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    height: auto !important;
-    min-height: 0 !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    box-shadow: none !important;
-    background: #ffffff !important;
-    overflow: visible !important;
-  }
-  body.printing-salary-cert #salaryCertPaper {
-    display: block !important;
-    position: static !important;
-    width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 10mm 15mm !important;
-    border: none !important;
-    box-shadow: none !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
-    font-size: 14px !important;
-    line-height: 1.85 !important;
-  }
-  body.printing-salary-cert #salaryCertPaper * {
-    visibility: visible !important;
-  }
-
 }
 
 /* =======================================================
@@ -1950,14 +1962,3 @@ footer {
   background-color: #ffffff;
   box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
 }
-
-@media print {
-  .salary-cert-paper [contenteditable="true"] {
-    outline: none !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    padding: 0 !important;
-  }
-}
-
-

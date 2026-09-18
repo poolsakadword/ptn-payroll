@@ -130,6 +130,42 @@ function getDefaultPeriod() {
   return months[d.getMonth()] + ' ' + (d.getFullYear() + 543);
 }
 
+function getCutoffDatesForPeriod(periodStr) {
+  const thaiMonths = [
+    'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+    'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
+  ];
+  let yearCE = new Date().getFullYear();
+  let month = new Date().getMonth() + 1; // 1-12
+
+  if (periodStr) {
+    for (let i = 0; i < thaiMonths.length; i++) {
+      if (periodStr.includes(thaiMonths[i])) {
+        month = i + 1;
+        break;
+      }
+    }
+    const numMatches = periodStr.match(/\d{4}/);
+    if (numMatches) {
+      let y = parseInt(numMatches[0], 10);
+      if (y > 2400) y -= 543; // BE to CE
+      yearCE = y;
+    }
+  }
+
+  let prevMonth = month - 1;
+  let prevYear = yearCE;
+  if (prevMonth < 1) {
+    prevMonth = 12;
+    prevYear -= 1;
+  }
+
+  const startDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-26`;
+  const endDate = `${yearCE}-${String(month).padStart(2, '0')}-25`;
+
+  return { startDate, endDate, month, yearCE };
+}
+
 async function handleAction(db, action, params) {
   const period = params.period || getDefaultPeriod();
 
@@ -220,6 +256,7 @@ async function handleAction(db, action, params) {
       await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+      await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
       const employees = (empQuery.results || []).map(e => ({
@@ -259,6 +296,7 @@ async function handleAction(db, action, params) {
         absentDays: Number(i.absent_days) || 0,
         leaveDays: Number(i.leave_days) || 0,
         sickLeaveDays: Number(i.sick_leave_days) || 0,
+        unpaidSickLeaveDays: Number(i.unpaid_sick_leave_days) || 0,
         lateDeduct: Number(i.late_deduct) || 0,
         otHours: Number(i.ot_hours) || 0,
         otRate: (i.ot_rate !== null && i.ot_rate !== undefined && !isNaN(Number(i.ot_rate))) ? Number(i.ot_rate) : 40,
@@ -348,6 +386,22 @@ async function handleAction(db, action, params) {
       };
     }
 
+    // 2.1 SAVE PAYROLL DEFAULTS
+    case 'savePayrollDefaults': {
+      const d = params.defaults || {};
+      if (d.defaultOtRate !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultOtRate", ?)').bind(String(d.defaultOtRate)).run();
+      if (d.defaultWorkDays !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultWorkDays", ?)').bind(String(d.defaultWorkDays)).run();
+      if (d.absentFactor !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("AbsentFactor", ?)').bind(String(d.absentFactor)).run();
+      if (d.leaveFactor !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("LeaveFactor", ?)').bind(String(d.leaveFactor)).run();
+      if (d.sickLeaveQuota !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("SickLeaveQuota", ?)').bind(String(d.sickLeaveQuota)).run();
+      if (d.defaultPfRate !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultPfRate", ?)').bind(String(d.defaultPfRate)).run();
+      if (d.defaultProbationDays !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultProbationDays", ?)').bind(String(d.defaultProbationDays)).run();
+
+      await calculateAndSavePayroll(db, period);
+      await logSystemActivity(db, params.username || 'Admin', 'SETTINGS_UPDATE', 'อัปเดตค่านโยบายและค่าเริ่มต้นการคำนวณเงินเดือน');
+      return { success: true, message: 'บันทึกค่านโยบายและค่าเริ่มต้นระบบเงินเดือนเรียบร้อยแล้ว' };
+    }
+
     // 3. PERIOD WORK DAYS
     case 'savePeriodWorkDays': {
       const days = Number(params.workingDays) || 30;
@@ -409,6 +463,7 @@ async function handleAction(db, action, params) {
       await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+      await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
       let probEndDate = emp.probationEndDate || '';
       const probDays = Number(emp.probationDays) || 119;
@@ -484,11 +539,11 @@ async function handleAction(db, action, params) {
 
       await db.prepare(`
         INSERT OR REPLACE INTO monthly_inputs
-        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         period, nextNo, r.empId, r.empName || '', baseSal, pfRate, pfAmt,
-        Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
+        Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.unpaidSickLeaveDays) || 0, Number(r.lateDeduct) || 0,
         Number(r.otHours) || 0, otRate,
         Number(r.allowance) || 0, Number(r.bonus) || 0, Number(r.advanceDeduct) || 0,
         Number(r.otherDeduct) || 0, (r.sso !== null && r.sso !== undefined && !isNaN(Number(r.sso))) ? Number(r.sso) : 0, Number(r.tax) || 0
@@ -533,9 +588,12 @@ async function handleAction(db, action, params) {
         const absentDays = Number(exist.absent_days) || 0;
         const leaveDays = Number(exist.leave_days) || 0;
         const sickLeaveDays = Number(exist.sick_leave_days) || 0;
+        const unpaidSickLeaveDays = Number(exist.unpaid_sick_leave_days) || 0;
         const lateDeduct = Number(exist.late_deduct) || 0;
         const otHours = Number(exist.ot_hours) || 0;
-        const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : 40;
+        const defOtRow = await db.prepare('SELECT value FROM settings WHERE key = "DefaultOtRate"').first().catch(() => null);
+        const fallbackOtRate = (defOtRow && defOtRow.value && !isNaN(Number(defOtRow.value))) ? Number(defOtRow.value) : 40;
+        const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : fallbackOtRate;
         const allowance = Number(exist.allowance) || 0;
         const bonus = Number(exist.bonus) || 0;
         const advDed = Number(exist.advance_deduct) || 0;
@@ -543,11 +601,11 @@ async function handleAction(db, action, params) {
 
         await db.prepare(`
           INSERT OR REPLACE INTO monthly_inputs
-          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-          absentDays, leaveDays, sickLeaveDays, lateDeduct, otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
+          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
         ).run();
       }
 
@@ -556,7 +614,167 @@ async function handleAction(db, action, params) {
         success: true,
         period: period,
         count: added,
-        message: `ดึงและอัปเดตข้อมูลพนักงานเข้างวด ${period} สำเร็จ (${added} คน) [อัตรา OT เริ่มต้น 40 บาท]`
+        message: `ดึงและอัปเดตข้อมูลพนักงานเข้างวด ${period} สำเร็จ (${added} คน)`
+      };
+    }
+
+    // 5.1 SYNC ATTENDANCE, LEAVES, OT & ADVANCE FROM PTN TIME
+    case 'syncFromPtnTime': {
+      const dates = getCutoffDatesForPeriod(period);
+      const startDate = dates.startDate;
+      const endDate = dates.endDate;
+
+      await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
+
+      // 1. Query approved advance requests in this cutoff window (26th to 25th)
+      let advMap = {};
+      let totalAdvAmount = 0;
+      try {
+        const advQuery = await db.prepare(`
+          SELECT emp_id, SUM(amount) as total_amt
+          FROM advance_requests
+          WHERE status = 'APPROVED'
+            AND (request_date BETWEEN ? AND ? OR period = ?)
+          GROUP BY emp_id
+        `).bind(startDate, endDate, period).all();
+        for (const row of (advQuery.results || [])) {
+          const amt = Number(row.total_amt) || 0;
+          advMap[row.emp_id] = amt;
+          totalAdvAmount += amt;
+        }
+      } catch (e) {
+        console.warn('advance_requests query note:', e);
+      }
+
+      // 2. Query approved OT requests in this cutoff window
+      let otMap = {};
+      let totalOtHours = 0;
+      try {
+        const otQuery = await db.prepare(`
+          SELECT emp_id, SUM(COALESCE(actual_hours, planned_hours)) as total_hours
+          FROM ot_requests
+          WHERE status = 'APPROVED'
+            AND (date BETWEEN ? AND ?)
+          GROUP BY emp_id
+        `).bind(startDate, endDate).all();
+        for (const row of (otQuery.results || [])) {
+          const hrs = Number(row.total_hours) || 0;
+          otMap[row.emp_id] = hrs;
+          totalOtHours += hrs;
+        }
+      } catch (e) {
+        console.warn('ot_requests query note:', e);
+      }
+
+      // Also check time_logs if any ot_hours recorded directly
+      try {
+        const timeLogOtQuery = await db.prepare(`
+          SELECT emp_id, SUM(ot_hours) as log_ot
+          FROM time_logs
+          WHERE date BETWEEN ? AND ? AND ot_hours > 0
+          GROUP BY emp_id
+        `).bind(startDate, endDate).all();
+        for (const row of (timeLogOtQuery.results || [])) {
+          const logOt = Number(row.log_ot) || 0;
+          if (logOt > (otMap[row.emp_id] || 0)) {
+            totalOtHours += (logOt - (otMap[row.emp_id] || 0));
+            otMap[row.emp_id] = logOt;
+          }
+        }
+      } catch (e) {}
+
+      // 3. Query approved leave requests in this cutoff window
+      let leaveMap = {};
+      let totalLeaveCount = 0;
+      try {
+        const leaveQuery = await db.prepare(`
+          SELECT emp_id, leave_type, SUM(days_count) as total_days
+          FROM leave_requests
+          WHERE status = 'APPROVED'
+            AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?))
+          GROUP BY emp_id, leave_type
+        `).bind(startDate, endDate, startDate, endDate).all();
+        for (const row of (leaveQuery.results || [])) {
+          if (!leaveMap[row.emp_id]) {
+            leaveMap[row.emp_id] = { sickCert: 0, sickNoCert: 0, business: 0 };
+          }
+          const days = Number(row.total_days) || 0;
+          totalLeaveCount += days;
+          if (row.leave_type === 'SICK_WITH_CERT') {
+            leaveMap[row.emp_id].sickCert += days;
+          } else if (row.leave_type === 'SICK_NO_CERT') {
+            leaveMap[row.emp_id].sickNoCert += days;
+          } else if (row.leave_type === 'BUSINESS' || row.leave_type === 'WITHOUT_PAY') {
+            leaveMap[row.emp_id].business += days;
+          }
+        }
+      } catch (e) {
+        console.warn('leave_requests query note:', e);
+      }
+
+      // 4. Merge into monthly_inputs for every employee
+      const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
+      const employees = empQuery.results || [];
+      const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
+      const existingMap = {};
+      for (const row of existingInput.results || []) existingMap[row.emp_id] = row;
+
+      const defOtRow = await db.prepare('SELECT value FROM settings WHERE key = "DefaultOtRate"').first().catch(() => null);
+      const fallbackOtRate = (defOtRow && defOtRow.value && !isNaN(Number(defOtRow.value))) ? Number(defOtRow.value) : 40;
+
+      let syncedCount = 0;
+      let nextNo = 0;
+
+      for (const emp of employees) {
+        nextNo++;
+        syncedCount++;
+        const baseSal = Number(emp.base_salary) || 0;
+        const pfRate = (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05;
+        const pfAmt = pfRate > 0 ? Math.round(baseSal * pfRate * 100) / 100 : 0;
+        const sso = (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 0;
+        const tax = Number(emp.default_tax) || 0;
+
+        const exist = existingMap[emp.emp_id] || {};
+        const absentDays = Number(exist.absent_days) || 0;
+        const allowance = Number(exist.allowance) || 0;
+        const bonus = Number(exist.bonus) || 0;
+        const othDed = Number(exist.other_deduct) || 0;
+        const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : fallbackOtRate;
+
+        // Apply synced data from PTN Time
+        const otHours = otMap[emp.emp_id] !== undefined ? otMap[emp.emp_id] : (Number(exist.ot_hours) || 0);
+        const advDed = advMap[emp.emp_id] !== undefined ? advMap[emp.emp_id] : (Number(exist.advance_deduct) || 0);
+        
+        const empLeave = leaveMap[emp.emp_id] || {};
+        const sickLeaveDays = empLeave.sickCert !== undefined ? empLeave.sickCert : (Number(exist.sick_leave_days) || 0);
+        const unpaidSickLeaveDays = empLeave.sickNoCert !== undefined ? empLeave.sickNoCert : (Number(exist.unpaid_sick_leave_days) || 0);
+        const leaveDays = empLeave.business !== undefined ? empLeave.business : (Number(exist.leave_days) || 0);
+        const lateDeduct = Number(exist.late_deduct) || 0;
+
+        await db.prepare(`
+          INSERT OR REPLACE INTO monthly_inputs
+          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
+          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct,
+          otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
+        ).run();
+      }
+
+      await calculateAndSavePayroll(db, period);
+      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม.)`);
+
+      return {
+        success: true,
+        period: period,
+        startDate: startDate,
+        endDate: endDate,
+        syncedCount: syncedCount,
+        totalAdvAmount: totalAdvAmount,
+        totalOtHours: totalOtHours,
+        totalLeaveCount: totalLeaveCount,
+        message: `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} สำเร็จเรียบร้อย! (ยอดเบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, OT รวม ${totalOtHours} ชม., ลารวม ${totalLeaveCount} วัน)`
       };
     }
 
@@ -1206,25 +1424,31 @@ async function handleAction(db, action, params) {
         }
       }
 
-      // Restore Users
+      // Restore Users (with full permissions)
       if (Array.isArray(data.users)) {
+        await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
         await db.prepare('DELETE FROM users').run();
         for (const u of data.users) {
           if (u.username && u.password) {
-            await db.prepare('INSERT OR REPLACE INTO users (username, password, role) VALUES (?, ?, ?)').bind(u.username, u.password, u.role || 'User').run();
+            const permsStr = typeof u.permissions === 'string' ? u.permissions : JSON.stringify(u.permissions || []);
+            await db.prepare('INSERT OR REPLACE INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)').bind(u.username, u.password, u.role || 'User', permsStr).run();
           }
         }
       }
 
-      // Restore Employees
+      // Restore Employees (with probation status and details)
       if (Array.isArray(data.employees)) {
+        await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
+        await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
+        await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+
         await db.prepare('DELETE FROM employees').run();
         for (const e of data.employees) {
           if (e.emp_id && e.full_name) {
             await db.prepare(`
               INSERT OR REPLACE INTO employees 
-              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, remark)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               e.emp_id, e.full_name, e.nickname || '', e.citizen_id || '', e.phone || '', e.address || '',
               e.department || '', e.position || '', Number(e.base_salary) || 0,
@@ -1232,25 +1456,30 @@ async function handleAction(db, action, params) {
               e.join_date || '',
               (e.pf_rate !== null && e.pf_rate !== undefined && !isNaN(Number(e.pf_rate))) ? Number(e.pf_rate) : 0.05,
               (e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 0,
-              Number(e.default_tax) || 0, e.remark || ''
+              Number(e.default_tax) || 0,
+              e.status || 'Active',
+              Number(e.probation_days) || 119,
+              e.probation_end_date || '',
+              e.remark || ''
             ).run();
           }
         }
       }
 
-      // Restore Monthly Inputs
+      // Restore Monthly Inputs (with unpaid_sick_leave_days)
       if (Array.isArray(data.monthly_inputs)) {
+        await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
         await db.prepare('DELETE FROM monthly_inputs').run();
         for (const i of data.monthly_inputs) {
           if (i.period && i.emp_id) {
             await db.prepare(`
               INSERT OR REPLACE INTO monthly_inputs
-              (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               i.period, Number(i.no) || 1, i.emp_id, i.emp_name || '', Number(i.base_salary) || 0,
               Number(i.pf_rate) || 0, Number(i.pf_amount) || 0,
-              Number(i.absent_days) || 0, Number(i.leave_days) || 0, Number(i.sick_leave_days) || 0, Number(i.late_deduct) || 0,
+              Number(i.absent_days) || 0, Number(i.leave_days) || 0, Number(i.sick_leave_days) || 0, Number(i.unpaid_sick_leave_days) || 0, Number(i.late_deduct) || 0,
               Number(i.ot_hours) || 0, Number(i.ot_rate) || 40, Number(i.allowance) || 0, Number(i.bonus) || 0,
               Number(i.advance_deduct) || 0, Number(i.other_deduct) || 0, Number(i.sso) || 0, Number(i.tax) || 0
             ).run();
@@ -1300,15 +1529,46 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     return 0;
   }
 
+  // Load payroll policy defaults from settings
+  const settingsRows = (await db.prepare('SELECT key, value FROM settings').all()).results || [];
+  let defaultOtRate = 40;
+  let defaultWorkDays = 30;
+  let absentFactor = 1.5;
+  let leaveFactor = 1.0;
+  let sickLeaveQuota = 10;
+
+  for (const s of settingsRows) {
+    if (s.key === 'DefaultOtRate' && !isNaN(Number(s.value))) defaultOtRate = Number(s.value);
+    if (s.key === 'DefaultWorkDays' && !isNaN(Number(s.value))) defaultWorkDays = Number(s.value);
+    if (s.key === 'AbsentFactor' && !isNaN(Number(s.value))) absentFactor = Number(s.value);
+    if (s.key === 'LeaveFactor' && !isNaN(Number(s.value))) leaveFactor = Number(s.value);
+    if (s.key === 'SickLeaveQuota' && !isNaN(Number(s.value))) sickLeaveQuota = Number(s.value);
+  }
+
   let workDays = explicitWorkDays;
   if (!workDays) {
-    const wdRow = await db.prepare('SELECT value FROM settings WHERE key = ?').bind(`Period_WorkDays_${period}`).first();
-    workDays = (wdRow && wdRow.value && !isNaN(Number(wdRow.value))) ? Number(wdRow.value) : 30;
+    const wdRow = settingsRows.find(s => s.key === `Period_WorkDays_${period}`);
+    workDays = (wdRow && wdRow.value && !isNaN(Number(wdRow.value))) ? Number(wdRow.value) : defaultWorkDays;
   }
 
   const empQuery = await db.prepare('SELECT * FROM employees').all();
   const empMap = {};
   for (const emp of empQuery.results || []) empMap[emp.emp_id] = emp;
+
+  // Calendar year prefix (e.g. "2026") for sick leave annual quota tracking
+  const yearPrefix = (period || '').split('-')[0] || (new Date().getFullYear() + 543).toString();
+
+  // Query sick leave days used in prior periods of the same year before current period
+  const priorSickQuery = await db.prepare(`
+    SELECT emp_id, COALESCE(SUM(sick_leave_days), 0) as used_sick
+    FROM monthly_inputs
+    WHERE period LIKE ? AND period < ?
+    GROUP BY emp_id
+  `).bind(`${yearPrefix}-%`, period).all().catch(() => ({ results: [] }));
+  const priorSickMap = {};
+  for (const row of (priorSickQuery.results || [])) {
+    priorSickMap[row.emp_id] = Number(row.used_sick) || 0;
+  }
 
   await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
 
@@ -1322,23 +1582,33 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const pfRate = (inp.pf_rate !== null && inp.pf_rate !== undefined && !isNaN(Number(inp.pf_rate))) ? Number(inp.pf_rate) : ((emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0);
     const pfAmt = (pfRate > 0) ? (Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100)) : 0;
 
-    const otRate = (inp.ot_rate !== null && inp.ot_rate !== undefined && !isNaN(Number(inp.ot_rate))) ? Number(inp.ot_rate) : 40;
+    const otRate = (inp.ot_rate !== null && inp.ot_rate !== undefined && !isNaN(Number(inp.ot_rate))) ? Number(inp.ot_rate) : defaultOtRate;
     const otPay = Math.round((Number(inp.ot_hours) || 0) * otRate * 100) / 100;
 
     const dailyRate = workDays > 0 ? (baseSal / workDays) : (baseSal / 30);
 
     const absentDays = Number(inp.absent_days) || 0;
-    const absentDed = absentDays * dailyRate * 1.5;
+    const absentDed = absentDays * dailyRate * absentFactor;
 
     const leaveDays = Number(inp.leave_days) || 0;
-    const businessLeaveDed = leaveDays * dailyRate * 1.0;
+    const businessLeaveDed = leaveDays * dailyRate * leaveFactor;
 
-    const sickDays = Number(inp.sick_leave_days) || 0;
-    const sickLeaveDed = sickDays * dailyRate * 1.0;
+    // SMART SICK LEAVE DEDUCTION:
+    // 1) Sick leave WITH medical certificate (counts against annual quota e.g. 10 days/yr)
+    const currentSickDays = Number(inp.sick_leave_days) || 0;
+    const priorUsedSick = priorSickMap[empId] || 0;
+    const availableQuota = Math.max(0, sickLeaveQuota - priorUsedSick);
+    const paidSickDays = Math.min(currentSickDays, availableQuota);
+    const unpaidSickDays = Math.max(0, currentSickDays - paidSickDays);
+    const sickLeaveDed = unpaidSickDays * dailyRate * leaveFactor;
+
+    // 2) Sick leave WITHOUT medical certificate (always unpaid, deducted at leaveFactor, DOES NOT consume the 10-day quota)
+    const unpaidSickNoCertDays = Number(inp.unpaid_sick_leave_days) || 0;
+    const unpaidSickNoCertDed = unpaidSickNoCertDays * dailyRate * leaveFactor;
 
     const lateDed = Number(inp.late_deduct) || 0;
 
-    const leaveDed = Math.round((absentDed + businessLeaveDed + sickLeaveDed + lateDed) * 100) / 100;
+    const leaveDed = Math.round((absentDed + businessLeaveDed + sickLeaveDed + unpaidSickNoCertDed + lateDed) * 100) / 100;
 
     const allowance = Number(inp.allowance) || 0;
     const bonus = Number(inp.bonus) || 0;
