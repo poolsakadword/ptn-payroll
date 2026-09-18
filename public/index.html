@@ -597,6 +597,70 @@
 
                 <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
 
+                <!-- SECTION 2.5: TIME WINDOW LOCK RESTRICTIONS -->
+                <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                    <div style="font-size:12.5px;font-weight:700;color:#92400e;display:flex;align-items:center;gap:6px">
+                      <i class="fa-solid fa-clock-rotate-left text-amber-600"></i> ล็อกช่วงเวลากดปุ่มลงเวลา (Time Window Locking)
+                    </div>
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#78350f;cursor:pointer;background:#fef3c7;padding:4px 10px;border-radius:20px;border:1px solid #fcd34d">
+                      <input type="checkbox" id="attSetEnableTimeWindows" style="width:16px;height:16px;accent-color:#d97706;cursor:pointer" onchange="toggleTimeWindowsUI(this.checked)">
+                      <span>เปิดใช้งานการจำกัดช่วงเวลา</span>
+                    </label>
+                  </div>
+                  <div style="font-size:11.5px;color:#78350f;line-height:1.4">
+                    เมื่อเปิดใช้งาน ปุ่มสแกน QR Code / ถ่ายรูปจะอนุญาตให้กดได้เฉพาะในช่วงเวลาที่กำหนดเท่านั้น หากอยู่นอกเวลาปุ่มจะล็อกเพื่อป้องกันการกดก่อนหรือหลังเวลา
+                  </div>
+                  <div id="attTimeWindowsGrid" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px;margin-top:2px">
+                    <!-- IN Window -->
+                    <div style="background:#ffffff;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">
+                      <div style="font-size:11px;font-weight:700;color:#059669;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                        ☀️ ช่วงเวลาเข้างาน (IN)
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <input type="time" id="attSetWindowInStart" value="06:00" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                        <span style="font-size:11px;color:#64748b">ถึง</span>
+                        <input type="time" id="attSetWindowInEnd" value="12:00" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                      </div>
+                    </div>
+                    <!-- BREAK OUT Window -->
+                    <div style="background:#ffffff;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">
+                      <div style="font-size:11px;font-weight:700;color:#d97706;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                        ☕ ช่วงเวลาเริ่มพัก (Break OUT)
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <input type="time" id="attSetWindowBreakOutStart" value="11:30" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                        <span style="font-size:11px;color:#64748b">ถึง</span>
+                        <input type="time" id="attSetWindowBreakOutEnd" value="14:30" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                      </div>
+                    </div>
+                    <!-- BREAK IN Window -->
+                    <div style="background:#ffffff;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">
+                      <div style="font-size:11px;font-weight:700;color:#0284c7;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                        💼 ช่วงเวลาเข้าหลังพัก (Break IN)
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <input type="time" id="attSetWindowBreakInStart" value="12:00" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                        <span style="font-size:11px;color:#64748b">ถึง</span>
+                        <input type="time" id="attSetWindowBreakInEnd" value="15:30" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                      </div>
+                    </div>
+                    <!-- OUT Window -->
+                    <div style="background:#ffffff;border:1px solid #fed7aa;border-radius:8px;padding:8px 10px">
+                      <div style="font-size:11px;font-weight:700;color:#dc2626;margin-bottom:6px;display:flex;align-items:center;gap:4px">
+                        🚪 ช่วงเวลาเลิกงาน (Clock OUT)
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <input type="time" id="attSetWindowOutStart" value="17:00" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                        <span style="font-size:11px;color:#64748b">ถึง</span>
+                        <input type="time" id="attSetWindowOutEnd" value="23:59" style="flex:1;padding:5px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
+
                 <!-- SECTION 2: ONLINE FEATURE TOGGLES -->
                 <div>
                   <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:6px">

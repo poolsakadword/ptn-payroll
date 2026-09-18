@@ -6043,6 +6043,27 @@ function loadTimeAttendanceDashboard() {
         var setBreakDuration = document.getElementById('attSetBreakDuration');
         if (setBreakMode && r.settings.break_tracking_mode) setBreakMode.value = r.settings.break_tracking_mode;
         if (setBreakDuration && r.settings.break_duration_minutes !== undefined) setBreakDuration.value = r.settings.break_duration_minutes;
+
+        var setTimeWindowLock = document.getElementById('attSetEnableTimeWindows');
+        var setWinInStart = document.getElementById('attSetWindowInStart');
+        var setWinInEnd = document.getElementById('attSetWindowInEnd');
+        var setWinBreakOutStart = document.getElementById('attSetWindowBreakOutStart');
+        var setWinBreakOutEnd = document.getElementById('attSetWindowBreakOutEnd');
+        var setWinBreakInStart = document.getElementById('attSetWindowBreakInStart');
+        var setWinBreakInEnd = document.getElementById('attSetWindowBreakInEnd');
+        var setWinOutStart = document.getElementById('attSetWindowOutStart');
+        var setWinOutEnd = document.getElementById('attSetWindowOutEnd');
+
+        if (setTimeWindowLock) setTimeWindowLock.checked = (r.settings.enable_time_window_restrictions === 'true');
+        if (setWinInStart && r.settings.window_in_start) setWinInStart.value = r.settings.window_in_start;
+        if (setWinInEnd && r.settings.window_in_end) setWinInEnd.value = r.settings.window_in_end;
+        if (setWinBreakOutStart && r.settings.window_break_out_start) setWinBreakOutStart.value = r.settings.window_break_out_start;
+        if (setWinBreakOutEnd && r.settings.window_break_out_end) setWinBreakOutEnd.value = r.settings.window_break_out_end;
+        if (setWinBreakInStart && r.settings.window_break_in_start) setWinBreakInStart.value = r.settings.window_break_in_start;
+        if (setWinBreakInEnd && r.settings.window_break_in_end) setWinBreakInEnd.value = r.settings.window_break_in_end;
+        if (setWinOutStart && r.settings.window_out_start) setWinOutStart.value = r.settings.window_out_start;
+        if (setWinOutEnd && r.settings.window_out_end) setWinOutEnd.value = r.settings.window_out_end;
+        toggleTimeWindowsUI(setTimeWindowLock ? setTimeWindowLock.checked : false);
       }
 
       // 4. Render Tables & Approvals
@@ -6609,6 +6630,16 @@ function saveAttendanceSettingsFromPayroll(e) {
   var breakMode = document.getElementById('attSetBreakMode') ? document.getElementById('attSetBreakMode').value : 'AUTO_DEDUCT';
   var breakDuration = document.getElementById('attSetBreakDuration') ? Number(document.getElementById('attSetBreakDuration').value) : 60;
 
+  var enableTimeWindows = document.getElementById('attSetEnableTimeWindows') ? (document.getElementById('attSetEnableTimeWindows').checked ? 'true' : 'false') : 'false';
+  var winInStart = document.getElementById('attSetWindowInStart') ? document.getElementById('attSetWindowInStart').value : '06:00';
+  var winInEnd = document.getElementById('attSetWindowInEnd') ? document.getElementById('attSetWindowInEnd').value : '12:00';
+  var winBreakOutStart = document.getElementById('attSetWindowBreakOutStart') ? document.getElementById('attSetWindowBreakOutStart').value : '11:30';
+  var winBreakOutEnd = document.getElementById('attSetWindowBreakOutEnd') ? document.getElementById('attSetWindowBreakOutEnd').value : '14:30';
+  var winBreakInStart = document.getElementById('attSetWindowBreakInStart') ? document.getElementById('attSetWindowBreakInStart').value : '12:00';
+  var winBreakInEnd = document.getElementById('attSetWindowBreakInEnd') ? document.getElementById('attSetWindowBreakInEnd').value : '15:30';
+  var winOutStart = document.getElementById('attSetWindowOutStart') ? document.getElementById('attSetWindowOutStart').value : '17:00';
+  var winOutEnd = document.getElementById('attSetWindowOutEnd') ? document.getElementById('attSetWindowOutEnd').value : '23:59';
+
   var settings = {
     shift_start: sStart,
     work_start_time: sStart,
@@ -6640,7 +6671,16 @@ function saveAttendanceSettingsFromPayroll(e) {
     ot_rounding_mode: otRounding,
     qr_mode: qrMode,
     break_tracking_mode: breakMode,
-    break_duration_minutes: breakDuration
+    break_duration_minutes: breakDuration,
+    enable_time_window_restrictions: enableTimeWindows,
+    window_in_start: winInStart,
+    window_in_end: winInEnd,
+    window_break_out_start: winBreakOutStart,
+    window_break_out_end: winBreakOutEnd,
+    window_break_in_start: winBreakInStart,
+    window_break_in_end: winBreakInEnd,
+    window_out_start: winOutStart,
+    window_out_end: winOutEnd
   };
 
   callApi('saveAttendanceSettings', {
@@ -6653,6 +6693,14 @@ function saveAttendanceSettingsFromPayroll(e) {
     .catch(function(err) {
       showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
     });
+}
+
+function toggleTimeWindowsUI(enabled) {
+  var grid = document.getElementById('attTimeWindowsGrid');
+  if (grid) {
+    grid.style.opacity = enabled ? '1' : '0.45';
+    grid.style.pointerEvents = enabled ? 'auto' : 'none';
+  }
 }
 
 function syncAttendanceToPayrollPeriod() {
