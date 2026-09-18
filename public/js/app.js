@@ -94,6 +94,7 @@ function applyRolePermissions() {
   var navDash = document.getElementById('navBtn-dashboard');
   var navPayroll = document.getElementById('navBtn-payroll');
   var navInput = document.getElementById('navBtn-input');
+  var navAttendance = document.getElementById('navBtn-attendance');
   var navEmp = document.getElementById('navBtn-employees');
   var navHistory = document.getElementById('navBtn-history');
   var navAnalytics = document.getElementById('navBtn-analytics');
@@ -102,10 +103,12 @@ function applyRolePermissions() {
   var navUsers = document.getElementById('navBtn-users');
 
   var canViewDocuments = canViewPayroll || canViewHistory || canManageCompany || hasPermission('view_salary') || hasPermission('all');
+  var canViewAttendance = canViewPayroll || canViewInputs || canViewHistory || isAdmin;
 
   if (navDash) navDash.style.display = canViewDash ? 'inline-flex' : 'none';
   if (navPayroll) navPayroll.style.display = canViewPayroll ? 'inline-flex' : 'none';
   if (navInput) navInput.style.display = canViewInputs ? 'inline-flex' : 'none';
+  if (navAttendance) navAttendance.style.display = canViewAttendance ? 'inline-flex' : 'none';
   if (navEmp) navEmp.style.display = canViewEmp ? 'inline-flex' : 'none';
   if (navHistory) navHistory.style.display = canViewHistory ? 'inline-flex' : 'none';
   if (navAnalytics) navAnalytics.style.display = canViewAnalytics ? 'inline-flex' : 'none';
@@ -121,6 +124,7 @@ function applyRolePermissions() {
     if (tabId === 'tab-dashboard' && !canViewDash) allowed = false;
     if (tabId === 'tab-payroll' && !canViewPayroll) allowed = false;
     if (tabId === 'tab-input' && !canViewInputs) allowed = false;
+    if (tabId === 'tab-attendance' && !canViewAttendance) allowed = false;
     if (tabId === 'tab-employees' && !canViewEmp) allowed = false;
     if (tabId === 'tab-history' && !canViewHistory) allowed = false;
     if (tabId === 'tab-analytics' && !canViewAnalytics) allowed = false;
@@ -1695,6 +1699,8 @@ function switchTab(tabId) {
     renderAnalyticsTab();
   } else if (tabId === 'documents') {
     renderDocumentsTab();
+  } else if (tabId === 'attendance') {
+    loadTimeAttendanceDashboard();
   }
 }
 
@@ -5645,3 +5651,354 @@ function exportKtbPayrollTxt() {
   document.body.removeChild(link);
   showToast('ดาวน์โหลดไฟล์โอนเงินเดือน KTB (TXT) สำเร็จ');
 }
+
+// ==========================================
+// TIME ATTENDANCE & PTN TIME DASHBOARD (ADMIN/SUPERVISOR)
+// ==========================================
+
+var _payrollMasterQrInterval = null;
+var _payrollMasterQrSecondsLeft = 60;
+var _payrollMasterQrObj = null;
+
+function loadTimeAttendanceDashboard() {
+  var logsBody = document.getElementById('attLogsTableBody');
+  if (logsBody) {
+    logsBody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงานและรูปถ่าย...</td></tr>';
+  }
+
+  callApi('getTimeAttendanceDashboard')
+    .then(function(r) {
+      if (!r || !r.success) {
+        showToast(r && r.message ? r.message : 'ไม่สามารถโหลดข้อมูลเวลาทำงานได้', 'error');
+        return;
+      }
+
+      // 1. Update KPI
+      if (r.kpi) {
+        var elIn = document.getElementById('attKpiClockedIn');
+        var elLate = document.getElementById('attKpiLate');
+        var elPend = document.getElementById('attKpiPending');
+        var elTot = document.getElementById('attKpiTotal');
+        if (elIn) elIn.innerHTML = (r.kpi.clockedIn || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
+        if (elLate) elLate.innerHTML = (r.kpi.late || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
+        if (elPend) elPend.innerHTML = (r.kpi.pendingApprovals || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">รายการ</span>';
+        if (elTot) elTot.innerHTML = (r.kpi.totalEmployees || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
+      }
+
+      // 2. Subtitle date
+      var subTitle = document.getElementById('attLogsSubTitle');
+      if (subTitle && r.today) {
+        subTitle.textContent = 'บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตน ประจำวันที่ ' + r.today;
+      }
+
+      // 3. Settings Form Values
+      if (r.settings) {
+        var setStart = document.getElementById('attSetShiftStart');
+        var setEnd = document.getElementById('attSetShiftEnd');
+        var setGrace = document.getElementById('attSetGraceMinutes');
+        var setRadius = document.getElementById('attSetRadiusMeters');
+        var setLat = document.getElementById('attSetLat');
+        var setLng = document.getElementById('attSetLng');
+
+        if (setStart && r.settings.shift_start) setStart.value = r.settings.shift_start;
+        if (setEnd && r.settings.shift_end) setEnd.value = r.settings.shift_end;
+        if (setGrace && r.settings.grace_minutes) setGrace.value = r.settings.grace_minutes;
+        if (setRadius && r.settings.geofence_radius_meters) setRadius.value = r.settings.geofence_radius_meters;
+        if (setLat && r.settings.office_lat) setLat.value = r.settings.office_lat;
+        if (setLng && r.settings.office_lng) setLng.value = r.settings.office_lng;
+      }
+
+      // 4. Render Tables & Approvals
+      renderTimeAttendanceTodayLogs(r.logsToday || []);
+      renderTimeAttendanceApprovals(r.pendingLeaves || [], r.pendingOts || [], r.pendingAdvances || []);
+    })
+    .catch(function(err) {
+      if (logsBody) {
+        logsBody.innerHTML = '<tr><td colspan="10" class="text-center text-red" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '</td></tr>';
+      }
+    });
+}
+
+function renderTimeAttendanceTodayLogs(logs) {
+  var tbody = document.getElementById('attLogsTableBody');
+  if (!tbody) return;
+
+  if (!logs || logs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ยังไม่มีพนักงานลงเวลาเข้างานในวันนี้</td></tr>';
+    return;
+  }
+
+  var html = '';
+  logs.forEach(function(l, idx) {
+    var inPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
+    if (l.in_photo_url) {
+      inPhotoHtml = '<img src="' + l.in_photo_url + '" alt="IN" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:2px solid #10b981;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + (l.full_name || l.emp_id) + '\', \'เวลาเข้า: ' + (l.clock_in || '-') + ' น. | พิกัด: ' + (l.in_lat ? l.in_lat.toFixed(4) + ', ' + l.in_lng.toFixed(4) : '-') + '\')">';
+    }
+
+    var outPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
+    if (l.out_photo_url) {
+      outPhotoHtml = '<img src="' + l.out_photo_url + '" alt="OUT" style="width:38px;height:38px;border-radius:8px;object-fit:cover;border:2px solid #ef4444;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + (l.full_name || l.emp_id) + '\', \'เวลาออก: ' + (l.clock_out || '-') + ' น. | พิกัด: ' + (l.out_lat ? l.out_lat.toFixed(4) + ', ' + l.out_lng.toFixed(4) : '-') + '\')">';
+    }
+
+    var lateBadge = '';
+    if ((Number(l.late_minutes) || 0) > 0) {
+      lateBadge = '<span style="background:#fff7ed;color:#c2410c;font-weight:700;font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid #fed7aa">สาย ' + l.late_minutes + ' น.</span>';
+    } else {
+      lateBadge = '<span style="background:#ecfdf5;color:#059669;font-weight:600;font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid #a7f3d0">ปกติ</span>';
+    }
+
+    var hrsText = '';
+    if ((Number(l.work_hours) || 0) > 0) {
+      hrsText = '<div style="font-size:10.5px;color:#64748b;margin-top:2px">' + l.work_hours + ' ชม.</div>';
+    }
+
+    var statusHtml = '';
+    if (l.status === 'GEOFENCE_FAIL') {
+      statusHtml = '<span style="background:#fef2f2;color:#b91c1c;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #fecaca;font-weight:600"><i class="fa-solid fa-location-dot"></i> นอกพิกัด</span>';
+    } else {
+      statusHtml = '<span style="background:#f0fdf4;color:#15803d;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #bbf7d0;font-weight:600"><i class="fa-solid fa-check"></i> ในสาขา</span>';
+    }
+
+    var nameDisplay = (l.full_name || '-') + (l.nickname ? ' (' + l.nickname + ')' : '');
+
+    html += '<tr>' +
+      '<td class="text-center font-bold" style="color:#64748b">' + (idx + 1) + '</td>' +
+      '<td class="text-center" style="padding:6px 4px">' + inPhotoHtml + '</td>' +
+      '<td class="text-center" style="padding:6px 4px">' + outPhotoHtml + '</td>' +
+      '<td class="font-bold" style="color:#1e40af">' + (l.emp_id || '-') + '</td>' +
+      '<td><div style="font-weight:700;color:#0f172a">' + nameDisplay + '</div><div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div></td>' +
+      '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
+      '<td class="text-center font-bold text-green" style="font-size:13px">' + (l.clock_in ? l.clock_in + ' น.' : '-') + '</td>' +
+      '<td class="text-center font-bold text-red" style="font-size:13px">' + (l.clock_out ? l.clock_out + ' น.' : '-') + '</td>' +
+      '<td class="text-center">' + lateBadge + hrsText + '</td>' +
+      '<td class="text-center">' + statusHtml + '</td>' +
+      '</tr>';
+  });
+
+  tbody.innerHTML = html;
+}
+
+function renderTimeAttendanceApprovals(leaves, ots, advances) {
+  var container = document.getElementById('attPendingListContainer');
+  var countEl = document.getElementById('attPendingCountDisplay');
+  if (!container) return;
+
+  var total = (leaves ? leaves.length : 0) + (ots ? ots.length : 0) + (advances ? advances.length : 0);
+  if (countEl) countEl.textContent = total;
+
+  if (total === 0) {
+    container.innerHTML = '<div class="text-muted text-center" style="padding:28px 16px;font-size:12.5px"><i class="fa-solid fa-circle-check" style="font-size:24px;color:#10b981;display:block;margin-bottom:8px"></i>ไม่มีคำขอรอการอนุมัติ</div>';
+    return;
+  }
+
+  var html = '';
+
+  // Leaves
+  (leaves || []).forEach(function(item) {
+    var typeLabel = 'ขอลางาน (' + (item.leave_type || 'ทั่วไป') + ')';
+    html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #3b82f6;border-radius:8px;padding:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#dbeafe;padding:2px 8px;border-radius:12px">' + typeLabel + '</span>' +
+        '<span style="font-size:11px;color:#64748b">' + (item.created_at ? String(item.created_at).substring(0, 16) : '') + '</span>' +
+      '</div>' +
+      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
+      '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar" style="color:#64748b"></i> วันที่ลา: <b>' + (item.start_date || '-') + '</b> ถึง <b>' + (item.end_date || '-') + '</b> (' + (item.days_count || 1) + ' วัน)</div>' +
+      (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
+      '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+        '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;font-weight:700" onclick="approveAttendanceRequest(\'leave\', ' + item.id + ', \'REJECT\')"><i class="fa-solid fa-xmark"></i> ปฏิเสธ</button>' +
+        '<button type="button" class="btn btn-sm btn-green" style="font-weight:700" onclick="approveAttendanceRequest(\'leave\', ' + item.id + ', \'APPROVE\')"><i class="fa-solid fa-check"></i> อนุมัติ</button>' +
+      '</div>' +
+    '</div>';
+  });
+
+  // OTs
+  (ots || []).forEach(function(item) {
+    html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #f59e0b;border-radius:8px;padding:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<span style="font-size:11px;font-weight:700;color:#b45309;background:#fef3c7;padding:2px 8px;border-radius:12px">ขอทำ OT</span>' +
+        '<span style="font-size:11px;color:#64748b">' + (item.created_at ? String(item.created_at).substring(0, 16) : '') + '</span>' +
+      '</div>' +
+      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
+      '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-clock" style="color:#64748b"></i> วันที่: <b>' + (item.date || '-') + '</b> | จำนวน <b>' + (item.planned_hours || item.actual_hours || 0) + ' ชม.</b></div>' +
+      (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
+      '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+        '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;font-weight:700" onclick="approveAttendanceRequest(\'ot\', ' + item.id + ', \'REJECT\')"><i class="fa-solid fa-xmark"></i> ปฏิเสธ</button>' +
+        '<button type="button" class="btn btn-sm btn-green" style="font-weight:700" onclick="approveAttendanceRequest(\'ot\', ' + item.id + ', \'APPROVE\')"><i class="fa-solid fa-check"></i> อนุมัติ</button>' +
+      '</div>' +
+    '</div>';
+  });
+
+  // Advances
+  (advances || []).forEach(function(item) {
+    html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #10b981;border-radius:8px;padding:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">' +
+        '<span style="font-size:11px;font-weight:700;color:#047857;background:#d1fae5;padding:2px 8px;border-radius:12px">ขอเบิกเงินล่วงหน้า</span>' +
+        '<span style="font-size:11px;color:#64748b">' + (item.created_at ? String(item.created_at).substring(0, 16) : '') + '</span>' +
+      '</div>' +
+      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
+      '<div style="font-size:13px;color:#047857;font-weight:700;margin-bottom:4px"><i class="fa-solid fa-money-bill-wave"></i> จำนวนเงิน: ฿' + Number(item.amount || 0).toLocaleString() + ' บาท</div>' +
+      (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
+      '<div style="display:flex;gap:6px;justify-content:flex-end">' +
+        '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;font-weight:700" onclick="approveAttendanceRequest(\'advance\', ' + item.id + ', \'REJECT\')"><i class="fa-solid fa-xmark"></i> ปฏิเสธ</button>' +
+        '<button type="button" class="btn btn-sm btn-green" style="font-weight:700" onclick="approveAttendanceRequest(\'advance\', ' + item.id + ', \'APPROVE\')"><i class="fa-solid fa-check"></i> อนุมัติ</button>' +
+      '</div>' +
+    '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+function approveAttendanceRequest(type, id, decision) {
+  var actionText = decision === 'APPROVE' ? 'อนุมัติ' : 'ปฏิเสธ';
+  if (!confirm('ยืนยัน ' + actionText + ' คำขอนี้ ?')) return;
+
+  var reason = '';
+  if (decision === 'REJECT') {
+    reason = prompt('โปรดระบุเหตุผลการปฏิเสธ (ถ้ามี):', '') || '';
+  }
+
+  callApi('handleAttendanceApproval', {
+    type: type,
+    id: id,
+    decision: decision,
+    rejectionReason: reason,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      showToast(r.message || ('ดำเนินการ ' + actionText + ' สำเร็จ'));
+      loadTimeAttendanceDashboard();
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการดำเนินการ', 'error');
+    });
+}
+
+function previewAttendancePhoto(url, title, sub) {
+  var img = document.getElementById('photoPreviewModalImg');
+  var titleEl = document.getElementById('photoPreviewModalTitle');
+  var subEl = document.getElementById('photoPreviewModalSub');
+
+  if (img) img.src = url || '';
+  if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-image text-blue"></i> <span>' + (title || 'ภาพถ่ายเซลฟี่ยืนยันตัวตน') + '</span>';
+  if (subEl) subEl.textContent = sub || '';
+
+  openModal('modalAttendancePhotoPreview');
+}
+
+function saveAttendanceSettingsFromPayroll(e) {
+  if (e) e.preventDefault();
+
+  var settings = {
+    shift_start: document.getElementById('attSetShiftStart').value || '08:30',
+    shift_end: document.getElementById('attSetShiftEnd').value || '17:30',
+    grace_minutes: document.getElementById('attSetGraceMinutes').value || '15',
+    geofence_radius_meters: document.getElementById('attSetRadiusMeters').value || '200',
+    office_lat: document.getElementById('attSetLat').value || '13.7563',
+    office_lng: document.getElementById('attSetLng').value || '100.5018'
+  };
+
+  callApi('saveAttendanceSettings', {
+    settings: settings,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      showToast(r.message || 'บันทึกการตั้งค่าสำเร็จ');
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
+    });
+}
+
+function syncAttendanceToPayrollPeriod() {
+  if (!confirm('ยืนยันดึงข้อมูลเวลาทำงาน OT วันลา และยอดเบิกเงินจาก PTN Time เข้าสู่งวดเงินเดือนปัจจุบัน (' + State.period + ') ?')) return;
+
+  showToast('กำลังดึงข้อมูลและประมวลผลเงินเดือนงวด ' + State.period + '...', 'info');
+  callApi('syncFromPtnTime', {
+    period: State.period,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      showToast(r.message || 'ดึงข้อมูลสำเร็จ');
+      loadAppData();
+    })
+    .catch(function(e) {
+      showToast(e.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล', 'error');
+    });
+}
+
+// Master QR Modal Controllers
+function openMasterQrModalFromPayroll() {
+  openModal('modalPayrollMasterQr');
+  refreshPayrollMasterQrCode();
+}
+
+function closePayrollMasterQrModal() {
+  if (_payrollMasterQrInterval) {
+    clearInterval(_payrollMasterQrInterval);
+    _payrollMasterQrInterval = null;
+  }
+  closeModal('modalPayrollMasterQr');
+}
+
+function refreshPayrollMasterQrCode() {
+  if (_payrollMasterQrInterval) {
+    clearInterval(_payrollMasterQrInterval);
+    _payrollMasterQrInterval = null;
+  }
+
+  var container = document.getElementById('payrollMasterQrContainer');
+  if (container) container.innerHTML = '<div style="padding:40px;color:#64748b;font-size:12px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังสร้างรหัส QR...</div>';
+
+  callApi('getMasterUnlockQr')
+    .then(function(r) {
+      if (!r || !r.token) {
+        showToast('ไม่สามารถสร้าง Master QR ได้', 'error');
+        return;
+      }
+
+      if (container) {
+        container.innerHTML = '';
+        _payrollMasterQrObj = new QRCode(container, {
+          text: r.token,
+          width: 180,
+          height: 180,
+          colorDark: '#0f172a',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
+
+      _payrollMasterQrSecondsLeft = r.secondsLeft || 60;
+      updatePayrollMasterQrCountdownDisplay();
+
+      _payrollMasterQrInterval = setInterval(function() {
+        _payrollMasterQrSecondsLeft--;
+        if (_payrollMasterQrSecondsLeft <= 0) {
+          refreshPayrollMasterQrCode();
+        } else {
+          updatePayrollMasterQrCountdownDisplay();
+        }
+      }, 1000);
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการสร้าง Master QR', 'error');
+    });
+}
+
+function updatePayrollMasterQrCountdownDisplay() {
+  var countEl = document.getElementById('payrollMasterQrCountdown');
+  var barEl = document.getElementById('payrollMasterQrProgressBar');
+  if (countEl) countEl.textContent = _payrollMasterQrSecondsLeft + 's';
+  if (barEl) {
+    var pct = Math.max(0, Math.min(100, (_payrollMasterQrSecondsLeft / 60) * 100));
+    barEl.style.width = pct + '%';
+    if (_payrollMasterQrSecondsLeft <= 10) {
+      barEl.style.background = '#ef4444';
+    } else if (_payrollMasterQrSecondsLeft <= 25) {
+      barEl.style.background = '#f59e0b';
+    } else {
+      barEl.style.background = '#10b981';
+    }
+  }
+}
+

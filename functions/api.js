@@ -37,6 +37,14 @@ async function logSystemActivity(db, username, action, details) {
   }
 }
 
+const MASTER_UNLOCK_SALT = 'PTN_MASTER_UNLOCK_TOKEN_SALT_2026';
+async function getMasterUnlockToken(windowOffset = 0) {
+  const windowIndex = Math.floor(Date.now() / 60000) + windowOffset;
+  const raw = `${MASTER_UNLOCK_SALT}:${windowIndex}`;
+  const fullHash = await sha256Hex(raw);
+  return 'PTN-UNLOCK-' + fullHash.substring(0, 12).toUpperCase();
+}
+
 function getDefaultRolePermissions(role) {
   if (role === 'Admin / HR' || role === 'Admin' || role === 'Super Admin') {
     return ['all'];
@@ -814,6 +822,158 @@ async function handleAction(db, action, params) {
         totalLeaveCount: totalLeaveCount,
         message: `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} สำเร็จเรียบร้อย! (ยอดเบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, OT รวม ${totalOtHours} ชม., ลารวม ${totalLeaveCount} วัน)`
       };
+    }
+
+    // 5.2 TIME ATTENDANCE ADMIN DASHBOARD (CENTRALIZED IN PAYROLL)
+    case 'getTimeAttendanceDashboard': {
+      const nowUtc = new Date();
+      const bangkokTime = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+      const today = bangkokTime.toISOString().substring(0, 10);
+
+      // Ensure tables exist
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS time_logs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          emp_id TEXT NOT NULL,
+          date TEXT NOT NULL,
+          clock_in TEXT,
+          clock_out TEXT,
+          in_lat REAL,
+          in_lng REAL,
+          out_lat REAL,
+          out_lng REAL,
+          in_photo_url TEXT,
+          out_photo_url TEXT,
+          late_minutes INTEGER DEFAULT 0,
+          work_hours REAL DEFAULT 0,
+          ot_hours REAL DEFAULT 0,
+          status TEXT DEFAULT 'NORMAL',
+          remark TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run().catch(() => {});
+
+      // 1. Logs Today with Employee Info
+      const logsQuery = await db.prepare(`
+        SELECT l.*, e.full_name, e.nickname, e.department, e.position
+        FROM time_logs l
+        LEFT JOIN employees e ON l.emp_id = e.emp_id
+        WHERE l.date = ?
+        ORDER BY l.clock_in DESC
+      `).bind(today).all().catch(() => ({ results: [] }));
+      const logsToday = logsQuery.results || [];
+
+      // 2. Pending Leaves
+      const leavesQuery = await db.prepare(`
+        SELECT lr.*, e.full_name, e.department
+        FROM leave_requests lr
+        LEFT JOIN employees e ON lr.emp_id = e.emp_id
+        WHERE lr.status = 'PENDING'
+        ORDER BY lr.created_at DESC
+      `).all().catch(() => ({ results: [] }));
+      const pendingLeaves = leavesQuery.results || [];
+
+      // 3. Pending OTs
+      const otsQuery = await db.prepare(`
+        SELECT ot.*, e.full_name, e.department
+        FROM ot_requests ot
+        LEFT JOIN employees e ON ot.emp_id = e.emp_id
+        WHERE ot.status = 'PENDING'
+        ORDER BY ot.created_at DESC
+      `).all().catch(() => ({ results: [] }));
+      const pendingOts = otsQuery.results || [];
+
+      // 4. Pending Advances
+      const advQuery = await db.prepare(`
+        SELECT ar.*, e.full_name, e.department
+        FROM advance_requests ar
+        LEFT JOIN employees e ON ar.emp_id = e.emp_id
+        WHERE ar.status = 'PENDING'
+        ORDER BY ar.created_at DESC
+      `).all().catch(() => ({ results: [] }));
+      const pendingAdvances = advQuery.results || [];
+
+      // 5. KPI & Settings
+      const empCountRow = await db.prepare('SELECT COUNT(*) as c FROM employees WHERE status != "Resigned"').first().catch(() => ({ c: 0 }));
+      const totalEmployees = empCountRow?.c || 0;
+      const clockedIn = logsToday.filter(x => x.clock_in).length;
+      const late = logsToday.filter(x => (x.late_minutes || 0) > 0).length;
+      const pendingApprovals = pendingLeaves.length + pendingOts.length + pendingAdvances.length;
+
+      // Settings
+      const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
+      const attSettings = {};
+      for (const r of setRows.results || []) attSettings[r.key] = r.value;
+
+      return {
+        success: true,
+        today,
+        logsToday,
+        pendingLeaves,
+        pendingOts,
+        pendingAdvances,
+        settings: attSettings,
+        kpi: {
+          totalEmployees,
+          clockedIn,
+          late,
+          pendingApprovals
+        }
+      };
+    }
+
+    // 5.3 HANDLE ATTENDANCE APPROVALS (LEAVE, OT, ADVANCE)
+    case 'handleAttendanceApproval': {
+      const { type, id, decision, rejectionReason } = params;
+      const approverId = params.username || 'Admin';
+      const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+
+      if (type === 'leave') {
+        await db.prepare(`
+          UPDATE leave_requests 
+          SET status = ?, approver_id = ?, approved_at = CURRENT_TIMESTAMP, rejection_reason = ?
+          WHERE id = ?
+        `).bind(status, approverId, rejectionReason || '', id).run();
+      } else if (type === 'ot') {
+        await db.prepare(`
+          UPDATE ot_requests 
+          SET status = ?, approver_id = ?, approved_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).bind(status, approverId, id).run();
+      } else if (type === 'advance') {
+        await db.prepare(`
+          UPDATE advance_requests 
+          SET status = ?, approver_id = ?, approved_at = CURRENT_TIMESTAMP, rejection_reason = ?
+          WHERE id = ?
+        `).bind(status, approverId, rejectionReason || '', id).run();
+      }
+
+      await logSystemActivity(db, approverId, 'ATTENDANCE_APPROVAL', `${status} คำขอ ${type} (ID: ${id})`);
+      return { success: true, message: `ดำเนินการ ${decision === 'APPROVE' ? 'อนุมัติ' : 'ปฏิเสธ'} คำขอเรียบร้อยแล้ว` };
+    }
+
+    // 5.4 GET MASTER UNLOCK QR TOKEN
+    case 'getMasterUnlockQr': {
+      const token = await getMasterUnlockToken(0);
+      const secondsLeft = 60 - (Math.floor(Date.now() / 1000) % 60);
+      return {
+        success: true,
+        token,
+        secondsLeft
+      };
+    }
+
+    // 5.5 SAVE ATTENDANCE SETTINGS
+    case 'saveAttendanceSettings': {
+      const newSettings = params.settings || {};
+      for (const [k, v] of Object.entries(newSettings)) {
+        await db.prepare(`
+          INSERT INTO attendance_settings (key, value) VALUES (?, ?)
+          ON CONFLICT(key) DO UPDATE SET value = excluded.value
+        `).bind(k, String(v)).run().catch(() => {});
+      }
+      await logSystemActivity(db, params.username || 'Admin', 'UPDATE_ATTENDANCE_SETTINGS', 'อัปเดตการตั้งค่าเวลากะงานและพิกัด GPS');
+      return { success: true, message: 'บันทึกการตั้งค่าระบบลงเวลาเรียบร้อยแล้ว' };
     }
 
     // 6. PROCESS PAYROLL
