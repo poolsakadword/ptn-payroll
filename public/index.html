@@ -483,46 +483,121 @@
             <div class="card">
               <div class="card-header">
                 <div>
-                  <div class="card-title"><i class="fa-solid fa-sliders text-blue"></i> ตั้งค่ากะงาน &amp; GPS สาขา</div>
-                  <div class="card-sub">กำหนดเวลาทำงานปกติและจุดสแกนพิกัด</div>
+                  <div class="card-title"><i class="fa-solid fa-sliders text-blue"></i> ตั้งค่าระบบลงเวลา &amp; สวัสดิการออนไลน์</div>
+                  <div class="card-sub">กำหนดเวลาทำงาน เปิด-ปิดขอลา/OT/เบิกเงิน และพิกัดสาขา</div>
                 </div>
               </div>
-              <form id="formAttendanceSettings" onsubmit="saveAttendanceSettingsFromPayroll(event)" style="padding:16px;display:flex;flex-direction:column;gap:12px">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                  <div>
-                    <label style="font-size:11.5px;font-weight:700;color:#1e3a8a">เวลาเข้างานปกติ</label>
-                    <input type="time" id="attSetShiftStart" value="08:30" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px" required>
+              <form id="formAttendanceSettings" onsubmit="saveAttendanceSettingsFromPayroll(event)" style="padding:16px;display:flex;flex-direction:column;gap:14px">
+                
+                <!-- SECTION 1: SHIFT & GPS -->
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+                    <i class="fa-regular fa-clock text-blue"></i> เวลากะงานและระยะทางพิกัด
                   </div>
-                  <div>
-                    <label style="font-size:11.5px;font-weight:700;color:#1e3a8a">เวลาเลิกงานปกติ</label>
-                    <input type="time" id="attSetShiftEnd" value="17:30" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px" required>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">เวลาเข้างานปกติ</label>
+                      <input type="time" id="attSetShiftStart" value="09:30" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
+                    </div>
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">เวลาเลิกงานปกติ</label>
+                      <input type="time" id="attSetShiftEnd" value="19:00" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
+                    </div>
+                  </div>
+
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">ผ่อนผันสาย (นาที)</label>
+                      <input type="number" id="attSetGraceMinutes" value="0" min="0" max="120" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
+                    </div>
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">รัศมี GPS (เมตร)</label>
+                      <input type="number" id="attSetRadiusMeters" value="200" min="20" max="5000" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
+                    </div>
+                  </div>
+
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">พิกัด Lat</label>
+                      <input type="number" step="0.000001" id="attSetLat" value="13.727896" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
+                    </div>
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">พิกัด Lng</label>
+                      <input type="number" step="0.000001" id="attSetLng" value="100.524123" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
+                    </div>
                   </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                  <div>
-                    <label style="font-size:11.5px;font-weight:700;color:#1e3a8a">อนุญาตสาย (นาที)</label>
-                    <input type="number" id="attSetGraceMinutes" value="15" min="0" max="120" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px" required>
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
+
+                <!-- SECTION 2: ONLINE FEATURE TOGGLES -->
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-toggle-on text-green"></i> เปิด-ปิด ฟังก์ชันคำขอออนไลน์ (PTN Time)
                   </div>
-                  <div>
-                    <label style="font-size:11.5px;font-weight:700;color:#1e3a8a">รัศมี GPS (เมตร)</label>
-                    <input type="number" id="attSetRadiusMeters" value="200" min="20" max="5000" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px" required>
+                  <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:10px">
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetEnableLeave" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>เปิดระบบขอลางานออนไลน์ (Leave Requests)</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetEnableOt" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>เปิดระบบขอทำ OT ออนไลน์ (Overtime Requests)</span>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;color:#334155;cursor:pointer">
+                      <input type="checkbox" id="attSetEnableAdvance" checked style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer">
+                      <span>เปิดระบบขอเบิกเงินล่วงหน้าออนไลน์ (Salary Advance)</span>
+                    </label>
                   </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                  <div>
-                    <label style="font-size:11.5px;font-weight:700;color:#1e3a8a">พิกัด Lat</label>
-                    <input type="number" step="0.000001" id="attSetLat" value="13.7563" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px" required>
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
+
+                <!-- SECTION 3: ADVANCE & OT POLICIES -->
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-money-bill-wave text-emerald-600"></i> เงื่อนไขเบิกเงินล่วงหน้า &amp; OT
                   </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">วันเปิดให้ยื่นเบิกเงิน</label>
+                      <select id="attSetAdvanceDay" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                        <option value="SATURDAY">เฉพาะวันเสาร์</option>
+                        <option value="ANY">ทุกวันตลอดสัปดาห์</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">อัตราเบิก (บาท/วันทำงาน)</label>
+                      <input type="number" id="attSetAdvanceDailyRate" value="250" min="0" max="5000" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                    </div>
+                  </div>
+
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">เวลาเริ่มนับ OT</label>
+                      <input type="time" id="attSetOtStart" value="19:00" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                    </div>
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#64748b">การปัดเศษ OT</label>
+                      <select id="attSetOtRounding" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                        <option value="HALF_HOUR">ปัดทุก 30 นาที (0.5 ชม.)</option>
+                        <option value="EXACT_MINUTES">คิดตามนาทีจริง</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <div>
-                    <label style="font-size:11.5px;font-weight:700;color:#1e3a8a">พิกัด Lng</label>
-                    <input type="number" step="0.000001" id="attSetLng" value="100.5018" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px" required>
+                    <label style="font-size:11px;font-weight:600;color:#64748b">โหมดการลงเวลา QR Code</label>
+                    <select id="attSetQrMode" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                      <option value="HYBRID">Hybrid (รองรับทั้งจอ Kiosk และป้ายกระดาษ A4)</option>
+                      <option value="DYNAMIC_ONLY">จอ Kiosk Dynamic QR เคาน์เตอร์เท่านั้น</option>
+                      <option value="STATIC_ONLY">ป้ายกระดาษ QR Code ติดผนังเท่านั้น</option>
+                    </select>
                   </div>
                 </div>
 
                 <button type="submit" class="btn btn-primary" style="margin-top:6px;font-weight:700">
-                  <i class="fa-solid fa-floppy-disk"></i> บันทึกการตั้งค่า
+                  <i class="fa-solid fa-floppy-disk"></i> บันทึกการตั้งค่าทั้งหมด
                 </button>
               </form>
             </div>

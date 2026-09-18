@@ -5699,13 +5699,38 @@ function loadTimeAttendanceDashboard() {
         var setRadius = document.getElementById('attSetRadiusMeters');
         var setLat = document.getElementById('attSetLat');
         var setLng = document.getElementById('attSetLng');
+        var setToggleLeave = document.getElementById('attSetEnableLeave');
+        var setToggleOt = document.getElementById('attSetEnableOt');
+        var setToggleAdvance = document.getElementById('attSetEnableAdvance');
+        var setAdvDay = document.getElementById('attSetAdvanceDay');
+        var setAdvRate = document.getElementById('attSetAdvanceDailyRate');
+        var setOtStart = document.getElementById('attSetOtStart');
+        var setOtRounding = document.getElementById('attSetOtRounding');
+        var setQrMode = document.getElementById('attSetQrMode');
 
-        if (setStart && r.settings.shift_start) setStart.value = r.settings.shift_start;
-        if (setEnd && r.settings.shift_end) setEnd.value = r.settings.shift_end;
-        if (setGrace && r.settings.grace_minutes) setGrace.value = r.settings.grace_minutes;
+        if (setStart && (r.settings.shift_start || r.settings.work_start_time)) {
+          setStart.value = r.settings.shift_start || r.settings.work_start_time;
+        }
+        if (setEnd && (r.settings.shift_end || r.settings.work_end_time)) {
+          setEnd.value = r.settings.shift_end || r.settings.work_end_time;
+        }
+        if (setGrace && (r.settings.grace_minutes !== undefined || r.settings.grace_period_morning_minutes !== undefined)) {
+          setGrace.value = r.settings.grace_minutes ?? r.settings.grace_period_morning_minutes;
+        }
         if (setRadius && r.settings.geofence_radius_meters) setRadius.value = r.settings.geofence_radius_meters;
         if (setLat && r.settings.office_lat) setLat.value = r.settings.office_lat;
         if (setLng && r.settings.office_lng) setLng.value = r.settings.office_lng;
+
+        if (setToggleLeave) setToggleLeave.checked = (r.settings.enable_leave_requests !== 'false');
+        if (setToggleOt) setToggleOt.checked = (r.settings.enable_ot_requests !== 'false');
+        if (setToggleAdvance) setToggleAdvance.checked = (r.settings.enable_advance_requests !== 'false');
+        if (setAdvDay && r.settings.advance_day_of_week) setAdvDay.value = r.settings.advance_day_of_week;
+        if (setAdvRate && r.settings.advance_daily_rate !== undefined) setAdvRate.value = r.settings.advance_daily_rate;
+        if (setOtStart && (r.settings.ot_start_time || r.settings.shift_end || r.settings.work_end_time)) {
+          setOtStart.value = r.settings.ot_start_time || r.settings.shift_end || r.settings.work_end_time;
+        }
+        if (setOtRounding && r.settings.ot_rounding_mode) setOtRounding.value = r.settings.ot_rounding_mode;
+        if (setQrMode && r.settings.qr_mode) setQrMode.value = r.settings.qr_mode;
       }
 
       // 4. Render Tables & Approvals
@@ -5888,13 +5913,41 @@ function previewAttendancePhoto(url, title, sub) {
 function saveAttendanceSettingsFromPayroll(e) {
   if (e) e.preventDefault();
 
+  var sStart = document.getElementById('attSetShiftStart').value || '09:30';
+  var sEnd = document.getElementById('attSetShiftEnd').value || '19:00';
+  var sGrace = Number(document.getElementById('attSetGraceMinutes').value) || 0;
+  var sRadius = Number(document.getElementById('attSetRadiusMeters').value) || 200;
+  var sLat = Number(document.getElementById('attSetLat').value) || 13.727896;
+  var sLng = Number(document.getElementById('attSetLng').value) || 100.524123;
+  
+  var enableLeave = document.getElementById('attSetEnableLeave') ? (document.getElementById('attSetEnableLeave').checked ? 'true' : 'false') : 'true';
+  var enableOt = document.getElementById('attSetEnableOt') ? (document.getElementById('attSetEnableOt').checked ? 'true' : 'false') : 'true';
+  var enableAdv = document.getElementById('attSetEnableAdvance') ? (document.getElementById('attSetEnableAdvance').checked ? 'true' : 'false') : 'true';
+  
+  var advDay = document.getElementById('attSetAdvanceDay') ? document.getElementById('attSetAdvanceDay').value : 'SATURDAY';
+  var advRate = document.getElementById('attSetAdvanceDailyRate') ? Number(document.getElementById('attSetAdvanceDailyRate').value) : 250;
+  var otStart = document.getElementById('attSetOtStart') ? document.getElementById('attSetOtStart').value : '19:00';
+  var otRounding = document.getElementById('attSetOtRounding') ? document.getElementById('attSetOtRounding').value : 'HALF_HOUR';
+  var qrMode = document.getElementById('attSetQrMode') ? document.getElementById('attSetQrMode').value : 'HYBRID';
+
   var settings = {
-    shift_start: document.getElementById('attSetShiftStart').value || '08:30',
-    shift_end: document.getElementById('attSetShiftEnd').value || '17:30',
-    grace_minutes: document.getElementById('attSetGraceMinutes').value || '15',
-    geofence_radius_meters: document.getElementById('attSetRadiusMeters').value || '200',
-    office_lat: document.getElementById('attSetLat').value || '13.7563',
-    office_lng: document.getElementById('attSetLng').value || '100.5018'
+    shift_start: sStart,
+    work_start_time: sStart,
+    shift_end: sEnd,
+    work_end_time: sEnd,
+    grace_minutes: sGrace,
+    grace_period_morning_minutes: sGrace,
+    geofence_radius_meters: sRadius,
+    office_lat: sLat,
+    office_lng: sLng,
+    enable_leave_requests: enableLeave,
+    enable_ot_requests: enableOt,
+    enable_advance_requests: enableAdv,
+    advance_day_of_week: advDay,
+    advance_daily_rate: advRate,
+    ot_start_time: otStart,
+    ot_rounding_mode: otRounding,
+    qr_mode: qrMode
   };
 
   callApi('saveAttendanceSettings', {
@@ -5902,7 +5955,7 @@ function saveAttendanceSettingsFromPayroll(e) {
     username: (State.currentUser && State.currentUser.username) || 'Admin'
   })
     .then(function(r) {
-      showToast(r.message || 'บันทึกการตั้งค่าสำเร็จ');
+      showToast(r.message || 'บันทึกการตั้งค่าระบบลงเวลา & สวัสดิการเรียบร้อยแล้ว');
     })
     .catch(function(err) {
       showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
