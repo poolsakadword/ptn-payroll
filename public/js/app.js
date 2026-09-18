@@ -5772,6 +5772,7 @@ function loadTimeAttendanceDashboard() {
         var setToggleLeave = document.getElementById('attSetEnableLeave');
         var setToggleOt = document.getElementById('attSetEnableOt');
         var setToggleAdvance = document.getElementById('attSetEnableAdvance');
+        var setToggleDirectGps = document.getElementById('attSetAllowDirectGps');
         var setAdvDay = document.getElementById('attSetAdvanceDay');
         var setAdvRate = document.getElementById('attSetAdvanceDailyRate');
         var setOtStart = document.getElementById('attSetOtStart');
@@ -5794,6 +5795,7 @@ function loadTimeAttendanceDashboard() {
         if (setToggleLeave) setToggleLeave.checked = (r.settings.enable_leave_requests !== 'false');
         if (setToggleOt) setToggleOt.checked = (r.settings.enable_ot_requests !== 'false');
         if (setToggleAdvance) setToggleAdvance.checked = (r.settings.enable_advance_requests !== 'false');
+        if (setToggleDirectGps) setToggleDirectGps.checked = (r.settings.allow_direct_gps !== 'false');
         if (setAdvDay && r.settings.advance_day_of_week) setAdvDay.value = r.settings.advance_day_of_week;
         if (setAdvRate && r.settings.advance_daily_rate !== undefined) setAdvRate.value = r.settings.advance_daily_rate;
         if (setOtStart && (r.settings.ot_start_time || r.settings.shift_end || r.settings.work_end_time)) {
@@ -5998,6 +6000,7 @@ function saveAttendanceSettingsFromPayroll(e) {
   var enableLeave = document.getElementById('attSetEnableLeave') ? (document.getElementById('attSetEnableLeave').checked ? 'true' : 'false') : 'true';
   var enableOt = document.getElementById('attSetEnableOt') ? (document.getElementById('attSetEnableOt').checked ? 'true' : 'false') : 'true';
   var enableAdv = document.getElementById('attSetEnableAdvance') ? (document.getElementById('attSetEnableAdvance').checked ? 'true' : 'false') : 'true';
+  var allowDirectGps = document.getElementById('attSetAllowDirectGps') ? (document.getElementById('attSetAllowDirectGps').checked ? 'true' : 'false') : 'true';
   
   var advDay = document.getElementById('attSetAdvanceDay') ? document.getElementById('attSetAdvanceDay').value : 'SATURDAY';
   var advRate = document.getElementById('attSetAdvanceDailyRate') ? Number(document.getElementById('attSetAdvanceDailyRate').value) : 250;
@@ -6018,6 +6021,7 @@ function saveAttendanceSettingsFromPayroll(e) {
     enable_leave_requests: enableLeave,
     enable_ot_requests: enableOt,
     enable_advance_requests: enableAdv,
+    allow_direct_gps: allowDirectGps,
     advance_day_of_week: advDay,
     advance_daily_rate: advRate,
     ot_start_time: otStart,

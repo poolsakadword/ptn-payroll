@@ -976,7 +976,9 @@ async function handleAction(db, action, params) {
 
       // Settings
       const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
-      const attSettings = {};
+      const attSettings = {
+        allow_direct_gps: 'true'
+      };
       for (const r of setRows.results || []) attSettings[r.key] = r.value;
 
       return {
