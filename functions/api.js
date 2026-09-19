@@ -1321,6 +1321,24 @@ async function handleAction(db, action, params) {
           status = excluded.status
       `).bind(branchId, branchName, lat, lng, radius, workStart, workEnd, lunchStart, lunchEnd, grace, otStart, kioskPin, status).run();
 
+      // If B01, keep global attendance_settings in sync
+      if (branchId === 'B01') {
+        const syncMap = {
+          work_start_time: workStart,
+          work_end_time: workEnd,
+          lunch_start_time: lunchStart,
+          lunch_end_time: lunchEnd,
+          ot_start_time: otStart,
+          office_lat: lat,
+          office_lng: lng,
+          geofence_radius_meters: radius,
+          kiosk_pin: kioskPin
+        };
+        for (const [k, v] of Object.entries(syncMap)) {
+          await db.prepare("INSERT INTO attendance_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(k, String(v)).run().catch(() => {});
+        }
+      }
+
       await logSystemActivity(db, callerUser, 'SAVE_BRANCH', `บันทึกข้อมูลสาขา [${branchId}] ${branchName} (${workStart}-${workEnd})`);
       return { success: true, message: `บันทึกข้อมูลสาขา [${branchId}] ${branchName} เรียบร้อยแล้ว` };
     }
@@ -1407,6 +1425,25 @@ async function handleAction(db, action, params) {
           ON CONFLICT(key) DO UPDATE SET value = excluded.value
         `).bind(k, String(v)).run().catch(() => {});
       }
+
+      // Keep B01 (สำนักงานใหญ่) in sync with attendance_settings
+      const b01Updates = [];
+      const b01Values = [];
+      if (newSettings.work_start_time) { b01Updates.push('work_start_time = ?'); b01Values.push(String(newSettings.work_start_time)); }
+      if (newSettings.work_end_time) { b01Updates.push('work_end_time = ?'); b01Values.push(String(newSettings.work_end_time)); }
+      if (newSettings.lunch_start_time) { b01Updates.push('lunch_start_time = ?'); b01Values.push(String(newSettings.lunch_start_time)); }
+      if (newSettings.lunch_end_time) { b01Updates.push('lunch_end_time = ?'); b01Values.push(String(newSettings.lunch_end_time)); }
+      if (newSettings.ot_start_time) { b01Updates.push('ot_start_time = ?'); b01Values.push(String(newSettings.ot_start_time)); }
+      if (newSettings.office_lat) { b01Updates.push('lat = ?'); b01Values.push(Number(newSettings.office_lat)); }
+      if (newSettings.office_lng) { b01Updates.push('lng = ?'); b01Values.push(Number(newSettings.office_lng)); }
+      if (newSettings.geofence_radius_meters) { b01Updates.push('radius_meters = ?'); b01Values.push(Number(newSettings.geofence_radius_meters)); }
+      if (newSettings.kiosk_pin) { b01Updates.push('kiosk_pin = ?'); b01Values.push(String(newSettings.kiosk_pin)); }
+
+      if (b01Updates.length > 0) {
+        b01Values.push('B01');
+        await db.prepare(`UPDATE branches SET ${b01Updates.join(', ')} WHERE branch_id = ?`).bind(...b01Values).run().catch(() => {});
+      }
+
       await logSystemActivity(db, callerUser, 'UPDATE_ATTENDANCE_SETTINGS', 'อัปเดตการตั้งค่าเวลากะงานและพิกัด GPS');
       return { success: true, message: 'บันทึกการตั้งค่าระบบลงเวลาเรียบร้อยแล้ว' };
     }
