@@ -273,6 +273,10 @@ function showToast(msg, type) {
 
 // API CLIENT
 function callApi(action, payload) {
+  if (typeof action === 'object' && action !== null) {
+    payload = action;
+    action = payload.action;
+  }
   payload = payload || {};
   payload.action = action;
   payload.period = payload.period || State.period;
@@ -1065,8 +1069,7 @@ function remoteResetDevice(empId, empName) {
     confirmButtonColor: '#dc2626'
   }).then(function(res) {
     if (res.isConfirmed) {
-      callApi({
-        action: 'resetEmployeeDevice',
+      callApi('resetEmployeeDevice', {
         empId: empId,
         username: State.currentUser ? State.currentUser.username : 'Admin'
       }).then(function(data) {
