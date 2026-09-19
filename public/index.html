@@ -592,7 +592,11 @@
                     </div>
                   </div>
 
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                    <div>
+                      <label style="font-size:11px;font-weight:600;color:#0369a1">📅 วันตัดวิก (วันที่)</label>
+                      <input type="number" id="attSetCutoffDay" value="25" min="1" max="31" style="width:100%;padding:6px;border:1.5px solid #38bdf8;border-radius:6px;font-size:12px;font-weight:700;color:#0284c7;background:#f0f9ff" required title="ระบุวันที่ตัดรอบวิก เช่น 25 (รอบคือ 26 เดือนก่อน ถึง 25 เดือนปัจจุบัน)">
+                    </div>
                     <div>
                       <label style="font-size:11px;font-weight:600;color:#64748b">ผ่อนผันสาย (นาที)</label>
                       <input type="number" id="attSetGraceMinutes" value="0" min="0" max="120" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>

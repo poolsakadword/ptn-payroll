@@ -1857,12 +1857,14 @@ function syncFromPtnTime() {
     if (!confirm('คำเตือน: งวด ' + State.period + ' ถูกปิดงวดแล้ว ต้องการดึงข้อมูลหรือไม่?')) return;
   }
 
-  var msg = 'ต้องการดึงข้อมูลบันทึกเวลา, วันลา, ชั่วโมง OT และยอดเบิกเงินล่วงหน้า (รอบตัดวิก 26 - 25) จากระบบ PTN Time เข้าสู่งวด ' + State.period + ' อัตโนมัติใช่หรือไม่?\n\n' +
+  var cutDay = (State.settings && State.settings.cutoff_day) ? Number(State.settings.cutoff_day) : 25;
+  var cutRangeText = cutDay >= 30 ? 'วันที่ 1 ถึงสิ้นเดือน' : ('วันที่ ' + (cutDay + 1) + ' ถึง ' + cutDay);
+  var msg = 'ต้องการดึงข้อมูลบันทึกเวลา, วันลา, ชั่วโมง OT และยอดเบิกเงินล่วงหน้า (รอบตัดวิก ' + cutRangeText + ') จากระบบ PTN Time เข้าสู่งวด ' + State.period + ' อัตโนมัติใช่หรือไม่?\n\n' +
             '✨ ระบบจะอัปเดตยอดเบิกเงินล่วงหน้า, OT, วันลา และคำนวณเงินเดือนงวดนี้ให้อัตโนมัติทันที';
   
   if (!confirm(msg)) return;
 
-  showToast('กำลังดึงข้อมูลจากระบบ PTN Time (26-25)...');
+  showToast('กำลังดึงข้อมูลจากระบบ PTN Time (' + cutRangeText + ')...');
   callApi('syncFromPtnTime', { period: State.period })
     .then(function(r) {
       if (r.success) {
@@ -6022,6 +6024,8 @@ function loadTimeAttendanceDashboard() {
         if (setGrace && (r.settings.grace_minutes !== undefined || r.settings.grace_period_morning_minutes !== undefined)) {
           setGrace.value = r.settings.grace_minutes ?? r.settings.grace_period_morning_minutes;
         }
+        var setCutoffDay = document.getElementById('attSetCutoffDay');
+        if (setCutoffDay && r.settings.cutoff_day) setCutoffDay.value = r.settings.cutoff_day;
         if (setRadius && r.settings.geofence_radius_meters) setRadius.value = r.settings.geofence_radius_meters;
         if (setLat && r.settings.office_lat) setLat.value = r.settings.office_lat;
         if (setLng && r.settings.office_lng) setLng.value = r.settings.office_lng;
@@ -6627,6 +6631,7 @@ function saveAttendanceSettingsFromPayroll(e) {
 
   var sStart = document.getElementById('attSetShiftStart').value || '09:30';
   var sEnd = document.getElementById('attSetShiftEnd').value || '19:00';
+  var sCutoffDay = Number(document.getElementById('attSetCutoffDay') ? document.getElementById('attSetCutoffDay').value : 25) || 25;
   var sGrace = Number(document.getElementById('attSetGraceMinutes').value) || 0;
   var sRadius = Number(document.getElementById('attSetRadiusMeters').value) || 200;
   var sLat = Number(document.getElementById('attSetLat').value) || 13.727896;
@@ -6676,6 +6681,7 @@ function saveAttendanceSettingsFromPayroll(e) {
     work_start_time: sStart,
     shift_end: sEnd,
     work_end_time: sEnd,
+    cutoff_day: sCutoffDay,
     grace_minutes: sGrace,
     grace_period_morning_minutes: sGrace,
     geofence_radius_meters: sRadius,

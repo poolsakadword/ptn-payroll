@@ -153,7 +153,16 @@ function getDefaultPeriod() {
   return months[d.getMonth()] + ' ' + (d.getFullYear() + 543);
 }
 
-function getCutoffDatesForPeriod(periodStr) {
+async function getCutoffDatesForPeriod(db, periodStr) {
+  let cutoffDay = 25;
+  if (db) {
+    const row = await db.prepare("SELECT value FROM attendance_settings WHERE key = 'cutoff_day'").first().catch(() => null);
+    if (row && row.value) {
+      const parsed = parseInt(row.value, 10);
+      if (parsed >= 1 && parsed <= 31) cutoffDay = parsed;
+    }
+  }
+
   const thaiMonths = [
     'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
     'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
@@ -183,10 +192,20 @@ function getCutoffDatesForPeriod(periodStr) {
     prevYear -= 1;
   }
 
-  const startDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-26`;
-  const endDate = `${yearCE}-${String(month).padStart(2, '0')}-25`;
+  let startDate, endDate;
+  if (cutoffDay >= 30) {
+    // End of month cycle: 1st of month to end of month
+    const daysInMonth = new Date(yearCE, month, 0).getDate();
+    const actualEndDay = Math.min(cutoffDay, daysInMonth);
+    startDate = `${yearCE}-${String(month).padStart(2, '0')}-01`;
+    endDate = `${yearCE}-${String(month).padStart(2, '0')}-${String(actualEndDay).padStart(2, '0')}`;
+  } else {
+    const startDay = cutoffDay + 1;
+    startDate = `${prevYear}-${String(prevMonth).padStart(2, '0')}-${String(startDay).padStart(2, '0')}`;
+    endDate = `${yearCE}-${String(month).padStart(2, '0')}-${String(cutoffDay).padStart(2, '0')}`;
+  }
 
-  return { startDate, endDate, month, yearCE };
+  return { startDate, endDate, month, yearCE, cutoffDay };
 }
 
 async function handleAction(db, action, params) {
@@ -712,7 +731,7 @@ async function handleAction(db, action, params) {
 
     // 5.1 SYNC ATTENDANCE, LEAVES, OT & ADVANCE FROM PTN TIME (ALL OR INDIVIDUAL)
     case 'syncFromPtnTime': {
-      const dates = getCutoffDatesForPeriod(period);
+      const dates = await getCutoffDatesForPeriod(db, period);
       const startDate = dates.startDate;
       const endDate = dates.endDate;
       const targetEmpId = params.empId ? String(params.empId).trim() : null;
