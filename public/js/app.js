@@ -6084,6 +6084,13 @@ function loadTimeAttendanceDashboard() {
         if (setWinOutStart && r.settings.window_out_start) setWinOutStart.value = r.settings.window_out_start;
         if (setWinOutEnd && r.settings.window_out_end) setWinOutEnd.value = r.settings.window_out_end;
         toggleTimeWindowsUI(setTimeWindowLock ? setTimeWindowLock.checked : false);
+
+        var setKioskLock = document.getElementById('attSetEnableKioskLock');
+        var setKioskPin = document.getElementById('attSetKioskPin');
+        var setKioskGeofence = document.getElementById('attSetKioskRequireGeofence');
+        if (setKioskLock) setKioskLock.checked = (r.settings.enable_kiosk_lock !== 'false');
+        if (setKioskPin && r.settings.kiosk_pin) setKioskPin.value = r.settings.kiosk_pin;
+        if (setKioskGeofence) setKioskGeofence.checked = (r.settings.kiosk_require_geofence !== 'false');
       }
 
       // 4. Render Tables & Approvals
@@ -6660,6 +6667,10 @@ function saveAttendanceSettingsFromPayroll(e) {
   var winOutStart = document.getElementById('attSetWindowOutStart') ? document.getElementById('attSetWindowOutStart').value : '17:00';
   var winOutEnd = document.getElementById('attSetWindowOutEnd') ? document.getElementById('attSetWindowOutEnd').value : '23:59';
 
+  var enableKioskLock = document.getElementById('attSetEnableKioskLock') ? (document.getElementById('attSetEnableKioskLock').checked ? 'true' : 'false') : 'true';
+  var kioskPin = document.getElementById('attSetKioskPin') ? document.getElementById('attSetKioskPin').value : '123456';
+  var kioskRequireGeofence = document.getElementById('attSetKioskRequireGeofence') ? (document.getElementById('attSetKioskRequireGeofence').checked ? 'true' : 'false') : 'true';
+
   var settings = {
     shift_start: sStart,
     work_start_time: sStart,
@@ -6700,7 +6711,10 @@ function saveAttendanceSettingsFromPayroll(e) {
     window_break_in_start: winBreakInStart,
     window_break_in_end: winBreakInEnd,
     window_out_start: winOutStart,
-    window_out_end: winOutEnd
+    window_out_end: winOutEnd,
+    enable_kiosk_lock: enableKioskLock,
+    kiosk_pin: kioskPin,
+    kiosk_require_geofence: kioskRequireGeofence
   };
 
   callApi('saveAttendanceSettings', {
