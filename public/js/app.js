@@ -467,6 +467,8 @@ function loadAppData() {
       State.payrollList = r.payrollList || [];
       State.stats = r.stats || { totalEmployees: 0, totalGross: 0, totalDeductions: 0, totalNet: 0 };
       State.users = r.users || [];
+      State.branches = r.branches || [];
+      populateBranchSelects();
 
       renderAllViews();
       return r;
@@ -948,6 +950,11 @@ function renderEmployeesTable() {
       ? ('<img src="' + esc(e.photoUrl) + '" alt="' + esc(e.fullName) + '" style="width:42px;height:42px;border-radius:12px;object-fit:cover;flex-shrink:0;border:1.5px solid #cbd5e1;box-shadow:0 2px 4px rgba(0,0,0,0.1);background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)\\\'>' + esc(initials) + '</div>\'">')
       : ('<div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)">' + esc(initials) + '</div>');
 
+    var branchObj = (State.branches || []).find(function(b) { return b.branch_id === e.branchId; });
+    var branchNameDisplay = branchObj ? branchObj.branch_name : (e.branchId === 'B02' ? 'สาขา 2' : (e.branchId === 'B03' ? 'สาขา 3' : (e.branchId === 'B04' ? 'สาขา 4' : 'สำนักงานใหญ่')));
+    var roamingText = e.allowAllBranches ? ' <span style="color:#0284c7;font-size:10px;font-weight:700" title="ลงเวลาได้ทุกสาขา">(ทุกสาขา)</span>' : '';
+    var branchBadgeHtml = '<div style="font-size:11px;color:#0369a1;font-weight:600;margin-top:2px"><i class="fa-solid fa-store" style="font-size:10px;margin-right:2px"></i> ' + esc(branchNameDisplay) + roamingText + '</div>';
+
     // 1. Render Table Row
     if (isGeneralUser) {
       hTable += '<tr>' +
@@ -961,7 +968,7 @@ function renderEmployeesTable() {
             '</div>' +
           '</div>' +
         '</td>' +
-        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div></td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div>' + branchBadgeHtml + '</td>' +
         '<td class="text-center">' + stBadge + '</td>' +
         '<td>' + esc(birthText) + '</td>' +
         '<td class="font-mono">' + esc(e.phone || '-') + '</td>' +
@@ -984,7 +991,7 @@ function renderEmployeesTable() {
             '</div>' +
           '</div>' +
         '</td>' +
-        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div></td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div>' + branchBadgeHtml + '</td>' +
         '<td class="text-center">' + stBadge + '</td>' +
         '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
         '<td class="text-right font-mono">' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '<span class="text-muted" style="font-size:11px">0%</span>') + '</td>' +
@@ -1013,6 +1020,7 @@ function renderEmployeesTable() {
               devBadge +
             '</div>' +
             '<div style="font-weight:700;font-size:13.5px;color:var(--text-main);margin-top:2px">' + esc(e.fullName) + '</div>' +
+            branchBadgeHtml +
           '</div>' +
         '</div>' +
         stBadge +
@@ -2260,12 +2268,54 @@ function compressEmployeePhoto(dataUrl, maxW, maxH, quality, callback) {
 }
 
 // EMPLOYEE MASTER MODAL
+function populateBranchSelects() {
+  var bList = State.branches || [];
+  if (!bList.length) {
+    bList = [
+      { branch_id: 'B01', branch_name: 'สำนักงานใหญ่', work_start_time: '08:30', work_end_time: '17:30' },
+      { branch_id: 'B02', branch_name: 'สาขาที่ 2 (หน้าร้าน A)', work_start_time: '09:30', work_end_time: '19:00' },
+      { branch_id: 'B03', branch_name: 'สาขาที่ 3 (หน้าร้าน B)', work_start_time: '10:00', work_end_time: '20:00' },
+      { branch_id: 'B04', branch_name: 'สาขาที่ 4 (คลังสินค้า/สำรอง)', work_start_time: '09:00', work_end_time: '18:00' }
+    ];
+  }
+
+  // 1. Employee modal branch selector
+  var mBranchSel = document.getElementById('mBranchId');
+  if (mBranchSel) {
+    var curVal = mBranchSel.value || 'B01';
+    var html = '';
+    bList.forEach(function(b) {
+      html += '<option value="' + esc(b.branch_id) + '">' + esc(b.branch_id) + ': ' + esc(b.branch_name) + ' (' + (b.work_start_time || '09:30') + '-' + (b.work_end_time || '19:00') + ')</option>';
+    });
+    mBranchSel.innerHTML = html;
+    if (curVal) mBranchSel.value = curVal;
+  }
+
+  // 2. Attendance log filter dropdown
+  var attFilterSel = document.getElementById('attFilterBranch');
+  if (attFilterSel) {
+    var curFilter = attFilterSel.value || 'ALL';
+    var fHtml = '<option value="ALL">🏢 ทุกสาขา (All Branches)</option>';
+    bList.forEach(function(b) {
+      fHtml += '<option value="' + esc(b.branch_id) + '">' + esc(b.branch_id) + ': ' + esc(b.branch_name) + '</option>';
+    });
+    attFilterSel.innerHTML = fHtml;
+    if (curFilter) attFilterSel.value = curFilter;
+  }
+}
+
 function openAddEmployeeModal() {
   var isGeneralUser = (State.currentUser && String(State.currentUser.role).trim().toLowerCase() === 'user');
   var finSection = document.getElementById('empModalFinancialSection');
   if (finSection) finSection.style.display = isGeneralUser ? 'none' : 'block';
   var salInput = document.getElementById('mBaseSalary');
   if (salInput) salInput.required = !isGeneralUser;
+
+  populateBranchSelects();
+  var bSel = document.getElementById('mBranchId');
+  if (bSel) bSel.value = 'B01';
+  var allBranchesCheck = document.getElementById('mAllowAllBranches');
+  if (allBranchesCheck) allBranchesCheck.checked = false;
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
@@ -2301,6 +2351,12 @@ function openEditEmployeeModal(empId) {
   if (finSection) finSection.style.display = isGeneralUser ? 'none' : 'block';
   var salInput = document.getElementById('mBaseSalary');
   if (salInput) salInput.required = !isGeneralUser;
+
+  populateBranchSelects();
+  var bSel = document.getElementById('mBranchId');
+  if (bSel) bSel.value = e.branchId || 'B01';
+  var allBranchesCheck = document.getElementById('mAllowAllBranches');
+  if (allBranchesCheck) allBranchesCheck.checked = (e.allowAllBranches === true || e.allowAllBranches === 'true');
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
   document.getElementById('empOrigId').value = e.empId;
@@ -2361,11 +2417,14 @@ function saveEmployeeForm(e, openPayslipAfter) {
   var isUser = (State.currentUser && State.currentUser.role === 'User');
 
   var baseSal = isUser ? (existingEmp ? existingEmp.baseSalary : 0) : (Number(document.getElementById('mBaseSalary').value) || 0);
-    var hasPf = document.getElementById('mHasPf') ? document.getElementById('mHasPf').checked : true;
+  var hasPf = document.getElementById('mHasPf') ? document.getElementById('mHasPf').checked : true;
   var pfRate = isUser ? (existingEmp ? (existingEmp.pfRate || 0) : 0) : (hasPf ? (Number(document.getElementById('mPfRate').value) || 0.05) : 0);
-    var hasSso = document.getElementById('mHasSso') ? document.getElementById('mHasSso').checked : true;
+  var hasSso = document.getElementById('mHasSso') ? document.getElementById('mHasSso').checked : true;
   var ssoVal = isUser ? (existingEmp ? (existingEmp.defaultSso !== undefined ? existingEmp.defaultSso : 0) : 0) : (hasSso ? (Number(document.getElementById('mDefaultSso').value) || 0) : 0);
   var taxVal = isUser ? (existingEmp ? existingEmp.defaultTax : 0) : (Number(document.getElementById('mDefaultTax').value) || 0);
+
+  var branchIdVal = (document.getElementById('mBranchId') && document.getElementById('mBranchId').value) || 'B01';
+  var allowAllBranchesVal = (document.getElementById('mAllowAllBranches') && document.getElementById('mAllowAllBranches').checked) || false;
 
   var d = {
     empId: document.getElementById('mEmpId').value.trim(),
@@ -2379,6 +2438,8 @@ function saveEmployeeForm(e, openPayslipAfter) {
     address: document.getElementById('mAddress').value.trim(),
     department: document.getElementById('mDepartment').value.trim(),
     position: document.getElementById('mPosition').value.trim(),
+    branchId: branchIdVal,
+    allowAllBranches: allowAllBranchesVal,
     status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
     probationDays: (document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119),
     probationEndDate: (document.getElementById('mProbationEndDate') ? document.getElementById('mProbationEndDate').value : ''),
@@ -5960,20 +6021,27 @@ function loadTimeAttendanceDashboard() {
     filterInput.value = bangkok.toISOString().substring(0, 10);
   }
   var filterDate = filterInput ? filterInput.value : '';
+  var filterBranch = (document.getElementById('attFilterBranch') && document.getElementById('attFilterBranch').value) || 'ALL';
 
   var logsBody = document.getElementById('attLogsTableBody');
   if (logsBody) {
-    logsBody.innerHTML = '<tr><td colspan="12" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงานและรูปถ่าย...</td></tr>';
+    logsBody.innerHTML = '<tr><td colspan="13" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงานและรูปถ่าย...</td></tr>';
   }
 
   callApi('getTimeAttendanceDashboard', {
     date: filterDate,
+    branchId: filterBranch,
     username: (State.currentUser && State.currentUser.username) || 'Admin'
   })
     .then(function(r) {
       if (!r || !r.success) {
         showToast(r && r.message ? r.message : 'ไม่สามารถโหลดข้อมูลเวลาทำงานได้', 'error');
         return;
+      }
+
+      if (r.branches) {
+        State.branches = r.branches;
+        populateBranchSelects();
       }
 
       _currentAttendanceLogs = r.logsToday || [];
@@ -6108,7 +6176,7 @@ function loadTimeAttendanceDashboard() {
     })
     .catch(function(err) {
       if (logsBody) {
-        logsBody.innerHTML = '<tr><td colspan="12" class="text-center text-red" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '</td></tr>';
+        logsBody.innerHTML = '<tr><td colspan="13" class="text-center text-red" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '</td></tr>';
       }
     });
 }
@@ -6128,7 +6196,7 @@ function renderTimeAttendanceTodayLogs(logs) {
   if (!tbody) return;
 
   if (!logs || logs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ไม่พบข้อมูลการลงเวลาในวันที่เลือก</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ไม่พบข้อมูลการลงเวลาในวันที่เลือก</td></tr>';
     return;
   }
 
@@ -6166,6 +6234,7 @@ function renderTimeAttendanceTodayLogs(logs) {
     }
 
     var nameDisplay = (l.full_name || '-') + (l.nickname ? ' (' + l.nickname + ')' : '');
+    var branchDisplay = l.branch_name || l.branch_id || 'สำนักงานใหญ่';
 
     html += '<tr id="attLogRow_' + l.id + '">' +
       '<td class="text-center" style="padding:4px">' +
@@ -6183,6 +6252,7 @@ function renderTimeAttendanceTodayLogs(logs) {
         (l.break_out ? '<div style="font-size:10.5px;color:#b45309;font-weight:700;margin-top:2px"><i class="fa-solid fa-mug-hot"></i> พัก ' + l.break_out + (l.break_in ? ' - ' + l.break_in : ' (กำลังพัก)') + (l.break_minutes > 0 ? ' (' + l.break_minutes + 'น.)' : '') + '</div>' : '') +
       '</td>' +
       '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
+      '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
       '<td class="text-center font-bold text-green" style="font-size:12.5px">' + (l.clock_in ? l.clock_in + ' น.' : '-') + '</td>' +
       '<td class="text-center font-bold text-red" style="font-size:12.5px">' + (l.clock_out ? l.clock_out + ' น.' : '-') + '</td>' +
       '<td class="text-center">' + lateBadge + hrsText + '</td>' +
@@ -6741,6 +6811,213 @@ function toggleTimeWindowsUI(enabled) {
     grid.style.opacity = enabled ? '1' : '0.45';
     grid.style.pointerEvents = enabled ? 'auto' : 'none';
   }
+}
+
+// ==========================================
+// 🏢 MULTI-BRANCH MANAGEMENT CONTROLLERS
+// ==========================================
+function openBranchManagerModal() {
+  if (!isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: จัดการสาขาสงวนสิทธิ์เฉพาะ Super Admin เท่านั้น', 'warning');
+    return;
+  }
+  openModal('modalBranchManager');
+  renderBranchManagerTable();
+}
+
+function renderBranchManagerTable() {
+  var tbody = document.getElementById('branchManagerTableBody');
+  if (!tbody) return;
+
+  var bList = State.branches || [];
+  if (!bList.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:24px">ไม่พบข้อมูลสาขา</td></tr>';
+    return;
+  }
+
+  var html = '';
+  bList.forEach(function(b) {
+    var statusBadge = (b.status === 'ACTIVE' || !b.status)
+      ? '<span class="period-pill" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-size:11px">🟢 เปิดใช้งาน</span>'
+      : '<span class="period-pill" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-size:11px">🔴 ปิดชั่วคราว</span>';
+
+    var workTime = (b.work_start_time || '09:30') + ' - ' + (b.work_end_time || '19:00');
+    var lunchTime = (b.lunch_start_time || '13:00') + ' - ' + (b.lunch_end_time || '14:00');
+    var otTime = b.ot_start_time || b.work_end_time || '19:00';
+    var coords = (b.lat ? Number(b.lat).toFixed(4) : '-') + ', ' + (b.lng ? Number(b.lng).toFixed(4) : '-');
+    var radius = (b.radius_meters || 200) + ' ม.';
+
+    html += '<tr>' +
+      '<td class="font-bold text-blue font-mono" style="font-size:12.5px">' + esc(b.branch_id) + '</td>' +
+      '<td>' +
+        '<div style="font-weight:700;color:#0f172a">' + esc(b.branch_name) + '</div>' +
+        (b.grace_minutes > 0 ? '<div style="font-size:10.5px;color:#c2410c">ผ่อนผัน ' + b.grace_minutes + ' นาที</div>' : '') +
+      '</td>' +
+      '<td class="text-center font-bold font-mono" style="color:#1e40af;font-size:12px">' + workTime + '</td>' +
+      '<td class="text-center font-mono" style="color:#b45309;font-size:12px">' + lunchTime + '</td>' +
+      '<td class="text-center font-mono font-bold" style="color:#7c3aed;font-size:12px">' + otTime + '</td>' +
+      '<td style="font-size:11px;color:#475569">' +
+        '<div><i class="fa-solid fa-location-dot text-green"></i> ' + coords + '</div>' +
+        '<div style="color:#64748b;font-size:10.5px">รัศมี: ' + radius + '</div>' +
+      '</td>' +
+      '<td class="text-center font-mono" style="font-size:11.5px;color:#0f766e;letter-spacing:1px">••••••</td>' +
+      '<td class="text-center">' + statusBadge + '</td>' +
+      '<td class="text-center" style="white-space:nowrap">' +
+        '<div style="display:inline-flex;gap:4px">' +
+          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd" onclick="openEditBranchModal(\'' + esc(b.branch_id) + '\')" title="แก้ไขสาขานี้">' +
+            '<i class="fa-solid fa-pen-to-square"></i> แก้ไข' +
+          '</button>' +
+          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca" onclick="deleteBranchPrompt(\'' + esc(b.branch_id) + '\', \'' + esc(b.branch_name) + '\')" title="ลบสาขา">' +
+            '<i class="fa-solid fa-trash-can"></i>' +
+          '</button>' +
+        '</div>' +
+      '</td>' +
+    '</tr>';
+  });
+
+  tbody.innerHTML = html;
+}
+
+function openEditBranchModal(branchId) {
+  var b = null;
+  if (branchId && State.branches) {
+    b = State.branches.find(function(x) { return x.branch_id === branchId; });
+  }
+
+  var titleEl = document.getElementById('modalEditBranchTitle');
+  var bIdInput = document.getElementById('bBranchId');
+
+  if (b) {
+    if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-pen-to-square text-blue"></i> <span>แก้ไขสาขา [' + esc(b.branch_id) + '] ' + esc(b.branch_name) + '</span>';
+    if (bIdInput) { bIdInput.value = b.branch_id; bIdInput.readOnly = true; }
+    document.getElementById('bBranchName').value = b.branch_name || '';
+    document.getElementById('bWorkStart').value = b.work_start_time || '09:30';
+    document.getElementById('bWorkEnd').value = b.work_end_time || '19:00';
+    document.getElementById('bLunchStart').value = b.lunch_start_time || '13:00';
+    document.getElementById('bLunchEnd').value = b.lunch_end_time || '14:00';
+    document.getElementById('bGraceMinutes').value = b.grace_minutes || 0;
+    document.getElementById('bOtStart').value = b.ot_start_time || b.work_end_time || '19:00';
+    document.getElementById('bLat').value = b.lat || 13.727896;
+    document.getElementById('bLng').value = b.lng || 100.524123;
+    document.getElementById('bRadius').value = b.radius_meters || 200;
+    document.getElementById('bKioskPin').value = b.kiosk_pin || '123456';
+    document.getElementById('bStatus').value = b.status || 'ACTIVE';
+  } else {
+    var nextId = 'B0' + ((State.branches ? State.branches.length : 0) + 1);
+    if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-plus text-blue"></i> <span>เพิ่มสาขาใหม่</span>';
+    if (bIdInput) { bIdInput.value = nextId; bIdInput.readOnly = false; }
+    document.getElementById('bBranchName').value = '';
+    document.getElementById('bWorkStart').value = '09:30';
+    document.getElementById('bWorkEnd').value = '19:00';
+    document.getElementById('bLunchStart').value = '13:00';
+    document.getElementById('bLunchEnd').value = '14:00';
+    document.getElementById('bGraceMinutes').value = 0;
+    document.getElementById('bOtStart').value = '19:00';
+    document.getElementById('bLat').value = 13.727896;
+    document.getElementById('bLng').value = 100.524123;
+    document.getElementById('bRadius').value = 200;
+    document.getElementById('bKioskPin').value = '123456';
+    document.getElementById('bStatus').value = 'ACTIVE';
+  }
+
+  openModal('modalEditBranch');
+}
+
+function saveBranchForm(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  var branchId = (document.getElementById('bBranchId').value || '').trim().toUpperCase();
+  var branchName = (document.getElementById('bBranchName').value || '').trim();
+  if (!branchId || !branchName) {
+    showToast('กรุณาระบุรหัสและชื่อสาขา', 'error');
+    return;
+  }
+
+  var branchObj = {
+    branch_id: branchId,
+    branch_name: branchName,
+    work_start_time: document.getElementById('bWorkStart').value || '09:30',
+    work_end_time: document.getElementById('bWorkEnd').value || '19:00',
+    lunch_start_time: document.getElementById('bLunchStart').value || '13:00',
+    lunch_end_time: document.getElementById('bLunchEnd').value || '14:00',
+    grace_minutes: Number(document.getElementById('bGraceMinutes').value) || 0,
+    ot_start_time: document.getElementById('bOtStart').value || '19:00',
+    lat: Number(document.getElementById('bLat').value) || 13.727896,
+    lng: Number(document.getElementById('bLng').value) || 100.524123,
+    radius_meters: Number(document.getElementById('bRadius').value) || 200,
+    kiosk_pin: (document.getElementById('bKioskPin').value || '123456').trim(),
+    status: document.getElementById('bStatus').value || 'ACTIVE'
+  };
+
+  callApi('saveBranch', {
+    branch: branchObj,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (r && r.success) {
+        showToast(r.message || 'บันทึกข้อมูลสาขาสำเร็จ');
+        closeModal('modalEditBranch');
+        callApi('getBranches').then(function(res) {
+          if (res && res.branches) {
+            State.branches = res.branches;
+            populateBranchSelects();
+            renderBranchManagerTable();
+            loadTimeAttendanceDashboard();
+          }
+        });
+      } else {
+        showToast(r ? r.message : 'บันทึกไม่สำเร็จ', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึกสาขา', 'error');
+    });
+}
+
+function deleteBranchPrompt(branchId, branchName) {
+  if (!confirm('ยืนยันการลบสาขา [' + branchId + '] ' + branchName + ' ?')) return;
+
+  callApi('deleteBranch', {
+    branchId: branchId,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (r && r.success) {
+        showToast(r.message || 'ลบสาขาสำเร็จ');
+        callApi('getBranches').then(function(res) {
+          if (res && res.branches) {
+            State.branches = res.branches;
+            populateBranchSelects();
+            renderBranchManagerTable();
+            loadTimeAttendanceDashboard();
+          }
+        });
+      } else {
+        showToast(r ? r.message : 'ลบไม่สำเร็จ', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการลบสาขา', 'error');
+    });
+}
+
+function getCurrentLocationForBranchEdit() {
+  if (!navigator.geolocation) {
+    showToast('เบราว์เซอร์ไม่รองรับ Geolocation', 'warning');
+    return;
+  }
+  showToast('กำลังตรวจหาพิกัด GPS...', 'info');
+  navigator.geolocation.getCurrentPosition(
+    function(pos) {
+      document.getElementById('bLat').value = pos.coords.latitude.toFixed(6);
+      document.getElementById('bLng').value = pos.coords.longitude.toFixed(6);
+      showToast('ดึงพิกัดสำเร็จ: ' + pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6));
+    },
+    function(err) {
+      showToast('ไม่สามารถดึงพิกัดได้: ' + err.message, 'error');
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
 }
 
 function syncAttendanceToPayrollPeriod() {

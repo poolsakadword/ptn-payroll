@@ -464,6 +464,9 @@
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn" style="background:#0284c7;color:#fff;border:1px solid #38bdf8;font-weight:700;font-size:12px" onclick="openBranchManagerModal()">
+                <i class="fa-solid fa-store"></i> จัดการสาขา &amp; กะเวลา (3-4 สาขา)
+              </button>
               <a href="https://ptntime.pages.dev" target="_blank" class="btn" style="background:#fff;color:#1e3a8a;font-weight:700;font-size:12px">
                 <i class="fa-solid fa-arrow-up-right-from-square"></i> เปิดเว็บพนักงาน PTN Time
               </a>
@@ -494,6 +497,12 @@
                 <div class="card-sub" id="attLogsSubTitle">บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตน</div>
               </div>
               <div class="toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:6px">
+                  <label style="font-size:12px;font-weight:700;color:#334155"><i class="fa-solid fa-store text-blue"></i> สาขา:</label>
+                  <select id="attFilterBranch" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600;min-width:140px" onchange="loadTimeAttendanceDashboard()">
+                    <option value="ALL">🏢 ทุกสาขา (All)</option>
+                  </select>
+                </div>
                 <div style="display:flex;align-items:center;gap:6px">
                   <label style="font-size:12px;font-weight:700;color:#334155"><i class="fa-regular fa-calendar text-blue"></i> วันที่:</label>
                   <input type="date" id="attFilterDate" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600" onchange="loadTimeAttendanceDashboard()">
@@ -535,6 +544,7 @@
                     <th style="width:75px">รหัส</th>
                     <th>ชื่อ-นามสกุล</th>
                     <th style="width:85px">แผนก</th>
+                    <th style="width:110px">สาขาที่ลง</th>
                     <th style="width:70px" class="text-center text-green">เข้างาน</th>
                     <th style="width:70px" class="text-center text-red">ออกงาน</th>
                     <th style="width:75px" class="text-center">สาย/ชม.</th>
@@ -2369,6 +2379,22 @@
               </div>
             </div>
 
+            <!-- Branch Assignment Section -->
+            <div class="form-row-2" style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:12px;align-items:center">
+              <div class="form-group" style="margin:0">
+                <label style="font-weight:700;color:#0369a1;font-size:12px"><i class="fa-solid fa-store"></i> สาขาประจำการหลัก (Branch) *</label>
+                <select id="mBranchId" style="font-weight:700;background:#ffffff;border-color:#7dd3fc">
+                  <!-- dynamically populated from State.branches -->
+                </select>
+              </div>
+              <div class="form-group" style="margin:0;padding-top:16px">
+                <label style="display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:#0284c7;cursor:pointer">
+                  <input type="checkbox" id="mAllowAllBranches" style="width:16px;height:16px;accent-color:#0284c7;cursor:pointer">
+                  <span>พนักงานหมุนเวียน (ลงเวลาได้ทุกสาขาตามพิกัดจริง)</span>
+                </label>
+              </div>
+            </div>
+
             <!-- Probation Details Configuration Section -->
             <div id="probationConfigSection" style="display:none;background:#fff7ed;border:1.5px solid #fed7aa;border-radius:var(--radius-md);padding:12px 14px;margin-bottom:12px">
               <div style="font-weight:700;color:#c2410c;font-size:12px;margin-bottom:8px">
@@ -3331,6 +3357,163 @@
           <button type="button" class="btn btn-slate" onclick="closeModal('modalAttendanceEdit')">ยกเลิก</button>
           <button type="submit" class="btn btn-primary" style="font-weight:700">
             <i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MULTI-BRANCH MANAGER MODAL -->
+  <div class="modal-overlay" id="modalBranchManager">
+    <div class="modal-card wide" style="max-width:920px;width:95vw">
+      <div class="modal-header" style="flex-wrap:wrap;gap:10px">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px">
+          <i class="fa-solid fa-store text-blue"></i>
+          <span>จัดการสาขา &amp; เวลากะงาน (Multi-Branch Management)</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button type="button" class="btn btn-primary btn-sm" onclick="openEditBranchModal('')" style="font-weight:700">
+            <i class="fa-solid fa-plus"></i> เพิ่มสาขาใหม่
+          </button>
+          <button type="button" class="modal-close-btn" onclick="closeModal('modalBranchManager')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="modal-body" style="padding:16px 20px">
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:12px;color:#1e40af;margin-bottom:14px;line-height:1.5">
+          <i class="fa-solid fa-circle-info" style="margin-right:4px"></i> <strong>ระบบรองรับหลายสาขา:</strong> แต่ละสาขาสามารถกำหนดเวลาเข้า-เลิกงาน เวลาพักเที่ยง และพิกัด GPS ประจำสาขาแยกอิสระจากกันได้ พนักงานจะคำนวณการมาสายและ OT ตามเวลากะของสาขาที่สังกัด หรือสาขาที่ลงเวลาจริง
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th style="width:65px">รหัส</th>
+                <th style="width:160px">ชื่อสาขา</th>
+                <th style="width:115px" class="text-center">เวลากะงาน</th>
+                <th style="width:105px" class="text-center">พักเที่ยง</th>
+                <th style="width:85px" class="text-center">เริ่ม OT</th>
+                <th>พิกัด / รัศมี</th>
+                <th style="width:75px" class="text-center">PIN</th>
+                <th style="width:85px" class="text-center">สถานะ</th>
+                <th style="width:100px" class="text-center">จัดการ</th>
+              </tr>
+            </thead>
+            <tbody id="branchManagerTableBody">
+              <tr><td colspan="9" class="text-center text-muted" style="padding:24px">กำลังโหลดข้อมูลสาขา...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end">
+        <button type="button" class="btn btn-slate" onclick="closeModal('modalBranchManager')">ปิดหน้าต่าง</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT / ADD BRANCH MODAL -->
+  <div class="modal-overlay" id="modalEditBranch">
+    <div class="modal-card" style="max-width:580px;width:95vw">
+      <div class="modal-header">
+        <div class="modal-title" style="display:flex;align-items:center;gap:8px" id="modalEditBranchTitle">
+          <i class="fa-solid fa-store text-blue"></i>
+          <span>แก้ไขข้อมูลสาขา</span>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalEditBranch')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="saveBranchForm(event)">
+        <div class="modal-body" style="padding:18px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:grid;grid-template-columns:1fr 2fr;gap:10px">
+            <div>
+              <label style="font-size:11.5px;font-weight:700;color:#1e3a8a">รหัสสาขา *</label>
+              <input type="text" id="bBranchId" placeholder="เช่น B01, B02" required style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:700;text-transform:uppercase">
+            </div>
+            <div>
+              <label style="font-size:11.5px;font-weight:700;color:#1e3a8a">ชื่อสาขา *</label>
+              <input type="text" id="bBranchName" placeholder="เช่น สาขาที่ 2 (หน้าร้าน A)" required style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:600">
+            </div>
+          </div>
+
+          <!-- Shift Times -->
+          <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+            <div style="font-size:11.5px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px">
+              <i class="fa-solid fa-clock text-blue"></i> กำหนดเวลากะงานประจำสาขานี้
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#15803d">เวลาเข้างาน (เริ่มนับสาย)</label>
+                <input type="time" id="bWorkStart" value="09:30" required style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:700">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#b91c1c">เวลาเลิกงานปกติ</label>
+                <input type="time" id="bWorkEnd" value="19:00" required style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:700">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#b45309">เริ่มพักเที่ยง</label>
+                <input type="time" id="bLunchStart" value="13:00" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#b45309">สิ้นสุดพักเที่ยง</label>
+                <input type="time" id="bLunchEnd" value="14:00" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#475569">ผ่อนผันสาย (นาที)</label>
+                <input type="number" id="bGraceMinutes" value="0" min="0" max="120" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#7c3aed">เวลาเริ่มนับ OT</label>
+                <input type="time" id="bOtStart" value="19:00" style="width:100%;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:700">
+              </div>
+            </div>
+          </div>
+
+          <!-- GPS Coordinates & Geofence -->
+          <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-size:11.5px;font-weight:700;color:#166534;display:flex;align-items:center;gap:6px">
+                <i class="fa-solid fa-location-dot text-green"></i> พิกัด GPS &amp; รัศมีสาขา
+              </div>
+              <button type="button" class="btn btn-sm" style="font-size:11px;padding:2px 8px;background:#dcfce7;color:#15803d;border:1px solid #86efac" onclick="getCurrentLocationForBranchEdit()">
+                <i class="fa-solid fa-crosshairs"></i> ดึงพิกัดปัจจุบัน
+              </button>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#166534">Latitude</label>
+                <input type="number" step="0.000001" id="bLat" value="13.727896" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-family:monospace">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#166534">Longitude</label>
+                <input type="number" step="0.000001" id="bLng" value="100.524123" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-family:monospace">
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#166534">รัศมี (เมตร)</label>
+                <input type="number" id="bRadius" value="200" min="20" max="5000" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+              </div>
+            </div>
+          </div>
+
+          <!-- Kiosk PIN & Status -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#0f766e">🔑 รหัส Kiosk PIN (6 หลัก)</label>
+              <input type="password" id="bKioskPin" value="123456" maxlength="12" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;letter-spacing:2px;font-weight:700">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#334155">สถานะสาขา</label>
+              <select id="bStatus" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:700">
+                <option value="ACTIVE">🟢 เปิดใช้งาน (Active)</option>
+                <option value="INACTIVE">🔴 ปิดชั่วคราว (Inactive)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="display:flex;justify-content:flex-end;gap:8px">
+          <button type="button" class="btn btn-slate" onclick="closeModal('modalEditBranch')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary" style="font-weight:700">
+            <i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูลสาขา
           </button>
         </div>
       </form>

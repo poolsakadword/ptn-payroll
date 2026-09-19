@@ -86,6 +86,50 @@ async function isUserSuperAdmin(db, username) {
   return false;
 }
 
+async function ensureBranchTables(db) {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS branches (
+        branch_id TEXT PRIMARY KEY,
+        branch_name TEXT NOT NULL,
+        lat REAL NOT NULL,
+        lng REAL NOT NULL,
+        radius_meters INTEGER DEFAULT 200,
+        work_start_time TEXT DEFAULT '09:30',
+        work_end_time TEXT DEFAULT '19:00',
+        lunch_start_time TEXT DEFAULT '13:00',
+        lunch_end_time TEXT DEFAULT '14:00',
+        grace_minutes INTEGER DEFAULT 0,
+        ot_start_time TEXT DEFAULT '19:00',
+        kiosk_pin TEXT DEFAULT '123456',
+        status TEXT DEFAULT 'ACTIVE',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run().catch(() => {});
+
+    // Seed default 4 branches if empty
+    const countRow = await db.prepare('SELECT COUNT(*) as count FROM branches').first().catch(() => null);
+    if (!countRow || countRow.count === 0) {
+      await db.prepare(`
+        INSERT OR IGNORE INTO branches (branch_id, branch_name, lat, lng, radius_meters, work_start_time, work_end_time, lunch_start_time, lunch_end_time, grace_minutes, ot_start_time, kiosk_pin, status)
+        VALUES 
+          ('B01', 'สำนักงานใหญ่', 13.727896, 100.524123, 200, '08:30', '17:30', '12:00', '13:00', 0, '17:30', '123456', 'ACTIVE'),
+          ('B02', 'สาขาที่ 2 (หน้าร้าน A)', 13.756300, 100.501800, 150, '09:30', '19:00', '13:00', '14:00', 0, '19:00', '123456', 'ACTIVE'),
+          ('B03', 'สาขาที่ 3 (หน้าร้าน B)', 13.712000, 100.589000, 150, '10:00', '20:00', '13:30', '14:30', 0, '20:00', '123456', 'ACTIVE'),
+          ('B04', 'สาขาที่ 4 (คลังสินค้า/สำรอง)', 13.789000, 100.550000, 200, '09:00', '18:00', '12:00', '13:00', 0, '18:00', '123456', 'ACTIVE')
+      `).run().catch(() => {});
+    }
+
+    await db.prepare("ALTER TABLE employees ADD COLUMN branch_id TEXT DEFAULT 'B01'").run().catch(() => {});
+    await db.prepare("ALTER TABLE employees ADD COLUMN allow_all_branches TEXT DEFAULT 'false'").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN branch_id TEXT").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN branch_name TEXT").run().catch(() => {});
+    await db.prepare("UPDATE employees SET branch_id = 'B01' WHERE branch_id IS NULL OR branch_id = ''").run().catch(() => {});
+  } catch(e) {
+    console.error('ensureBranchTables note:', e);
+  }
+}
+
 /**
  * ==============================================================================
  * PTN Payroll System V4.0 - Clean Enterprise Cloudflare D1 Backend
@@ -118,6 +162,8 @@ export async function onRequest(context) {
   }
 
   try {
+    await ensureBranchTables(db);
+
     let action = 'getAppInitialData';
     let params = {};
     const url = new URL(request.url);
@@ -321,6 +367,8 @@ async function handleAction(db, action, params) {
         };
       }
 
+      const branchRows = await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
+
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
       const employees = (empQuery.results || []).map(e => ({
         empId: e.emp_id,
@@ -332,6 +380,8 @@ async function handleAction(db, action, params) {
         address: e.address || '',
         department: e.department || '',
         position: e.position || '',
+        branchId: e.branch_id || 'B01',
+        allowAllBranches: e.allow_all_branches === 'true',
         baseSalary: Number(e.base_salary) || 0,
         bankName: e.bank_name || '',
         bankAccount: e.bank_account || '',
@@ -448,7 +498,8 @@ async function handleAction(db, action, params) {
           totalDeductions: Math.round(totalDeductions * 100) / 100,
           totalNet: Math.round(totalNet * 100) / 100
         },
-        users: users
+        users: users,
+        branches: branchRows.results || []
       };
     }
 
@@ -551,10 +602,13 @@ async function handleAction(db, action, params) {
         photoUrlVal = photoUrlVal || '';
       }
 
+      const branchIdVal = String(emp.branchId || emp.branch_id || 'B01').trim();
+      const allowAllVal = (emp.allowAllBranches === 'true' || emp.allowAllBranches === true) ? 'true' : 'false';
+
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -563,7 +617,8 @@ async function handleAction(db, action, params) {
         pfRateVal, ssoVal,
         taxVal, emp.remark || '',
         statusVal, probDays, probEndDate,
-        photoUrlVal
+        photoUrlVal,
+        branchIdVal, allowAllVal
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period
@@ -1073,15 +1128,32 @@ async function handleAction(db, action, params) {
       await db.prepare("ALTER TABLE time_logs ADD COLUMN break_minutes INTEGER DEFAULT 0").run().catch(() => {});
       await db.prepare("ALTER TABLE time_logs ADD COLUMN overbreak_minutes INTEGER DEFAULT 0").run().catch(() => {});
 
-      // 1. Logs for Selected Date (or Today) with Employee Info
-      const logsQuery = await db.prepare(`
-        SELECT l.*, e.full_name, e.nickname, e.department, e.position
-        FROM time_logs l
-        LEFT JOIN employees e ON l.emp_id = e.emp_id
-        WHERE l.date = ?
-        ORDER BY l.clock_in DESC
-      `).bind(filterDate).all().catch(() => ({ results: [] }));
+      const branchFilter = String(params.branchId || params.branch_id || '').trim();
+
+      // 1. Logs for Selected Date (or Today) with Employee Info and Branch Info
+      let logsQuery;
+      if (branchFilter && branchFilter !== 'ALL') {
+        logsQuery = await db.prepare(`
+          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
+          FROM time_logs l
+          LEFT JOIN employees e ON l.emp_id = e.emp_id
+          WHERE l.date = ? AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))
+          ORDER BY l.clock_in DESC
+        `).bind(filterDate, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
+      } else {
+        logsQuery = await db.prepare(`
+          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
+          FROM time_logs l
+          LEFT JOIN employees e ON l.emp_id = e.emp_id
+          WHERE l.date = ?
+          ORDER BY l.clock_in DESC
+        `).bind(filterDate).all().catch(() => ({ results: [] }));
+      }
       const logsToday = logsQuery.results || [];
+
+      // 1.1 Branches
+      const branchRows = await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
+      const branches = branchRows.results || [];
 
       // 2. Pending Leaves
       const leavesQuery = await db.prepare(`
@@ -1149,6 +1221,7 @@ async function handleAction(db, action, params) {
         pendingOts,
         pendingAdvances,
         settings: attSettings,
+        branches,
         kpi: {
           totalEmployees,
           clockedIn,
@@ -1200,6 +1273,74 @@ async function handleAction(db, action, params) {
         token,
         secondsLeft
       };
+    }
+
+    // 5.4.1 BRANCH MANAGEMENT (MULTI-BRANCH)
+    case 'getBranches': {
+      const branches = (await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all()).results || [];
+      return { success: true, branches };
+    }
+
+    case 'saveBranch': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      const b = params.branch || {};
+      const branchId = String(b.branch_id || b.branchId || '').trim();
+      const branchName = String(b.branch_name || b.branchName || '').trim();
+      if (!branchId || !branchName) return { success: false, message: 'กรุณาระบุรหัสและชื่อสาขา' };
+
+      const lat = Number(b.lat) || 13.727896;
+      const lng = Number(b.lng) || 100.524123;
+      const radius = Number(b.radius_meters || b.radiusMeters) || 200;
+      const workStart = String(b.work_start_time || b.workStartTime || '09:30').trim();
+      const workEnd = String(b.work_end_time || b.workEndTime || '19:00').trim();
+      const lunchStart = String(b.lunch_start_time || b.lunchStartTime || '13:00').trim();
+      const lunchEnd = String(b.lunch_end_time || b.lunchEndTime || '14:00').trim();
+      const grace = Number(b.grace_minutes || b.graceMinutes) || 0;
+      const otStart = String(b.ot_start_time || b.otStartTime || workEnd).trim();
+      const kioskPin = String(b.kiosk_pin || b.kioskPin || '123456').trim();
+      const status = String(b.status || 'ACTIVE').toUpperCase();
+
+      await db.prepare(`
+        INSERT INTO branches (branch_id, branch_name, lat, lng, radius_meters, work_start_time, work_end_time, lunch_start_time, lunch_end_time, grace_minutes, ot_start_time, kiosk_pin, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(branch_id) DO UPDATE SET
+          branch_name = excluded.branch_name,
+          lat = excluded.lat,
+          lng = excluded.lng,
+          radius_meters = excluded.radius_meters,
+          work_start_time = excluded.work_start_time,
+          work_end_time = excluded.work_end_time,
+          lunch_start_time = excluded.lunch_start_time,
+          lunch_end_time = excluded.lunch_end_time,
+          grace_minutes = excluded.grace_minutes,
+          ot_start_time = excluded.ot_start_time,
+          kiosk_pin = excluded.kiosk_pin,
+          status = excluded.status
+      `).bind(branchId, branchName, lat, lng, radius, workStart, workEnd, lunchStart, lunchEnd, grace, otStart, kioskPin, status).run();
+
+      await logSystemActivity(db, callerUser, 'SAVE_BRANCH', `บันทึกข้อมูลสาขา [${branchId}] ${branchName} (${workStart}-${workEnd})`);
+      return { success: true, message: `บันทึกข้อมูลสาขา [${branchId}] ${branchName} เรียบร้อยแล้ว` };
+    }
+
+    case 'deleteBranch': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      const branchId = String(params.branchId || params.branch_id || '').trim();
+      if (!branchId) return { success: false, message: 'กรุณาระบุรหัสสาขาที่ต้องการลบ' };
+
+      const countRow = await db.prepare('SELECT COUNT(*) as count FROM branches').first();
+      if (countRow && countRow.count <= 1) {
+        return { success: false, message: 'ไม่สามารถลบสาขาสุดท้ายได้' };
+      }
+
+      await db.prepare('DELETE FROM branches WHERE branch_id = ?').bind(branchId).run();
+      await logSystemActivity(db, callerUser, 'DELETE_BRANCH', `ลบข้อมูลสาขา [${branchId}]`);
+      return { success: true, message: `ลบสาขา ${branchId} เรียบร้อยแล้ว` };
     }
 
     // 5.5 SAVE ATTENDANCE SETTINGS
