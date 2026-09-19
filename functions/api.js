@@ -1343,6 +1343,57 @@ async function handleAction(db, action, params) {
       return { success: true, message: `ลบสาขา ${branchId} เรียบร้อยแล้ว` };
     }
 
+    // 5.4.2 GET ATTENDANCE LOGS FOR DATE RANGE (EXPORT)
+    case 'getAttendanceLogsRange': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      let startDate = String(params.startDate || '').trim();
+      let endDate = String(params.endDate || '').trim();
+      const periodStr = String(params.period || '').trim();
+
+      if (!startDate || !endDate) {
+        if (periodStr) {
+          const cutDates = await getCutoffDatesForPeriod(db, periodStr);
+          startDate = cutDates.startDate;
+          endDate = cutDates.endDate;
+        } else {
+          return { success: false, message: 'กรุณาระบุช่วงวันที่เริ่มต้นและสิ้นสุด' };
+        }
+      }
+
+      const branchFilter = String(params.branchId || params.branch_id || '').trim();
+
+      let query;
+      if (branchFilter && branchFilter !== 'ALL') {
+        query = await db.prepare(`
+          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
+          FROM time_logs l
+          LEFT JOIN employees e ON l.emp_id = e.emp_id
+          WHERE l.date >= ? AND l.date <= ?
+            AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))
+          ORDER BY l.date DESC, l.clock_in ASC, l.emp_id ASC
+        `).bind(startDate, endDate, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
+      } else {
+        query = await db.prepare(`
+          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
+          FROM time_logs l
+          LEFT JOIN employees e ON l.emp_id = e.emp_id
+          WHERE l.date >= ? AND l.date <= ?
+          ORDER BY l.date DESC, l.clock_in ASC, l.emp_id ASC
+        `).bind(startDate, endDate).all().catch(() => ({ results: [] }));
+      }
+
+      return {
+        success: true,
+        logs: query.results || [],
+        startDate,
+        endDate,
+        branchId: branchFilter
+      };
+    }
+
     // 5.5 SAVE ATTENDANCE SETTINGS
     case 'saveAttendanceSettings': {
       const callerUser = params.username || 'Admin';

@@ -7037,6 +7037,243 @@ function syncAttendanceToPayrollPeriod() {
     });
 }
 
+// ==============================================================================
+// TIME ATTENDANCE CSV EXPORT CONTROLLER (DAILY & PERIOD / RANGE)
+// ==============================================================================
+function generateAttendanceCsvString(logs) {
+  var csv = '\uFEFF';
+  csv += 'วันที่,รหัสพนักงาน,ชื่อ-นามสกุล,ชื่อเล่น,แผนก,ตำแหน่ง,สาขา,เวลาเข้างาน,เวลาออกพัก,เวลากลับเข้าพัก,เวลาพักจริง(นาที),พักเกินเกณฑ์(นาที),เวลาเลิกงาน,นาทีสาย,ชั่วโมงทำงานปกติ,ชั่วโมงOT,สถานะ,พิกัดเข้างาน,พิกัดออกงาน,หมายเหตุ\n';
+
+  (logs || []).forEach(function(l) {
+    var branchName = l.branch_name || '';
+    if (!branchName && l.branch_id) {
+      var foundB = (State.branches || []).find(function(b) { return b.branch_id === l.branch_id; });
+      branchName = foundB ? foundB.branch_name : l.branch_id;
+    }
+    if (!branchName && l.emp_branch_id) {
+      var foundEB = (State.branches || []).find(function(b) { return b.branch_id === l.emp_branch_id; });
+      branchName = foundEB ? foundEB.branch_name : l.emp_branch_id;
+    }
+    if (!branchName) branchName = 'สำนักงานใหญ่';
+
+    var inGps = (l.in_lat && l.in_lng) ? (l.in_lat + ' ' + l.in_lng) : '';
+    var outGps = (l.out_lat && l.out_lng) ? (l.out_lat + ' ' + l.out_lng) : '';
+
+    var row = [
+      l.date || '',
+      l.emp_id || '',
+      '"' + (l.full_name || '').replace(/"/g, '""') + '"',
+      '"' + (l.nickname || '').replace(/"/g, '""') + '"',
+      '"' + (l.department || '').replace(/"/g, '""') + '"',
+      '"' + (l.position || '').replace(/"/g, '""') + '"',
+      '"' + branchName.replace(/"/g, '""') + '"',
+      l.clock_in || '',
+      l.break_out || '',
+      l.break_in || '',
+      (l.break_minutes != null) ? l.break_minutes : 0,
+      (l.overbreak_minutes != null) ? l.overbreak_minutes : 0,
+      l.clock_out || '',
+      l.late_minutes || 0,
+      l.work_hours || 0,
+      l.ot_hours || 0,
+      '"' + (l.status || 'NORMAL') + '"',
+      '"' + inGps + '"',
+      '"' + outGps + '"',
+      '"' + (l.remark || '').replace(/"/g, '""') + '"'
+    ];
+    csv += row.join(',') + '\n';
+  });
+
+  return csv;
+}
+
+function exportAttendanceTodayCsv() {
+  if (!_currentAttendanceLogs || _currentAttendanceLogs.length === 0) {
+    showToast('ไม่พบข้อมูลลงเวลาของวันที่เลือก', 'warning');
+    return;
+  }
+
+  var filterInput = document.getElementById('attFilterDate');
+  var dateStr = filterInput ? filterInput.value : 'today';
+  var branchSelect = document.getElementById('attFilterBranch');
+  var branchStr = branchSelect ? branchSelect.value : 'ALL';
+
+  var csv = generateAttendanceCsvString(_currentAttendanceLogs);
+  var filename = 'PTN_Attendance_Daily_' + dateStr + (branchStr !== 'ALL' ? ('_' + branchStr) : '') + '.csv';
+
+  var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast('ดาวน์โหลดข้อมูลลงเวลาประจำวัน ' + dateStr + ' สำเร็จ (' + _currentAttendanceLogs.length + ' รายการ)', 'success');
+}
+
+function openExportAttendanceModal() {
+  // Populate branch select
+  var bSel = document.getElementById('expAttBranch');
+  if (bSel) {
+    bSel.innerHTML = '<option value="ALL">🏢 ทุกสาขา (All Branches)</option>';
+    (State.branches || []).forEach(function(b) {
+      var opt = document.createElement('option');
+      opt.value = b.branch_id;
+      opt.textContent = b.branch_id + ' - ' + b.branch_name;
+      bSel.appendChild(opt);
+    });
+  }
+
+  // Populate department select
+  var dSel = document.getElementById('expAttDept');
+  if (dSel) {
+    dSel.innerHTML = '<option value="ALL">👥 ทุกแผนก (All Departments)</option>';
+    var depts = {};
+    (State.employees || []).forEach(function(e) {
+      if (e.department) depts[e.department] = true;
+    });
+    Object.keys(depts).sort().forEach(function(dept) {
+      var opt = document.createElement('option');
+      opt.value = dept;
+      opt.textContent = dept;
+      dSel.appendChild(opt);
+    });
+  }
+
+  // Default to cutoff preset
+  setExportAttendancePreset('cutoff');
+  openModal('modalExportAttendanceRange');
+}
+
+function setExportAttendancePreset(preset) {
+  var now = new Date();
+  var startInput = document.getElementById('expAttStartDate');
+  var endInput = document.getElementById('expAttEndDate');
+  if (!startInput || !endInput) return;
+
+  var cutDay = (State.settings && State.settings.cutoff_day) ? Number(State.settings.cutoff_day) : 25;
+
+  if (preset === 'cutoff') {
+    var year = now.getFullYear();
+    var month = now.getMonth() + 1; // 1-12
+    var prevMonth = month - 1;
+    var prevYear = year;
+    if (prevMonth < 1) {
+      prevMonth = 12;
+      prevYear -= 1;
+    }
+    if (cutDay >= 30) {
+      var daysInMonth = new Date(year, month, 0).getDate();
+      var actualEnd = Math.min(cutDay, daysInMonth);
+      startInput.value = year + '-' + String(month).padStart(2, '0') + '-01';
+      endInput.value = year + '-' + String(month).padStart(2, '0') + '-' + String(actualEnd).padStart(2, '0');
+    } else {
+      var startDay = cutDay + 1;
+      startInput.value = prevYear + '-' + String(prevMonth).padStart(2, '0') + '-' + String(startDay).padStart(2, '0');
+      endInput.value = year + '-' + String(month).padStart(2, '0') + '-' + String(cutDay).padStart(2, '0');
+    }
+  } else if (preset === 'this_month') {
+    var year = now.getFullYear();
+    var month = now.getMonth() + 1;
+    var lastDay = new Date(year, month, 0).getDate();
+    startInput.value = year + '-' + String(month).padStart(2, '0') + '-01';
+    endInput.value = year + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+  } else if (preset === 'last_month') {
+    var year = now.getFullYear();
+    var month = now.getMonth(); // 0 is prev month (1-12 offset)
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    }
+    var lastDay = new Date(year, month, 0).getDate();
+    startInput.value = year + '-' + String(month).padStart(2, '0') + '-01';
+    endInput.value = year + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+  } else if (preset === 'last_7') {
+    var past = new Date(now.getTime() - (6 * 24 * 3600 * 1000));
+    startInput.value = past.toISOString().substring(0, 10);
+    endInput.value = now.toISOString().substring(0, 10);
+  } else if (preset === 'last_30') {
+    var past = new Date(now.getTime() - (29 * 24 * 3600 * 1000));
+    startInput.value = past.toISOString().substring(0, 10);
+    endInput.value = now.toISOString().substring(0, 10);
+  }
+}
+
+function submitExportAttendanceRangeCsv() {
+  var startDate = document.getElementById('expAttStartDate').value;
+  var endDate = document.getElementById('expAttEndDate').value;
+  var branchId = document.getElementById('expAttBranch').value;
+  var dept = document.getElementById('expAttDept').value;
+  var btn = document.getElementById('btnSubmitExportAttRange');
+
+  if (!startDate || !endDate) {
+    showToast('กรุณาระบุวันที่เริ่มต้นและวันที่สิ้นสุด', 'warning');
+    return;
+  }
+  if (startDate > endDate) {
+    showToast('วันที่เริ่มต้นต้องไม่มากกว่าวันที่สิ้นสุด', 'warning');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังดึงข้อมูล...';
+  }
+
+  showToast('กำลังดึงข้อมูลลงเวลาระหว่าง ' + startDate + ' ถึง ' + endDate + '...', 'info');
+
+  callApi('getAttendanceLogsRange', {
+    startDate: startDate,
+    endDate: endDate,
+    branchId: branchId,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-file-arrow-down"></i> ดาวน์โหลด Excel (CSV)';
+      }
+
+      if (!r || !r.success) {
+        showToast(r && r.message ? r.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล', 'error');
+        return;
+      }
+
+      var logs = r.logs || [];
+      if (dept && dept !== 'ALL') {
+        logs = logs.filter(function(l) { return l.department === dept; });
+      }
+
+      if (logs.length === 0) {
+        showToast('ไม่พบข้อมูลลงเวลาในช่วงวันที่ ' + startDate + ' ถึง ' + endDate, 'warning');
+        return;
+      }
+
+      var csv = generateAttendanceCsvString(logs);
+      var branchSuffix = branchId !== 'ALL' ? ('_' + branchId) : '';
+      var deptSuffix = dept !== 'ALL' ? ('_' + dept) : '';
+      var filename = 'PTN_Attendance_' + startDate + '_to_' + endDate + branchSuffix + deptSuffix + '.csv';
+
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      closeModal('modalExportAttendanceRange');
+      showToast('ดาวน์โหลดข้อมูลลงเวลาสำเร็จ (' + logs.length + ' รายการ)', 'success');
+    })
+    .catch(function(e) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-file-arrow-down"></i> ดาวน์โหลด Excel (CSV)';
+      }
+      showToast('เกิดข้อผิดพลาด: ' + e.message, 'error');
+    });
+}
+
 // Master QR Modal Controllers
 function openMasterQrModalFromPayroll() {
   openModal('modalPayrollMasterQr');
