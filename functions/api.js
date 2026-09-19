@@ -944,6 +944,68 @@ async function handleAction(db, action, params) {
       };
     }
 
+    // 5.1.5 REALTIME ALERTS & NOTIFICATIONS FOR ADMIN
+    case 'getAdminRealtimeAlerts': {
+      const nowUtc = new Date();
+      const bangkokTime = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+      const today = bangkokTime.toISOString().substring(0, 10);
+
+      // 1. Pending Leaves
+      const leavesQ = await db.prepare(`
+        SELECT lr.id, lr.emp_id, lr.leave_type, lr.start_date, lr.days, lr.created_at, e.full_name
+        FROM leave_requests lr
+        LEFT JOIN employees e ON lr.emp_id = e.emp_id
+        WHERE lr.status = 'PENDING'
+        ORDER BY lr.created_at DESC
+        LIMIT 10
+      `).all().catch(() => ({ results: [] }));
+
+      // 2. Pending OTs
+      const otsQ = await db.prepare(`
+        SELECT ot.id, ot.emp_id, ot.ot_date, ot.ot_hours, ot.created_at, e.full_name
+        FROM ot_requests ot
+        LEFT JOIN employees e ON ot.emp_id = e.emp_id
+        WHERE ot.status = 'PENDING'
+        ORDER BY ot.created_at DESC
+        LIMIT 10
+      `).all().catch(() => ({ results: [] }));
+
+      // 3. Pending Advances
+      const advQ = await db.prepare(`
+        SELECT ar.id, ar.emp_id, ar.amount, ar.request_date, ar.created_at, e.full_name
+        FROM advance_requests ar
+        LEFT JOIN employees e ON ar.emp_id = e.emp_id
+        WHERE ar.status = 'PENDING'
+        ORDER BY ar.created_at DESC
+        LIMIT 10
+      `).all().catch(() => ({ results: [] }));
+
+      // 4. Anomalies Today (Overbreak or Anomaly)
+      const anomQ = await db.prepare(`
+        SELECT l.id, l.emp_id, l.clock_in, l.break_out, l.break_in, l.overbreak_minutes, l.status, l.remark, e.full_name
+        FROM time_logs l
+        LEFT JOIN employees e ON l.emp_id = e.emp_id
+        WHERE l.date = ? AND (l.overbreak_minutes > 0 OR l.status = 'ANOMALY')
+        ORDER BY l.id DESC
+        LIMIT 10
+      `).bind(today).all().catch(() => ({ results: [] }));
+
+      const pendingLeaves = leavesQ.results || [];
+      const pendingOts = otsQ.results || [];
+      const pendingAdvances = advQ.results || [];
+      const anomalies = anomQ.results || [];
+
+      return {
+        success: true,
+        today,
+        pendingLeaves,
+        pendingOts,
+        pendingAdvances,
+        anomalies,
+        totalPending: pendingLeaves.length + pendingOts.length + pendingAdvances.length
+      };
+    }
+
     // 5.2 TIME ATTENDANCE ADMIN DASHBOARD (CENTRALIZED IN PAYROLL)
     case 'getTimeAttendanceDashboard': {
       const callerUser = params.username || 'Admin';

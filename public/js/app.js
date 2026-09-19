@@ -296,6 +296,7 @@ function callApi(action, payload) {
 document.addEventListener('DOMContentLoaded', function() {
   initPeriodDropdowns();
   checkAuth();
+  initAdminNotificationCenter();
 });
 
 function navigateToAuthorizedTab() {
@@ -6813,5 +6814,350 @@ function updatePayrollMasterQrCountdownDisplay() {
       barEl.style.background = '#10b981';
     }
   }
+}
+
+// =======================================================
+// REALTIME IN-APP NOTIFICATION CENTER & ALERTS (PAYROLL ADMIN)
+// =======================================================
+
+var AdminNotifState = {
+  soundEnabled: localStorage.getItem('ptn_admin_notif_sound') !== 'false',
+  unreadCount: 0,
+  seenItemIds: new Set(JSON.parse(localStorage.getItem('ptn_admin_seen_items') || '[]')),
+  lastData: null,
+  pollerInterval: null
+};
+
+function initAdminNotificationCenter() {
+  updateSoundIcon();
+  // Close dropdown when clicking outside
+  document.addEventListener('click', function(e) {
+    var wrapper = document.querySelector('.notif-dropdown-wrapper');
+    var dropdown = document.getElementById('adminNotifDropdown');
+    if (dropdown && wrapper && !wrapper.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  // Start periodic polling every 30 seconds
+  if (AdminNotifState.pollerInterval) clearInterval(AdminNotifState.pollerInterval);
+  AdminNotifState.pollerInterval = setInterval(pollAdminRealtimeAlerts, 30000);
+
+  // Poll when browser tab gains focus
+  window.addEventListener('focus', function() {
+    pollAdminRealtimeAlerts();
+  });
+
+  // Initial poll after auth
+  setTimeout(pollAdminRealtimeAlerts, 2000);
+}
+
+function toggleAdminNotifDropdown() {
+  var dropdown = document.getElementById('adminNotifDropdown');
+  if (!dropdown) return;
+  if (dropdown.style.display === 'none' || !dropdown.style.display) {
+    dropdown.style.display = 'block';
+    // Mark badge as seen
+    AdminNotifState.unreadCount = 0;
+    updateAdminNotifBadge();
+    // Render current or fetch fresh
+    pollAdminRealtimeAlerts();
+  } else {
+    dropdown.style.display = 'none';
+  }
+}
+
+function pollAdminRealtimeAlerts() {
+  if (!State.currentUser || !State.currentUser.username) return;
+
+  callApi('getAdminRealtimeAlerts', { username: State.currentUser.username })
+    .then(function(res) {
+      if (res && res.success) {
+        processAdminAlerts(res);
+      }
+    })
+    .catch(function(err) {
+      console.warn('Realtime poller note:', err);
+    });
+}
+
+function processAdminAlerts(data) {
+  AdminNotifState.lastData = data;
+  var leaves = data.pendingLeaves || [];
+  var ots = data.pendingOts || [];
+  var advances = data.pendingAdvances || [];
+  var anomalies = data.anomalies || [];
+
+  var newItems = [];
+
+  // Check leaves
+  leaves.forEach(function(lv) {
+    var key = 'lv_' + lv.id;
+    if (!AdminNotifState.seenItemIds.has(key)) {
+      newItems.push({
+        type: 'leave',
+        title: 'มีคำขอลางานใหม่ 🏖️',
+        desc: (lv.full_name || ('พนักงาน ' + lv.emp_id)) + ' ขอลางาน ' + (lv.days || 1) + ' วัน (' + (lv.start_date || '') + ')'
+      });
+      AdminNotifState.seenItemIds.add(key);
+    }
+  });
+
+  // Check OTs
+  ots.forEach(function(ot) {
+    var key = 'ot_' + ot.id;
+    if (!AdminNotifState.seenItemIds.has(key)) {
+      newItems.push({
+        type: 'ot',
+        title: 'มีคำขอ OT เข้าใหม่ ⏳',
+        desc: (ot.full_name || ('พนักงาน ' + ot.emp_id)) + ' ร้องขอ OT ' + (ot.ot_hours || 0) + ' ชม. วันที่ ' + (ot.ot_date || '')
+      });
+      AdminNotifState.seenItemIds.add(key);
+    }
+  });
+
+  // Check Advances
+  advances.forEach(function(ad) {
+    var key = 'ad_' + ad.id;
+    if (!AdminNotifState.seenItemIds.has(key)) {
+      newItems.push({
+        type: 'advance',
+        title: 'มีคำขอเบิกเงินล่วงหน้า 💵',
+        desc: (ad.full_name || ('พนักงาน ' + ad.emp_id)) + ' ขอเบิกเงิน ฿' + Number(ad.amount || 0).toLocaleString()
+      });
+      AdminNotifState.seenItemIds.add(key);
+    }
+  });
+
+  // Check Anomalies
+  anomalies.forEach(function(an) {
+    var key = 'an_' + an.id + '_' + (an.overbreak_minutes || 0);
+    if (!AdminNotifState.seenItemIds.has(key)) {
+      newItems.push({
+        type: 'anomaly',
+        title: '⚠️ แจ้งเตือนพักเกินเวลา',
+        desc: (an.full_name || an.emp_id) + ' พักเกินเกณฑ์ ' + an.overbreak_minutes + ' นาที'
+      });
+      AdminNotifState.seenItemIds.add(key);
+    }
+  });
+
+  // Save seen IDs (cap at 100)
+  var arr = Array.from(AdminNotifState.seenItemIds);
+  if (arr.length > 100) arr = arr.slice(arr.length - 100);
+  AdminNotifState.seenItemIds = new Set(arr);
+  localStorage.setItem('ptn_admin_seen_items', JSON.stringify(arr));
+
+  // If there are new incoming items and not first load: trigger alerts
+  if (newItems.length > 0) {
+    AdminNotifState.unreadCount += newItems.length;
+    updateAdminNotifBadge();
+
+    // Trigger Toast & Audio for first few items
+    newItems.slice(0, 2).forEach(function(item) {
+      showToast(item.title + ': ' + item.desc, item.type === 'anomaly' ? 'error' : 'success');
+      triggerDesktopNotification(item.title, item.desc);
+    });
+
+    if (AdminNotifState.soundEnabled) {
+      playAdminNotificationSound();
+    }
+  }
+
+  renderAdminNotifList(data);
+}
+
+function updateAdminNotifBadge() {
+  var badge = document.getElementById('adminNotifBadge');
+  if (!badge) return;
+  var total = (AdminNotifState.lastData && AdminNotifState.lastData.totalPending) || 0;
+  var displayCount = AdminNotifState.unreadCount > 0 ? AdminNotifState.unreadCount : total;
+
+  if (displayCount > 0) {
+    badge.style.display = 'inline-block';
+    badge.textContent = displayCount > 99 ? '99+' : displayCount;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderAdminNotifList(data) {
+  var container = document.getElementById('adminNotifList');
+  if (!container) return;
+
+  var leaves = data.pendingLeaves || [];
+  var ots = data.pendingOts || [];
+  var advances = data.pendingAdvances || [];
+  var anomalies = data.anomalies || [];
+
+  var allItems = [];
+
+  ots.forEach(function(ot) {
+    allItems.push({
+      type: 'ot',
+      icon: 'fa-clock',
+      iconCol: '#f59e0b',
+      iconBg: '#fef3c7',
+      title: 'คำขอ OT: ' + (ot.full_name || ot.emp_id),
+      desc: 'ขอทำ OT ' + (ot.ot_hours || 0) + ' ชม. (' + (ot.ot_date || '-') + ')',
+      actionTab: 'attendance',
+      actionSection: 'ot'
+    });
+  });
+
+  leaves.forEach(function(lv) {
+    allItems.push({
+      type: 'leave',
+      icon: 'fa-umbrella-beach',
+      iconCol: '#10b981',
+      iconBg: '#ecfdf5',
+      title: 'คำขอลางาน: ' + (lv.full_name || lv.emp_id),
+      desc: 'ขอลางาน ' + (lv.days || 1) + ' วัน (' + (lv.start_date || '-') + ')',
+      actionTab: 'attendance',
+      actionSection: 'leave'
+    });
+  });
+
+  advances.forEach(function(ad) {
+    allItems.push({
+      type: 'advance',
+      icon: 'fa-money-bill-wave',
+      iconCol: '#3b82f6',
+      iconBg: '#eff6ff',
+      title: 'ขอเบิกเงิน: ' + (ad.full_name || ad.emp_id),
+      desc: 'ขอเบิกเงิน ฿' + Number(ad.amount || 0).toLocaleString() + ' วันที่ ' + (ad.request_date || '-'),
+      actionTab: 'attendance',
+      actionSection: 'advance'
+    });
+  });
+
+  anomalies.forEach(function(an) {
+    allItems.push({
+      type: 'anomaly',
+      icon: 'fa-triangle-exclamation',
+      iconCol: '#ef4444',
+      iconBg: '#fef2f2',
+      title: 'พักเกินเวลา: ' + (an.full_name || an.emp_id),
+      desc: 'เกินเกณฑ์ ' + an.overbreak_minutes + ' นาที (พัก ' + (an.break_out || '-') + ' ถึง ' + (an.break_in || '-') + ')',
+      actionTab: 'attendance',
+      actionSection: 'today'
+    });
+  });
+
+  if (allItems.length === 0) {
+    container.innerHTML = '<div style="text-align:center;padding:24px 12px;color:#94a3b8;font-size:12px">' +
+      '<i class="fa-regular fa-bell-slash" style="font-size:24px;display:block;margin-bottom:6px"></i>' +
+      'ไม่มีการแจ้งเตือนใหม่ในขณะนี้ ✨' +
+      '</div>';
+    return;
+  }
+
+  var html = '';
+  allItems.forEach(function(item) {
+    html += '<div onclick="handleAdminNotifClick(\'' + item.actionTab + '\')" style="display:flex;align-items:flex-start;gap:10px;padding:9px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;cursor:pointer;transition:all 0.15s ease" onmouseover="this.style.background=\'#eff6ff\'" onmouseout="this.style.background=\'#f8fafc\'">' +
+      '<div style="width:30px;height:30px;border-radius:8px;background:' + item.iconBg + ';color:' + item.iconCol + ';display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">' +
+        '<i class="fa-solid ' + item.icon + '"></i>' +
+      '</div>' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:700;font-size:12px;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(item.title) + '</div>' +
+        '<div style="font-size:11px;color:#64748b;margin-top:1px;line-height:1.3">' + esc(item.desc) + '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+function handleAdminNotifClick(tabName) {
+  var dropdown = document.getElementById('adminNotifDropdown');
+  if (dropdown) dropdown.style.display = 'none';
+  if (typeof switchTab === 'function') {
+    switchTab(tabName);
+  }
+}
+
+function clearAdminNotifications() {
+  AdminNotifState.unreadCount = 0;
+  updateAdminNotifBadge();
+  var container = document.getElementById('adminNotifList');
+  if (container) {
+    container.innerHTML = '<div style="text-align:center;padding:24px 12px;color:#94a3b8;font-size:12px">' +
+      '<i class="fa-regular fa-bell-slash" style="font-size:24px;display:block;margin-bottom:6px"></i>' +
+      'ล้างการแจ้งเตือนแล้ว' +
+      '</div>';
+  }
+}
+
+function toggleSoundAlert() {
+  AdminNotifState.soundEnabled = !AdminNotifState.soundEnabled;
+  localStorage.setItem('ptn_admin_notif_sound', AdminNotifState.soundEnabled ? 'true' : 'false');
+  updateSoundIcon();
+  if (AdminNotifState.soundEnabled) {
+    playAdminNotificationSound();
+    showToast('เปิดเสียงแจ้งเตือนแล้ว', 'success');
+  } else {
+    showToast('ปิดเสียงแจ้งเตือนแล้ว', 'info');
+  }
+}
+
+function updateSoundIcon() {
+  var icon = document.getElementById('iconSoundToggle');
+  if (!icon) return;
+  if (AdminNotifState.soundEnabled) {
+    icon.className = 'fa-solid fa-volume-high';
+    icon.style.color = '#2563eb';
+  } else {
+    icon.className = 'fa-solid fa-volume-xmark';
+    icon.style.color = '#94a3b8';
+  }
+}
+
+function playAdminNotificationSound() {
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(659.25, ctx.currentTime); // E5
+    osc.frequency.setValueAtTime(880.00, ctx.currentTime + 0.12); // A5
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+  } catch (e) {}
+}
+
+function requestAdminBrowserNotification() {
+  if (!('Notification' in window)) {
+    alert('เบราว์เซอร์นี้ไม่รองรับ Desktop Notification');
+    return;
+  }
+  Notification.requestPermission().then(function(perm) {
+    if (perm === 'granted') {
+      showToast('เปิดการแจ้งเตือนบนหน้าจอสำเร็จ', 'success');
+      triggerDesktopNotification('PTN Payroll 🔔', 'ระบบเปิดแจ้งเตือนบนหน้าจอเรียบร้อยแล้ว');
+    } else {
+      showToast('การแจ้งเตือนหน้าจอถูกปฏิเสธ', 'error');
+    }
+  });
+}
+
+function triggerDesktopNotification(title, body) {
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification(title, {
+        body: body,
+        icon: 'https://cdn-icons-png.flaticon.com/512/2972/2972531.png'
+      });
+    } catch(e) {}
+  }
+}
+
+function testAdminNotification() {
+  playAdminNotificationSound();
+  showToast('🔔 [ทดสอบ] มีคำขอ OT เข้าใหม่ 1 รายการ', 'info');
+  triggerDesktopNotification('PTN Payroll ทดสอบ 🔔', 'ระบบแจ้งเตือนคำขอใหม่อัตโนมัติกำลังทำงาน');
 }
 
