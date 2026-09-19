@@ -936,7 +936,7 @@ function renderEmployeesTable() {
 
     // Device Lock Badge & Button (PTN Time Integration)
     var devBadge = e.isDeviceBound ? (' <span class="period-pill" style="background:#eff6ff;color:#0284c7;border-color:#bae6fd;font-size:10px;padding:1px 6px" title="ผูกเครื่องแล้ว: ' + esc(e.boundDevice?.deviceName || 'Mobile Web') + '">📱 ผูกเครื่อง</span>') : '';
-    var devUnlockBtn = e.isDeviceBound ? ('<button type="button" class="btn-icon" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\', \'' + esc(e.fullName) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button> ') : '';
+    var devUnlockBtn = e.isDeviceBound ? ('<button type="button" class="btn-icon" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button> ') : '';
 
     // Avatar HTML for Table & Card
     var avatarTableHtml = e.photoUrl
@@ -1042,7 +1042,7 @@ function renderEmployeesTable() {
       '</div>' +
 
       '<div style="display:flex;align-items:center;gap:6px;padding-top:6px">' +
-        devUnlockBtn +
+        (e.isDeviceBound ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;border-color:#fecaca;background:#fef2f2;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button>' : '') +
         (st === 'Probation' ? '<button type="button" class="btn btn-success btn-sm" style="flex:1" onclick="passProbation(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-check"></i> ผ่านโปร</button>' : '') +
         (canEditEmp ? '<button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไขประวัติ</button>' : '') +
         (canDelEmp ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;padding:4px 8px" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i></button>' : '') +
@@ -1056,40 +1056,56 @@ function renderEmployeesTable() {
 
 // REMOTE RESET DEVICE (Method 3: Remote Reset from Payroll)
 function remoteResetDevice(empId, empName) {
-  Swal.fire({
-    title: 'ปลดล็อกเครื่องพนักงาน?',
-    html: '<div style="font-size:13px;text-align:left;color:#475569;line-height:1.6">' +
-      '<p>ต้องการปลดล็อกอุปกรณ์ประจำตัวของ <b>[' + esc(empId) + '] ' + esc(empName) + '</b> ใช่หรือไม่?</p>' +
-      '<p style="margin-top:10px;font-size:12px;color:#0369a1;background:#f0f9ff;border:1px solid #bae6fd;padding:10px;border-radius:8px">💡 <b>ผลลัพธ์:</b> เมื่อปลดล็อกแล้ว พนักงานจะสามารถเลือกหรือผูกเข้ากับโทรศัพท์เครื่องใหม่ในระบบ PTN Time ได้ทันที</p>' +
-      '</div>',
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonText: '<i class="fa-solid fa-unlock"></i> ใช่, ปลดล็อกทันที',
-    cancelButtonText: 'ยกเลิก',
-    confirmButtonColor: '#dc2626'
-  }).then(function(res) {
-    if (res.isConfirmed) {
-      callApi('resetEmployeeDevice', {
-        empId: empId,
-        username: State.currentUser ? State.currentUser.username : 'Admin'
-      }).then(function(data) {
-        if (data.success) {
-          showToast(data.message, 'success');
-          // Update local state
-          var found = (State.employees || []).find(function(x) { return x.empId === empId; });
-          if (found) {
-            found.isDeviceBound = false;
-            found.boundDevice = null;
-          }
-          renderEmployeesTable();
-        } else {
-          showToast(data.message || 'ปลดล็อกไม่สำเร็จ', 'error');
+  if (!empName) {
+    var foundEmp = (State.employees || []).find(function(x) { return x.empId === empId; });
+    empName = foundEmp ? foundEmp.fullName : empId;
+  }
+
+  function executeReset() {
+    callApi('resetEmployeeDevice', {
+      empId: empId,
+      username: State.currentUser ? State.currentUser.username : 'Admin'
+    }).then(function(data) {
+      if (data && data.success) {
+        showToast(data.message || 'ปลดล็อกเครื่องสำเร็จแล้ว', 'success');
+        // Update local state
+        var found = (State.employees || []).find(function(x) { return x.empId === empId; });
+        if (found) {
+          found.isDeviceBound = false;
+          found.boundDevice = null;
         }
-      }).catch(function(err) {
-        showToast('Error: ' + err.message, 'error');
-      });
+        renderEmployeesTable();
+      } else {
+        showToast((data && data.message) || 'ปลดล็อกไม่สำเร็จ', 'error');
+      }
+    }).catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+  }
+
+  if (typeof Swal !== 'undefined') {
+    Swal.fire({
+      title: 'ปลดล็อกเครื่องพนักงาน?',
+      html: '<div style="font-size:13px;text-align:left;color:#475569;line-height:1.6">' +
+        '<p>ต้องการปลดล็อกอุปกรณ์ประจำตัวของ <b>[' + esc(empId) + '] ' + esc(empName) + '</b> ใช่หรือไม่?</p>' +
+        '<p style="margin-top:10px;font-size:12px;color:#0369a1;background:#f0f9ff;border:1px solid #bae6fd;padding:10px;border-radius:8px">💡 <b>ผลลัพธ์:</b> เมื่อปลดล็อกแล้ว พนักงานจะสามารถเลือกหรือผูกเข้ากับโทรศัพท์เครื่องใหม่ในระบบ PTN Time ได้ทันที</p>' +
+        '</div>',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: '<i class="fa-solid fa-unlock"></i> ใช่, ปลดล็อกทันที',
+      cancelButtonText: 'ยกเลิก',
+      confirmButtonColor: '#dc2626'
+    }).then(function(res) {
+      if (res && res.isConfirmed) {
+        executeReset();
+      }
+    });
+  } else {
+    var confirmed = confirm('ต้องการปลดล็อกอุปกรณ์ประจำตัวของ [' + empId + '] ' + empName + ' ใช่หรือไม่?\n\nเมื่อปลดล็อกแล้ว พนักงานจะสามารถเลือกหรือผูกเข้ากับโทรศัพท์เครื่องใหม่ในระบบ PTN Time ได้ทันที');
+    if (confirmed) {
+      executeReset();
     }
-  });
+  }
 }
 
 
