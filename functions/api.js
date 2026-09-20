@@ -1156,58 +1156,98 @@ async function handleAction(db, action, params) {
       const branches = branchRows.results || [];
 
       const reqStatus = String(params.requestStatus || 'PENDING').toUpperCase();
-      let statusWhere = "WHERE lr.status = 'PENDING'";
-      let statusWhereOt = "WHERE ot.status = 'PENDING'";
-      let statusWhereAdv = "WHERE ar.status = 'PENDING'";
-      let statusBinds = [];
-      let statusBindsOt = [];
-      let statusBindsAdv = [];
+      const reqType = String(params.requestType || 'ALL').toUpperCase(); // 'ALL', 'LEAVE', 'OT', 'ADVANCE'
+      const reqDate = params.requestDate ? String(params.requestDate).trim() : ''; // 'YYYY-MM-DD'
 
-      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
-        statusWhere = "WHERE lr.status = ?";
-        statusWhereOt = "WHERE ot.status = ?";
-        statusWhereAdv = "WHERE ar.status = ?";
-        statusBinds = [reqStatus];
-        statusBindsOt = [reqStatus];
-        statusBindsAdv = [reqStatus];
-      } else if (reqStatus === 'ALL') {
-        statusWhere = "";
-        statusWhereOt = "";
-        statusWhereAdv = "";
+      // 2. Leaves (Filtered by Status, Type & Date)
+      let pendingLeaves = [];
+      if (reqType === 'ALL' || reqType === 'LEAVE') {
+        const leaveConds = [];
+        const leaveBinds = [];
+
+        if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+          leaveConds.push("lr.status = ?");
+          leaveBinds.push(reqStatus);
+        } else if (reqStatus === 'PENDING') {
+          leaveConds.push("lr.status = 'PENDING'");
+        }
+
+        if (reqDate) {
+          leaveConds.push("(substr(lr.created_at, 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
+          leaveBinds.push(reqDate, reqDate);
+        }
+
+        const leaveWhere = leaveConds.length > 0 ? "WHERE " + leaveConds.join(" AND ") : "";
+        const leavesQuery = await db.prepare(`
+          SELECT lr.*, e.full_name, e.department
+          FROM leave_requests lr
+          LEFT JOIN employees e ON lr.emp_id = e.emp_id
+          ${leaveWhere}
+          ORDER BY lr.created_at DESC
+          LIMIT 100
+        `).bind(...leaveBinds).all().catch(() => ({ results: [] }));
+        pendingLeaves = leavesQuery.results || [];
       }
 
-      // 2. Leaves (Filtered by Status)
-      const leavesQuery = await db.prepare(`
-        SELECT lr.*, e.full_name, e.department
-        FROM leave_requests lr
-        LEFT JOIN employees e ON lr.emp_id = e.emp_id
-        ${statusWhere}
-        ORDER BY lr.created_at DESC
-        LIMIT 50
-      `).bind(...statusBinds).all().catch(() => ({ results: [] }));
-      const pendingLeaves = leavesQuery.results || [];
+      // 3. OTs (Filtered by Status, Type & Date)
+      let pendingOts = [];
+      if (reqType === 'ALL' || reqType === 'OT') {
+        const otConds = [];
+        const otBinds = [];
 
-      // 3. OTs (Filtered by Status)
-      const otsQuery = await db.prepare(`
-        SELECT ot.*, e.full_name, e.department
-        FROM ot_requests ot
-        LEFT JOIN employees e ON ot.emp_id = e.emp_id
-        ${statusWhereOt}
-        ORDER BY ot.created_at DESC
-        LIMIT 50
-      `).bind(...statusBindsOt).all().catch(() => ({ results: [] }));
-      const pendingOts = otsQuery.results || [];
+        if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+          otConds.push("ot.status = ?");
+          otBinds.push(reqStatus);
+        } else if (reqStatus === 'PENDING') {
+          otConds.push("ot.status = 'PENDING'");
+        }
 
-      // 4. Advances (Filtered by Status)
-      const advQuery = await db.prepare(`
-        SELECT ar.*, e.full_name, e.department
-        FROM advance_requests ar
-        LEFT JOIN employees e ON ar.emp_id = e.emp_id
-        ${statusWhereAdv}
-        ORDER BY ar.created_at DESC
-        LIMIT 50
-      `).bind(...statusBindsAdv).all().catch(() => ({ results: [] }));
-      const pendingAdvances = advQuery.results || [];
+        if (reqDate) {
+          otConds.push("(ot.date = ? OR substr(ot.created_at, 1, 10) = ?)");
+          otBinds.push(reqDate, reqDate);
+        }
+
+        const otWhere = otConds.length > 0 ? "WHERE " + otConds.join(" AND ") : "";
+        const otsQuery = await db.prepare(`
+          SELECT ot.*, e.full_name, e.department
+          FROM ot_requests ot
+          LEFT JOIN employees e ON ot.emp_id = e.emp_id
+          ${otWhere}
+          ORDER BY ot.created_at DESC
+          LIMIT 100
+        `).bind(...otBinds).all().catch(() => ({ results: [] }));
+        pendingOts = otsQuery.results || [];
+      }
+
+      // 4. Advances (Filtered by Status, Type & Date)
+      let pendingAdvances = [];
+      if (reqType === 'ALL' || reqType === 'ADVANCE') {
+        const advConds = [];
+        const advBinds = [];
+
+        if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+          advConds.push("ar.status = ?");
+          advBinds.push(reqStatus);
+        } else if (reqStatus === 'PENDING') {
+          advConds.push("ar.status = 'PENDING'");
+        }
+
+        if (reqDate) {
+          advConds.push("(ar.request_date = ? OR substr(ar.created_at, 1, 10) = ?)");
+          advBinds.push(reqDate, reqDate);
+        }
+
+        const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
+        const advQuery = await db.prepare(`
+          SELECT ar.*, e.full_name, e.department
+          FROM advance_requests ar
+          LEFT JOIN employees e ON ar.emp_id = e.emp_id
+          ${advWhere}
+          ORDER BY ar.created_at DESC
+          LIMIT 100
+        `).bind(...advBinds).all().catch(() => ({ results: [] }));
+        pendingAdvances = advQuery.results || [];
+      }
 
       // 5. KPI & Settings
       const empCountRow = await db.prepare('SELECT COUNT(*) as c FROM employees WHERE status != "Resigned"').first().catch(() => ({ c: 0 }));
