@@ -3534,8 +3534,8 @@
   </div>
 
   <!-- MODAL: EXPORT ATTENDANCE RANGE / CUTOFF -->
-  <div class="modal-backdrop" id="modalExportAttendanceRange" style="display:none">
-    <div class="modal-content" style="max-width:550px">
+  <div class="modal-overlay" id="modalExportAttendanceRange">
+    <div class="modal-card wide" style="max-width:560px">
       <div class="modal-header" style="background:#f0f9ff;border-bottom:1px solid #bae6fd">
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:36px;height:36px;border-radius:10px;background:#0284c7;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px">
@@ -3546,7 +3546,7 @@
             <div style="font-size:11px;color:#0284c7">ดาวน์โหลดสถิติเวลาเข้า-ออก, เวลาพัก, สาย, OT รายวันและตามรอบงวด</div>
           </div>
         </div>
-        <button type="button" class="modal-close" onclick="closeModal('modalExportAttendanceRange')">&times;</button>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalExportAttendanceRange')"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <form onsubmit="event.preventDefault(); submitExportAttendanceRangeCsv();">
         <div class="modal-body" style="padding:16px 20px;display:flex;flex-direction:column;gap:14px">
@@ -3617,7 +3617,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=7.5"></script>
-  <script src="js/app.js?v=7.5"></script>
+  <script src="js/config.js?v=7.8"></script>
+  <script src="js/app.js?v=7.8"></script>
 </body>
 </html>

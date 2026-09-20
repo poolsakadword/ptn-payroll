@@ -7186,17 +7186,42 @@ function exportAttendanceTodayCsv() {
   showToast('ดาวน์โหลดข้อมูลลงเวลาประจำวัน ' + dateStr + ' สำเร็จ (' + _currentAttendanceLogs.length + ' รายการ)', 'success');
 }
 
+function formatLocalYmd(d) {
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1).padStart(2, '0');
+  var day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
+
 function openExportAttendanceModal() {
   // Populate branch select
   var bSel = document.getElementById('expAttBranch');
   if (bSel) {
     bSel.innerHTML = '<option value="ALL">🏢 ทุกสาขา (All Branches)</option>';
-    (State.branches || []).forEach(function(b) {
-      var opt = document.createElement('option');
-      opt.value = b.branch_id;
-      opt.textContent = b.branch_id + ' - ' + b.branch_name;
-      bSel.appendChild(opt);
-    });
+    var branches = State.branches || [];
+    if (branches.length === 0) {
+      // Fallback from filter select if available
+      var mainBSel = document.getElementById('attFilterBranch');
+      if (mainBSel && mainBSel.options) {
+        for (var i = 0; i < mainBSel.options.length; i++) {
+          var val = mainBSel.options[i].value;
+          var txt = mainBSel.options[i].textContent;
+          if (val && val !== 'ALL') {
+            var opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = txt;
+            bSel.appendChild(opt);
+          }
+        }
+      }
+    } else {
+      branches.forEach(function(b) {
+        var opt = document.createElement('option');
+        opt.value = b.branch_id;
+        opt.textContent = b.branch_id + ' - ' + b.branch_name;
+        bSel.appendChild(opt);
+      });
+    }
   }
 
   // Populate department select
@@ -7226,51 +7251,81 @@ function setExportAttendancePreset(preset) {
   var endInput = document.getElementById('expAttEndDate');
   if (!startInput || !endInput) return;
 
-  var cutDay = (State.settings && State.settings.cutoff_day) ? Number(State.settings.cutoff_day) : 25;
+  var cutDay = 25;
+  if (_currentAttendanceSettings && _currentAttendanceSettings.cutoff_day) {
+    cutDay = Number(_currentAttendanceSettings.cutoff_day);
+  } else if (State.settings && State.settings.cutoff_day) {
+    cutDay = Number(State.settings.cutoff_day);
+  } else {
+    var cutEl = document.getElementById('attSetCutoffDay');
+    if (cutEl && cutEl.value) cutDay = Number(cutEl.value);
+  }
+  if (!cutDay || isNaN(cutDay)) cutDay = 25;
+
+  var currentYear = now.getFullYear();
+  var currentMonth = now.getMonth() + 1; // 1-12
+  var currentDate = now.getDate();
 
   if (preset === 'cutoff') {
-    var year = now.getFullYear();
-    var month = now.getMonth() + 1; // 1-12
-    var prevMonth = month - 1;
-    var prevYear = year;
+    var startYear, startMonth, startDayNum;
+    var endYear, endMonth, endDayNum;
+
+    if (currentDate > cutDay) {
+      startYear = currentYear;
+      startMonth = currentMonth;
+      startDayNum = cutDay + 1;
+
+      endMonth = currentMonth + 1;
+      endYear = currentYear;
+      if (endMonth > 12) {
+        endMonth = 1;
+        endYear += 1;
+      }
+      endDayNum = cutDay;
+    } else {
+      endYear = currentYear;
+      endMonth = currentMonth;
+      endDayNum = cutDay;
+
+      startMonth = currentMonth - 1;
+      startYear = currentYear;
+      if (startMonth < 1) {
+        startMonth = 12;
+        startYear -= 1;
+      }
+      startDayNum = cutDay + 1;
+    }
+
+    var maxDaysStart = new Date(startYear, startMonth, 0).getDate();
+    if (startDayNum > maxDaysStart) startDayNum = 1;
+
+    var maxDaysEnd = new Date(endYear, endMonth, 0).getDate();
+    if (endDayNum > maxDaysEnd) endDayNum = maxDaysEnd;
+
+    startInput.value = startYear + '-' + String(startMonth).padStart(2, '0') + '-' + String(startDayNum).padStart(2, '0');
+    endInput.value = endYear + '-' + String(endMonth).padStart(2, '0') + '-' + String(endDayNum).padStart(2, '0');
+  } else if (preset === 'this_month') {
+    var lastDay = new Date(currentYear, currentMonth, 0).getDate();
+    startInput.value = currentYear + '-' + String(currentMonth).padStart(2, '0') + '-01';
+    endInput.value = currentYear + '-' + String(currentMonth).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+  } else if (preset === 'last_month') {
+    var prevMonth = currentMonth - 1;
+    var prevYear = currentYear;
     if (prevMonth < 1) {
       prevMonth = 12;
       prevYear -= 1;
     }
-    if (cutDay >= 30) {
-      var daysInMonth = new Date(year, month, 0).getDate();
-      var actualEnd = Math.min(cutDay, daysInMonth);
-      startInput.value = year + '-' + String(month).padStart(2, '0') + '-01';
-      endInput.value = year + '-' + String(month).padStart(2, '0') + '-' + String(actualEnd).padStart(2, '0');
-    } else {
-      var startDay = cutDay + 1;
-      startInput.value = prevYear + '-' + String(prevMonth).padStart(2, '0') + '-' + String(startDay).padStart(2, '0');
-      endInput.value = year + '-' + String(month).padStart(2, '0') + '-' + String(cutDay).padStart(2, '0');
-    }
-  } else if (preset === 'this_month') {
-    var year = now.getFullYear();
-    var month = now.getMonth() + 1;
-    var lastDay = new Date(year, month, 0).getDate();
-    startInput.value = year + '-' + String(month).padStart(2, '0') + '-01';
-    endInput.value = year + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
-  } else if (preset === 'last_month') {
-    var year = now.getFullYear();
-    var month = now.getMonth(); // 0 is prev month (1-12 offset)
-    if (month === 0) {
-      month = 12;
-      year -= 1;
-    }
-    var lastDay = new Date(year, month, 0).getDate();
-    startInput.value = year + '-' + String(month).padStart(2, '0') + '-01';
-    endInput.value = year + '-' + String(month).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+    var lastDay = new Date(prevYear, prevMonth, 0).getDate();
+    startInput.value = prevYear + '-' + String(prevMonth).padStart(2, '0') + '-01';
+    endInput.value = prevYear + '-' + String(prevMonth).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
   } else if (preset === 'last_7') {
     var past = new Date(now.getTime() - (6 * 24 * 3600 * 1000));
-    startInput.value = past.toISOString().substring(0, 10);
-    endInput.value = now.toISOString().substring(0, 10);
+    startInput.value = formatLocalYmd(past);
+    endInput.value = formatLocalYmd(now);
   } else if (preset === 'last_30') {
     var past = new Date(now.getTime() - (29 * 24 * 3600 * 1000));
-    startInput.value = past.toISOString().substring(0, 10);
-    endInput.value = now.toISOString().substring(0, 10);
+    startInput.value = formatLocalYmd(past);
+    endInput.value = formatLocalYmd(now);
   }
 }
 
