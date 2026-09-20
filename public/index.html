@@ -897,6 +897,28 @@
                   </div>
                 </div>
 
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
+
+                <!-- SECTION: SYSTEM MAINTENANCE MODE (ปิดปรับปรุงระบบ PTN TIME) -->
+                <div style="background:#fff1f2;border:1.5px solid #fecdd3;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                    <div style="font-size:12.5px;font-weight:700;color:#9f1239;display:flex;align-items:center;gap:6px">
+                      <i class="fa-solid fa-wrench text-rose-600"></i> โหมดปิดปรับปรุงระบบ PTN Time (Maintenance Mode)
+                    </div>
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#881337;cursor:pointer;background:#ffe4e6;padding:4px 10px;border-radius:20px;border:1px solid #fda4af">
+                      <input type="checkbox" id="attSetMaintenanceMode" style="width:16px;height:16px;accent-color:#e11d48;cursor:pointer">
+                      <span>เปิดโหมดปิดปรับปรุง (พักการใช้งาน)</span>
+                    </label>
+                  </div>
+                  <div style="font-size:11.5px;color:#9f1239;line-height:1.4">
+                    เมื่อเปิดใช้งาน พนักงานที่เข้าเว็บ <b>PTN Time</b> จะเห็นหน้าจอ <b>"อยู่ระหว่างปรับปรุง"</b> และระบบจะล็อกการลงเวลา/ขอเบิกเงิน/ขอลางานทั้งหมดชั่วคราว (ผู้ดูแลระบบยังสามารถล็อกอินเข้าทดสอบได้ตามปกติ)
+                  </div>
+                  <div>
+                    <label style="font-size:11px;font-weight:600;color:#9f1239;display:block;margin-bottom:4px">ข้อความแจ้งเตือนถึงพนักงาน:</label>
+                    <input type="text" id="attSetMaintenanceMessage" value="ระบบลงเวลา PTN Time อยู่ระหว่างปิดปรับปรุงชั่วคราว เพื่อเพิ่มประสิทธิภาพการทำงาน ขออภัยในความไม่สะดวก" style="width:100%;padding:6px 10px;border:1px solid #fda4af;border-radius:6px;font-size:12px;background:#fff;color:#881337">
+                  </div>
+                </div>
+
                 <button type="submit" class="btn btn-primary" style="margin-top:6px;font-weight:700">
                   <i class="fa-solid fa-floppy-disk"></i> บันทึกการตั้งค่าทั้งหมด
                 </button>

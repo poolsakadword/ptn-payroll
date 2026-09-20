@@ -6184,6 +6184,11 @@ function loadTimeAttendanceDashboard() {
         if (setKioskLock) setKioskLock.checked = (r.settings.enable_kiosk_lock !== 'false');
         if (setKioskPin && r.settings.kiosk_pin) setKioskPin.value = r.settings.kiosk_pin;
         if (setKioskGeofence) setKioskGeofence.checked = (r.settings.kiosk_require_geofence !== 'false');
+
+        var setMaintMode = document.getElementById('attSetMaintenanceMode');
+        var setMaintMsg = document.getElementById('attSetMaintenanceMessage');
+        if (setMaintMode) setMaintMode.checked = (r.settings.system_maintenance_mode === 'true');
+        if (setMaintMsg && r.settings.system_maintenance_message) setMaintMsg.value = r.settings.system_maintenance_message;
       }
 
       // 4. Render Tables & Approvals
@@ -6821,6 +6826,9 @@ function saveAttendanceSettingsFromPayroll(e) {
   var kioskPin = document.getElementById('attSetKioskPin') ? document.getElementById('attSetKioskPin').value : '123456';
   var kioskRequireGeofence = document.getElementById('attSetKioskRequireGeofence') ? (document.getElementById('attSetKioskRequireGeofence').checked ? 'true' : 'false') : 'true';
 
+  var maintMode = document.getElementById('attSetMaintenanceMode') ? (document.getElementById('attSetMaintenanceMode').checked ? 'true' : 'false') : 'false';
+  var maintMsg = document.getElementById('attSetMaintenanceMessage') ? document.getElementById('attSetMaintenanceMessage').value.trim() : '';
+
   var settings = {
     shift_start: sStart,
     work_start_time: sStart,
@@ -6865,7 +6873,9 @@ function saveAttendanceSettingsFromPayroll(e) {
     window_out_end: winOutEnd,
     enable_kiosk_lock: enableKioskLock,
     kiosk_pin: kioskPin,
-    kiosk_require_geofence: kioskRequireGeofence
+    kiosk_require_geofence: kioskRequireGeofence,
+    system_maintenance_mode: maintMode,
+    system_maintenance_message: maintMsg
   };
 
   callApi('saveAttendanceSettings', {
