@@ -1155,34 +1155,58 @@ async function handleAction(db, action, params) {
       const branchRows = await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
       const branches = branchRows.results || [];
 
-      // 2. Pending Leaves
+      const reqStatus = String(params.requestStatus || 'PENDING').toUpperCase();
+      let statusWhere = "WHERE lr.status = 'PENDING'";
+      let statusWhereOt = "WHERE ot.status = 'PENDING'";
+      let statusWhereAdv = "WHERE ar.status = 'PENDING'";
+      let statusBinds = [];
+      let statusBindsOt = [];
+      let statusBindsAdv = [];
+
+      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+        statusWhere = "WHERE lr.status = ?";
+        statusWhereOt = "WHERE ot.status = ?";
+        statusWhereAdv = "WHERE ar.status = ?";
+        statusBinds = [reqStatus];
+        statusBindsOt = [reqStatus];
+        statusBindsAdv = [reqStatus];
+      } else if (reqStatus === 'ALL') {
+        statusWhere = "";
+        statusWhereOt = "";
+        statusWhereAdv = "";
+      }
+
+      // 2. Leaves (Filtered by Status)
       const leavesQuery = await db.prepare(`
         SELECT lr.*, e.full_name, e.department
         FROM leave_requests lr
         LEFT JOIN employees e ON lr.emp_id = e.emp_id
-        WHERE lr.status = 'PENDING'
+        ${statusWhere}
         ORDER BY lr.created_at DESC
-      `).all().catch(() => ({ results: [] }));
+        LIMIT 50
+      `).bind(...statusBinds).all().catch(() => ({ results: [] }));
       const pendingLeaves = leavesQuery.results || [];
 
-      // 3. Pending OTs
+      // 3. OTs (Filtered by Status)
       const otsQuery = await db.prepare(`
         SELECT ot.*, e.full_name, e.department
         FROM ot_requests ot
         LEFT JOIN employees e ON ot.emp_id = e.emp_id
-        WHERE ot.status = 'PENDING'
+        ${statusWhereOt}
         ORDER BY ot.created_at DESC
-      `).all().catch(() => ({ results: [] }));
+        LIMIT 50
+      `).bind(...statusBindsOt).all().catch(() => ({ results: [] }));
       const pendingOts = otsQuery.results || [];
 
-      // 4. Pending Advances
+      // 4. Advances (Filtered by Status)
       const advQuery = await db.prepare(`
         SELECT ar.*, e.full_name, e.department
         FROM advance_requests ar
         LEFT JOIN employees e ON ar.emp_id = e.emp_id
-        WHERE ar.status = 'PENDING'
+        ${statusWhereAdv}
         ORDER BY ar.created_at DESC
-      `).all().catch(() => ({ results: [] }));
+        LIMIT 50
+      `).bind(...statusBindsAdv).all().catch(() => ({ results: [] }));
       const pendingAdvances = advQuery.results || [];
 
       // 5. KPI & Settings
@@ -1190,7 +1214,14 @@ async function handleAction(db, action, params) {
       const totalEmployees = empCountRow?.c || 0;
       const clockedIn = logsToday.filter(x => x.clock_in).length;
       const late = logsToday.filter(x => (x.late_minutes || 0) > 0).length;
-      const pendingApprovals = pendingLeaves.length + pendingOts.length + pendingAdvances.length;
+
+      const pendingCountRow = await db.prepare(`
+        SELECT 
+          (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') +
+          (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING') +
+          (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending
+      `).first().catch(() => ({ total_pending: 0 }));
+      const pendingApprovals = pendingCountRow?.total_pending || 0;
 
       // Settings
       const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
@@ -1240,6 +1271,18 @@ async function handleAction(db, action, params) {
       const { type, id, decision, rejectionReason } = params;
       const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
 
+      if (decision === 'DELETE') {
+        if (type === 'leave') {
+          await db.prepare('DELETE FROM leave_requests WHERE id = ?').bind(id).run();
+        } else if (type === 'ot') {
+          await db.prepare('DELETE FROM ot_requests WHERE id = ?').bind(id).run();
+        } else if (type === 'advance') {
+          await db.prepare('DELETE FROM advance_requests WHERE id = ?').bind(id).run();
+        }
+        await logSystemActivity(db, approverId, 'DELETE_ATTENDANCE_REQUEST', `ลบคำขอ ${type} (ID: ${id})`);
+        return { success: true, message: `ลบคำขอ ${type} ออกจากระบบเรียบร้อยแล้ว` };
+      }
+
       if (type === 'leave') {
         await db.prepare(`
           UPDATE leave_requests 
@@ -1262,6 +1305,29 @@ async function handleAction(db, action, params) {
 
       await logSystemActivity(db, approverId, 'ATTENDANCE_APPROVAL', `${status} คำขอ ${type} (ID: ${id})`);
       return { success: true, message: `ดำเนินการ ${decision === 'APPROVE' ? 'อนุมัติ' : 'ปฏิเสธ'} คำขอเรียบร้อยแล้ว` };
+    }
+
+    // 5.3.1 DELETE ATTENDANCE REQUEST (PERMANENT DELETE FOR LEAVE, OT, ADVANCE)
+    case 'deleteAttendanceRequest': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      const { type, id } = params;
+      if (!type || !id) return { success: false, message: 'ระบุ type และ id' };
+
+      if (type === 'leave') {
+        await db.prepare('DELETE FROM leave_requests WHERE id = ?').bind(id).run();
+      } else if (type === 'ot') {
+        await db.prepare('DELETE FROM ot_requests WHERE id = ?').bind(id).run();
+      } else if (type === 'advance') {
+        await db.prepare('DELETE FROM advance_requests WHERE id = ?').bind(id).run();
+      } else {
+        return { success: false, message: 'ประเภทคำขอไม่ถูกต้อง' };
+      }
+
+      await logSystemActivity(db, callerUser, 'DELETE_ATTENDANCE_REQUEST', `ลบคำขอ ${type} ID: ${id}`);
+      return { success: true, message: `ลบคำขอ ${type} ออกจากระบบเรียบร้อยแล้ว` };
     }
 
     // 5.4 GET MASTER UNLOCK QR TOKEN
