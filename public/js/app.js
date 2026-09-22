@@ -6254,6 +6254,15 @@ function loadTimeAttendanceDashboard() {
         var setMaintMsg = document.getElementById('attSetMaintenanceMessage');
         if (setMaintMode) setMaintMode.checked = (r.settings.system_maintenance_mode === 'true');
         if (setMaintMsg && r.settings.system_maintenance_message) setMaintMsg.value = r.settings.system_maintenance_message;
+
+        var setEnablePayslip = document.getElementById('attSetEnablePayslip');
+        var setPayslipMode = document.getElementById('attSetPayslipReleaseMode');
+        var setBroadcastPeriod = document.getElementById('attBroadcastPeriod');
+        if (setEnablePayslip) setEnablePayslip.checked = (r.settings.enable_payslip !== 'false');
+        if (setPayslipMode && r.settings.payslip_release_mode) setPayslipMode.value = r.settings.payslip_release_mode;
+        if (setBroadcastPeriod && !setBroadcastPeriod.value) {
+          setBroadcastPeriod.value = State.currentPeriod || new Date().toISOString().substring(0, 7);
+        }
       }
 
       // 4. Render Tables & Approvals
@@ -6923,6 +6932,9 @@ function saveAttendanceSettingsFromPayroll(e) {
   var maintMode = document.getElementById('attSetMaintenanceMode') ? (document.getElementById('attSetMaintenanceMode').checked ? 'true' : 'false') : 'false';
   var maintMsg = document.getElementById('attSetMaintenanceMessage') ? document.getElementById('attSetMaintenanceMessage').value.trim() : '';
 
+  var enablePayslip = document.getElementById('attSetEnablePayslip') ? (document.getElementById('attSetEnablePayslip').checked ? 'true' : 'false') : 'true';
+  var payslipReleaseMode = document.getElementById('attSetPayslipReleaseMode') ? document.getElementById('attSetPayslipReleaseMode').value : 'CLOSED_PERIODS_ONLY';
+
   var settings = {
     shift_start: sStart,
     work_start_time: sStart,
@@ -6969,7 +6981,9 @@ function saveAttendanceSettingsFromPayroll(e) {
     kiosk_pin: kioskPin,
     kiosk_require_geofence: kioskRequireGeofence,
     system_maintenance_mode: maintMode,
-    system_maintenance_message: maintMsg
+    system_maintenance_message: maintMsg,
+    enable_payslip: enablePayslip,
+    payslip_release_mode: payslipReleaseMode
   };
 
   callApi('saveAttendanceSettings', {
@@ -6981,6 +6995,34 @@ function saveAttendanceSettingsFromPayroll(e) {
     })
     .catch(function(err) {
       showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
+    });
+}
+
+function triggerBroadcastPayslipFromPayroll() {
+  var periodInput = document.getElementById('attBroadcastPeriod');
+  var period = periodInput ? periodInput.value.trim() : '';
+  if (!period) {
+    showToast('กรุณาระบุงวดเงินเดือน เช่น 2026-09', 'warning');
+    return;
+  }
+
+  if (!confirm('ยืนยันส่งการแจ้งเตือนสลิปเงินเดือนงวด "' + period + '" ไปยังพนักงานทุกคนใช่หรือไม่?\n(ระบบจะส่ง Push Notification บนมือถือ และขึ้นจุดแจ้งเตือนสีแดงในแอป PTN Time)')) {
+    return;
+  }
+
+  callApi('broadcastPayslipNotification', {
+    period: period,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (r && r.success) {
+        showToast(r.message || ('ส่งแจ้งเตือนสลิปงวด ' + period + ' เรียบร้อยแล้ว'), 'success');
+      } else {
+        showToast(r && r.message ? r.message : 'ส่งแจ้งเตือนไม่สำเร็จ', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการส่งแจ้งเตือน', 'error');
     });
 }
 

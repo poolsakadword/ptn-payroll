@@ -482,6 +482,9 @@
               <button type="button" class="btn" style="background:#f59e0b;color:#78350f;font-weight:700;font-size:12px" onclick="openMasterQrModalFromPayroll()">
                 <i class="fa-solid fa-qrcode"></i> Master QR ปลดล็อกเครื่อง
               </button>
+              <button type="button" class="btn" style="background:#059669;color:#fff;border:1px solid #34d399;font-weight:700;font-size:12px" onclick="document.getElementById('attSetEnablePayslip')?.scrollIntoView({behavior:'smooth'})">
+                <i class="fa-solid fa-file-invoice-dollar"></i> ตั้งค่า e-Payslip &amp; แจ้งเตือน
+              </button>
               <button type="button" class="btn" style="background:#10b981;color:#fff;font-weight:700;font-size:12px" onclick="syncAttendanceToPayrollPeriod()">
                 <i class="fa-solid fa-cloud-arrow-down"></i> ดึงเวลาเข้างวดนี้
               </button>
@@ -782,6 +785,49 @@
                         <input type="checkbox" id="attSetKioskRequireGeofence" checked style="width:16px;height:16px;accent-color:#0d9488;cursor:pointer">
                         <span>📍 บังคับตรวจพิกัด GPS หน้าจอ Kiosk (ต้องอยู่ในรัศมีบริษัท)</span>
                       </label>
+                    </div>
+                  </div>
+                </div>
+
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
+
+                <!-- SECTION: E-PAYSLIP & BROADCAST NOTIFICATIONS (SUPER ADMIN CONTROLS) -->
+                <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                    <div style="font-size:12.5px;font-weight:700;color:#166534;display:flex;align-items:center;gap:6px">
+                      <i class="fa-solid fa-file-invoice-dollar text-emerald-600"></i> ฟังก์ชันสลิปเงินเดือนออนไลน์ (e-Payslip ใน PTN Time)
+                    </div>
+                    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#14532d;cursor:pointer;background:#dcfce7;padding:4px 10px;border-radius:20px;border:1px solid #86efac">
+                      <input type="checkbox" id="attSetEnablePayslip" checked style="width:16px;height:16px;accent-color:#16a34a;cursor:pointer">
+                      <span>เปิดใช้งานสลิปเงินเดือน</span>
+                    </label>
+                  </div>
+                  <div style="font-size:11.5px;color:#166534;line-height:1.4">
+                    เปิดให้พนักงานสามารถดูสลิปเงินเดือนของตนเองผ่านแอป <b>PTN Time</b> (พร้อมระบบล็อกรหัส PIN ป้องกันข้อมูลส่วนบุคคล) หากปิดฟังก์ชันนี้ แท็บสลิปจะถูกซ่อนจากพนักงานทันที
+                  </div>
+                  
+                  <div style="display:grid;grid-template-columns:1fr;gap:8px">
+                    <div>
+                      <label style="font-size:11px;font-weight:700;color:#166534;display:block;margin-bottom:4px">🔒 เงื่อนไขการแสดงสลิปให้พนักงาน:</label>
+                      <select id="attSetPayslipReleaseMode" style="width:100%;padding:6px 8px;border:1px solid #86efac;border-radius:6px;font-size:12px;font-weight:600;background:#fff;color:#14532d">
+                        <option value="CLOSED_PERIODS_ONLY">🔒 แสดงเฉพาะงวดที่ปิดงวดแล้ว (CLOSED) เท่านั้น (แนะนำ)</option>
+                        <option value="ALL_CALCULATED">🌐 แสดงทุกงวดที่มีการคำนวณเงินเดือนในระบบ</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <!-- Broadcast Section -->
+                  <div style="background:#ffffff;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;margin-top:2px">
+                    <div style="font-size:11.5px;font-weight:700;color:#15803d;display:flex;align-items:center;gap:6px">
+                      <i class="fa-solid fa-bullhorn text-emerald-600"></i> ส่งแจ้งเตือนสลิปออกแล้วให้พนักงานทุกคน (Broadcast Notification)
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                      <div style="flex:1;min-width:140px">
+                        <input type="text" id="attBroadcastPeriod" placeholder="งวด เช่น 2026-09" style="width:100%;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:700;color:#0f172a">
+                      </div>
+                      <button type="button" class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700;font-size:11.5px;padding:6px 12px;border-radius:6px;white-space:nowrap" onclick="triggerBroadcastPayslipFromPayroll()">
+                        <i class="fa-solid fa-paper-plane"></i> ส่ง Push แจ้งเตือนสลิปทันที
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -3671,7 +3717,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=7.8"></script>
-  <script src="js/app.js?v=7.8"></script>
+  <script src="js/config.js?v=7.9"></script>
+  <script src="js/app.js?v=7.9"></script>
 </body>
 </html>

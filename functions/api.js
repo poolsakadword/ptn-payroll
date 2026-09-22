@@ -1708,6 +1708,44 @@ async function handleAction(db, action, params) {
       return { success: true, message: 'บันทึกการตั้งค่าระบบลงเวลาเรียบร้อยแล้ว' };
     }
 
+    // 5.5.1 BROADCAST PAYSLIP NOTIFICATION
+    case 'broadcastPayslipNotification': {
+      const callerUser = params.username || 'Admin';
+      const isSuper = await isUserSuperAdmin(db, callerUser);
+      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+
+      const period = params.period ? String(params.period).trim() : 'ล่าสุด';
+      const title = params.title || `💰 สลิปเงินเดือนงวด ${period} ออกแล้ว!`;
+      const body = params.body || `พนักงานสามารถตรวจสอบยอดเงินเดือนสุทธิและรายการหักได้แล้วในแท็บ สลิปเงินเดือน`;
+
+      await db.prepare(`
+        CREATE TABLE IF NOT EXISTS broadcast_notifications (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL,
+          tag TEXT DEFAULT 'payslip',
+          target_emp_id TEXT DEFAULT 'ALL',
+          period TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run().catch(() => {});
+
+      await db.prepare(`
+        INSERT INTO broadcast_notifications (title, body, tag, target_emp_id, period)
+        VALUES (?, ?, 'payslip', 'ALL', ?)
+      `).bind(title, body, period).run();
+
+      await logSystemActivity(db, callerUser, 'BROADCAST_PAYSLIP', `ส่งการแจ้งเตือนสลิปเงินเดือนงวด ${period} ไปยังพนักงานทุกคน`);
+
+      return {
+        success: true,
+        period,
+        title,
+        body,
+        message: `ส่งการแจ้งเตือนสลิปเงินเดือนงวด ${period} ไปยังพนักงานทุกคนเรียบร้อยแล้ว`
+      };
+    }
+
     // 5.6 UPDATE TIME LOG
     case 'updateAttendanceLog': {
       const callerUser = params.username || 'Admin';
