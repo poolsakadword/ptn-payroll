@@ -1433,7 +1433,9 @@ async function handleAction(db, action, params) {
         leave_type_annual: 'false',
         leave_type_without_pay: 'false',
         system_maintenance_mode: 'false',
-        system_maintenance_message: 'ระบบลงเวลา PTN Time อยู่ระหว่างปิดปรับปรุงชั่วคราว เพื่อเพิ่มประสิทธิภาพการทำงาน ขออภัยในความไม่สะดวก'
+        system_maintenance_message: 'ระบบลงเวลา PTN Time อยู่ระหว่างปิดปรับปรุงชั่วคราว เพื่อเพิ่มประสิทธิภาพการทำงาน ขออภัยในความไม่สะดวก',
+        enable_payslip: 'true',
+        payslip_release_mode: 'CLOSED_PERIODS_ONLY'
       };
       for (const r of setRows.results || []) attSettings[r.key] = r.value;
 
