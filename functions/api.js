@@ -254,6 +254,20 @@ async function getCutoffDatesForPeriod(db, periodStr) {
   return { startDate, endDate, month, yearCE, cutoffDay };
 }
 
+function getActualWorkingDaysInCutoff(startDate, endDate) {
+  let count = 0;
+  let cur = new Date(startDate + 'T00:00:00Z');
+  const end = new Date(endDate + 'T00:00:00Z');
+  while (cur <= end) {
+    const day = cur.getUTCDay(); // 0 = Sunday
+    if (day !== 0) { // Monday to Saturday are working days
+      count++;
+    }
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return count > 0 ? count : 26;
+}
+
 async function handleAction(db, action, params) {
   const period = params.period || getDefaultPeriod();
 
@@ -338,6 +352,13 @@ async function handleAction(db, action, params) {
             workingDays = Number(row.value);
           }
         }
+      }
+
+      // If workingDays is not explicitly set for this period, calculate from actual working days in cutoff
+      const wdRowExplicit = (settingsRows.results || []).find(r => r.key === `Period_WorkDays_${period}`);
+      if (!wdRowExplicit || !wdRowExplicit.value) {
+        const dates = await getCutoffDatesForPeriod(db, period);
+        workingDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate);
       }
 
       // Employees
@@ -525,6 +546,12 @@ async function handleAction(db, action, params) {
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_WorkDays_${period}`, String(days)).run();
       const count = await calculateAndSavePayroll(db, period, days);
       return { success: true, period: period, workingDays: days, count: count, message: `ตั้งค่าจำนวนวันทำงานงวด ${period} เป็น ${days} วัน เรียบร้อยแล้ว` };
+    }
+
+    case 'getActualWorkDays': {
+      const dates = await getCutoffDatesForPeriod(db, period);
+      const actualDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate);
+      return { success: true, period: period, startDate: dates.startDate, endDate: dates.endDate, actualDays: actualDays };
     }
 
     // 4. EMPLOYEE MASTER CRUD
@@ -793,6 +820,55 @@ async function handleAction(db, action, params) {
 
       await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
+      // 0. Determine actual work days for this period (from settings or calculated Mon-Sat non-Sundays)
+      const settingsRowsQuery = await db.prepare('SELECT key, value FROM settings').all().catch(() => ({ results: [] }));
+      const settingsList = settingsRowsQuery.results || [];
+      const wdRowExplicit = settingsList.find(r => r.key === `Period_WorkDays_${period}`);
+      let periodWorkDays = (wdRowExplicit && wdRowExplicit.value && !isNaN(Number(wdRowExplicit.value)))
+        ? Number(wdRowExplicit.value)
+        : getActualWorkingDaysInCutoff(startDate, endDate);
+      if (periodWorkDays <= 0) periodWorkDays = 26;
+
+      // 0.1 Load branch configurations for standard shift hours calculation
+      const branchRowsQuery = await db.prepare('SELECT * FROM branches').all().catch(() => ({ results: [] }));
+      const branchMap = {};
+      for (const b of (branchRowsQuery.results || [])) branchMap[b.branch_id] = b;
+
+      function getShiftHoursForBranch(branch) {
+        if (!branch) return 8.5;
+        const start = branch.work_start_time || '09:30';
+        const end = branch.work_end_time || '19:00';
+        const lunchStart = branch.lunch_start_time || '13:00';
+        const lunchEnd = branch.lunch_end_time || '14:00';
+        const [sh, sm] = (start || '09:30').split(':').map(Number);
+        const [eh, em] = (end || '19:00').split(':').map(Number);
+        const [lsh, lsm] = (lunchStart || '13:00').split(':').map(Number);
+        const [leh, lem] = (lunchEnd || '14:00').split(':').map(Number);
+        const totalShiftMins = (eh * 60 + em) - (sh * 60 + sm);
+        const lunchMins = (leh * 60 + lem) - (lsh * 60 + lsm);
+        const netMins = totalShiftMins - Math.max(0, lunchMins);
+        return netMins > 0 ? Math.round((netMins / 60) * 100) / 100 : 8.5;
+      }
+
+      // 0.2 Load employees and existing monthly inputs upfront
+      let employees = [];
+      let existingMap = {};
+
+      if (targetEmpId) {
+        const singleEmp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(targetEmpId).first();
+        if (!singleEmp) {
+          return { success: false, message: `ไม่พบข้อมูลพนักงานรหัส ${targetEmpId}` };
+        }
+        employees = [singleEmp];
+        const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, targetEmpId).first();
+        if (existingInput) existingMap[targetEmpId] = existingInput;
+      } else {
+        const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
+        employees = empQuery.results || [];
+        const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
+        for (const row of (existingInput.results || [])) existingMap[row.emp_id] = row;
+      }
+
       // 1. Query approved advance requests in this cutoff window (26th to 25th)
       let advMap = {};
       let totalAdvAmount = 0;
@@ -847,33 +923,10 @@ async function handleAction(db, action, params) {
         console.warn('ot_requests query note:', e);
       }
 
-      // Also check time_logs if any ot_hours recorded directly
-      try {
-        let timeLogOtSql = `
-          SELECT emp_id, SUM(ot_hours) as log_ot
-          FROM time_logs
-          WHERE date BETWEEN ? AND ? AND ot_hours > 0
-        `;
-        let timeLogOtBinds = [startDate, endDate];
-        if (targetEmpId) {
-          timeLogOtSql += ` AND emp_id = ?`;
-          timeLogOtBinds.push(targetEmpId);
-        }
-        timeLogOtSql += ` GROUP BY emp_id`;
-
-        const timeLogOtQuery = await db.prepare(timeLogOtSql).bind(...timeLogOtBinds).all();
-        for (const row of (timeLogOtQuery.results || [])) {
-          const logOt = Number(row.log_ot) || 0;
-          if (logOt > (otMap[row.emp_id] || 0)) {
-            totalOtHours += (logOt - (otMap[row.emp_id] || 0));
-            otMap[row.emp_id] = logOt;
-          }
-        }
-      } catch (e) {}
-
       // 3. Query approved leave requests in this cutoff window
       let leaveMap = {};
       let totalLeaveCount = 0;
+      let detailedLeaves = [];
       try {
         let leaveSql = `
           SELECT emp_id, leave_type, SUM(days_count) as total_days
@@ -903,29 +956,101 @@ async function handleAction(db, action, params) {
             leaveMap[row.emp_id].business += days;
           }
         }
+
+        // Detailed leaves to check date coverage
+        let detSql = `
+          SELECT emp_id, start_date, end_date, days_count, leave_type
+          FROM leave_requests
+          WHERE status = 'APPROVED'
+            AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?))
+        `;
+        let detBinds = [startDate, endDate, startDate, endDate];
+        if (targetEmpId) {
+          detSql += ` AND emp_id = ?`;
+          detBinds.push(targetEmpId);
+        }
+        const detQuery = await db.prepare(detSql).bind(...detBinds).all();
+        detailedLeaves = detQuery.results || [];
       } catch (e) {
         console.warn('leave_requests query note:', e);
       }
 
-      // 4. Merge into monthly_inputs (For single employee or all employees)
-      let employees = [];
-      let existingMap = {};
-
-      if (targetEmpId) {
-        const singleEmp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(targetEmpId).first();
-        if (!singleEmp) {
-          return { success: false, message: `ไม่พบข้อมูลพนักงานรหัส ${targetEmpId}` };
+      function getLeaveDaysOnDate(empId, dateStr) {
+        let d = 0;
+        for (const lr of detailedLeaves) {
+          if (lr.emp_id === empId && dateStr >= lr.start_date && dateStr <= lr.end_date) {
+            d += Number(lr.days_count) || 1.0;
+          }
         }
-        employees = [singleEmp];
-        const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, targetEmpId).first();
-        if (existingInput) existingMap[targetEmpId] = existingInput;
-      } else {
-        const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
-        employees = empQuery.results || [];
-        const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
-        for (const row of (existingInput.results || [])) existingMap[row.emp_id] = row;
+        return d;
       }
 
+      // 4. Query time_logs for OT hours, missing hours & early departures
+      let missingHoursMap = {};
+      let earlyDeductMap = {};
+      let employeeHasLogs = {};
+      try {
+        let tlSql = `
+          SELECT id, emp_id, date, clock_in, clock_out, work_hours, ot_hours, late_minutes, status, branch_id
+          FROM time_logs
+          WHERE date BETWEEN ? AND ?
+        `;
+        let tlBinds = [startDate, endDate];
+        if (targetEmpId) {
+          tlSql += ` AND emp_id = ?`;
+          tlBinds.push(targetEmpId);
+        }
+        const tlQuery = await db.prepare(tlSql).bind(...tlBinds).all();
+        for (const row of (tlQuery.results || [])) {
+          employeeHasLogs[row.emp_id] = true;
+
+          // Merge any OT logged directly in time_logs if not already in otMap
+          const logOt = Number(row.ot_hours) || 0;
+          if (logOt > (otMap[row.emp_id] || 0)) {
+            totalOtHours += (logOt - (otMap[row.emp_id] || 0));
+            otMap[row.emp_id] = logOt;
+          }
+
+          // Check if Sunday (Sunday = 0 in JS UTC day, only overtime, no regular shift deduction)
+          const logDate = new Date(row.date + 'T00:00:00Z');
+          if (logDate.getUTCDay() === 0) continue;
+
+          // Find employee info to calculate hourly rate based on actual workdays
+          const emp = employees.find(e => e.emp_id === row.emp_id);
+          const baseSal = emp ? (Number(emp.base_salary) || 0) : 0;
+          const branch = branchMap[row.branch_id] || (emp ? branchMap[emp.branch_id] : null);
+          const shiftHours = getShiftHoursForBranch(branch);
+
+          const dailyRate = periodWorkDays > 0 ? (baseSal / periodWorkDays) : (baseSal / 30);
+          const hourlyRate = shiftHours > 0 ? (dailyRate / shiftHours) : 0;
+
+          // Avoid double deduction if an approved leave already covers this date
+          const approvedLeaveDays = getLeaveDaysOnDate(row.emp_id, row.date);
+          if (approvedLeaveDays >= 1.0) continue; // Fully covered by approved leave
+
+          const coveredHours = approvedLeaveDays * shiftHours;
+          const targetHours = Math.max(0, shiftHours - coveredHours);
+          const workHours = Number(row.work_hours) || 0;
+          const lateMins = Number(row.late_minutes) || 0;
+
+          if (row.clock_in && row.clock_out && workHours > 0) {
+            if (workHours < targetHours) {
+              const missing = Math.round((targetHours - workHours) * 100) / 100;
+              missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + missing;
+              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (missing * hourlyRate);
+            }
+          } else if (row.clock_in && !row.clock_out && lateMins > 0) {
+            // Clocked in but missed clock out, apply late minutes deduction
+            const lateHours = Math.round((lateMins / 60) * 100) / 100;
+            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
+            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
+          }
+        }
+      } catch (e) {
+        console.warn('time_logs sync note:', e);
+      }
+
+      // 5. Merge into monthly_inputs
       const defOtRow = await db.prepare('SELECT value FROM settings WHERE key = "DefaultOtRate"').first().catch(() => null);
       const fallbackOtRate = (defOtRow && defOtRow.value && !isNaN(Number(defOtRow.value))) ? Number(defOtRow.value) : 40;
 
@@ -968,7 +1093,18 @@ async function handleAction(db, action, params) {
         const sickLeaveDays = empLeave.sickCert !== undefined ? empLeave.sickCert : (Number(exist.sick_leave_days) || 0);
         const unpaidSickLeaveDays = empLeave.sickNoCert !== undefined ? empLeave.sickNoCert : (Number(exist.unpaid_sick_leave_days) || 0);
         const leaveDays = empLeave.business !== undefined ? empLeave.business : (Number(exist.leave_days) || 0);
-        const lateDeduct = Number(exist.late_deduct) || 0;
+
+        // Deduct missing hours / early departure based on actual workdays
+        const calcEarlyDeduct = earlyDeductMap[emp.emp_id] !== undefined
+          ? Math.round(earlyDeductMap[emp.emp_id] * 100) / 100
+          : 0;
+
+        let lateDeduct = Number(exist.late_deduct) || 0;
+        if (calcEarlyDeduct > 0) {
+          lateDeduct = calcEarlyDeduct;
+        } else if (employeeHasLogs[emp.emp_id]) {
+          lateDeduct = 0;
+        }
 
         await db.prepare(`
           INSERT OR REPLACE INTO monthly_inputs
@@ -981,7 +1117,7 @@ async function handleAction(db, action, params) {
         ).run();
       }
 
-      await calculateAndSavePayroll(db, period);
+      await calculateAndSavePayroll(db, period, periodWorkDays);
 
       if (targetEmpId) {
         const empName = employees[0].full_name || targetEmpId;
@@ -989,7 +1125,10 @@ async function handleAction(db, action, params) {
         const empOt = otMap[targetEmpId] || 0;
         const empL = leaveMap[targetEmpId] || {};
         const empLeaveTotal = (empL.sickCert || 0) + (empL.sickNoCert || 0) + (empL.business || 0);
-        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time เฉพาะพนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน)`);
+        const empMissingHrs = Math.round((missingHoursMap[targetEmpId] || 0) * 100) / 100;
+        const empEarlyDed = Math.round((earlyDeductMap[targetEmpId] || 0) * 100) / 100;
+
+        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time พนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''})`);
 
         return {
           success: true,
@@ -999,11 +1138,21 @@ async function handleAction(db, action, params) {
           advAmount: empAdv,
           otHours: empOt,
           leaveTotal: empLeaveTotal,
-          message: `ดึงข้อมูลของ [${targetEmpId}] ${empName} เข้าสู่งวด ${period} สำเร็จเรียบร้อย! (ยอดเบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน)`
+          missingHours: empMissingHrs,
+          lateDeduct: empEarlyDed,
+          workingDays: periodWorkDays,
+          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลารวม ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''})`
         };
       }
 
-      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม.)`);
+      let totalMissingHours = 0;
+      let totalEarlyDeduct = 0;
+      for (const k in missingHoursMap) totalMissingHours += missingHoursMap[k];
+      for (const k in earlyDeductMap) totalEarlyDeduct += earlyDeductMap[k];
+      totalMissingHours = Math.round(totalMissingHours * 100) / 100;
+      totalEarlyDeduct = Math.round(totalEarlyDeduct * 100) / 100;
+
+      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ขาด/ออกก่อน ${totalMissingHours} ชม. หัก ฿${totalEarlyDeduct.toLocaleString()})`);
 
       return {
         success: true,
@@ -1014,7 +1163,10 @@ async function handleAction(db, action, params) {
         totalAdvAmount: totalAdvAmount,
         totalOtHours: totalOtHours,
         totalLeaveCount: totalLeaveCount,
-        message: `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} สำเร็จเรียบร้อย! (ยอดเบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, OT รวม ${totalOtHours} ชม., ลารวม ${totalLeaveCount} วัน)`
+        totalMissingHours: totalMissingHours,
+        totalEarlyDeduct: totalEarlyDeduct,
+        workingDays: periodWorkDays,
+        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}${totalMissingHours > 0 ? `, ขาด/ออกก่อนรวม ${totalMissingHours} ชม. หักรวม ฿${totalEarlyDeduct.toLocaleString()}` : ''})`
       };
     }
 
@@ -2395,8 +2547,14 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   let workDays = explicitWorkDays;
   if (!workDays) {
     const wdRow = settingsRows.find(s => s.key === `Period_WorkDays_${period}`);
-    workDays = (wdRow && wdRow.value && !isNaN(Number(wdRow.value))) ? Number(wdRow.value) : defaultWorkDays;
+    if (wdRow && wdRow.value && !isNaN(Number(wdRow.value))) {
+      workDays = Number(wdRow.value);
+    } else {
+      const dates = await getCutoffDatesForPeriod(db, period);
+      workDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate);
+    }
   }
+  if (!workDays || workDays <= 0) workDays = 26;
 
   const empQuery = await db.prepare('SELECT * FROM employees').all();
   const empMap = {};

@@ -449,6 +449,17 @@ function setPeriodWorkingDays() {
     .catch(function(e) { showToast(e.message, 'error'); });
 }
 
+function resetToActualWorkDays() {
+  callApi('getActualWorkDays')
+    .then(function(r) {
+      if (!r.success) { showToast(r.message || 'ไม่สามารถคำนวณวันทำงานได้', 'error'); return; }
+      document.getElementById('periodWorkingDaysInput').value = r.actualDays;
+      showToast('คำนวณวันทำงานจริงงวด ' + r.period + ' (จ.-ส.): ' + r.actualDays + ' วัน');
+      setPeriodWorkingDays();
+    })
+    .catch(function(e) { showToast(e.message, 'error'); });
+}
+
 // DATA LOADER & STATE SYNC
 function loadAppData() {
   return callApi('getAppInitialData')
