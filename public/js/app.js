@@ -87,18 +87,23 @@ function applyRolePermissions() {
   var canManageUsers = hasPermission('manage_users');
   var canViewSalary = hasPermission('view_salary');
   var canEditEmp = hasPermission('edit_emp');
+  var canDelEmp = hasPermission('del_emp');
   var canEditInputs = hasPermission('edit_inputs');
   var canPopulateInputs = hasPermission('populate_inputs');
   var canCalcPayroll = hasPermission('calc_payroll');
   var canClosePeriod = hasPermission('close_period');
   var canPrintHistory = hasPermission('print_history');
   var canExportCsv = hasPermission('export_csv');
-  var isAdmin = Boolean(State.currentUser && (
-    String(State.currentUser.username || '').toLowerCase() === 'admin' ||
-    String(State.currentUser.role || '').toLowerCase().indexOf('admin') >= 0 ||
-    hasPermission('all')
-  ));
-  var canViewAnalytics = isAdmin;
+  var canViewAnalytics = hasPermission('view_analytics') || isSuperAdmin();
+  var canViewAttendance = hasPermission('view_attendance') || isSuperAdmin();
+  var canApproveAttendance = hasPermission('approve_attendance') || isSuperAdmin();
+  var canUnlockDevice = hasPermission('unlock_device') || isSuperAdmin();
+  var canSyncPtnTime = hasPermission('sync_ptn_time') || isSuperAdmin();
+  var canManageAttendanceSettings = hasPermission('manage_attendance_settings') || isSuperAdmin();
+  var canViewDocuments = hasPermission('view_documents') || hasPermission('all') || isSuperAdmin() || canViewPayroll || canViewHistory;
+  var canIssueSalaryCert = hasPermission('issue_salary_cert') || isSuperAdmin() || hasPermission('all');
+  var canExportBankFiles = hasPermission('export_bank_files') || isSuperAdmin() || hasPermission('all');
+  var canExportTaxSso = hasPermission('export_tax_sso') || isSuperAdmin() || hasPermission('all');
 
   // 1. Navigation Tabs Visibility
   var navDash = document.getElementById('navBtn-dashboard');
@@ -111,9 +116,6 @@ function applyRolePermissions() {
   var navDocuments = document.getElementById('navBtn-documents');
   var navCompany = document.getElementById('navBtn-company');
   var navUsers = document.getElementById('navBtn-users');
-
-  var canViewDocuments = canViewPayroll || canViewHistory || canManageCompany || hasPermission('view_salary') || hasPermission('all');
-  var canViewAttendance = isSuperAdmin();
 
   if (navDash) navDash.style.display = canViewDash ? 'inline-flex' : 'none';
   if (navPayroll) navPayroll.style.display = canViewPayroll ? 'inline-flex' : 'none';
@@ -145,10 +147,12 @@ function applyRolePermissions() {
     if (!allowed) {
       if (canViewDash) switchTab('dashboard');
       else if (canViewEmp) switchTab('employees');
+      else if (canViewAttendance) switchTab('attendance');
       else if (canViewInputs) switchTab('input');
       else if (canViewPayroll) switchTab('payroll');
       else if (canViewHistory) switchTab('history');
       else if (canViewAnalytics) switchTab('analytics');
+      else if (canViewDocuments) switchTab('documents');
     }
   }
 
@@ -174,6 +178,12 @@ function applyRolePermissions() {
     if (miDailySec) miDailySec.style.display = 'flex';
     if (miSsoTaxSec) miSsoTaxSec.style.display = 'block';
   }
+
+  // Delete employee buttons
+  var btnDelEmpList = document.querySelectorAll('button[onclick*="deleteEmployee"]');
+  btnDelEmpList.forEach(function(b) {
+    b.style.display = canDelEmp ? 'inline-flex' : 'none';
+  });
 
   // 4. Monthly Input Toolbar Buttons
   var btnAddInput = document.querySelector('button[onclick="openAddInputModal()"]');
@@ -213,6 +223,26 @@ function applyRolePermissions() {
   var btnEmpSlip = document.getElementById('btnEmpSaveAndPayslip');
   if (btnInpSlip) btnInpSlip.style.display = canViewPayslipStrict ? 'inline-flex' : 'none';
   if (btnEmpSlip) btnEmpSlip.style.display = canViewPayslipStrict ? 'inline-flex' : 'none';
+
+  // 10. Time Attendance Actions
+  var btnAttQr = document.getElementById('btnAttMasterQr');
+  if (btnAttQr) btnAttQr.style.display = canUnlockDevice ? 'inline-flex' : 'none';
+  var btnAttSync = document.getElementById('btnAttSyncPeriod');
+  if (btnAttSync) btnAttSync.style.display = canSyncPtnTime ? 'inline-flex' : 'none';
+  var btnAttBranches = document.getElementById('btnAttManageBranches');
+  if (btnAttBranches) btnAttBranches.style.display = canManageAttendanceSettings ? 'inline-flex' : 'none';
+  var cardAttSettings = document.getElementById('cardAttendanceSettings');
+  if (cardAttSettings) cardAttSettings.style.display = canManageAttendanceSettings ? 'block' : 'none';
+
+  // 11. Document Center Categories
+  var btnDocCert = document.getElementById('btnDocCatCert');
+  if (btnDocCert) btnDocCert.style.display = canIssueSalaryCert ? 'inline-flex' : 'none';
+  var btnDocTax = document.getElementById('btnDocCatTax');
+  if (btnDocTax) btnDocTax.style.display = canExportTaxSso ? 'inline-flex' : 'none';
+  var btnDocSso = document.getElementById('btnDocCatSso');
+  if (btnDocSso) btnDocSso.style.display = canExportTaxSso ? 'inline-flex' : 'none';
+  var btnDocBank = document.getElementById('btnDocCatBank');
+  if (btnDocBank) btnDocBank.style.display = canExportBankFiles ? 'inline-flex' : 'none';
 }
 
 /**
@@ -297,6 +327,7 @@ document.addEventListener('DOMContentLoaded', function() {
   initPeriodDropdowns();
   checkAuth();
   initAdminNotificationCenter();
+  initDraggableAiChatBtn();
 });
 
 function navigateToAuthorizedTab() {
@@ -1725,6 +1756,9 @@ function renderCompanySettings() {
   if (document.getElementById('cfgSignatoryTitle')) document.getElementById('cfgSignatoryTitle').value = State.company.signatoryTitle || '';
   if (document.getElementById('cfgSignatoryNameEn')) document.getElementById('cfgSignatoryNameEn').value = State.company.signatoryNameEn || '';
   if (document.getElementById('cfgSignatoryTitleEn')) document.getElementById('cfgSignatoryTitleEn').value = State.company.signatoryTitleEn || '';
+  if (document.getElementById('inputGeminiApiKey')) {
+    document.getElementById('inputGeminiApiKey').value = (State.company && State.company.geminiApiKey) || '';
+  }
 
   // Payroll Defaults fields
   var pd = State.payrollDefaults || {};
@@ -1770,7 +1804,8 @@ function saveCompanySettings(e) {
     signatoryName: document.getElementById('cfgSignatoryName') ? document.getElementById('cfgSignatoryName').value.trim() : '',
     signatoryTitle: document.getElementById('cfgSignatoryTitle') ? document.getElementById('cfgSignatoryTitle').value.trim() : '',
     signatoryNameEn: document.getElementById('cfgSignatoryNameEn') ? document.getElementById('cfgSignatoryNameEn').value.trim() : '',
-    signatoryTitleEn: document.getElementById('cfgSignatoryTitleEn') ? document.getElementById('cfgSignatoryTitleEn').value.trim() : ''
+    signatoryTitleEn: document.getElementById('cfgSignatoryTitleEn') ? document.getElementById('cfgSignatoryTitleEn').value.trim() : '',
+    geminiApiKey: document.getElementById('inputGeminiApiKey') ? document.getElementById('inputGeminiApiKey').value.trim() : undefined
   };
   callApi('saveCompanyInfo', { settings: d })
     .then(function(r) {
@@ -1810,20 +1845,29 @@ function switchTab(tabId) {
     tabId = 'employees';
   }
 
-  // Analytics tab is strictly restricted to Admin only
-  var isAdminUser = Boolean(
+  // Analytics tab
+  var canAccessAnalytics = Boolean(
     String(State.currentUser && State.currentUser.username || '').toLowerCase() === 'admin' ||
     String(role).toLowerCase().indexOf('admin') >= 0 ||
-    hasPermission('all')
+    hasPermission('all') ||
+    hasPermission('view_analytics')
   );
-  if (tabId === 'analytics' && !isAdminUser) {
-    showToast('ฟีเจอร์วิเคราะห์ข้อมูลสงวนสิทธิ์เฉพาะผู้ดูแลระบบ (Admin) เท่านั้น', 'warning');
+  if (tabId === 'analytics' && !canAccessAnalytics) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบวิเคราะห์ Payroll Analytics', 'warning');
     return;
   }
 
-  // Attendance tab is strictly restricted to Super Admin only
-  if (tabId === 'attendance' && !isSuperAdmin()) {
-    showToast('สิทธิ์ไม่เพียงพอ: ระบบลงเวลาสงวนสิทธิ์เฉพาะ Super Admin เท่านั้น', 'warning');
+  // Attendance tab
+  var canAccessAttendance = isSuperAdmin() || hasPermission('view_attendance');
+  if (tabId === 'attendance' && !canAccessAttendance) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา', 'warning');
+    return;
+  }
+
+  // Documents tab
+  var canAccessDocuments = isSuperAdmin() || hasPermission('view_documents') || hasPermission('all') || hasPermission('view_payroll') || hasPermission('view_history');
+  if (tabId === 'documents' && !canAccessDocuments) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานศูนย์เอกสาร', 'warning');
     return;
   }
 
@@ -2327,6 +2371,8 @@ function openAddEmployeeModal() {
   if (bSel) bSel.value = 'B01';
   var allBranchesCheck = document.getElementById('mAllowAllBranches');
   if (allBranchesCheck) allBranchesCheck.checked = false;
+  var isOtCheck = document.getElementById('mIsOtEligible');
+  if (isOtCheck) isOtCheck.checked = true;
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
@@ -2368,6 +2414,8 @@ function openEditEmployeeModal(empId) {
   if (bSel) bSel.value = e.branchId || 'B01';
   var allBranchesCheck = document.getElementById('mAllowAllBranches');
   if (allBranchesCheck) allBranchesCheck.checked = (e.allowAllBranches === true || e.allowAllBranches === 'true');
+  var isOtCheck = document.getElementById('mIsOtEligible');
+  if (isOtCheck) isOtCheck.checked = (e.isOtEligible !== false && e.isOtEligible !== 'false');
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
   document.getElementById('empOrigId').value = e.empId;
@@ -2451,6 +2499,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
     position: document.getElementById('mPosition').value.trim(),
     branchId: branchIdVal,
     allowAllBranches: allowAllBranchesVal,
+    isOtEligible: (document.getElementById('mIsOtEligible') ? document.getElementById('mIsOtEligible').checked : true),
     status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
     probationDays: (document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119),
     probationEndDate: (document.getElementById('mProbationEndDate') ? document.getElementById('mProbationEndDate').value : ''),
@@ -2799,9 +2848,11 @@ function onRoleTemplateChanged() {
   var role = document.getElementById('mRole').value;
   var allPerms = [
     'perm_view_emp', 'perm_view_salary', 'perm_edit_emp', 'perm_del_emp',
-    'perm_view_inputs', 'perm_edit_inputs', 'populate_inputs',
+    'perm_view_inputs', 'perm_edit_inputs', 'perm_populate_inputs',
     'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip', 'perm_close_period',
-    'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv',
+    'perm_view_attendance', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time', 'perm_manage_attendance_settings',
+    'perm_view_documents', 'perm_issue_salary_cert', 'perm_export_bank_files', 'perm_export_tax_sso',
+    'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv', 'perm_view_analytics',
     'perm_manage_users', 'perm_company_settings', 'perm_backup_restore'
   ];
 
@@ -2810,20 +2861,41 @@ function onRoleTemplateChanged() {
       var el = document.getElementById(p);
       if (el) el.checked = true;
     });
+  } else if (role === 'Supervisor') {
+    var supPerms = ['perm_view_emp', 'perm_view_attendance', 'perm_approve_attendance', 'perm_unlock_device'];
+    allPerms.forEach(function(p) {
+      var el = document.getElementById(p);
+      if (el) el.checked = (supPerms.indexOf(p) >= 0);
+    });
   } else if (role === 'HR Payroll') {
-    var hrPerms = ['perm_view_emp', 'perm_view_salary', 'perm_edit_emp', 'perm_view_inputs', 'perm_edit_inputs', 'populate_inputs', 'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip', 'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv'];
+    var hrPerms = [
+      'perm_view_emp', 'perm_view_salary', 'perm_edit_emp',
+      'perm_view_inputs', 'perm_edit_inputs', 'perm_populate_inputs',
+      'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip',
+      'perm_view_attendance', 'perm_sync_ptn_time',
+      'perm_view_documents', 'perm_issue_salary_cert', 'perm_export_bank_files', 'perm_export_tax_sso',
+      'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv', 'perm_view_analytics'
+    ];
     allPerms.forEach(function(p) {
       var el = document.getElementById(p);
       if (el) el.checked = (hrPerms.indexOf(p) >= 0);
     });
   } else if (role === 'HR Time Attendance') {
-    var attPerms = ['perm_view_emp', 'perm_edit_emp', 'perm_view_inputs', 'perm_edit_inputs', 'populate_inputs', 'perm_view_history', 'perm_print_history'];
+    var attPerms = [
+      'perm_view_emp', 'perm_view_inputs', 'perm_edit_inputs', 'perm_populate_inputs',
+      'perm_view_attendance', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time',
+      'perm_view_history', 'perm_print_history'
+    ];
     allPerms.forEach(function(p) {
       var el = document.getElementById(p);
       if (el) el.checked = (attPerms.indexOf(p) >= 0);
     });
   } else if (role === 'Accounting / Finance') {
-    var accPerms = ['perm_view_dash', 'perm_view_payroll', 'perm_view_payslip', 'perm_view_history', 'perm_print_history', 'perm_export_csv'];
+    var accPerms = [
+      'perm_view_payroll', 'perm_view_payslip',
+      'perm_view_documents', 'perm_export_bank_files', 'perm_export_tax_sso',
+      'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv', 'perm_view_analytics'
+    ];
     allPerms.forEach(function(p) {
       var el = document.getElementById(p);
       if (el) el.checked = (accPerms.indexOf(p) >= 0);
@@ -2872,21 +2944,43 @@ function openEditUserModal(username) {
   var perms = u.permissions || [];
   var isAll = perms.indexOf('all') >= 0 || u.username === 'admin';
 
-  var allPerms = [
-    'perm_view_emp', 'perm_view_salary', 'perm_edit_emp', 'perm_del_emp',
-    'perm_view_inputs', 'perm_edit_inputs', 'populate_inputs',
-    'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip', 'perm_close_period',
-    'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv',
-    'perm_manage_users', 'perm_company_settings', 'perm_backup_restore'
-  ];
+  var permMapping = {
+    'perm_view_emp': ['view_emp'],
+    'perm_view_salary': ['view_salary'],
+    'perm_edit_emp': ['edit_emp'],
+    'perm_del_emp': ['del_emp'],
+    'perm_view_inputs': ['view_inputs'],
+    'perm_edit_inputs': ['edit_inputs'],
+    'perm_populate_inputs': ['populate_inputs'],
+    'perm_view_payroll': ['view_payroll'],
+    'perm_calc_payroll': ['calc_payroll'],
+    'perm_view_payslip': ['view_payslip'],
+    'perm_close_period': ['close_period'],
+    'perm_view_attendance': ['view_attendance'],
+    'perm_approve_attendance': ['approve_attendance'],
+    'perm_unlock_device': ['unlock_device'],
+    'perm_sync_ptn_time': ['sync_ptn_time'],
+    'perm_manage_attendance_settings': ['manage_attendance_settings'],
+    'perm_view_documents': ['view_documents'],
+    'perm_issue_salary_cert': ['issue_salary_cert'],
+    'perm_export_bank_files': ['export_bank_files'],
+    'perm_export_tax_sso': ['export_tax_sso'],
+    'perm_view_dash': ['view_dash'],
+    'perm_view_history': ['view_history'],
+    'perm_print_history': ['print_history'],
+    'perm_export_csv': ['export_csv'],
+    'perm_view_analytics': ['view_analytics'],
+    'perm_manage_users': ['manage_users'],
+    'perm_company_settings': ['manage_company', 'company_settings'],
+    'perm_backup_restore': ['manage_backup', 'backup_restore']
+  };
 
-  allPerms.forEach(function(pKey) {
-    var el = document.getElementById(pKey);
+  Object.keys(permMapping).forEach(function(pId) {
+    var el = document.getElementById(pId);
     if (el) {
-      // Map element id to perm key
-      var cleanKey = pKey.replace('perm_', '');
-      if (pKey === 'populate_inputs') cleanKey = 'populate_inputs';
-      el.checked = isAll || (perms.indexOf(cleanKey) >= 0) || (perms.indexOf(pKey) >= 0);
+      var keys = permMapping[pId];
+      var hasIt = isAll || keys.some(function(k) { return perms.indexOf(k) >= 0 || perms.indexOf('perm_' + k) >= 0; });
+      el.checked = hasIt;
     }
   });
 
@@ -2920,10 +3014,20 @@ function saveUserForm(e) {
       { id: 'perm_calc_payroll', key: 'calc_payroll' },
       { id: 'perm_view_payslip', key: 'view_payslip' },
       { id: 'perm_close_period', key: 'close_period' },
+      { id: 'perm_view_attendance', key: 'view_attendance' },
+      { id: 'perm_approve_attendance', key: 'approve_attendance' },
+      { id: 'perm_unlock_device', key: 'unlock_device' },
+      { id: 'perm_sync_ptn_time', key: 'sync_ptn_time' },
+      { id: 'perm_manage_attendance_settings', key: 'manage_attendance_settings' },
+      { id: 'perm_view_documents', key: 'view_documents' },
+      { id: 'perm_issue_salary_cert', key: 'issue_salary_cert' },
+      { id: 'perm_export_bank_files', key: 'export_bank_files' },
+      { id: 'perm_export_tax_sso', key: 'export_tax_sso' },
       { id: 'perm_view_dash', key: 'view_dash' },
       { id: 'perm_view_history', key: 'view_history' },
       { id: 'perm_print_history', key: 'print_history' },
       { id: 'perm_export_csv', key: 'export_csv' },
+      { id: 'perm_view_analytics', key: 'view_analytics' },
       { id: 'perm_manage_users', key: 'manage_users' },
       { id: 'perm_company_settings', key: 'manage_company' },
       { id: 'perm_backup_restore', key: 'manage_backup' }
@@ -3024,18 +3128,21 @@ function onEmpSsoInputChanged() {
 
 // (Legacy filterHistoryTable removed - using upgraded version with privacy guards)
 
-// BACKUP & RESTORE HANDLERS
-function backupDatabase() {
-  showToast('กำลังเตรียมไฟล์สำรองข้อมูล...', 'info');
-  callApi('backupDatabase')
+// BACKUP & RESTORE HANDLERS (ENTERPRISE FULL TABLE COVERAGE & SELECTIVE RESTORE)
+window.pendingRestoreBackupData = null;
+
+function backupDatabase(isAutoSafety) {
+  if (!isAutoSafety) showToast('กำลังเตรียมไฟล์สำรองข้อมูลทั้งระบบ...', 'info');
+  return callApi('backupDatabase', { username: (window.currentUser && window.currentUser.username) || 'Admin' })
     .then(function(r) {
       if (!r.success || !r.backup) {
         showToast(r.message || 'ไม่สามารถสำรองข้อมูลได้', 'error');
-        return;
+        return null;
       }
       var jsonStr = JSON.stringify(r.backup, null, 2);
       var nowStr = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
-      var filename = 'PTN_PAYROLL_BACKUP_' + nowStr + '.json';
+      var prefix = isAutoSafety ? 'SAFETY_PRE_RESTORE_BACKUP_' : 'PTN_FULL_SYSTEM_BACKUP_';
+      var filename = prefix + nowStr + '.json';
 
       var blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
       var link = document.createElement('a');
@@ -3044,10 +3151,14 @@ function backupDatabase() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      showToast('ดาวน์โหลดไฟล์สำรองข้อมูลสำเร็จ');
+      if (!isAutoSafety) {
+        showToast('ดาวน์โหลดไฟล์สำรองข้อมูลสมบูรณ์ทุกตารางเรียบร้อย');
+      }
+      return r.backup;
     })
     .catch(function(err) {
-      showToast('Error: ' + err.message, 'error');
+      showToast('Error Backup: ' + err.message, 'error');
+      return null;
     });
 }
 
@@ -3063,32 +3174,193 @@ function handleRestoreBackupFile(event) {
   var file = event.target.files && event.target.files[0];
   if (!file) return;
 
-  if (!confirm('⚠️ คำเตือนสำคัญ!\n\nการกู้คืนข้อมูลจะเขียนทับข้อมูลพนักงาน ข้อมูลเงินเดือนทุกงวด ผู้ใช้งาน และการตั้งค่าทั้งหมดในระบบด้วยข้อมูลจากไฟล์นี้\n\nคุณแน่ใจหรือไม่ที่จะทำการกู้คืนข้อมูล?')) {
-    return;
-  }
-
   var reader = new FileReader();
   reader.onload = function(e) {
     try {
       var backupData = JSON.parse(e.target.result);
-      showToast('กำลังกู้คืนข้อมูลเข้าสู่ระบบ...', 'info');
-      callApi('restoreDatabase', { backup: backupData })
-        .then(function(r) {
-          if (r.success) {
-            showToast(r.message || 'กู้คืนข้อมูลสำเร็จ');
-            loadAppData();
-          } else {
-            showToast(r.message || 'เกิดข้อผิดพลาดในการกู้คืนข้อมูล', 'error');
-          }
-        })
-        .catch(function(err) {
-          showToast('Error: ' + err.message, 'error');
-        });
+      var data = backupData.data || backupData;
+
+      if (!data.employees && !data.settings && !data.users && !data.monthly_inputs && !data.branches) {
+        showToast('ไฟล์นี้ไม่ใช่ไฟล์สำรองของระบบ PTN หรือโครงสร้างข้อมูลไม่ถูกต้อง', 'error');
+        return;
+      }
+
+      window.pendingRestoreBackupData = backupData;
+
+      // Extract metadata
+      var metaName = file.name + ' (' + (file.size > 1048576 ? (file.size/1048576).toFixed(2) + ' MB' : (file.size/1024).toFixed(1) + ' KB') + ')';
+      var lblMeta = document.getElementById('restoreFileMetaName');
+      if (lblMeta) lblMeta.textContent = metaName;
+
+      var bDate = backupData.backupDate || backupData.date;
+      var dateDisplay = '-';
+      if (bDate) {
+        try {
+          var d = new Date(bDate);
+          dateDisplay = d.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        } catch(ex) { dateDisplay = String(bDate); }
+      } else {
+        dateDisplay = 'ไม่ระบุในไฟล์';
+      }
+
+      var empCount = (data.employees || []).length;
+      var branchCount = (data.branches || []).length;
+
+      // Extract unique periods from monthly_inputs or payroll_calcs
+      var periodSet = new Set();
+      (data.monthly_inputs || []).forEach(function(i) { if (i.period) periodSet.add(i.period); });
+      (data.payroll_calcs || []).forEach(function(p) { if (p.period) periodSet.add(p.period); });
+      var periods = Array.from(periodSet).sort();
+
+      var elDate = document.getElementById('lblRestoreDate');
+      if (elDate) elDate.textContent = dateDisplay;
+      var elEmp = document.getElementById('lblRestoreEmpCount');
+      if (elEmp) elEmp.textContent = empCount + ' คน';
+      var elBranch = document.getElementById('lblRestoreBranchCount');
+      if (elBranch) elBranch.textContent = branchCount > 0 ? branchCount + ' สาขา' : 'ไม่มีในไฟล์';
+      var elPeriods = document.getElementById('lblRestorePeriodsCount');
+      if (elPeriods) elPeriods.textContent = periods.length + ' งวด';
+
+      // Populate Period Checkboxes
+      var periodBox = document.getElementById('restorePeriodCheckboxes');
+      if (periodBox) {
+        if (periods.length === 0) {
+          periodBox.innerHTML = '<span style="color:#94a3b8">ไม่มีรายการงวดเงินเดือนในไฟล์</span>';
+        } else {
+          periodBox.innerHTML = periods.map(function(p) {
+            return '<label style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:#fff;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer">' +
+              '<input type="checkbox" class="restore-period-chk" value="' + p + '" checked style="accent-color:#2563eb"> ' +
+              '<span>' + p + '</span>' +
+            '</label>';
+          }).join('');
+        }
+      }
+
+      // Reset checkboxes
+      if (document.getElementById('chkAutoSafetyBackup')) document.getElementById('chkAutoSafetyBackup').checked = true;
+      if (document.getElementById('chkRestoreEmployees')) document.getElementById('chkRestoreEmployees').checked = true;
+      if (document.getElementById('chkRestoreDevices')) document.getElementById('chkRestoreDevices').checked = (data.employee_devices || []).length > 0;
+      if (document.getElementById('chkRestorePayroll')) document.getElementById('chkRestorePayroll').checked = periods.length > 0;
+      if (document.getElementById('chkRestorePtnTime')) document.getElementById('chkRestorePtnTime').checked = Boolean(data.time_logs || data.leave_requests || data.ot_requests || data.advance_requests);
+      if (document.getElementById('chkRestorePushSubs')) document.getElementById('chkRestorePushSubs').checked = (data.push_subscriptions || []).length > 0;
+      if (document.getElementById('chkRestoreSettings')) document.getElementById('chkRestoreSettings').checked = true;
+      if (document.getElementById('chkRestoreUsers')) document.getElementById('chkRestoreUsers').checked = false; // default false for security
+
+      toggleRestorePeriodOptions();
+
+      // Open Modal
+      openModal('modalRestoreInspection');
+
     } catch(err) {
       showToast('ไฟล์ JSON ไม่ถูกต้อง หรือเสียหาย: ' + err.message, 'error');
     }
   };
   reader.readAsText(file, 'utf-8');
+}
+
+function toggleRestorePeriodOptions() {
+  var chkPayroll = document.getElementById('chkRestorePayroll');
+  var area = document.getElementById('restorePeriodScopeArea');
+  if (area && chkPayroll) {
+    area.style.display = chkPayroll.checked ? 'flex' : 'none';
+  }
+}
+
+function toggleSelectAllRestorePeriods() {
+  var chks = document.querySelectorAll('.restore-period-chk');
+  if (chks.length === 0) return;
+  var allChecked = Array.from(chks).every(function(c) { return c.checked; });
+  chks.forEach(function(c) { c.checked = !allChecked; });
+}
+
+function executeSelectiveRestore() {
+  if (!window.pendingRestoreBackupData) {
+    showToast('ไม่พบข้อมูลไฟล์สำรอง กรุณาเลือกไฟล์ใหม่อีกครั้ง', 'error');
+    return;
+  }
+
+  var doSafety = document.getElementById('chkAutoSafetyBackup') ? document.getElementById('chkAutoSafetyBackup').checked : false;
+  var doEmployees = document.getElementById('chkRestoreEmployees') ? document.getElementById('chkRestoreEmployees').checked : true;
+  var doDevices = document.getElementById('chkRestoreDevices') ? document.getElementById('chkRestoreDevices').checked : true;
+  var doPayroll = document.getElementById('chkRestorePayroll') ? document.getElementById('chkRestorePayroll').checked : true;
+  var doPtnTime = document.getElementById('chkRestorePtnTime') ? document.getElementById('chkRestorePtnTime').checked : true;
+  var doPushSubs = document.getElementById('chkRestorePushSubs') ? document.getElementById('chkRestorePushSubs').checked : true;
+  var doSettings = document.getElementById('chkRestoreSettings') ? document.getElementById('chkRestoreSettings').checked : true;
+  var doUsers = document.getElementById('chkRestoreUsers') ? document.getElementById('chkRestoreUsers').checked : false;
+
+  var selectedPeriods = [];
+  if (doPayroll) {
+    var periodChks = document.querySelectorAll('.restore-period-chk:checked');
+    periodChks.forEach(function(c) { selectedPeriods.push(c.value); });
+    var allPeriodChks = document.querySelectorAll('.restore-period-chk');
+    if (allPeriodChks.length > 0 && selectedPeriods.length === 0) {
+      showToast('กรุณาเลือกงวดเงินเดือนอย่างน้อย 1 งวด หรือยกเลิกการเลือกหมวดเงินเดือน', 'warning');
+      return;
+    }
+  }
+
+  var btn = document.getElementById('btnConfirmExecuteRestore');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังดำเนินการ...';
+  }
+
+  var proceedRestore = function() {
+    showToast('กำลังกู้คืนข้อมูลเข้าสู่ฐานข้อมูล Cloudflare D1...', 'info');
+
+    var options = {
+      selectiveMode: true,
+      restoreEmployees: doEmployees,
+      restoreBranches: doEmployees,
+      restoreDevices: doDevices,
+      restorePayroll: doPayroll,
+      selectedPeriods: selectedPeriods,
+      restorePtnTime: doPtnTime,
+      restorePushSubs: doPushSubs,
+      restoreSettings: doSettings,
+      restoreUsers: doUsers
+    };
+
+    callApi('restoreDatabase', {
+      backup: window.pendingRestoreBackupData,
+      options: options,
+      username: (window.currentUser && window.currentUser.username) || 'Admin'
+    })
+      .then(function(r) {
+        if (r.success) {
+          closeModal('modalRestoreInspection');
+          window.pendingRestoreBackupData = null;
+          showToast(r.message || 'กู้คืนข้อมูลสำเร็จเรียบร้อยแล้ว');
+          setTimeout(function() {
+            loadAppData();
+          }, 600);
+        } else {
+          showToast(r.message || 'เกิดข้อผิดพลาดในการกู้คืนข้อมูล', 'error');
+        }
+      })
+      .catch(function(err) {
+        showToast('Restore Error: ' + err.message, 'error');
+      })
+      .finally(function() {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-check-double"></i> ยืนยันการกู้คืนข้อมูล';
+        }
+      });
+  };
+
+  if (doSafety) {
+    showToast('กำลังดาวน์โหลดข้อมูลสำรองปัจจุบัน (Auto-Safety Snapshot)...', 'info');
+    backupDatabase(true)
+      .then(function() {
+        setTimeout(proceedRestore, 800);
+      })
+      .catch(function() {
+        proceedRestore();
+      });
+  } else {
+    proceedRestore();
+  }
 }
 
 function exportAllEmployeeHistory() {
@@ -3309,8 +3581,70 @@ function printAllEmployeesBatch() {
 
 
 // ==============================================================================
-// AI PAYROLL ASSISTANT CONTROLLER
+// GEMINI SETTINGS & DRAGGABLE AI ASSISTANT CONTROLLER
 // ==============================================================================
+function toggleGeminiKeyVisibility() {
+  var inp = document.getElementById('inputGeminiApiKey');
+  var icon = document.getElementById('iconToggleGeminiKey');
+  if (!inp) return;
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    if (icon) { icon.classList.remove('fa-eye'); icon.classList.add('fa-eye-slash'); }
+  } else {
+    inp.type = 'password';
+    if (icon) { icon.classList.remove('fa-eye-slash'); icon.classList.add('fa-eye'); }
+  }
+}
+
+function testGeminiConnection() {
+  var inp = document.getElementById('inputGeminiApiKey');
+  var key = inp ? inp.value.trim() : '';
+  if (!key) {
+    showToast('กรุณากรอก API Key ก่อนทดสอบ', 'warning');
+    return;
+  }
+  showToast('กำลังทดสอบเชื่อมต่อ Google Gemini 3.6 Flash...', 'info');
+  callApi('testGeminiApiKey', { apiKey: key })
+    .then(function(r) {
+      if (r.success) {
+        showToast(r.message || 'เชื่อมต่อสำเร็จ');
+        var badge = document.getElementById('geminiConnectionStatusBadge');
+        if (badge) {
+          badge.style.background = '#ecfdf5';
+          badge.style.color = '#059669';
+          badge.style.borderColor = '#a7f3d0';
+          badge.innerHTML = '<i class="fa-solid fa-circle-check"></i> พร้อมใช้งาน';
+        }
+      } else {
+        showToast(r.message || 'เชื่อมต่อไม่สำเร็จ', 'error');
+        var badge = document.getElementById('geminiConnectionStatusBadge');
+        if (badge) {
+          badge.style.background = '#fef2f2';
+          badge.style.color = '#dc2626';
+          badge.style.borderColor = '#fecaca';
+          badge.innerHTML = '<i class="fa-solid fa-circle-xmark"></i> ผิดพลาด';
+        }
+      }
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function saveGeminiApiKey() {
+  var inp = document.getElementById('inputGeminiApiKey');
+  var key = inp ? inp.value.trim() : '';
+  showToast('กำลังบันทึก Google Gemini API Key...', 'info');
+  callApi('saveCompanyInfo', { settings: { geminiApiKey: key } })
+    .then(function(r) {
+      showToast('บันทึก API Key สำเร็จเรียบร้อย');
+      if (State.company) State.company.geminiApiKey = key;
+    })
+    .catch(function(err) {
+      showToast('Error: ' + err.message, 'error');
+    });
+}
+
 var isAiChatOpen = false;
 
 function toggleAiChat() {
@@ -3319,6 +3653,16 @@ function toggleAiChat() {
   var btn = document.getElementById('aiChatToggleBtn');
   if (drawer) {
     if (isAiChatOpen) {
+      if (btn) {
+        var rect = btn.getBoundingClientRect();
+        if (rect.left < window.innerWidth / 2) {
+          drawer.style.left = Math.max(16, rect.left) + 'px';
+          drawer.style.right = 'auto';
+        } else {
+          drawer.style.right = Math.max(16, window.innerWidth - rect.right) + 'px';
+          drawer.style.left = 'auto';
+        }
+      }
       drawer.classList.add('active');
       if (btn) btn.style.display = 'none';
       var inp = document.getElementById('aiChatInput');
@@ -3328,6 +3672,108 @@ function toggleAiChat() {
       if (btn) btn.style.display = 'flex';
     }
   }
+}
+
+function initDraggableAiChatBtn() {
+  var btn = document.getElementById('aiChatToggleBtn');
+  if (!btn) return;
+
+  // Restore saved position
+  try {
+    var savedPos = localStorage.getItem('ptn_ai_btn_pos');
+    if (savedPos) {
+      var p = JSON.parse(savedPos);
+      var maxLeft = window.innerWidth - (btn.offsetWidth || 130) - 10;
+      var maxTop = window.innerHeight - (btn.offsetHeight || 44) - 10;
+      var left = Math.max(10, Math.min(p.left, maxLeft));
+      var top = Math.max(10, Math.min(p.top, maxTop));
+      btn.style.left = left + 'px';
+      btn.style.top = top + 'px';
+      btn.style.right = 'auto';
+      btn.style.bottom = 'auto';
+    }
+  } catch(e) {}
+
+  var isDragging = false;
+  var hasMoved = false;
+  var startX = 0, startY = 0;
+  var origLeft = 0, origTop = 0;
+
+  function onPointerDown(e) {
+    if (e.type === 'mousedown' && e.button !== 0) return;
+
+    isDragging = true;
+    hasMoved = false;
+    var clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0].clientX);
+    var clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0].clientY);
+    startX = clientX;
+    startY = clientY;
+
+    var rect = btn.getBoundingClientRect();
+    origLeft = rect.left;
+    origTop = rect.top;
+
+    btn.style.transition = 'none';
+
+    document.addEventListener('mousemove', onPointerMove, { passive: false });
+    document.addEventListener('mouseup', onPointerUp);
+    document.addEventListener('touchmove', onPointerMove, { passive: false });
+    document.addEventListener('touchend', onPointerUp);
+  }
+
+  function onPointerMove(e) {
+    if (!isDragging) return;
+    var clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0].clientX);
+    var clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0].clientY);
+
+    var dx = clientX - startX;
+    var dy = clientY - startY;
+
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) {
+      hasMoved = true;
+      if (e.cancelable) e.preventDefault();
+    }
+
+    if (hasMoved) {
+      var newLeft = origLeft + dx;
+      var newTop = origTop + dy;
+
+      var maxLeft = window.innerWidth - btn.offsetWidth - 10;
+      var maxTop = window.innerHeight - btn.offsetHeight - 10;
+
+      newLeft = Math.max(10, Math.min(newLeft, maxLeft));
+      newTop = Math.max(10, Math.min(newTop, maxTop));
+
+      btn.style.left = newLeft + 'px';
+      btn.style.top = newTop + 'px';
+      btn.style.right = 'auto';
+      btn.style.bottom = 'auto';
+    }
+  }
+
+  function onPointerUp(e) {
+    if (!isDragging) return;
+    isDragging = false;
+
+    btn.style.transition = '';
+
+    document.removeEventListener('mousemove', onPointerMove);
+    document.removeEventListener('mouseup', onPointerUp);
+    document.removeEventListener('touchmove', onPointerMove);
+    document.removeEventListener('touchend', onPointerUp);
+
+    if (hasMoved) {
+      var rect = btn.getBoundingClientRect();
+      try {
+        localStorage.setItem('ptn_ai_btn_pos', JSON.stringify({ left: rect.left, top: rect.top }));
+      } catch(ex) {}
+    } else {
+      toggleAiChat();
+    }
+  }
+
+  btn.addEventListener('mousedown', onPointerDown);
+  btn.addEventListener('touchstart', onPointerDown, { passive: false });
 }
 
 function clearAiChat() {
@@ -4123,6 +4569,9 @@ var analyticsTrendChartInstance = null;
 var analyticsDeptChartInstance = null;
 var analyticsOtBarChartInstance = null;
 var cachedAllHistoryData = null;
+var cachedAnalyticsBranches = [];
+var cachedAdvanceStats = [];
+var cachedCurrentMatrixData = [];
 var currentAnalyticsCategory = 'ALL';
 
 var THAI_MONTHS_NAMES = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
@@ -4193,8 +4642,9 @@ function initAnalyticsYearDropdown() {
     var label = (num > 2400) ? (y + ' (' + (num - 543) + ')') : (y + ' (' + (num + 543) + ')');
     h += '<option value="' + y + '">' + label + '</option>';
   });
+  h += '<option value="ALL">ทุกปีสะสม (All Years)</option>';
   sel.innerHTML = h;
-  if (curVal && sortedYears.indexOf(curVal) >= 0) {
+  if (curVal && (curVal === 'ALL' || sortedYears.indexOf(curVal) >= 0)) {
     sel.value = curVal;
   } else if (sortedYears.length > 0) {
     sel.value = sortedYears[0];
@@ -4276,13 +4726,64 @@ function loadAnalyticsData(silent) {
       }
 
       cachedAllHistoryData = combined;
+      cachedAnalyticsBranches = r.branches || [];
+      cachedAdvanceStats = r.advanceStats || [];
       initAnalyticsYearDropdown();
+      updateAnalyticsBranchDropdown(cachedAllHistoryData, cachedAnalyticsBranches);
       updateAnalyticsDepartmentDropdown(cachedAllHistoryData);
       computeAndRenderAnalytics();
     })
     .catch(function(err) {
       if (isTabActive) showToast('Error: ' + err.message, 'error');
     });
+}
+
+function getBranchName(branchId) {
+  if (!branchId) return 'สำนักงานใหญ่ (B01)';
+  var bList = cachedAnalyticsBranches && cachedAnalyticsBranches.length > 0 ? cachedAnalyticsBranches : (State.branches || []);
+  var found = bList.find(function(b) { return b.id === branchId || b.code === branchId; });
+  if (found) return (found.name || branchId) + ' (' + (found.id || branchId) + ')';
+  if (branchId === 'B01') return 'สำนักงานใหญ่ (B01)';
+  if (branchId === 'B02') return 'สาขา 2 (B02)';
+  return 'สาขา ' + branchId;
+}
+
+function updateAnalyticsBranchDropdown(list, branches) {
+  var sel = document.getElementById('analyticsBranchSelect');
+  if (!sel) return;
+  var curVal = sel.value || 'ALL';
+  var branchMap = {};
+
+  (branches || State.branches || []).forEach(function(b) {
+    if (b.id) branchMap[b.id] = b.name ? (b.name + ' (' + b.id + ')') : b.id;
+  });
+  (State.employees || []).forEach(function(e) {
+    var bid = e.branch_id || e.branchId;
+    if (bid && !branchMap[bid]) {
+      branchMap[bid] = getBranchName(bid);
+    }
+  });
+  (list || []).forEach(function(x) {
+    var bid = x.branchId || x.branch_id;
+    if (bid && !branchMap[bid]) {
+      branchMap[bid] = getBranchName(bid);
+    }
+  });
+
+  if (Object.keys(branchMap).length === 0) {
+    branchMap['B01'] = 'สำนักงานใหญ่ (B01)';
+  }
+
+  var h = '<option value="ALL">🏢 ทุกสาขา (All Branches)</option>';
+  Object.keys(branchMap).sort().forEach(function(bid) {
+    h += '<option value="' + esc(bid) + '">' + esc(branchMap[bid]) + '</option>';
+  });
+  sel.innerHTML = h;
+  if (branchMap[curVal]) {
+    sel.value = curVal;
+  } else {
+    sel.value = 'ALL';
+  }
 }
 
 function updateAnalyticsDepartmentDropdown(list) {
@@ -4301,7 +4802,11 @@ function updateAnalyticsDepartmentDropdown(list) {
     h += '<option value="' + esc(d) + '">' + esc(d) + '</option>';
   });
   sel.innerHTML = h;
-  sel.value = curVal;
+  if (depts[curVal]) {
+    sel.value = curVal;
+  } else {
+    sel.value = 'ALL';
+  }
 }
 
 function onAnalyticsFilterChanged() {
@@ -4312,14 +4817,22 @@ function computeAndRenderAnalytics() {
   if (!cachedAllHistoryData) return;
 
   var yrSel = document.getElementById('analyticsYearSelect');
+  var branchSel = document.getElementById('analyticsBranchSelect');
   var deptSel = document.getElementById('analyticsDeptSelect');
   var selYear = yrSel ? yrSel.value : '';
+  var selBranch = branchSel ? branchSel.value : 'ALL';
   var selDept = deptSel ? deptSel.value : 'ALL';
 
   var list = cachedAllHistoryData;
   if (selYear && selYear !== 'ALL') {
     list = list.filter(function(item) {
       return periodMatchesYear(item.period, selYear);
+    });
+  }
+  if (selBranch && selBranch !== 'ALL') {
+    list = list.filter(function(item) {
+      var b = item.branchId || item.branch_id || 'B01';
+      return b === selBranch;
     });
   }
   if (selDept && selDept !== 'ALL') {
@@ -4347,6 +4860,8 @@ function computeAndRenderAnalytics() {
 
   var deptGross = {};
   var deptOt = {};
+  var branchGross = {};
+  var branchOt = {};
 
   list.forEach(function(r) {
     var g = Number(r.grossPay) || 0;
@@ -4382,6 +4897,10 @@ function computeAndRenderAnalytics() {
     var d = (r.department || 'ไม่ระบุ').trim();
     deptGross[d] = (deptGross[d] || 0) + g;
     deptOt[d] = (deptOt[d] || 0) + otH;
+
+    var br = r.branchId || r.branch_id || 'B01';
+    branchGross[br] = (branchGross[br] || 0) + g;
+    branchOt[br] = (branchOt[br] || 0) + otH;
   });
 
   var totalEmpDays = totalPeriodsActive * 30;
@@ -4394,12 +4913,14 @@ function computeAndRenderAnalytics() {
   var activeEmpIds = {};
   list.forEach(function(x) { activeEmpIds[x.empId] = true; });
   var empCount = Object.keys(activeEmpIds).length || 1;
-  var avgMonthlyGross = totalPeriodsActive > 0 ? (totalGross / (totalPeriodsActive / empCount || 1)) : 0;
+  var avgPeriodsPerEmp = totalPeriodsActive > 0 ? (totalPeriodsActive / empCount) : 1;
+  var avgMonthlyGross = totalPeriodsActive > 0 ? (totalGross / (avgPeriodsPerEmp || 1)) : 0;
+  var costPerHeadMonthly = empCount > 0 ? (avgMonthlyGross / empCount) : 0;
 
   var elGrossVal = document.getElementById('kpiGrossVal');
   if (elGrossVal) elGrossVal.textContent = '฿' + fmt(totalGross);
   var elGrossSub = document.getElementById('kpiGrossSub');
-  if (elGrossSub) elGrossSub.innerHTML = '<i class="fa-solid fa-circle-info" style="color:var(--primary)"></i> เฉลี่ย ฿' + fmt(avgMonthlyGross) + ' / งวด (พนักงาน ' + empCount + ' คน)';
+  if (elGrossSub) elGrossSub.innerHTML = '<i class="fa-solid fa-circle-info" style="color:var(--primary)"></i> เฉลี่ย ฿' + fmt(avgMonthlyGross) + ' / งวด (รวม ' + empCount + ' คน)';
 
   var elAttendVal = document.getElementById('kpiAttendVal');
   if (elAttendVal) elAttendVal.textContent = attendanceRate.toFixed(1) + '%';
@@ -4411,6 +4932,11 @@ function computeAndRenderAnalytics() {
   var elOtSub = document.getElementById('kpiOtSub');
   if (elOtSub) elOtSub.innerHTML = '<i class="fa-solid fa-clock" style="color:#7c3aed"></i> รวม ' + totalOtHours.toLocaleString() + ' ชม. (เฉลี่ย ฿' + (totalOtHours > 0 ? (totalOtPay/totalOtHours).toFixed(1) : 0) + '/ชม.)';
 
+  var elCostPerHeadVal = document.getElementById('kpiCostPerHeadVal');
+  if (elCostPerHeadVal) elCostPerHeadVal.textContent = '฿' + fmt(costPerHeadMonthly);
+  var elCostPerHeadSub = document.getElementById('kpiCostPerHeadSub');
+  if (elCostPerHeadSub) elCostPerHeadSub.innerHTML = '<i class="fa-solid fa-user-tag" style="color:#0d9488"></i> ต้นทุนเฉลี่ยต่อคนต่อเดือน (พนักงาน ' + empCount + ' คน)';
+
   var elPfVal = document.getElementById('kpiPfVal');
   if (elPfVal) elPfVal.textContent = '฿' + fmt(totalPf);
   var elPfSub = document.getElementById('kpiPfSub');
@@ -4420,9 +4946,9 @@ function computeAndRenderAnalytics() {
   renderAnalyticsDeptChart(deptGross);
   renderAnalyticsOtBarChart(deptOt);
 
-  renderAnalyticsLeaderboard(cachedAllHistoryData, selYear, selDept);
-  renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLateDeduct, totalAbsent, attendanceRate, deptGross, deptOt);
-  renderAnalyticsEmployeeMatrix(cachedAllHistoryData, selYear, selDept);
+  renderAnalyticsLeaderboard(cachedAllHistoryData, selYear, selBranch, selDept);
+  renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLateDeduct, totalAbsent, attendanceRate, deptGross, deptOt, branchGross, branchOt, selBranch, selDept);
+  renderAnalyticsEmployeeMatrix(cachedAllHistoryData, selYear, selBranch, selDept);
 }
 
 function renderAnalyticsTrendChart(monthlyData) {
@@ -4461,18 +4987,19 @@ function renderAnalyticsTrendChart(monthlyData) {
           tension: 0.3
         },
         {
-          label: 'เงินได้รวมจริง (Gross Pay)',
+          label: 'เงินได้รวม (Gross Pay)',
           data: grossArr,
           borderColor: '#059669',
-          backgroundColor: 'rgba(5, 150, 105, 0.04)',
-          borderDash: [4, 4],
+          backgroundColor: 'rgba(5, 150, 105, 0.08)',
+          fill: true,
           tension: 0.3
         },
         {
           label: 'ค่าล่วงเวลา (OT Pay)',
           data: otArr,
-          borderColor: '#d97706',
-          backgroundColor: 'rgba(217, 119, 6, 0.1)',
+          borderColor: '#7c3aed',
+          backgroundColor: 'transparent',
+          borderDash: [5, 5],
           tension: 0.3
         }
       ]
@@ -4480,12 +5007,13 @@ function renderAnalyticsTrendChart(monthlyData) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top', labels: { boxWidth: 12, font: { family: 'Prompt', size: 11 } } },
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11, family: 'Prompt' } } },
         tooltip: {
           callbacks: {
-            label: function(ctx) {
-              return ctx.dataset.label + ': ฿' + fmt(ctx.parsed.y);
+            label: function(c) {
+              return c.dataset.label + ': ฿' + (Number(c.raw) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             }
           }
         }
@@ -4493,12 +5021,15 @@ function renderAnalyticsTrendChart(monthlyData) {
       scales: {
         y: {
           ticks: {
-            callback: function(v) { return '฿' + (v >= 1000 ? (v / 1000).toFixed(0) + 'k' : v); },
-            font: { family: 'Prompt', size: 10 }
+            callback: function(v) { return '฿' + (v >= 1000 ? (v/1000).toFixed(0) + 'k' : v); },
+            font: { size: 10 }
           },
-          grid: { color: '#f1f5f9' }
+          grid: { color: 'rgba(0,0,0,0.04)' }
         },
-        x: { ticks: { font: { family: 'Prompt', size: 11 } }, grid: { display: false } }
+        x: {
+          ticks: { font: { size: 10 } },
+          grid: { display: false }
+        }
       }
     }
   });
@@ -4515,34 +5046,44 @@ function renderAnalyticsDeptChart(deptGross) {
   }
 
   var labels = Object.keys(deptGross);
-  var data = labels.map(function(k) { return deptGross[k]; });
-  var palette = ['#2563eb', '#0284c7', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#64748b'];
+  var values = labels.map(function(k) { return deptGross[k]; });
+
+  if (labels.length === 0) {
+    labels = ['ไม่มีข้อมูล'];
+    values = [0];
+  }
+
+  var palette = [
+    '#2563eb', '#059669', '#d97706', '#7c3aed', '#db2777',
+    '#0891b2', '#ea580c', '#4f46e5', '#16a34a', '#ca8a04'
+  ];
 
   analyticsDeptChartInstance = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: labels.length ? labels : ['ไม่มีข้อมูล'],
+      labels: labels,
       datasets: [{
-        data: data.length ? data : [1],
-        backgroundColor: palette.slice(0, Math.max(1, labels.length)),
-        borderWidth: 2,
-        borderColor: '#ffffff'
+        data: values,
+        backgroundColor: palette.slice(0, labels.length)
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       plugins: {
-        legend: { position: 'bottom', labels: { boxWidth: 10, font: { family: 'Prompt', size: 10 } } },
+        legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 10, family: 'Prompt' } } },
         tooltip: {
           callbacks: {
-            label: function(ctx) {
-              return ctx.label + ': ฿' + fmt(ctx.parsed);
+            label: function(c) {
+              var val = Number(c.raw) || 0;
+              var total = c.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+              var pct = total > 0 ? ((val / total) * 100).toFixed(1) : 0;
+              return c.label + ': ฿' + val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' (' + pct + '%)';
             }
           }
         }
       },
-      cutout: '65%'
+      cutout: '62%'
     }
   });
 }
@@ -4557,40 +5098,68 @@ function renderAnalyticsOtBarChart(deptOt) {
     analyticsOtBarChartInstance.destroy();
   }
 
-  var sorted = Object.keys(deptOt).sort(function(a, b) { return deptOt[b] - deptOt[a]; }).slice(0, 5);
-  var labels = sorted;
-  var data = sorted.map(function(k) { return deptOt[k]; });
+  var labels = Object.keys(deptOt);
+  var values = labels.map(function(k) { return deptOt[k]; });
+
+  if (labels.length === 0) {
+    labels = ['ไม่มีข้อมูล'];
+    values = [0];
+  }
 
   analyticsOtBarChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: labels.length ? labels : ['ไม่มีข้อมูล'],
+      labels: labels,
       datasets: [{
         label: 'ชั่วโมง OT สะสม (ชม.)',
-        data: data.length ? data : [0],
-        backgroundColor: '#3b82f6',
-        borderRadius: 6
+        data: values,
+        backgroundColor: 'rgba(124, 58, 237, 0.75)',
+        borderColor: '#7c3aed',
+        borderWidth: 1,
+        borderRadius: 4
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(c) {
+              return (Number(c.raw) || 0).toLocaleString() + ' ชั่วโมง';
+            }
+          }
+        }
+      },
       scales: {
-        y: { ticks: { font: { family: 'Prompt', size: 10 } }, grid: { color: '#f1f5f9' } },
-        x: { ticks: { font: { family: 'Prompt', size: 11 } }, grid: { display: false } }
+        y: {
+          beginAtZero: true,
+          ticks: { font: { size: 10 } },
+          grid: { color: 'rgba(0,0,0,0.04)' }
+        },
+        x: {
+          ticks: { font: { size: 10 } },
+          grid: { display: false }
+        }
       }
     }
   });
 }
 
-function renderAnalyticsLeaderboard(allHistory, selYear, selDept) {
+function renderAnalyticsLeaderboard(allHistory, selYear, selBranch, selDept) {
   var tbody = document.getElementById('analyticsLeaderboardBody');
   if (!tbody) return;
 
-  var list = allHistory;
+  var list = allHistory || [];
   if (selYear && selYear !== 'ALL') {
     list = list.filter(function(x) { return periodMatchesYear(x.period, selYear); });
+  }
+  if (selBranch && selBranch !== 'ALL') {
+    list = list.filter(function(x) {
+      var b = x.branchId || x.branch_id || 'B01';
+      return b === selBranch;
+    });
   }
   if (selDept && selDept !== 'ALL') {
     list = list.filter(function(x) { return (x.department || '').trim() === selDept.trim(); });
@@ -4603,6 +5172,7 @@ function renderAnalyticsLeaderboard(allHistory, selYear, selDept) {
         empId: r.empId,
         fullName: r.fullName,
         nickname: r.nickname,
+        branchId: r.branchId || r.branch_id || 'B01',
         department: r.department,
         totalAllowance: 0,
         totalAbsent: 0,
@@ -4633,9 +5203,10 @@ function renderAnalyticsLeaderboard(allHistory, selYear, selDept) {
   top5.forEach(function(e, idx) {
     var rankClass = idx === 0 ? 'top1' : (idx === 1 ? 'top2' : (idx === 2 ? 'top3' : ''));
     var nick = e.nickname ? ' (' + esc(e.nickname) + ')' : '';
+    var brName = getBranchName(e.branchId);
     h += '<tr>' +
       '<td><span class="analytics-rank-badge ' + rankClass + '">' + (idx + 1) + '</span></td>' +
-      '<td><strong>' + esc(e.fullName) + '</strong><span style="font-size:10.5px;color:#64748b">' + nick + '</span></td>' +
+      '<td><strong>' + esc(e.fullName) + '</strong><span style="font-size:10.5px;color:#64748b">' + nick + '</span><div style="font-size:10px;color:#6b7280"><i class="fa-solid fa-store" style="color:#0284c7;font-size:9.5px"></i> ' + esc(brName) + '</div></td>' +
       '<td>' + esc(e.department || '-') + '</td>' +
       '<td style="text-align:right;font-family:monospace;font-weight:700;color:var(--success)">฿' + fmt(e.totalAllowance) + '</td>' +
     '</tr>';
@@ -4643,7 +5214,7 @@ function renderAnalyticsLeaderboard(allHistory, selYear, selDept) {
   tbody.innerHTML = h;
 }
 
-function renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLateDeduct, totalAbsent, attendanceRate, deptGross, deptOt) {
+function renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLateDeduct, totalAbsent, attendanceRate, deptGross, deptOt, branchGross, branchOt, selBranch, selDept) {
   var container = document.getElementById('analyticsInsightsContainer');
   if (!container) return;
 
@@ -4657,59 +5228,87 @@ function renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLate
     }
   });
 
+  var topBranch = '';
+  var maxBranchGross = 0;
+  Object.keys(branchGross).forEach(function(b) {
+    if (branchGross[b] > maxBranchGross) {
+      maxBranchGross = branchGross[b];
+      topBranch = b;
+    }
+  });
+
+  // Calculate Advance Request metrics from PTN Time
+  var advList = cachedAdvanceStats || [];
+  var advTotalAmount = 0;
+  var advCount = advList.length;
+  var advEmpSet = {};
+  advList.forEach(function(a) {
+    advTotalAmount += Number(a.amount) || 0;
+    if (a.emp_id) advEmpSet[a.emp_id] = true;
+  });
+  var advEmpCount = Object.keys(advEmpSet).length;
+
   var h = '';
 
-  // 1. OT Optimization Insight
+  // 1. Branch & Dept OT Optimization Insight
   var otImpact = Math.round(totalOtPay * 0.2);
+  var branchContext = (topBranch ? ' สาขาหลักที่มีค่าใช้จ่ายสูงสุดคือ ' + getBranchName(topBranch) : '');
+  var deptContext = (topOtDept ? ' แผนกที่มีชั่วโมง OT สูงสุดคือ ' + esc(topOtDept) + ' (' + maxOtHours.toLocaleString() + ' ชม.)' : '');
+
   h += '<div class="insight-card-item orange">' +
     '<div class="insight-card-top">' +
-      '<span class="insight-badge orange"><i class="fa-solid fa-triangle-exclamation"></i> จุดเฝ้าระวัง: ค่าล่วงเวลา (OT สะสม ' + otPercent.toFixed(1) + '%)</span>' +
+      '<span class="insight-badge orange"><i class="fa-solid fa-store"></i> 🏢 บริหารจัดการสาขา &amp; ค่าล่วงเวลา (OT สะสม ' + otPercent.toFixed(1) + '%)</span>' +
       '<span class="insight-impact orange">โอกาสประหยัด: ~฿' + fmt(otImpact) + '</span>' +
     '</div>' +
     '<p style="font-size:12px;color:#475569;margin-bottom:6px">' +
-      '<strong>ปัญหาที่พบ:</strong> ' + (topOtDept ? 'แผนก' + esc(topOtDept) + ' มีชั่วโมงทำ OT รวม ' + maxOtHours.toLocaleString() + ' ชม. ' : '') +
-      'สัดส่วนค่าล่วงเวลาคิดเป็น ' + otPercent.toFixed(1) + '% ของต้นทุนค่าจ้างทั้งหมด ซึ่งช่วงปลายงวดมีการเร่งงานกระจุกตัว' +
+      '<strong>สรุปวิเคราะห์ข้อมูล:</strong> ' + deptContext + branchContext +
+      ' สัดส่วนค่าล่วงเวลาคิดเป็น ' + otPercent.toFixed(1) + '% ของต้นทุนค่าจ้างทั้งหมด ซึ่งมักเกิดจากการเร่งส่งมอบงานช่วงสุดสัปดาห์หรือปลายงวด' +
     '</p>' +
     '<div class="insight-action-box orange">' +
-      '<div style="font-weight:700;color:#9a3412;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> แนวทางแก้ไข &amp; ปรับปรุง (Action Plan):</div>' +
+      '<div style="font-weight:700;color:#9a3412;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> ข้อเสนอแนะ &amp; แนวทางแก้ไข (Action Plan):</div>' +
       '<ul style="margin-left:16px;color:#334155;line-height:1.5;font-size:11.5px">' +
-        '<li><strong>ปรับรอบส่งของ/จัดเตรียมสินค้า:</strong> ปรับขยับเวลาตัดรอบงานให้เร็วขึ้น 1 ชม. เพื่อลดการทำ OT ช่วงเย็น</li>' +
-        '<li><strong>เสริมอัตราจ้างพาร์ทไทม์ช่วงพีค:</strong> จ้างรายวันเฉพาะช่วงศุกร์-เสาร์ จะช่วยลดต้นทุน OT รายชั่วโมงได้ถึง 20-25%</li>' +
+        '<li><strong>ปรับรอบงานและเวลาตัดรอบ (Shift Scheduling):</strong> ปรับขยับเวลาเตรียมสินค้า/เบิกจ่ายให้เร็วขึ้น 1 ชม. ลดการค้างคาของงานช่วงเย็น</li>' +
+        '<li><strong>เสริมอัตราจ้างพาร์ทไทม์ช่วงพีค:</strong> พิจารณาจ้างพนักงานรายวันเฉพาะวันศุกร์-เสาร์ จะช่วยประหยัดต้นทุน OT รายชั่วโมงได้ถึง 20-25%</li>' +
+        '<li><strong>กระจายภาระงานระหว่างสาขา:</strong> ใช้ข้อมูลเปรียบเทียบข้ามสาขาเพื่อโยกย้ายกำลังคนชั่วคราวแทนการอนุมัติ OT ต่อเนื่อง</li>' +
       '</ul>' +
     '</div>' +
   '</div>';
 
-  // 2. Attendance & Lateness Insight
+  // 2. Attendance Discipline & Emergency Advances (PTN Time Integration)
+  var advSubText = advCount > 0 ? (' มีคำขอเบิกเงินฉุกเฉินผ่านระบบ PTN Time จำนวน ' + advCount + ' รายการ (พนักงาน ' + advEmpCount + ' คน รวม ฿' + fmt(advTotalAmount) + ')') : ' ไม่มีรายการขอเบิกเงินฉุกเฉินค้างในงวด';
   h += '<div class="insight-card-item pink">' +
     '<div class="insight-card-top">' +
-      '<span class="insight-badge pink"><i class="fa-solid fa-stopwatch"></i> วินัยเวลาทำงาน: การมาสาย &amp; ขาดงาน</span>' +
+      '<span class="insight-badge pink"><i class="fa-solid fa-stopwatch"></i> ⏱️ วินัยเวลาทำงาน &amp; ขอเบิกเงินฉุกเฉิน (PTN Time)</span>' +
       '<span class="insight-impact pink">หักสายสะสม: ฿' + fmt(totalLateDeduct) + '</span>' +
     '</div>' +
     '<p style="font-size:12px;color:#475569;margin-bottom:6px">' +
-      '<strong>ปัญหาที่พบ:</strong> มีการขาดงานสะสมรวม ' + totalAbsent + ' วัน และหักสาย ฿' + fmt(totalLateDeduct) + ' บาท พบพนักงานบางรายสูญเสียสิทธิ์เบี้ยขยันจากการมาสายเพียงเล็กน้อย' +
+      '<strong>สรุปวิเคราะห์ข้อมูล:</strong> พบสถิติขาดงานสะสม ' + totalAbsent + ' วัน และหักเงินมาสาย ฿' + fmt(totalLateDeduct) + ' บาท' + advSubText + ' ซึ่งสะท้อนทั้งวินัยการทำงานและสภาพคล่องทางการเงินของพนักงาน' +
     '</p>' +
     '<div class="insight-action-box pink">' +
-      '<div style="font-weight:700;color:#831843;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> แนวทางแก้ไข &amp; ปรับปรุง (Action Plan):</div>' +
+      '<div style="font-weight:700;color:#831843;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> ข้อเสนอแนะ &amp; แนวทางแก้ไข (Action Plan):</div>' +
       '<ul style="margin-left:16px;color:#334155;line-height:1.5;font-size:11.5px">' +
-        '<li><strong>จัดกะเวลาเข้างานแบบยืดหยุ่น (Flexible Shift):</strong> เสนอกะ 08:30-17:30 น. สำหรับพนักงานที่เดินทางไกลเพื่อลดปัญหาจราจร</li>' +
-        '<li><strong>ระบบเตือนก่อนหมดสิทธิ์ (Early Warning):</strong> แจ้งเตือนเมื่อพนักงานสายครบ 2 ครั้ง เพื่อให้ระวังตัวและรักษาเบี้ยขยัน</li>' +
+        '<li><strong>จัดกะเวลาเข้างานแบบยืดหยุ่น (Flexible Shifts):</strong> เสนอกะ 08:30-17:30 น. หรือ 09:00-18:00 น. สำหรับพนักงานที่เดินทางไกลเพื่อลดปัญหาจราจรติดขัด</li>' +
+        '<li><strong>ระบบแจ้งเตือนก่อนหลุดเบี้ยขยัน (Early Warning System):</strong> แจ้งเตือนผ่านไลน์หรือระบบเมื่อพนักงานสายครบ 2 ครั้ง เพื่อเตือนสติและรักษาสิทธิ์</li>' +
+        '<li><strong>ให้คำปรึกษาพนักงานที่ขอเบิกเงินถี่ (Financial Wellness):</strong> หัวหน้างานหรือ HR ควรเข้าพูดคุยสอบถามปัญหาสำหรับพนักงานที่ขอเบิกเงินล่วงหน้าบ่อยครั้ง</li>' +
       '</ul>' +
     '</div>' +
   '</div>';
 
-  // 3. Retention & Provident Fund
+  // 3. Workforce Stability, Retention & Provident Fund (Cost per Headcount)
   h += '<div class="insight-card-item green">' +
     '<div class="insight-card-top">' +
-      '<span class="insight-badge green"><i class="fa-solid fa-shield-heart"></i> การรักษาบุคลากร: กองทุนสำรองเลี้ยงชีพ (PF)</span>' +
+      '<span class="insight-badge green"><i class="fa-solid fa-shield-heart"></i> 👥 เสถียรภาพกำลังคน &amp; กองทุนสำรองเลี้ยงชีพ (PF)</span>' +
       '<span class="insight-impact green">อัตราการมาทำงาน ' + attendanceRate.toFixed(1) + '%</span>' +
     '</div>' +
     '<p style="font-size:12px;color:#475569;margin-bottom:6px">' +
-      '<strong>โอกาสต่อยอด:</strong> กองทุนสำรองเลี้ยงชีพเป็นเครื่องมือสร้างความภักดีและรักษาพนักงานที่มีคุณภาพให้อยู่กับองค์กรระยะยาว' +
+      '<strong>สรุปวิเคราะห์ข้อมูล:</strong> องค์กรมีอัตราความพร้อมในการทำงาน (Attendance Rate) อยู่ที่ ' + attendanceRate.toFixed(1) + '% มีกองทุนสำรองเลี้ยงชีพสะสม ฿' + fmt(totalGross > 0 ? (totalGross * 0.05) : 0) + ' เป็นจุดแข็งในการสร้างความมั่นคงและจูงใจพนักงานที่มีศักยภาพ' +
     '</p>' +
     '<div class="insight-action-box green">' +
-      '<div style="font-weight:700;color:#14532d;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> ข้อเสนอแนะเชิงรุก (Strategic Recommendation):</div>' +
+      '<div style="font-weight:700;color:#14532d;margin-bottom:3px"><i class="fa-solid fa-wrench"></i> ข้อเสนอแนะ &amp; แนวทางแก้ไข (Action Plan):</div>' +
       '<ul style="margin-left:16px;color:#334155;line-height:1.5;font-size:11.5px">' +
-        '<li><strong>ส่งเสริมพนักงานใหม่สมัคร PF ทันทีที่ผ่านโปร:</strong> จัดรอบแนะนำสิทธิประโยชน์การออมและเงินสมทบจากบริษัท</li>' +
+        '<li><strong>ส่งเสริมพนักงานบรรจุใหม่สมัคร PF ทันที:</strong> จัดอบรมแนะนำสิทธิประโยชน์ของการออมและการสมทบของบริษัททันทีที่ผ่านการทดลองงาน (Probation)</li>' +
+        '<li><strong>นำผลประเมินรายบุคคลไปจัดทำ Talent Roadmap:</strong> พนักงานกลุ่มเด่น (เกรด A/A+) ควรได้รับการพัฒนาทักษะหัวหน้างาน (Succession Plan)</li>' +
+        '<li><strong>ติดตามพนักงานกลุ่มเฝ้าระวังด้วยแผน PIP:</strong> จัดทำ Performance Improvement Plan ภายใน 30-60 วัน เพื่อให้โอกาสปรับปรุงตัวก่อนมาตรการขั้นเด็ดขาด</li>' +
       '</ul>' +
     '</div>' +
   '</div>';
@@ -4717,17 +5316,31 @@ function renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLate
   container.innerHTML = h;
 }
 
-function renderAnalyticsEmployeeMatrix(allHistory, selYear, selDept) {
+function renderAnalyticsEmployeeMatrix(allHistory, selYear, selBranch, selDept) {
   var tbody = document.getElementById('analyticsMatrixBody');
   if (!tbody) return;
 
-  var list = allHistory;
+  var list = allHistory || [];
   if (selYear && selYear !== 'ALL') {
     list = list.filter(function(x) { return periodMatchesYear(x.period, selYear); });
+  }
+  if (selBranch && selBranch !== 'ALL') {
+    list = list.filter(function(x) {
+      var b = x.branchId || x.branch_id || 'B01';
+      return b === selBranch;
+    });
   }
   if (selDept && selDept !== 'ALL') {
     list = list.filter(function(x) { return (x.department || '').trim() === selDept.trim(); });
   }
+
+  // Pre-calculate Advance Requests by Employee
+  var empAdvMap = {};
+  (cachedAdvanceStats || []).forEach(function(a) {
+    if (a.emp_id) {
+      empAdvMap[a.emp_id] = (empAdvMap[a.emp_id] || 0) + (Number(a.amount) || 0);
+    }
+  });
 
   var empMap = {};
   list.forEach(function(r) {
@@ -4736,6 +5349,7 @@ function renderAnalyticsEmployeeMatrix(allHistory, selYear, selDept) {
         empId: r.empId,
         fullName: r.fullName,
         nickname: r.nickname,
+        branchId: r.branchId || r.branch_id || 'B01',
         department: r.department,
         baseSalary: Number(r.baseSalary) || 0,
         totalAbsent: 0,
@@ -4745,7 +5359,8 @@ function renderAnalyticsEmployeeMatrix(allHistory, selYear, selDept) {
         lateCount: 0,
         totalAllowance: 0,
         totalOtHours: 0,
-        periodsCount: 0
+        periodsCount: 0,
+        advanceRequests: empAdvMap[r.empId] || 0
       };
     }
     var e = empMap[r.empId];
@@ -4761,32 +5376,38 @@ function renderAnalyticsEmployeeMatrix(allHistory, selYear, selDept) {
     if (Number(r.baseSalary) > 0) e.baseSalary = Number(r.baseSalary);
   });
 
-  if (!selDept || selDept === 'ALL') {
-    (State.employees || []).forEach(function(emp) {
-      if (!empMap[emp.empId]) {
-        empMap[emp.empId] = {
-          empId: emp.empId,
-          fullName: emp.fullName,
-          nickname: emp.nickname,
-          department: emp.department,
-          baseSalary: Number(emp.baseSalary) || 0,
-          totalAbsent: 0,
-          totalLeave: 0,
-          totalSick: 0,
-          totalLateDeduct: 0,
-          lateCount: 0,
-          totalAllowance: 0,
-          totalOtHours: 0,
-          periodsCount: 0
-        };
-      }
-    });
-  }
+  // Include active employees who may not have payroll history in selected period if branch/dept permits
+  (State.employees || []).forEach(function(emp) {
+    var b = emp.branch_id || emp.branchId || 'B01';
+    var d = (emp.department || '').trim();
+    var matchBranch = (!selBranch || selBranch === 'ALL' || b === selBranch);
+    var matchDept = (!selDept || selDept === 'ALL' || d === selDept.trim());
+    if (matchBranch && matchDept && !empMap[emp.empId]) {
+      empMap[emp.empId] = {
+        empId: emp.empId,
+        fullName: emp.fullName,
+        nickname: emp.nickname,
+        branchId: b,
+        department: emp.department,
+        baseSalary: Number(emp.baseSalary) || 0,
+        totalAbsent: 0,
+        totalLeave: 0,
+        totalSick: 0,
+        totalLateDeduct: 0,
+        lateCount: 0,
+        totalAllowance: 0,
+        totalOtHours: 0,
+        periodsCount: 0,
+        advanceRequests: empAdvMap[emp.empId] || 0
+      };
+    }
+  });
 
   var emps = Object.values(empMap);
   if (emps.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:24px">ไม่มีข้อมูลพนักงานในช่วงเวลาที่เลือก</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted" style="padding:24px">ไม่มีข้อมูลพนักงานในช่วงเวลาที่เลือก</td></tr>';
     updateMatrixCounters(0, 0, 0, 0, 0);
+    cachedCurrentMatrixData = [];
     return;
   }
 
@@ -4800,7 +5421,7 @@ function renderAnalyticsEmployeeMatrix(allHistory, selYear, selDept) {
   var countWarn = 0;
   var countTerm = 0;
 
-  var rowsHtml = '';
+  var processedData = [];
 
   emps.forEach(function(e) {
     var cat = 'STANDARD';
@@ -4812,7 +5433,7 @@ function renderAnalyticsEmployeeMatrix(allHistory, selYear, selDept) {
       cat = 'TERMINATION';
       countTerm++;
       badgeHtml = '<span style="background:#fee2e2;color:#b91c1c;padding:3px 10px;border-radius:20px;font-weight:800;font-size:11px;display:inline-block"><i class="fa-solid fa-triangle-exclamation"></i> 🚨 เข้าข่ายเลิกจ้าง</span>';
-      recText = '<span style="color:#991b1b"><strong>เข้าข่ายความผิดวินัยร้ายแรงตามกฎหมายแรงงาน (มาตรา 119):</strong> ขาดงานเกินเกณฑ์สะสม ' + e.totalAbsent + ' วัน ควรออกหนังสือเตือนขั้นเด็ดขาด หรือรวบรวมหลักฐานพิจารณาพักงาน/เลิกจ้าง</span>';
+      recText = '<span style="color:#991b1b"><strong>เข้าข่ายความผิดวินัยร้ายแรงตามกฎหมายแรงงาน (ม.119):</strong> ขาดงานเกินเกณฑ์สะสม ' + e.totalAbsent + ' วัน ควรออกหนังสือเตือนขั้นเด็ดขาด หรือรวบรวมหลักฐานพิจารณาพักงาน/เลิกจ้าง</span>';
     } else if (e.totalAbsent >= 2 || e.totalLateDeduct >= 600 || totalLeaves >= 10 || e.lateCount >= 4) {
       cat = 'WARNING';
       countWarn++;
@@ -4830,27 +5451,17 @@ function renderAnalyticsEmployeeMatrix(allHistory, selYear, selDept) {
       recText = '<span style="color:#334155"><strong>เสนอปรับขึ้นเงินเดือนตามเกณฑ์ปกติประจำปี (+2% ถึง +4%):</strong> ปฏิบัติงานตามมาตรฐาน OT สม่ำเสมอ ลาตามสิทธิ์ถูกต้อง</span>';
     }
 
-    var nick = e.nickname ? ' (' + esc(e.nickname) + ')' : '';
-    var absentStyle = e.totalAbsent > 0 ? 'color:#dc2626;font-weight:800' : 'color:#16a34a';
-    var lateStyle = e.totalLateDeduct > 0 ? 'color:#dc2626;font-weight:800' : 'color:#16a34a';
-
-    rowsHtml += '<tr class="analytics-matrix-row" data-cat="' + cat + '">' +
-      '<td><strong style="color:var(--primary)">' + esc(e.empId) + '</strong></td>' +
-      '<td><strong>' + esc(e.fullName) + '</strong><span style="font-size:10.5px;color:#64748b">' + nick + '</span></td>' +
-      '<td>' + esc(e.department || '-') + '</td>' +
-      '<td style="text-align:right;font-family:monospace;font-weight:700">฿' + fmt(e.baseSalary) + '</td>' +
-      '<td style="text-align:center;font-family:monospace;' + absentStyle + '">' + e.totalAbsent + '</td>' +
-      '<td style="text-align:center;font-family:monospace">' + totalLeaves + '</td>' +
-      '<td style="text-align:center;font-family:monospace;' + lateStyle + '">' + (e.lateCount > 0 ? e.lateCount + ' ครั้ง / ฿' + fmt(e.totalLateDeduct) : '0 / ฿0') + '</td>' +
-      '<td style="text-align:right;font-family:monospace;font-weight:700;color:var(--success)">฿' + fmt(e.totalAllowance) + '</td>' +
-      '<td style="text-align:center">' + badgeHtml + '</td>' +
-      '<td style="font-size:11.5px;line-height:1.4">' + recText + '</td>' +
-    '</tr>';
+    e.category = cat;
+    e.badgeHtml = badgeHtml;
+    e.recText = recText;
+    e.totalLeaves = totalLeaves;
+    e.branchName = getBranchName(e.branchId);
+    processedData.push(e);
   });
 
-  tbody.innerHTML = rowsHtml;
+  cachedCurrentMatrixData = processedData;
   updateMatrixCounters(countAll, countPromo, countStd, countWarn, countTerm);
-  applyMatrixCategoryFilter();
+  renderMatrixTableRows();
 }
 
 function updateMatrixCounters(all, promo, std, warn, term) {
@@ -4877,6 +5488,65 @@ function updateMatrixCounters(all, promo, std, warn, term) {
   if (pillTerm) pillTerm.textContent = term;
 }
 
+function renderMatrixTableRows() {
+  var tbody = document.getElementById('analyticsMatrixBody');
+  if (!tbody) return;
+
+  var searchInput = document.getElementById('analyticsMatrixSearchInput');
+  var query = (searchInput ? searchInput.value : '').trim().toLowerCase();
+
+  var filtered = (cachedCurrentMatrixData || []).filter(function(e) {
+    if (currentAnalyticsCategory !== 'ALL' && e.category !== currentAnalyticsCategory) {
+      return false;
+    }
+    if (query) {
+      var matchEmpId = (e.empId || '').toLowerCase().indexOf(query) >= 0;
+      var matchName = (e.fullName || '').toLowerCase().indexOf(query) >= 0;
+      var matchNick = (e.nickname || '').toLowerCase().indexOf(query) >= 0;
+      var matchDept = (e.department || '').toLowerCase().indexOf(query) >= 0;
+      var matchBranch = (e.branchName || '').toLowerCase().indexOf(query) >= 0;
+      if (!matchEmpId && !matchName && !matchNick && !matchDept && !matchBranch) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted" style="padding:24px">ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา</td></tr>';
+    return;
+  }
+
+  var rowsHtml = '';
+  filtered.forEach(function(e) {
+    var nick = e.nickname ? ' (' + esc(e.nickname) + ')' : '';
+    var absentStyle = e.totalAbsent > 0 ? 'color:#dc2626;font-weight:800' : 'color:#16a34a';
+    var lateStyle = e.totalLateDeduct > 0 ? 'color:#dc2626;font-weight:800' : 'color:#16a34a';
+    var advStyle = e.advanceRequests > 0 ? 'color:#d97706;font-weight:700' : 'color:#64748b';
+
+    rowsHtml += '<tr class="analytics-matrix-row" data-cat="' + e.category + '">' +
+      '<td><strong style="color:var(--primary)">' + esc(e.empId) + '</strong></td>' +
+      '<td><strong>' + esc(e.fullName) + '</strong><span style="font-size:10.5px;color:#64748b">' + nick + '</span></td>' +
+      '<td><span style="font-size:11px;color:#334155"><i class="fa-solid fa-store" style="color:#0284c7;font-size:10px"></i> ' + esc(e.branchName) + '</span></td>' +
+      '<td>' + esc(e.department || '-') + '</td>' +
+      '<td style="text-align:right;font-family:monospace;font-weight:700">฿' + fmt(e.baseSalary) + '</td>' +
+      '<td style="text-align:center;font-family:monospace;' + absentStyle + '">' + e.totalAbsent + '</td>' +
+      '<td style="text-align:center;font-family:monospace">' + e.totalLeaves + '</td>' +
+      '<td style="text-align:center;font-family:monospace;' + lateStyle + '">' + (e.lateCount > 0 ? e.lateCount + ' ครั้ง / ฿' + fmt(e.totalLateDeduct) : '0 / ฿0') + '</td>' +
+      '<td style="text-align:right;font-family:monospace;font-weight:700;color:var(--success)">฿' + fmt(e.totalAllowance) + '</td>' +
+      '<td style="text-align:right;font-family:monospace;' + advStyle + '">' + (e.advanceRequests > 0 ? '฿' + fmt(e.advanceRequests) : '-') + '</td>' +
+      '<td style="text-align:center">' + e.badgeHtml + '</td>' +
+      '<td style="font-size:11.5px;line-height:1.4">' + e.recText + '</td>' +
+    '</tr>';
+  });
+
+  tbody.innerHTML = rowsHtml;
+}
+
+function onAnalyticsMatrixSearch(query) {
+  renderMatrixTableRows();
+}
+
 function filterAnalyticsMatrix(cat) {
   currentAnalyticsCategory = cat;
   document.querySelectorAll('.analytics-filter-btn').forEach(function(btn) {
@@ -4884,25 +5554,96 @@ function filterAnalyticsMatrix(cat) {
   });
   var activeBtn = document.getElementById('btnFilter-' + cat);
   if (activeBtn) activeBtn.classList.add('active');
-  applyMatrixCategoryFilter();
+  renderMatrixTableRows();
 }
 
-function applyMatrixCategoryFilter() {
-  var rows = document.querySelectorAll('.analytics-matrix-row');
-  rows.forEach(function(r) {
-    if (currentAnalyticsCategory === 'ALL' || r.getAttribute('data-cat') === currentAnalyticsCategory) {
-      r.style.display = '';
-    } else {
-      r.style.display = 'none';
-    }
+function exportAnalyticsMatrixToExcel() {
+  if (!cachedCurrentMatrixData || cachedCurrentMatrixData.length === 0) {
+    showToast('ไม่มีข้อมูลในตารางสำหรับส่งออก Excel', 'warning');
+    return;
+  }
+
+  var yrSel = document.getElementById('analyticsYearSelect');
+  var yr = yrSel ? yrSel.value : '2569';
+  var branchSel = document.getElementById('analyticsBranchSelect');
+  var branch = branchSel ? branchSel.value : 'ALL';
+  var deptSel = document.getElementById('analyticsDeptSelect');
+  var dept = deptSel ? deptSel.value : 'ALL';
+
+  var headers = [
+    'รหัสพนักงาน',
+    'ชื่อ-นามสกุล',
+    'ชื่อเล่น',
+    'สาขา',
+    'แผนก',
+    'ฐานเงินเดือน (บาท)',
+    'ขาดงาน (วัน)',
+    'ลากิจ/ป่วย (วัน)',
+    'มาสาย (ครั้ง)',
+    'หักเงินมาสาย (บาท)',
+    'เบี้ยขยันสะสม (บาท)',
+    'เบิกเงินฉุกเฉิน (บาท)',
+    'สถานะผลการประเมิน',
+    'ข้อเสนอแนะเชิงบริหาร & มาตรการ'
+  ];
+
+  var csvRows = [];
+  csvRows.push(headers.map(function(h) { return '"' + h.replace(/"/g, '""') + '"'; }).join(','));
+
+  cachedCurrentMatrixData.forEach(function(e) {
+    var catText = '';
+    if (e.category === 'PROMOTION') catText = 'เกรด A+ (เด่นมาก / ปรับขึ้นเงินเดือน)';
+    else if (e.category === 'STANDARD') catText = 'เกรด B/B+ (มาตรฐานตามเกณฑ์)';
+    else if (e.category === 'WARNING') catText = 'เฝ้าระวัง / ตักเตือนลายลักษณ์อักษร (PIP)';
+    else if (e.category === 'TERMINATION') catText = 'เข้าข่ายพักงาน / พิจารณาเลิกจ้าง (ม.119)';
+
+    var cleanRec = (e.recText || '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+
+    var row = [
+      e.empId || '',
+      e.fullName || '',
+      e.nickname || '',
+      e.branchName || '',
+      e.department || '',
+      e.baseSalary || 0,
+      e.totalAbsent || 0,
+      e.totalLeaves || 0,
+      e.lateCount || 0,
+      e.totalLateDeduct || 0,
+      e.totalAllowance || 0,
+      e.advanceRequests || 0,
+      catText,
+      cleanRec
+    ];
+
+    csvRows.push(row.map(function(val) {
+      return '"' + String(val).replace(/"/g, '""') + '"';
+    }).join(','));
   });
+
+  // Prepend UTF-8 BOM (\uFEFF) for Excel Thai encoding support
+  var csvContent = '\uFEFF' + csvRows.join('\r\n');
+  var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'PTN_Performance_Appraisal_Matrix_' + yr + '_' + branch + '_' + dept + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showToast('ส่งออกไฟล์ Excel (CSV) สำเร็จเรียบร้อย', 'success');
 }
 
 function printAnalyticsReport() {
   var yrSel = document.getElementById('analyticsYearSelect');
   var yr = yrSel ? yrSel.value : '2569';
+  var branchSel = document.getElementById('analyticsBranchSelect');
+  var branch = branchSel ? branchSel.value : 'ALL';
   var deptSel = document.getElementById('analyticsDeptSelect');
   var dept = deptSel ? deptSel.value : 'ALL';
+
+  var branchText = (branch === 'ALL') ? 'ทุกสาขา' : getBranchName(branch);
   var deptText = (dept === 'ALL') ? 'ทุกแผนก' : ('แผนก ' + dept);
 
   var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
@@ -4912,6 +5653,7 @@ function printAnalyticsReport() {
 
   if (document.getElementById('analyticsPrintCompName')) document.getElementById('analyticsPrintCompName').textContent = compName;
   if (document.getElementById('analyticsPrintYearDisplay')) document.getElementById('analyticsPrintYearDisplay').textContent = yr;
+  if (document.getElementById('analyticsPrintBranchDisplay')) document.getElementById('analyticsPrintBranchDisplay').textContent = branchText;
   if (document.getElementById('analyticsPrintDeptDisplay')) document.getElementById('analyticsPrintDeptDisplay').textContent = deptText;
   if (document.getElementById('analyticsPrintDateDisplay')) document.getElementById('analyticsPrintDateDisplay').textContent = printDate;
 
@@ -6350,6 +7092,7 @@ function renderTimeAttendanceTodayLogs(logs) {
         '</div>' +
         '<div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div>' +
         (l.break_out ? '<div style="font-size:10.5px;color:#b45309;font-weight:700;margin-top:2px"><i class="fa-solid fa-mug-hot"></i> พัก ' + l.break_out + (l.break_in ? ' - ' + l.break_in : ' (กำลังพัก)') + (l.break_minutes > 0 ? ' (' + l.break_minutes + 'น.)' : '') + '</div>' : '') +
+        (l.has_leave_conflict ? '<div style="font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px" title="พนักงานมีใบลาที่อนุมัติไว้ในวันนี้ แต่มาทำงานจริง ระบบตรวจจับอัตโนมัติและยกเว้นการหักวันลา"><i class="fa-solid fa-shield-halved text-amber"></i> <span>มีใบลาอนุมัติไว้แต่วันนี้มาทำงานจริง (ระบบบันทึกเวลาทำงานปกติ ไม่หักวันลา)</span></div>' : '') +
       '</td>' +
       '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
       '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
@@ -6700,6 +7443,10 @@ function getAttendanceStatusBadge(status) {
 }
 
 function getAttendanceActionButtons(type, item) {
+  var canApprove = hasPermission('approve_attendance') || isSuperAdmin();
+  if (!canApprove) {
+    return '<span style="font-size:11px;color:#94a3b8;font-style:italic">ดูได้อย่างเดียว</span>';
+  }
   var status = item.status || 'PENDING';
   var html = '';
   if (status === 'PENDING') {
@@ -7939,19 +8686,192 @@ function playAdminNotificationSound() {
   } catch (e) {}
 }
 
-function requestAdminBrowserNotification() {
-  if (!('Notification' in window)) {
-    alert('เบราว์เซอร์นี้ไม่รองรับ Desktop Notification');
+// ==============================================================================
+// WEB PUSH NOTIFICATION CLIENT CONTROLLER (VAPID + SERVICE WORKER)
+// ==============================================================================
+var _currentPushSubscription = null;
+
+function urlBase64ToUint8Array(base64String) {
+  var padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  var rawData = window.atob(base64);
+  var outputArray = new Uint8Array(rawData.length);
+  for (var i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+function initServiceWorkerAndPush() {
+  if (!('serviceWorker' in navigator)) {
+    console.log('Service Worker is not supported by this browser');
     return;
   }
-  Notification.requestPermission().then(function(perm) {
-    if (perm === 'granted') {
-      showToast('เปิดการแจ้งเตือนบนหน้าจอสำเร็จ', 'success');
-      triggerDesktopNotification('PTN Payroll 🔔', 'ระบบเปิดแจ้งเตือนบนหน้าจอเรียบร้อยแล้ว');
-    } else {
-      showToast('การแจ้งเตือนหน้าจอถูกปฏิเสธ', 'error');
-    }
+
+  navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    .then(function(reg) {
+      console.log('PTN Service Worker active:', reg.scope);
+      checkPushSubscriptionStatus(reg);
+    })
+    .catch(function(err) {
+      console.warn('Service Worker registration note:', err);
+    });
+}
+
+function checkPushSubscriptionStatus(reg) {
+  if (!reg || !reg.pushManager) return;
+  reg.pushManager.getSubscription().then(function(sub) {
+    _currentPushSubscription = sub;
+    updatePushUiStatus(Boolean(sub));
+  }).catch(function(e) {
+    console.warn('getSubscription note:', e);
   });
+}
+
+function updatePushUiStatus(isSubscribed) {
+  var btn = document.getElementById('btnToggleWebPush');
+  var statusText = document.getElementById('webPushStatusText');
+  if (btn) {
+    if (isSubscribed) {
+      btn.innerHTML = '<i class="fa-solid fa-bell-slash"></i> ปิดรับแจ้งเตือน (Web Push)';
+      btn.className = 'btn btn-outline btn-sm';
+      btn.style.borderColor = '#cbd5e1';
+      btn.style.color = '#64748b';
+    } else {
+      btn.innerHTML = '<i class="fa-solid fa-bell"></i> เปิดรับแจ้งเตือนหน้าจอ (Web Push)';
+      btn.className = 'btn btn-primary btn-sm';
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }
+  }
+  if (statusText) {
+    if (isSubscribed) {
+      statusText.innerHTML = '<span style="color:#059669;font-weight:700"><i class="fa-solid fa-circle-check"></i> เปิดรับแจ้งเตือนแล้ว (เด้งเตือน Real-time 1-3 วิ)</span>';
+    } else {
+      statusText.innerHTML = '<span style="color:#64748b">⚪ ยังไม่ได้เปิดรับแจ้งเตือนบนอุปกรณ์นี้</span>';
+    }
+  }
+}
+
+function toggleWebPushSubscription() {
+  if (_currentPushSubscription) {
+    unsubscribeWebPush();
+  } else {
+    subscribeWebPush();
+  }
+}
+
+function subscribeWebPush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('อุปกรณ์หรือเบราว์เซอร์นี้ไม่รองรับ Web Push Notification\n(หากใช้ iPhone ต้องกด "เพิ่มไปยังหน้าจอโฮม / Add to Home Screen" ก่อน)');
+    return;
+  }
+
+  showToast('กำลังขออนุญาตและลงทะเบียนรับการแจ้งเตือน...', 'info');
+
+  callApi('getVapidPublicKey')
+    .then(function(res) {
+      if (!res || !res.publicKey) {
+        throw new Error('ไม่สามารถดึง VAPID Public Key จากเซิร์ฟเวอร์ได้');
+      }
+      var vapidKey = res.publicKey;
+      return navigator.serviceWorker.ready.then(function(reg) {
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey)
+        });
+      });
+    })
+    .then(function(sub) {
+      _currentPushSubscription = sub;
+      var subJson = sub.toJSON();
+      var p256dh = (subJson.keys && subJson.keys.p256dh) || '';
+      var auth = (subJson.keys && subJson.keys.auth) || '';
+      var endpoint = sub.endpoint;
+
+      return callApi('savePushSubscription', {
+        empId: (State.currentUser && State.currentUser.empId) || (State.currentUser && State.currentUser.username) || 'ADMIN',
+        endpoint: endpoint,
+        p256dh: p256dh,
+        auth: auth,
+        userAgent: navigator.userAgent
+      });
+    })
+    .then(function(saveRes) {
+      updatePushUiStatus(true);
+      showToast('เปิดรับการแจ้งเตือน Web Push สำเร็จ! พร้อมเด้งเตือนแบบ Real-time', 'success');
+      // Trigger instant test notification
+      sendTestWebPush();
+    })
+    .catch(function(err) {
+      console.error('Subscription error:', err);
+      showToast('ไม่สามารถเปิดการแจ้งเตือนได้: ' + err.message, 'error');
+    });
+}
+
+function unsubscribeWebPush() {
+  if (!_currentPushSubscription) return;
+  var endpoint = _currentPushSubscription.endpoint;
+  _currentPushSubscription.unsubscribe()
+    .then(function() {
+      _currentPushSubscription = null;
+      updatePushUiStatus(false);
+      return callApi('removePushSubscription', { endpoint: endpoint });
+    })
+    .then(function() {
+      showToast('ยกเลิกการรับแจ้งเตือนบนอุปกรณ์นี้เรียบร้อยแล้ว', 'info');
+    })
+    .catch(function(err) {
+      showToast('เกิดข้อผิดพลาด: ' + err.message, 'error');
+    });
+}
+
+function sendTestWebPush() {
+  showToast('กำลังส่งการแจ้งเตือนทดสอบ...', 'info');
+  callApi('sendTestPushNotification', {
+    endpoint: _currentPushSubscription ? _currentPushSubscription.endpoint : null,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+  .then(function(r) {
+    if (r.success) {
+      showToast(r.message || 'ส่งแจ้งเตือนสำเร็จ', 'success');
+    } else {
+      showToast(r.message || 'เกิดข้อผิดพลาด', 'warning');
+    }
+  })
+  .catch(function(e) {
+    showToast('Error: ' + e.message, 'error');
+  });
+}
+
+function broadcastPayslipPushNotification(period) {
+  var targetPeriod = period || State.period || 'ล่าสุด';
+  var msg = 'เงินเดือนงวด ' + targetPeriod + '  เช็กสลิปออนไลน์ได้ทันที';
+  if (!confirm('ยืนยันส่งการแจ้งเตือน Web Push ไปยังพนักงานทุกคนใช่หรือไม่?\n\nข้อความที่จะส่ง:\n"บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด: ' + msg + '"')) {
+    return;
+  }
+
+  showToast('กำลังส่งการแจ้งเตือนสลิปเงินเดือนไปยังอุปกรณ์พนักงานทุกคน...', 'info');
+  callApi('broadcastPayslipNotification', {
+    period: targetPeriod,
+    title: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
+    body: msg,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+  .then(function(r) {
+    if (r.success) {
+      showToast(r.message, 'success');
+    } else {
+      showToast(r.message || 'เกิดข้อผิดพลาดในการส่งแจ้งเตือน', 'error');
+    }
+  })
+  .catch(function(e) {
+    showToast('Error: ' + e.message, 'error');
+  });
+}
+
+function requestAdminBrowserNotification() {
+  toggleWebPushSubscription();
 }
 
 function triggerDesktopNotification(title, body) {
@@ -7966,8 +8886,13 @@ function triggerDesktopNotification(title, body) {
 }
 
 function testAdminNotification() {
-  playAdminNotificationSound();
-  showToast('🔔 [ทดสอบ] มีคำขอ OT เข้าใหม่ 1 รายการ', 'info');
-  triggerDesktopNotification('PTN Payroll ทดสอบ 🔔', 'ระบบแจ้งเตือนคำขอใหม่อัตโนมัติกำลังทำงาน');
+  sendTestWebPush();
+}
+
+// Auto-register Service Worker on startup
+if (typeof window !== 'undefined') {
+  window.addEventListener('DOMContentLoaded', function() {
+    initServiceWorkerAndPush();
+  });
 }
 

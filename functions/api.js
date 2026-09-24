@@ -46,24 +46,33 @@ async function getMasterUnlockToken(windowOffset = 0) {
 }
 
 function getDefaultRolePermissions(role) {
-  if (role === 'Admin / HR' || role === 'Admin' || role === 'Super Admin') {
+  const r = String(role || '').toLowerCase();
+  if (r.includes('super') || r === 'admin / hr' || r === 'admin') {
     return ['all'];
-  } else if (role === 'HR Payroll' || role === 'HR') {
+  } else if (r.includes('supervisor')) {
+    return [
+      'view_emp', 'view_attendance', 'approve_attendance', 'unlock_device'
+    ];
+  } else if (r.includes('payroll') || r === 'hr') {
     return [
       'view_dash', 'view_emp', 'view_salary', 'edit_emp',
       'view_inputs', 'edit_inputs', 'populate_inputs',
       'view_payroll', 'calc_payroll', 'view_payslip',
-      'view_history', 'print_history', 'export_csv'
+      'view_history', 'print_history', 'export_csv',
+      'view_analytics', 'view_documents', 'issue_salary_cert',
+      'export_bank_files', 'export_tax_sso', 'view_attendance', 'sync_ptn_time'
     ];
-  } else if (role === 'HR Time Attendance') {
+  } else if (r.includes('attendance')) {
     return [
       'view_emp', 'view_inputs', 'edit_inputs', 'populate_inputs',
-      'view_history', 'print_history'
+      'view_attendance', 'approve_attendance', 'unlock_device',
+      'sync_ptn_time', 'view_history', 'print_history'
     ];
-  } else if (role === 'Accounting / Finance') {
+  } else if (r.includes('accounting') || r.includes('finance')) {
     return [
       'view_dash', 'view_payroll', 'view_payslip',
-      'view_history', 'print_history', 'export_csv'
+      'view_history', 'print_history', 'export_csv',
+      'view_analytics', 'view_documents', 'export_bank_files', 'export_tax_sso'
     ];
   } else {
     // General User
@@ -82,6 +91,21 @@ async function isUserSuperAdmin(db, username) {
   try {
     const perms = row.permissions ? JSON.parse(row.permissions) : [];
     if (perms.includes('all') && (r.includes('admin') || u === 'admin')) return true;
+  } catch(e) {}
+  return false;
+}
+
+async function userHasPermission(db, username, requiredPerm) {
+  if (!username) return false;
+  const u = String(username).trim().toLowerCase();
+  if (u === 'admin') return true;
+  const row = await db.prepare('SELECT role, permissions FROM users WHERE LOWER(username) = ?').bind(u).first();
+  if (!row) return false;
+  const r = String(row.role || '').toLowerCase();
+  if (r.includes('super') || r === 'admin / hr' || r === 'admin') return true;
+  try {
+    const perms = row.permissions ? JSON.parse(row.permissions) : [];
+    if (perms.includes('all') || perms.includes(requiredPerm)) return true;
   } catch(e) {}
   return false;
 }
@@ -130,6 +154,200 @@ async function ensureBranchTables(db) {
   }
 }
 
+// ==============================================================================
+// WEB PUSH NOTIFICATION (VAPID + RFC 8291 / 8292 ZERO-DEPENDENCY ENGINE)
+// ==============================================================================
+const VAPID_PUBLIC_KEY = 'BFIl918yWYb9YE1JrQvdjqVIDumstq7AoG68thcEd-eeVbOIMA5uhUO6SAlBaO7Ulj2CR3mcJQNHUrx1Crg4g7A';
+const VAPID_PRIVATE_KEY = 'LlUhEMxj03FGhpNmJ854Ht5XjxT7aOAFTEDWDs_SxIw';
+const VAPID_SUBJECT = 'mailto:admin@ptn-pharma.com';
+
+function base64UrlToBytes(b64url) {
+  const b64 = String(b64url).replace(/-/g, '+').replace(/_/g, '/');
+  const pad = b64.length % 4;
+  const padded = pad ? b64 + '='.repeat(4 - pad) : b64;
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function createVapidJwt(audience) {
+  const pubBytes = base64UrlToBytes(VAPID_PUBLIC_KEY);
+  const x = bytesToBase64Url(pubBytes.slice(1, 33));
+  const y = bytesToBase64Url(pubBytes.slice(33, 65));
+
+  const privKey = await crypto.subtle.importKey(
+    'jwk',
+    { kty: 'EC', crv: 'P-256', x, y, d: VAPID_PRIVATE_KEY },
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  );
+
+  const encoder = new TextEncoder();
+  const header = bytesToBase64Url(encoder.encode(JSON.stringify({ typ: 'JWT', alg: 'ES256' })));
+  const claims = bytesToBase64Url(encoder.encode(JSON.stringify({
+    aud: audience,
+    exp: Math.floor(Date.now() / 1000) + 12 * 3600,
+    sub: VAPID_SUBJECT
+  })));
+
+  const data = encoder.encode(header + '.' + claims);
+  const sig = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privKey, data);
+  return header + '.' + claims + '.' + bytesToBase64Url(new Uint8Array(sig));
+}
+
+async function encryptWebPushPayload(clientP256dhB64, clientAuthB64, payloadString) {
+  const clientPublicKeyBytes = base64UrlToBytes(clientP256dhB64);
+  const clientAuthBytes = base64UrlToBytes(clientAuthB64);
+
+  // 1. Generate local ECDH key pair
+  const localKeyPair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    ['deriveBits']
+  );
+
+  // 2. Import client public key for ECDH
+  const clientKeyJwk = {
+    kty: 'EC',
+    crv: 'P-256',
+    x: bytesToBase64Url(clientPublicKeyBytes.slice(1, 33)),
+    y: bytesToBase64Url(clientPublicKeyBytes.slice(33, 65))
+  };
+  const clientPublicKey = await crypto.subtle.importKey(
+    'jwk',
+    clientKeyJwk,
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    []
+  );
+
+  // 3. Derive shared secret (32 bytes)
+  const sharedSecret = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: clientPublicKey },
+    localKeyPair.privateKey,
+    256
+  );
+
+  // 4. Export local public key in raw format (65 bytes)
+  const localPublicKeyRaw = new Uint8Array(await crypto.subtle.exportKey('raw', localKeyPair.publicKey));
+
+  // 5. HKDF for PRK using auth secret
+  const encoder = new TextEncoder();
+  const authInfoPrefix = encoder.encode('WebPush: info\0');
+  const authInfo = new Uint8Array(authInfoPrefix.length + clientPublicKeyBytes.length + localPublicKeyRaw.length);
+  authInfo.set(authInfoPrefix, 0);
+  authInfo.set(clientPublicKeyBytes, authInfoPrefix.length);
+  authInfo.set(localPublicKeyRaw, authInfoPrefix.length + clientPublicKeyBytes.length);
+
+  const ikmKey = await crypto.subtle.importKey('raw', sharedSecret, 'HKDF', false, ['deriveBits']);
+  const prkBits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: clientAuthBytes, info: authInfo },
+    ikmKey,
+    256
+  );
+
+  // 6. Generate 16 bytes random salt
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+
+  // 7. Derive Content Encryption Key (CEK, 16 bytes) and Nonce (12 bytes)
+  const prkKey = await crypto.subtle.importKey('raw', prkBits, 'HKDF', false, ['deriveBits']);
+  const cekBits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt, info: encoder.encode('Content-Encoding: aes128gcm\0') },
+    prkKey,
+    128
+  );
+  const nonceBits = await crypto.subtle.deriveBits(
+    { name: 'HKDF', hash: 'SHA-256', salt: salt, info: encoder.encode('Content-Encoding: nonce\0') },
+    prkKey,
+    96
+  );
+
+  // 8. Encrypt payload with AES-GCM
+  const cek = await crypto.subtle.importKey('raw', cekBits, 'AES-GCM', false, ['encrypt']);
+  const payloadBytes = encoder.encode(payloadString);
+  const record = new Uint8Array(payloadBytes.length + 1);
+  record.set(payloadBytes, 0);
+  record[payloadBytes.length] = 2; // record delimiter
+
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: nonceBits, tagLength: 128 },
+    cek,
+    record
+  );
+
+  // 9. Build aes128gcm body header
+  const header = new Uint8Array(16 + 4 + 1 + 65);
+  header.set(salt, 0);
+  new DataView(header.buffer).setUint32(16, 4096, false);
+  header[20] = 65;
+  header.set(localPublicKeyRaw, 21);
+
+  const finalBody = new Uint8Array(header.length + ciphertext.byteLength);
+  finalBody.set(header, 0);
+  finalBody.set(new Uint8Array(ciphertext), header.length);
+
+  return finalBody;
+}
+
+async function sendWebPush(subscription, payload) {
+  try {
+    const endpoint = subscription.endpoint;
+    const url = new URL(endpoint);
+    const audience = url.protocol + '//' + url.host;
+
+    const jwt = await createVapidJwt(audience);
+    const bodyBytes = await encryptWebPushPayload(subscription.p256dh, subscription.auth, typeof payload === 'string' ? payload : JSON.stringify(payload));
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+        'Content-Encoding': 'aes128gcm',
+        'TTL': '86400',
+        'Urgency': 'high',
+        'Authorization': `vapid t=${jwt}, k=${VAPID_PUBLIC_KEY}`
+      },
+      body: bodyBytes
+    });
+
+    if (res.status === 404 || res.status === 410) {
+      return { success: false, expired: true, status: res.status };
+    }
+    return { success: res.ok, status: res.status };
+  } catch(e) {
+    console.error('sendWebPush error:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+async function ensurePushTables(db) {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        emp_id TEXT,
+        endpoint TEXT UNIQUE NOT NULL,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run().catch(() => {});
+  } catch(e) {
+    console.error('ensurePushTables note:', e);
+  }
+}
+
 /**
  * ==============================================================================
  * PTN Payroll System V4.0 - Clean Enterprise Cloudflare D1 Backend
@@ -163,6 +381,7 @@ export async function onRequest(context) {
 
   try {
     await ensureBranchTables(db);
+    await ensurePushTables(db);
 
     let action = 'getAppInitialData';
     let params = {};
@@ -341,6 +560,7 @@ async function handleAction(db, action, params) {
         if (row.key === 'SignatoryTitleEn') settingsMap.signatoryTitleEn = row.value;
         if (row.key === 'EmployerSsoId') settingsMap.employerSsoId = row.value;
         if (row.key === 'CompanyBranch') settingsMap.companyBranch = row.value;
+        if (row.key === 'GeminiApiKey') settingsMap.geminiApiKey = row.value;
         if (row.key === `Period_Status_${period}`) {
           if (row.value && row.value.startsWith('CLOSED')) {
             isClosed = true;
@@ -403,6 +623,7 @@ async function handleAction(db, action, params) {
         position: e.position || '',
         branchId: e.branch_id || 'B01',
         allowAllBranches: e.allow_all_branches === 'true',
+        isOtEligible: (e.is_ot_eligible !== 'false' && e.is_ot_eligible !== false),
         baseSalary: Number(e.base_salary) || 0,
         bankName: e.bank_name || '',
         bankAccount: e.bank_account || '',
@@ -608,6 +829,7 @@ async function handleAction(db, action, params) {
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT "true"').run().catch(() => {});
       await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
       let probEndDate = emp.probationEndDate || '';
@@ -631,11 +853,12 @@ async function handleAction(db, action, params) {
 
       const branchIdVal = String(emp.branchId || emp.branch_id || 'B01').trim();
       const allowAllVal = (emp.allowAllBranches === 'true' || emp.allowAllBranches === true) ? 'true' : 'false';
+      const isOtEligibleVal = (emp.isOtEligible === false || emp.isOtEligible === 'false') ? 'false' : 'true';
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -645,7 +868,8 @@ async function handleAction(db, action, params) {
         taxVal, emp.remark || '',
         statusVal, probDays, probEndDate,
         photoUrlVal,
-        branchIdVal, allowAllVal
+        branchIdVal, allowAllVal,
+        isOtEligibleVal
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period
@@ -915,7 +1139,9 @@ async function handleAction(db, action, params) {
 
         const otQuery = await db.prepare(otSql).bind(...otBinds).all();
         for (const row of (otQuery.results || [])) {
-          const hrs = Number(row.total_hours) || 0;
+          const emp = employees.find(e => e.emp_id === row.emp_id);
+          const isOtEligible = !(emp && (emp.is_ot_eligible === 'false' || emp.is_ot_eligible === false));
+          const hrs = isOtEligible ? (Number(row.total_hours) || 0) : 0;
           otMap[row.emp_id] = hrs;
           totalOtHours += hrs;
         }
@@ -923,72 +1149,12 @@ async function handleAction(db, action, params) {
         console.warn('ot_requests query note:', e);
       }
 
-      // 3. Query approved leave requests in this cutoff window
-      let leaveMap = {};
-      let totalLeaveCount = 0;
-      let detailedLeaves = [];
-      try {
-        let leaveSql = `
-          SELECT emp_id, leave_type, SUM(days_count) as total_days
-          FROM leave_requests
-          WHERE status = 'APPROVED'
-            AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?))
-        `;
-        let leaveBinds = [startDate, endDate, startDate, endDate];
-        if (targetEmpId) {
-          leaveSql += ` AND emp_id = ?`;
-          leaveBinds.push(targetEmpId);
-        }
-        leaveSql += ` GROUP BY emp_id, leave_type`;
-
-        const leaveQuery = await db.prepare(leaveSql).bind(...leaveBinds).all();
-        for (const row of (leaveQuery.results || [])) {
-          if (!leaveMap[row.emp_id]) {
-            leaveMap[row.emp_id] = { sickCert: 0, sickNoCert: 0, business: 0 };
-          }
-          const days = Number(row.total_days) || 0;
-          totalLeaveCount += days;
-          if (row.leave_type === 'SICK_WITH_CERT') {
-            leaveMap[row.emp_id].sickCert += days;
-          } else if (row.leave_type === 'SICK_NO_CERT') {
-            leaveMap[row.emp_id].sickNoCert += days;
-          } else if (row.leave_type === 'BUSINESS' || row.leave_type === 'WITHOUT_PAY') {
-            leaveMap[row.emp_id].business += days;
-          }
-        }
-
-        // Detailed leaves to check date coverage
-        let detSql = `
-          SELECT emp_id, start_date, end_date, days_count, leave_type
-          FROM leave_requests
-          WHERE status = 'APPROVED'
-            AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?))
-        `;
-        let detBinds = [startDate, endDate, startDate, endDate];
-        if (targetEmpId) {
-          detSql += ` AND emp_id = ?`;
-          detBinds.push(targetEmpId);
-        }
-        const detQuery = await db.prepare(detSql).bind(...detBinds).all();
-        detailedLeaves = detQuery.results || [];
-      } catch (e) {
-        console.warn('leave_requests query note:', e);
-      }
-
-      function getLeaveDaysOnDate(empId, dateStr) {
-        let d = 0;
-        for (const lr of detailedLeaves) {
-          if (lr.emp_id === empId && dateStr >= lr.start_date && dateStr <= lr.end_date) {
-            d += Number(lr.days_count) || 1.0;
-          }
-        }
-        return d;
-      }
-
-      // 4. Query time_logs for OT hours, missing hours & early departures
+      // 3. Query time_logs for the cutoff window
       let missingHoursMap = {};
       let earlyDeductMap = {};
       let employeeHasLogs = {};
+      let logsByEmpDate = {};
+      let timeLogsList = [];
       try {
         let tlSql = `
           SELECT id, emp_id, date, clock_in, clock_out, work_hours, ot_hours, late_minutes, status, branch_id
@@ -1001,53 +1167,166 @@ async function handleAction(db, action, params) {
           tlBinds.push(targetEmpId);
         }
         const tlQuery = await db.prepare(tlSql).bind(...tlBinds).all();
-        for (const row of (tlQuery.results || [])) {
+        timeLogsList = tlQuery.results || [];
+        for (const row of timeLogsList) {
           employeeHasLogs[row.emp_id] = true;
+          logsByEmpDate[`${row.emp_id}_${row.date}`] = row;
 
-          // Merge any OT logged directly in time_logs if not already in otMap
-          const logOt = Number(row.ot_hours) || 0;
+          // Merge any OT logged directly in time_logs if not already in otMap (only if eligible)
+          const empForOt = employees.find(e => e.emp_id === row.emp_id);
+          const isRowOtEligible = !(empForOt && (empForOt.is_ot_eligible === 'false' || empForOt.is_ot_eligible === false));
+          const logOt = isRowOtEligible ? (Number(row.ot_hours) || 0) : 0;
           if (logOt > (otMap[row.emp_id] || 0)) {
             totalOtHours += (logOt - (otMap[row.emp_id] || 0));
             otMap[row.emp_id] = logOt;
           }
-
-          // Check if Sunday (Sunday = 0 in JS UTC day, only overtime, no regular shift deduction)
-          const logDate = new Date(row.date + 'T00:00:00Z');
-          if (logDate.getUTCDay() === 0) continue;
-
-          // Find employee info to calculate hourly rate based on actual workdays
-          const emp = employees.find(e => e.emp_id === row.emp_id);
-          const baseSal = emp ? (Number(emp.base_salary) || 0) : 0;
-          const branch = branchMap[row.branch_id] || (emp ? branchMap[emp.branch_id] : null);
-          const shiftHours = getShiftHoursForBranch(branch);
-
-          const dailyRate = periodWorkDays > 0 ? (baseSal / periodWorkDays) : (baseSal / 30);
-          const hourlyRate = shiftHours > 0 ? (dailyRate / shiftHours) : 0;
-
-          // Avoid double deduction if an approved leave already covers this date
-          const approvedLeaveDays = getLeaveDaysOnDate(row.emp_id, row.date);
-          if (approvedLeaveDays >= 1.0) continue; // Fully covered by approved leave
-
-          const coveredHours = approvedLeaveDays * shiftHours;
-          const targetHours = Math.max(0, shiftHours - coveredHours);
-          const workHours = Number(row.work_hours) || 0;
-          const lateMins = Number(row.late_minutes) || 0;
-
-          if (row.clock_in && row.clock_out && workHours > 0) {
-            if (workHours < targetHours) {
-              const missing = Math.round((targetHours - workHours) * 100) / 100;
-              missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + missing;
-              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (missing * hourlyRate);
-            }
-          } else if (row.clock_in && !row.clock_out && lateMins > 0) {
-            // Clocked in but missed clock out, apply late minutes deduction
-            const lateHours = Math.round((lateMins / 60) * 100) / 100;
-            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
-            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
-          }
         }
       } catch (e) {
         console.warn('time_logs sync note:', e);
+      }
+
+      // 4. Query approved leave requests & apply Automatic Attendance Overrides (ระบบตรวจจับการมาทำงานจริงในวันลาอัตโนมัติ)
+      let leaveMap = {};
+      let totalLeaveCount = 0;
+      let detailedLeaves = [];
+      let autoAdjustedLeaves = [];
+      let overriddenDatesByEmp = {}; // { 'EMP_YYYY-MM-DD': 'FULL' | 'HALF' }
+
+      try {
+        let detSql = `
+          SELECT id, emp_id, start_date, end_date, days_count, leave_type, reason
+          FROM leave_requests
+          WHERE status = 'APPROVED'
+            AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?) OR (start_date <= ? AND end_date >= ?))
+        `;
+        let detBinds = [startDate, endDate, startDate, endDate, startDate, endDate];
+        if (targetEmpId) {
+          detSql += ` AND emp_id = ?`;
+          detBinds.push(targetEmpId);
+        }
+        const detQuery = await db.prepare(detSql).bind(...detBinds).all();
+        detailedLeaves = detQuery.results || [];
+
+        for (const lr of detailedLeaves) {
+          const emp = employees.find(e => e.emp_id === lr.emp_id);
+          const origDays = Number(lr.days_count) || 1.0;
+          let daysDeductedDueToWork = 0;
+
+          // Check each date covered by this leave within cutoff window
+          let dCur = new Date(lr.start_date + 'T00:00:00Z');
+          const dEnd = new Date(lr.end_date + 'T00:00:00Z');
+
+          while (dCur <= dEnd) {
+            const dStr = dCur.toISOString().substring(0, 10);
+            if (dStr >= startDate && dStr <= endDate) {
+              const tl = logsByEmpDate[`${lr.emp_id}_${dStr}`];
+              if (tl && tl.clock_in) {
+                const branch = branchMap[tl.branch_id] || (emp ? branchMap[emp.branch_id] : null);
+                const shiftHours = getShiftHoursForBranch(branch);
+                const wHours = Number(tl.work_hours) || 0;
+
+                // FULL WORK DAY: clocked out with sufficient hours, or work_hours >= (shiftHours - 1.0), or work_hours >= 6
+                if ((tl.clock_out && wHours >= Math.max(6.0, shiftHours - 1.0)) || (tl.clock_out && wHours >= shiftHours * 0.75)) {
+                  daysDeductedDueToWork += 1.0;
+                  overriddenDatesByEmp[`${lr.emp_id}_${dStr}`] = 'FULL';
+                  autoAdjustedLeaves.push({
+                    empId: lr.emp_id,
+                    empName: emp ? emp.full_name : lr.emp_id,
+                    date: dStr,
+                    leaveType: lr.leave_type,
+                    type: 'FULL_WORK',
+                    workHours: wHours,
+                    shiftHours: shiftHours,
+                    originalDays: origDays,
+                    adjustedDeduction: 1.0,
+                    note: `มีใบลา ${lr.leave_type} แต่วันนี้มาทำงานจริง ${wHours} ชม. (เต็มกะ)`
+                  });
+                } else if (wHours >= 3.5) {
+                  // HALF WORK DAY: worked at least half day (3.5+ hrs)
+                  daysDeductedDueToWork += 0.5;
+                  overriddenDatesByEmp[`${lr.emp_id}_${dStr}`] = 'HALF';
+                  autoAdjustedLeaves.push({
+                    empId: lr.emp_id,
+                    empName: emp ? emp.full_name : lr.emp_id,
+                    date: dStr,
+                    leaveType: lr.leave_type,
+                    type: 'HALF_WORK',
+                    workHours: wHours,
+                    shiftHours: shiftHours,
+                    originalDays: origDays,
+                    adjustedDeduction: 0.5,
+                    note: `มีใบลา ${lr.leave_type} แต่วันนี้มาทำงานจริง ${wHours} ชม. (ครึ่งวัน)`
+                  });
+                }
+              }
+            }
+            dCur.setUTCDate(dCur.getUTCDate() + 1);
+          }
+
+          const effectiveDays = Math.max(0, origDays - daysDeductedDueToWork);
+          if (effectiveDays > 0) {
+            if (!leaveMap[lr.emp_id]) {
+              leaveMap[lr.emp_id] = { sickCert: 0, sickNoCert: 0, business: 0 };
+            }
+            totalLeaveCount += effectiveDays;
+            if (lr.leave_type === 'SICK_WITH_CERT') {
+              leaveMap[lr.emp_id].sickCert += effectiveDays;
+            } else if (lr.leave_type === 'SICK_NO_CERT') {
+              leaveMap[lr.emp_id].sickNoCert += effectiveDays;
+            } else if (lr.leave_type === 'BUSINESS' || lr.leave_type === 'WITHOUT_PAY') {
+              leaveMap[lr.emp_id].business += effectiveDays;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('leave_requests query note:', e);
+      }
+
+      function getLeaveDaysOnDate(empId, dateStr) {
+        const override = overriddenDatesByEmp[`${empId}_${dateStr}`];
+        if (override === 'FULL') return 0; // Full day worked, zero leave coverage needed
+        if (override === 'HALF') return 0.5; // Half day leave coverage
+        let d = 0;
+        for (const lr of detailedLeaves) {
+          if (lr.emp_id === empId && dateStr >= lr.start_date && dateStr <= lr.end_date) {
+            d += Number(lr.days_count) || 1.0;
+          }
+        }
+        return d;
+      }
+
+      // Calculate missing hours / early departures from timeLogsList
+      for (const row of timeLogsList) {
+        const logDate = new Date(row.date + 'T00:00:00Z');
+        if (logDate.getUTCDay() === 0) continue; // Sunday = 0
+
+        const emp = employees.find(e => e.emp_id === row.emp_id);
+        const baseSal = emp ? (Number(emp.base_salary) || 0) : 0;
+        const branch = branchMap[row.branch_id] || (emp ? branchMap[emp.branch_id] : null);
+        const shiftHours = getShiftHoursForBranch(branch);
+
+        const dailyRate = periodWorkDays > 0 ? (baseSal / periodWorkDays) : (baseSal / 30);
+        const hourlyRate = shiftHours > 0 ? (dailyRate / shiftHours) : 0;
+
+        const approvedLeaveDays = getLeaveDaysOnDate(row.emp_id, row.date);
+        if (approvedLeaveDays >= 1.0) continue; // Fully covered by approved leave
+
+        const coveredHours = approvedLeaveDays * shiftHours;
+        const targetHours = Math.max(0, shiftHours - coveredHours);
+        const workHours = Number(row.work_hours) || 0;
+        const lateMins = Number(row.late_minutes) || 0;
+
+        if (row.clock_in && row.clock_out && workHours > 0) {
+          if (workHours < targetHours) {
+            const missing = Math.round((targetHours - workHours) * 100) / 100;
+            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + missing;
+            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (missing * hourlyRate);
+          }
+        } else if (row.clock_in && !row.clock_out && lateMins > 0) {
+          const lateHours = Math.round((lateMins / 60) * 100) / 100;
+          missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
+          earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
+        }
       }
 
       // 5. Merge into monthly_inputs
@@ -1085,8 +1364,9 @@ async function handleAction(db, action, params) {
         const othDed = Number(exist.other_deduct) || 0;
         const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : fallbackOtRate;
 
-        // Apply synced data from PTN Time
-        const otHours = otMap[emp.emp_id] !== undefined ? otMap[emp.emp_id] : (Number(exist.ot_hours) || 0);
+        // Apply synced data from PTN Time (strictly 0 if employee is not eligible for OT)
+        const isEmpOtEligible = !(emp.is_ot_eligible === 'false' || emp.is_ot_eligible === false);
+        const otHours = isEmpOtEligible ? (otMap[emp.emp_id] !== undefined ? otMap[emp.emp_id] : (Number(exist.ot_hours) || 0)) : 0;
         const advDed = advMap[emp.emp_id] !== undefined ? advMap[emp.emp_id] : (Number(exist.advance_deduct) || 0);
         
         const empLeave = leaveMap[emp.emp_id] || {};
@@ -1141,7 +1421,8 @@ async function handleAction(db, action, params) {
           missingHours: empMissingHrs,
           lateDeduct: empEarlyDed,
           workingDays: periodWorkDays,
-          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลารวม ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''})`
+          autoAdjustedLeaves: autoAdjustedLeaves.filter(a => a.empId === targetEmpId),
+          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลาสุทธิ ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length > 0 ? `, ตรวจพบมาทำงานในวันลา ${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length} วัน (ยกเว้นการหักวันลาอัตโนมัติ)` : ''})`
         };
       }
 
@@ -1152,7 +1433,12 @@ async function handleAction(db, action, params) {
       totalMissingHours = Math.round(totalMissingHours * 100) / 100;
       totalEarlyDeduct = Math.round(totalEarlyDeduct * 100) / 100;
 
-      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ขาด/ออกก่อน ${totalMissingHours} ชม. หัก ฿${totalEarlyDeduct.toLocaleString()})`);
+      let adjustSummary = '';
+      if (autoAdjustedLeaves.length > 0) {
+        adjustSummary = `, ตรวจพบและยกเว้นวันลาที่มาทำงานจริง ${autoAdjustedLeaves.length} รายการ`;
+      }
+
+      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ลาสุทธิ ${totalLeaveCount} วัน, ขาด/ออกก่อน ${totalMissingHours} ชม. หัก ฿${totalEarlyDeduct.toLocaleString()}${adjustSummary})`);
 
       return {
         success: true,
@@ -1166,7 +1452,8 @@ async function handleAction(db, action, params) {
         totalMissingHours: totalMissingHours,
         totalEarlyDeduct: totalEarlyDeduct,
         workingDays: periodWorkDays,
-        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}${totalMissingHours > 0 ? `, ขาด/ออกก่อนรวม ${totalMissingHours} ชม. หักรวม ฿${totalEarlyDeduct.toLocaleString()}` : ''})`
+        autoAdjustedLeaves: autoAdjustedLeaves,
+        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, ลาสุทธิ ${totalLeaveCount} วัน${totalMissingHours > 0 ? `, ขาด/ออกก่อนรวม ${totalMissingHours} ชม. หักรวม ฿${totalEarlyDeduct.toLocaleString()}` : ''}${adjustSummary})`
       };
     }
 
@@ -1235,9 +1522,9 @@ async function handleAction(db, action, params) {
     // 5.2 TIME ATTENDANCE ADMIN DASHBOARD (CENTRALIZED IN PAYROLL)
     case 'getTimeAttendanceDashboard': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) {
-        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: หน้าลงเวลาสงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const isAllowed = await userHasPermission(db, callerUser, 'view_attendance');
+      if (!isAllowed) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา' };
       }
 
       const nowUtc = new Date();
@@ -1302,6 +1589,34 @@ async function handleAction(db, action, params) {
         `).bind(filterDate).all().catch(() => ({ results: [] }));
       }
       const logsToday = logsQuery.results || [];
+
+      // Auto-detect: check if any clocked-in employees have an approved leave request on filterDate
+      try {
+        const approvedLeavesOnDate = await db.prepare(`
+          SELECT lr.*, e.full_name
+          FROM leave_requests lr
+          LEFT JOIN employees e ON lr.emp_id = e.emp_id
+          WHERE lr.status = 'APPROVED'
+            AND ? >= lr.start_date AND ? <= lr.end_date
+        `).bind(filterDate, filterDate).all();
+        const leaveOnDateMap = {};
+        for (const lr of (approvedLeavesOnDate.results || [])) {
+          leaveOnDateMap[lr.emp_id] = lr;
+        }
+        for (const l of logsToday) {
+          if (leaveOnDateMap[l.emp_id]) {
+            const lr = leaveOnDateMap[l.emp_id];
+            l.has_leave_conflict = true;
+            l.leave_conflict_info = {
+              leave_type: lr.leave_type,
+              days_count: lr.days_count,
+              reason: lr.reason || ''
+            };
+          }
+        }
+      } catch (e) {
+        console.warn('leave conflict check note:', e);
+      }
 
       // 1.1 Branches
       const branchRows = await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
@@ -1461,8 +1776,8 @@ async function handleAction(db, action, params) {
     // 5.3 HANDLE ATTENDANCE APPROVALS (LEAVE, OT, ADVANCE)
     case 'handleAttendanceApproval': {
       const approverId = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, approverId);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = await userHasPermission(db, approverId, 'approve_attendance');
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์อนุมัติคำขอ' };
 
       const { type, id, decision, rejectionReason } = params;
       const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
@@ -1506,8 +1821,8 @@ async function handleAction(db, action, params) {
     // 5.3.1 DELETE ATTENDANCE REQUEST (PERMANENT DELETE FOR LEAVE, OT, ADVANCE)
     case 'deleteAttendanceRequest': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = await userHasPermission(db, callerUser, 'approve_attendance');
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบคำขอ' };
 
       const { type, id } = params;
       if (!type || !id) return { success: false, message: 'ระบุ type และ id' };
@@ -1545,8 +1860,8 @@ async function handleAction(db, action, params) {
 
     case 'saveBranch': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = await userHasPermission(db, callerUser, 'manage_attendance_settings');
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการสาขา' };
 
       const b = params.branch || {};
       const branchId = String(b.branch_id || b.branchId || '').trim();
@@ -1607,8 +1922,8 @@ async function handleAction(db, action, params) {
 
     case 'deleteBranch': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = await userHasPermission(db, callerUser, 'manage_attendance_settings');
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบสาขา' };
 
       const branchId = String(params.branchId || params.branch_id || '').trim();
       if (!branchId) return { success: false, message: 'กรุณาระบุรหัสสาขาที่ต้องการลบ' };
@@ -1626,8 +1941,8 @@ async function handleAction(db, action, params) {
     // 5.4.2 GET ATTENDANCE LOGS FOR DATE RANGE (EXPORT)
     case 'getAttendanceLogsRange': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = await userHasPermission(db, callerUser, 'view_attendance');
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูข้อมูลลงเวลา' };
 
       let startDate = String(params.startDate || '').trim();
       let endDate = String(params.endDate || '').trim();
@@ -1677,8 +1992,8 @@ async function handleAction(db, action, params) {
     // 5.5 SAVE ATTENDANCE SETTINGS
     case 'saveAttendanceSettings': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = await userHasPermission(db, callerUser, 'manage_attendance_settings');
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ตั้งค่าระบบลงเวลา' };
 
       const newSettings = params.settings || {};
       for (const [k, v] of Object.entries(newSettings)) {
@@ -1713,12 +2028,12 @@ async function handleAction(db, action, params) {
     // 5.5.1 BROADCAST PAYSLIP NOTIFICATION
     case 'broadcastPayslipNotification': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = await userHasPermission(db, callerUser, 'calc_payroll') || await isUserSuperAdmin(db, callerUser);
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ส่งการแจ้งเตือนสลิปเงินเดือน' };
 
       const period = params.period ? String(params.period).trim() : 'ล่าสุด';
-      const title = params.title || `💰 สลิปเงินเดือนงวด ${period} ออกแล้ว!`;
-      const body = params.body || `พนักงานสามารถตรวจสอบยอดเงินเดือนสุทธิและรายการหักได้แล้วในแท็บ สลิปเงินเดือน`;
+      const title = params.title || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+      const body = params.body || `เงินเดือนงวด ${period}  เช็กสลิปออนไลน์ได้ทันที`;
 
       await db.prepare(`
         CREATE TABLE IF NOT EXISTS broadcast_notifications (
@@ -1737,22 +2052,136 @@ async function handleAction(db, action, params) {
         VALUES (?, ?, 'payslip', 'ALL', ?)
       `).bind(title, body, period).run();
 
-      await logSystemActivity(db, callerUser, 'BROADCAST_PAYSLIP', `ส่งการแจ้งเตือนสลิปเงินเดือนงวด ${period} ไปยังพนักงานทุกคน`);
+      // Dispatch Web Push to all registered devices
+      let sentCount = 0;
+      let expiredCount = 0;
+      try {
+        const subs = (await db.prepare('SELECT * FROM push_subscriptions').all().catch(() => ({ results: [] }))).results || [];
+        for (const sub of subs) {
+          const pushRes = await sendWebPush(sub, {
+            title: title,
+            body: body,
+            url: '/?tab=payroll',
+            tag: 'payslip-' + period
+          });
+          if (pushRes.success) {
+            sentCount++;
+          } else if (pushRes.expired) {
+            expiredCount++;
+            await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(sub.endpoint).run().catch(() => {});
+          }
+        }
+      } catch(pushErr) {
+        console.error('Broadcast push error:', pushErr);
+      }
+
+      await logSystemActivity(db, callerUser, 'BROADCAST_PAYSLIP', `ส่งการแจ้งเตือนสลิปเงินเดือนงวด ${period} (Web Push: ${sentCount} เครื่อง)`);
 
       return {
         success: true,
         period,
         title,
         body,
-        message: `ส่งการแจ้งเตือนสลิปเงินเดือนงวด ${period} ไปยังพนักงานทุกคนเรียบร้อยแล้ว`
+        sentCount,
+        message: `ส่งการแจ้งเตือนสลิปเงินเดือนงวด ${period} สำเร็จ (ส่งแจ้งเตือน Web Push ไปยัง ${sentCount} อุปกรณ์)`
+      };
+    }
+
+    // 5.5.2 WEB PUSH NOTIFICATION CONTROLLERS
+    case 'getVapidPublicKey': {
+      return {
+        success: true,
+        publicKey: VAPID_PUBLIC_KEY
+      };
+    }
+
+    case 'savePushSubscription': {
+      const { empId, endpoint, p256dh, auth, userAgent } = params;
+      if (!endpoint || !p256dh || !auth) {
+        return { success: false, message: 'ข้อมูล Subscription ไม่ครบถ้วน' };
+      }
+
+      await db.prepare(`
+        INSERT INTO push_subscriptions (emp_id, endpoint, p256dh, auth, user_agent, updated_at)
+        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        ON CONFLICT(endpoint) DO UPDATE SET
+          emp_id = COALESCE(excluded.emp_id, push_subscriptions.emp_id),
+          p256dh = excluded.p256dh,
+          auth = excluded.auth,
+          user_agent = excluded.user_agent,
+          updated_at = datetime('now')
+      `).bind(empId || null, endpoint, p256dh, auth, userAgent || '').run();
+
+      return { success: true, message: 'บันทึกอุปกรณ์เพื่อรับการแจ้งเตือน Web Push สำเร็จ' };
+    }
+
+    case 'removePushSubscription': {
+      const endpoint = params.endpoint;
+      if (endpoint) {
+        await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(endpoint).run();
+      }
+      return { success: true, message: 'ยกเลิกการรับแจ้งเตือนบนอุปกรณ์นี้เรียบร้อยแล้ว' };
+    }
+
+    case 'getPushSubscriptionStatus': {
+      const countRow = await db.prepare('SELECT COUNT(*) as count FROM push_subscriptions').first().catch(() => ({ count: 0 }));
+      return {
+        success: true,
+        totalSubscribers: countRow ? Number(countRow.count) : 0
+      };
+    }
+
+    case 'sendTestPushNotification': {
+      const callerUser = params.username || 'Admin';
+      const endpoint = params.endpoint;
+      let subs = [];
+
+      if (endpoint) {
+        const row = await db.prepare('SELECT * FROM push_subscriptions WHERE endpoint = ?').bind(endpoint).first();
+        if (row) subs.push(row);
+      }
+      if (subs.length === 0) {
+        subs = (await db.prepare('SELECT * FROM push_subscriptions').all().catch(() => ({ results: [] }))).results || [];
+      }
+
+      if (subs.length === 0) {
+        return {
+          success: false,
+          message: 'ยังไม่มีอุปกรณ์ที่ลงทะเบียนรับแจ้งเตือน กรุณากดปุ่มเปิดรับการแจ้งเตือนบนอุปกรณ์นี้ก่อน'
+        };
+      }
+
+      const testPayload = {
+        title: '🔔 ทดสอบระบบการแจ้งเตือน PTN',
+        body: 'ระบบ Web Push Notification เชื่อมต่อและทำงานสมบูรณ์แบบแล้ว!',
+        url: '/',
+        tag: 'ptn-test-' + Date.now()
+      };
+
+      let successCount = 0;
+      for (const s of subs) {
+        const res = await sendWebPush(s, testPayload);
+        if (res.success) {
+          successCount++;
+        } else if (res.expired) {
+          await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(s.endpoint).run().catch(() => {});
+        }
+      }
+
+      await logSystemActivity(db, callerUser, 'TEST_WEB_PUSH', `ทดสอบส่ง Web Push สำเร็จ ${successCount} อุปกรณ์`);
+
+      return {
+        success: true,
+        sentCount: successCount,
+        message: `ส่งการแจ้งเตือนทดสอบสำเร็จไปยัง ${successCount} อุปกรณ์ (เด้งเตือนทันทีภายใน 1-3 วินาที)`
       };
     }
 
     // 5.6 UPDATE TIME LOG
     case 'updateAttendanceLog': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = (await userHasPermission(db, callerUser, 'approve_attendance')) || (await userHasPermission(db, callerUser, 'manage_attendance_settings'));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์แก้ไขข้อมูลลงเวลา' };
 
       const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, status, remark } = params;
       if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการแก้ไข' };
@@ -1782,8 +2211,8 @@ async function handleAction(db, action, params) {
     // 5.7 DELETE TIME LOG
     case 'deleteAttendanceLog': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = (await userHasPermission(db, callerUser, 'approve_attendance')) || (await userHasPermission(db, callerUser, 'manage_attendance_settings'));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลลงเวลา' };
 
       const { id } = params;
       if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการลบ' };
@@ -1796,8 +2225,8 @@ async function handleAction(db, action, params) {
     // 5.8 BATCH DELETE TIME LOGS
     case 'batchDeleteAttendanceLogs': {
       const callerUser = params.username || 'Admin';
-      const isSuper = await isUserSuperAdmin(db, callerUser);
-      if (!isSuper) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin เท่านั้น' };
+      const allowed = (await userHasPermission(db, callerUser, 'approve_attendance')) || (await userHasPermission(db, callerUser, 'manage_attendance_settings'));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลลงเวลา' };
 
       const ids = Array.isArray(params.ids) ? params.ids : [];
       if (ids.length === 0) return { success: false, message: 'กรุณาเลือกรายการที่ต้องการลบ' };
@@ -1980,6 +2409,12 @@ async function handleAction(db, action, params) {
       const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY period DESC, emp_id ASC').all()).results || [];
       const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY period DESC, emp_id ASC').all()).results || [];
       const emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      const branches = (await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }))).results || [];
+
+      let advanceStats = [];
+      try {
+        advanceStats = (await db.prepare('SELECT emp_id, amount, status, request_date, period FROM advance_requests').all()).results || [];
+      } catch(e) {}
 
       const empMap = {};
       for (const e of emps) empMap[e.emp_id] = e;
@@ -1999,6 +2434,9 @@ async function handleAction(db, action, params) {
           nickname: emp.nickname || '',
           department: c.department || emp.department || '',
           position: c.position || emp.position || '',
+          branchId: emp.branch_id || c.branch_id || 'B01',
+          joinDate: emp.join_date || '',
+          status: emp.status || 'ACTIVE',
           baseSalary: Number(c.base_salary) || 0,
           absentDays: Number(inp.absent_days) || 0,
           leaveDays: Number(inp.leave_days) || 0,
@@ -2021,7 +2459,7 @@ async function handleAction(db, action, params) {
         };
       });
 
-      return { success: true, allHistory: allRecords };
+      return { success: true, allHistory: allRecords, branches, advanceStats };
     }
 
     case 'getEmployeeHistory': {
@@ -2095,7 +2533,28 @@ async function handleAction(db, action, params) {
     }
 
     // 8. COMPANY INFO
-        // 12. AI PAYROLL ASSISTANT
+    // 12. AI PAYROLL ASSISTANT (POWERED BY GOOGLE GEMINI 3.6 FLASH)
+    case 'testGeminiApiKey': {
+      const apiKey = (params.apiKey || '').trim();
+      if (!apiKey) return { success: false, message: 'กรุณาระบุ API Key' };
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: 'สวัสดี ทดสอบการเชื่อมต่อ' }] }] })
+        });
+        const data = await res.json();
+        if (data.candidates && data.candidates[0]) {
+          return { success: true, message: 'เชื่อมต่อ Google Gemini 3.6 Flash สำเร็จสมบูรณ์ 🟢' };
+        } else {
+          const errMsg = data.error?.message || 'ไม่สามารถเชื่อมต่อได้';
+          return { success: false, message: 'การเชื่อมต่อล้มเหลว: ' + errMsg };
+        }
+      } catch(e) {
+        return { success: false, message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ: ' + e.message };
+      }
+    }
+
     case 'askAiAssistant': {
       const userMsg = (params.message || '').trim();
       const currentPeriod = period;
@@ -2173,7 +2632,76 @@ async function handleAction(db, action, params) {
         };
       });
 
-      // Intelligent Response Generator Engine
+      // Extra Context: Branches & Today PTN Time
+      const branchRows = (await db.prepare('SELECT branch_id, branch_name, work_start_time, work_end_time FROM branches').all().catch(() => ({ results: [] }))).results || [];
+      const todayDate = new Date().toISOString().substring(0, 10);
+      const todayLogs = (await db.prepare('SELECT status, late_minutes FROM time_logs WHERE date = ?').bind(todayDate).all().catch(() => ({ results: [] }))).results || [];
+      const pendingRow = await db.prepare(`
+        SELECT 
+          (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') as pending_leaves,
+          (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING') as pending_ots,
+          (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as pending_advances
+      `).first().catch(() => null);
+
+      // 1. TRY GOOGLE GEMINI 3.6 FLASH
+      let geminiKey = (await db.prepare('SELECT value FROM settings WHERE key = "GeminiApiKey"').first().catch(() => null))?.value;
+      geminiKey = (geminiKey || '').trim();
+
+      if (geminiKey) {
+        try {
+          const systemContext = `
+คุณคือ "PTN AI Assistant" ผู้ช่วยปัญญาประดิษฐ์ประจำระบบเงินเดือนและบริหารบุคคล (PTN Payroll & PTN Time) ของ บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด
+จงตอบคำถามเป็นภาษาไทยอย่างเป็นมิตร สุภาพ มีความเชี่ยวชาญด้านงาน HR และเงินเดือน ใช้ Markdown (เช่น ตาราง, ตัวหนา, bullet points) ให้อ่านง่าย
+
+บริบทข้อมูลจริงของระบบในปัจจุบัน (Live System Context):
+- ชื่อบริษัท: ${compName}
+- งวดเงินเดือนปัจจุบัน: ${currentPeriod} (${isPeriodClosed ? '🔴 ปิดงวดแล้ว' : '🟢 กำลังเปิดคำนวณ'})
+- สิทธิ์ผู้ใช้งาน: ${canViewSalary ? 'ผู้ดูแลระบบ/มีสิทธิ์ดูตัวเลขเงินเดือน' : 'พนักงานทั่วไป (ไม่มีสิทธิ์ดูตัวเลขเงินเดือน ห้ามบอกยอดเงินเด็ดขาด ให้แสดง ฿***)'}
+- จำนวนพนักงานทั้งหมด: ${totalEmployees} คน
+- แผนกทั้งหมด: ${JSON.stringify(deptCounts)}
+- สาขาทั้งหมด: ${branchRows.map(b => `${b.branch_id}: ${b.branch_name} (เวลา ${b.work_start_time}-${b.work_end_time} น.)`).join(', ')}
+- สถิติเงินเดือนงวดนี้: รวมชั่วโมง OT = ${totalOtHours} ชม., มีคนได้เบี้ยขยัน = ${allowanceList.length} คน, ขาดงานรวม = ${totalAbsent} วัน, ลากิจ = ${totalLeave} วัน, ลาป่วย = ${totalSick} วัน, หักสายรวม = ${totalLate > 0 ? 'มีหักสาย' : 'ไม่มี'}
+${canViewSalary ? `- ยอดการเงินงวดนี้: เงินได้รวม Gross = ฿${totalGross.toLocaleString('th-TH')}, หักรวม = ฿${totalDeductions.toLocaleString('th-TH')}, จ่ายสุทธิ Net = ฿${totalNet.toLocaleString('th-TH')}, เงิน OT รวม = ฿${totalOtPay.toLocaleString('th-TH')}` : ''}
+- ท็อป OT งวดนี้: ${JSON.stringify(topOtList)}
+- พนักงานที่ได้เบี้ยขยัน: ${JSON.stringify(allowanceList.map(a => `${a.empId} ${a.name} (${a.dept})`))}
+- รายการขาดลามาสาย: ${JSON.stringify(leaveList)}
+- สถิติ PTN Time วันนี้ (${todayDate}): เข้างานแล้ว ${todayLogs.length} คน, สาย ${todayLogs.filter(t => (t.late_minutes||0) > 0).length} คน
+- คำขอรออนุมัติ: คำขอลา ${pendingRow?.pending_leaves || 0} รายการ, ขอโอที ${pendingRow?.pending_ots || 0} รายการ, ขอเบิกฉุกเฉิน ${pendingRow?.pending_advances || 0} รายการ
+- นโยบายบริษัท: เวลาทำงาน 09:30 - 19:00 น. (พัก 13:00 - 14:00 น.), โอทีปกติ 40 บาท/ชม., เบี้ยขยัน 1,000 บ./เดือน, โควตาลาป่วย 10 วัน/ปี (มีใบรับรองแพทย์), ขาดงานหัก 1.5 เท่า
+
+คำถามจากผู้ใช้: "${userMsg}"
+ตอบคำถามโดยอ้างอิงข้อมูลด้านบนนี้อย่างแม่นยำ เป็นประโยชน์ หากขอคำแนะนำหรือวิเคราะห์ให้ตอบเชิงลึกแบบมืออาชีพ
+          `.trim();
+
+          const gRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [
+                { role: 'user', parts: [{ text: systemContext }] }
+              ],
+              generationConfig: {
+                temperature: 0.4,
+                maxOutputTokens: 1000
+              }
+            })
+          });
+
+          const gData = await gRes.json();
+          const gReply = gData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (gReply && gReply.trim()) {
+            return {
+              success: true,
+              reply: gReply.trim(),
+              source: 'gemini'
+            };
+          }
+        } catch(gErr) {
+          console.warn('Gemini API call note, using fallback engine:', gErr);
+        }
+      }
+
+      // 2. FALLBACK TO INTELLIGENT RULE-BASED ENGINE
       const q = userMsg.toLowerCase();
       let reply = '';
 
@@ -2371,6 +2899,7 @@ async function handleAction(db, action, params) {
       if (cfg.signatoryTitleEn !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("SignatoryTitleEn", ?)').bind(cfg.signatoryTitleEn).run();
       if (cfg.employerSsoId !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("EmployerSsoId", ?)').bind(cfg.employerSsoId).run();
       if (cfg.companyBranch !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CompanyBranch", ?)').bind(cfg.companyBranch).run();
+      if (cfg.geminiApiKey !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("GeminiApiKey", ?)').bind(cfg.geminiApiKey).run();
       return { success: true, message: 'บันทึกข้อมูลบริษัทเรียบร้อยแล้ว' };
     }
 
@@ -2417,76 +2946,173 @@ async function handleAction(db, action, params) {
       return { success: true, message: `ลบผู้ใช้ ${username} เรียบร้อยแล้ว` };
     }
 
-        // 11. BACKUP & RESTORE DATABASE
+        // 11. BACKUP & RESTORE DATABASE (ENTERPRISE FULL TABLE COVERAGE & SELECTIVE RESTORE)
     case 'backupDatabase': {
-      const settings = (await db.prepare('SELECT * FROM settings').all()).results || [];
-      const users = (await db.prepare('SELECT * FROM users').all()).results || [];
-      const employees = (await db.prepare('SELECT * FROM employees').all()).results || [];
-      const monthly_inputs = (await db.prepare('SELECT * FROM monthly_inputs').all()).results || [];
-      const payroll_calcs = (await db.prepare('SELECT * FROM payroll_calcs').all()).results || [];
+      await ensureBranchTables(db);
+      await ensurePushTables(db);
+
+      const settings = (await db.prepare('SELECT * FROM settings').all().catch(() => ({ results: [] }))).results || [];
+      const users = (await db.prepare('SELECT username, password, role, permissions FROM users').all().catch(() => ({ results: [] }))).results || [];
+      const employees = (await db.prepare('SELECT * FROM employees').all().catch(() => ({ results: [] }))).results || [];
+      const branches = (await db.prepare('SELECT * FROM branches').all().catch(() => ({ results: [] }))).results || [];
+      const employee_devices = (await db.prepare('SELECT * FROM employee_devices').all().catch(() => ({ results: [] }))).results || [];
+      const monthly_inputs = (await db.prepare('SELECT * FROM monthly_inputs').all().catch(() => ({ results: [] }))).results || [];
+      const payroll_calcs = (await db.prepare('SELECT * FROM payroll_calcs').all().catch(() => ({ results: [] }))).results || [];
+      const push_subscriptions = (await db.prepare('SELECT * FROM push_subscriptions').all().catch(() => ({ results: [] }))).results || [];
+      const activity_logs = (await db.prepare('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 500').all().catch(() => ({ results: [] }))).results || [];
+
+      // PTN Time tables (if present in D1)
+      const time_logs = (await db.prepare('SELECT * FROM time_logs').all().catch(() => ({ results: [] }))).results || [];
+      const leave_requests = (await db.prepare('SELECT * FROM leave_requests').all().catch(() => ({ results: [] }))).results || [];
+      const ot_requests = (await db.prepare('SELECT * FROM ot_requests').all().catch(() => ({ results: [] }))).results || [];
+      const advance_requests = (await db.prepare('SELECT * FROM advance_requests').all().catch(() => ({ results: [] }))).results || [];
+      const attendance_settings = (await db.prepare('SELECT * FROM attendance_settings').all().catch(() => ({ results: [] }))).results || [];
+
+      // Extract unique periods
+      const periodsSet = new Set();
+      monthly_inputs.forEach(i => { if (i.period) periodsSet.add(i.period); });
+      payroll_calcs.forEach(p => { if (p.period) periodsSet.add(p.period); });
+      const periods = Array.from(periodsSet).sort();
+
+      const backupObj = {
+        app: 'PTN_PAYROLL_SYSTEM',
+        version: '5.0',
+        backupDate: new Date().toISOString(),
+        company: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
+        summary: {
+          employeesCount: employees.length,
+          branchesCount: branches.length,
+          monthlyInputsCount: monthly_inputs.length,
+          payrollCalcsCount: payroll_calcs.length,
+          periods: periods,
+          usersCount: users.length,
+          devicesCount: employee_devices.length,
+          pushSubsCount: push_subscriptions.length,
+          timeLogsCount: time_logs.length,
+          leaveRequestsCount: leave_requests.length,
+          otRequestsCount: ot_requests.length,
+          advanceRequestsCount: advance_requests.length
+        },
+        data: {
+          settings,
+          users,
+          employees,
+          branches,
+          employee_devices,
+          monthly_inputs,
+          payroll_calcs,
+          push_subscriptions,
+          activity_logs,
+          time_logs,
+          leave_requests,
+          ot_requests,
+          advance_requests,
+          attendance_settings
+        }
+      };
+
+      await logSystemActivity(db, params.username || 'Admin', 'BACKUP_DATABASE', `Downloaded backup: ${employees.length} employees, ${periods.length} periods, ${branches.length} branches`);
 
       return {
         success: true,
-        backup: {
-          app: 'PTN_PAYROLL_SYSTEM',
-          version: '4.0',
-          backupDate: new Date().toISOString(),
-          company: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
-          data: {
-            settings: settings,
-            users: users,
-            employees: employees,
-            monthly_inputs: monthly_inputs,
-            payroll_calcs: payroll_calcs
-          }
-        },
-        message: 'สำรองข้อมูลฐานข้อมูลสำเร็จ'
+        backup: backupObj,
+        message: 'สำรองข้อมูลฐานข้อมูลสมบูรณ์ทุกตาราง'
       };
     }
 
     case 'restoreDatabase': {
+      await ensureBranchTables(db);
+      await ensurePushTables(db);
+
       const backup = params.backup || {};
       const data = backup.data || backup;
-      if (!data.employees && !data.settings && !data.users && !data.monthly_inputs) {
-        return { success: false, message: 'โครงสร้างไฟล์สำรองไม่ถูกต้อง' };
+      const opts = params.options || {};
+
+      if (!data.employees && !data.settings && !data.users && !data.monthly_inputs && !data.branches) {
+        return { success: false, message: 'โครงสร้างไฟล์สำรองไม่ถูกต้อง หรือไม่มีข้อมูลที่รองรับ' };
       }
 
-      // Restore Settings
-      if (Array.isArray(data.settings)) {
-        await db.prepare('DELETE FROM settings').run();
+      // Check selective options (if not supplied, default to restore present tables)
+      const doEmployees = opts.restoreEmployees !== false && Array.isArray(data.employees);
+      const doBranches = opts.restoreBranches !== false && Array.isArray(data.branches);
+      const doDevices = opts.restoreDevices !== false && Array.isArray(data.employee_devices);
+      const doPayroll = opts.restorePayroll !== false && (Array.isArray(data.monthly_inputs) || Array.isArray(data.payroll_calcs));
+      const doSettings = opts.restoreSettings !== false && Array.isArray(data.settings);
+      // For safety, doUsers is false by default unless explicitly specified true
+      const doUsers = Boolean(opts.restoreUsers) && Array.isArray(data.users);
+      const doPushSubs = opts.restorePushSubs !== false && Array.isArray(data.push_subscriptions);
+      const doPtnTime = opts.restorePtnTime !== false && (
+        Array.isArray(data.time_logs) || Array.isArray(data.leave_requests) || 
+        Array.isArray(data.ot_requests) || Array.isArray(data.advance_requests) ||
+        Array.isArray(data.attendance_settings)
+      );
+
+      const selectedPeriods = Array.isArray(opts.selectedPeriods) && opts.selectedPeriods.length > 0 ? opts.selectedPeriods : null;
+
+      let restoredSummary = [];
+
+      // 1. Settings
+      if (doSettings) {
+        if (!opts.selectiveMode) {
+          await db.prepare('DELETE FROM settings').run().catch(() => {});
+        }
         for (const s of data.settings) {
           if (s.key && s.value !== undefined) {
             await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(s.key, String(s.value)).run();
           }
         }
+        restoredSummary.push(`การตั้งค่า ${data.settings.length} ค่า`);
       }
 
-      // Restore Users (with full permissions)
-      if (Array.isArray(data.users)) {
+      // 2. Users (Only if explicitly enabled)
+      if (doUsers) {
         await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
-        await db.prepare('DELETE FROM users').run();
         for (const u of data.users) {
           if (u.username && u.password) {
             const permsStr = typeof u.permissions === 'string' ? u.permissions : JSON.stringify(u.permissions || []);
             await db.prepare('INSERT OR REPLACE INTO users (username, password, role, permissions) VALUES (?, ?, ?, ?)').bind(u.username, u.password, u.role || 'User', permsStr).run();
           }
         }
+        restoredSummary.push(`ผู้ใช้งาน ${data.users.length} บัญชี`);
       }
 
-      // Restore Employees (with probation status and details)
-      if (Array.isArray(data.employees)) {
+      // 3. Branches
+      if (doBranches && data.branches.length > 0) {
+        for (const b of data.branches) {
+          if (b.branch_id && b.branch_name) {
+            await db.prepare(`
+              INSERT OR REPLACE INTO branches 
+              (branch_id, branch_name, lat, lng, radius_meters, work_start_time, work_end_time, lunch_start_time, lunch_end_time, grace_minutes, ot_start_time, kiosk_pin, status)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).bind(
+              b.branch_id, b.branch_name, Number(b.lat) || 0, Number(b.lng) || 0,
+              Number(b.radius_meters) || 150, b.work_start_time || '09:30', b.work_end_time || '19:00',
+              b.lunch_start_time || '13:00', b.lunch_end_time || '14:00', Number(b.grace_minutes) || 0,
+              b.ot_start_time || '19:00', b.kiosk_pin || '123456', b.status || 'ACTIVE'
+            ).run().catch(() => {});
+          }
+        }
+        restoredSummary.push(`สาขา ${data.branches.length} แห่ง`);
+      }
+
+      // 4. Employees (with full column migration & branch assignment)
+      if (doEmployees) {
         await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
         await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
         await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
         await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN branch_id TEXT DEFAULT 'B01'").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN allow_all_branches TEXT DEFAULT 'false'").run().catch(() => {});
 
-        await db.prepare('DELETE FROM employees').run();
+        if (!opts.selectiveMode) {
+          await db.prepare('DELETE FROM employees').run().catch(() => {});
+        }
         for (const e of data.employees) {
           if (e.emp_id && e.full_name) {
             await db.prepare(`
               INSERT OR REPLACE INTO employees 
-              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark, branch_id, allow_all_branches)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               e.emp_id, e.full_name, e.nickname || '', e.citizen_id || '', e.phone || '', e.address || '',
               e.department || '', e.position || '', Number(e.base_salary) || 0,
@@ -2499,17 +3125,55 @@ async function handleAction(db, action, params) {
               Number(e.probation_days) || 119,
               e.probation_end_date || '',
               e.photo_url || '',
-              e.remark || ''
+              e.remark || '',
+              e.branch_id || 'B01',
+              String(e.allow_all_branches || 'false')
             ).run();
           }
         }
+        restoredSummary.push(`พนักงาน ${data.employees.length} คน`);
       }
 
-      // Restore Monthly Inputs (with unpaid_sick_leave_days)
-      if (Array.isArray(data.monthly_inputs)) {
+      // 5. Employee Devices
+      if (doDevices && Array.isArray(data.employee_devices)) {
+        await db.prepare(`
+          CREATE TABLE IF NOT EXISTS employee_devices (
+            emp_id TEXT PRIMARY KEY, device_id TEXT NOT NULL, device_name TEXT, bound_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run().catch(() => {});
+
+        for (const d of data.employee_devices) {
+          if (d.emp_id && d.device_id) {
+            await db.prepare(`
+              INSERT OR REPLACE INTO employee_devices (emp_id, device_id, device_name, bound_at, updated_at)
+              VALUES (?, ?, ?, ?, ?)
+            `).bind(d.emp_id, d.device_id, d.device_name || '', d.bound_at || new Date().toISOString(), d.updated_at || new Date().toISOString()).run().catch(() => {});
+          }
+        }
+        restoredSummary.push(`การผูกเครื่อง ${data.employee_devices.length} เครื่อง`);
+      }
+
+      // 6. Monthly Inputs & Payroll Calcs
+      if (doPayroll) {
         await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
-        await db.prepare('DELETE FROM monthly_inputs').run();
-        for (const i of data.monthly_inputs) {
+
+        let targetInputs = Array.isArray(data.monthly_inputs) ? data.monthly_inputs : [];
+        let targetCalcs = Array.isArray(data.payroll_calcs) ? data.payroll_calcs : [];
+
+        if (selectedPeriods && selectedPeriods.length > 0) {
+          targetInputs = targetInputs.filter(i => selectedPeriods.includes(i.period));
+          targetCalcs = targetCalcs.filter(p => selectedPeriods.includes(p.period));
+
+          for (const sp of selectedPeriods) {
+            await db.prepare('DELETE FROM monthly_inputs WHERE period = ?').bind(sp).run().catch(() => {});
+            await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(sp).run().catch(() => {});
+          }
+        } else if (!opts.selectiveMode) {
+          await db.prepare('DELETE FROM monthly_inputs').run().catch(() => {});
+          await db.prepare('DELETE FROM payroll_calcs').run().catch(() => {});
+        }
+
+        for (const i of targetInputs) {
           if (i.period && i.emp_id) {
             await db.prepare(`
               INSERT OR REPLACE INTO monthly_inputs
@@ -2524,12 +3188,8 @@ async function handleAction(db, action, params) {
             ).run();
           }
         }
-      }
 
-      // Restore Payroll Calcs
-      if (Array.isArray(data.payroll_calcs) && data.payroll_calcs.length > 0) {
-        await db.prepare('DELETE FROM payroll_calcs').run();
-        for (const p of data.payroll_calcs) {
+        for (const p of targetCalcs) {
           if (p.period && p.emp_id) {
             await db.prepare(`
               INSERT OR REPLACE INTO payroll_calcs
@@ -2544,13 +3204,80 @@ async function handleAction(db, action, params) {
             ).run();
           }
         }
-      } else {
-        await calculateAndSavePayroll(db, period);
+        restoredSummary.push(`รายการเงินเดือน ${targetInputs.length} รายการ (${targetCalcs.length} คำนวณ)`);
       }
+
+      // 7. Push Subscriptions
+      if (doPushSubs && Array.isArray(data.push_subscriptions)) {
+        for (const ps of data.push_subscriptions) {
+          if (ps.endpoint && ps.p256dh && ps.auth) {
+            await db.prepare(`
+              INSERT OR REPLACE INTO push_subscriptions (emp_id, endpoint, p256dh, auth, user_agent, created_at, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).bind(ps.emp_id || '', ps.endpoint, ps.p256dh, ps.auth, ps.user_agent || '', ps.created_at || new Date().toISOString(), ps.updated_at || new Date().toISOString()).run().catch(() => {});
+          }
+        }
+        restoredSummary.push(`Web Push ${data.push_subscriptions.length} อุปกรณ์`);
+      }
+
+      // 8. PTN Time Tables
+      if (doPtnTime) {
+        if (Array.isArray(data.time_logs)) {
+          for (const tl of data.time_logs) {
+            if (tl.emp_id && tl.date) {
+              await db.prepare(`
+                INSERT OR REPLACE INTO time_logs (id, emp_id, date, clock_in, clock_out, in_lat, in_lng, out_lat, out_lng, in_photo_url, out_photo_url, late_minutes, work_hours, ot_hours, status, remark, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(tl.id || null, tl.emp_id, tl.date, tl.clock_in || null, tl.clock_out || null, tl.in_lat || null, tl.in_lng || null, tl.out_lat || null, tl.out_lng || null, tl.in_photo_url || null, tl.out_photo_url || null, tl.late_minutes || 0, tl.work_hours || 0, tl.ot_hours || 0, tl.status || 'NORMAL', tl.remark || null, tl.created_at || new Date().toISOString()).run().catch(() => {});
+            }
+          }
+        }
+        if (Array.isArray(data.leave_requests)) {
+          for (const lr of data.leave_requests) {
+            if (lr.emp_id && lr.leave_type) {
+              await db.prepare(`
+                INSERT OR REPLACE INTO leave_requests (id, emp_id, leave_type, start_date, end_date, days, reason, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(lr.id || null, lr.emp_id, lr.leave_type, lr.start_date, lr.end_date, lr.days || 1, lr.reason || '', lr.status || 'PENDING', lr.created_at || new Date().toISOString()).run().catch(() => {});
+            }
+          }
+        }
+        if (Array.isArray(data.ot_requests)) {
+          for (const ot of data.ot_requests) {
+            if (ot.emp_id && ot.ot_date) {
+              await db.prepare(`
+                INSERT OR REPLACE INTO ot_requests (id, emp_id, ot_date, start_time, end_time, hours, reason, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(ot.id || null, ot.emp_id, ot.ot_date, ot.start_time, ot.end_time, ot.hours || 0, ot.reason || '', ot.status || 'PENDING', ot.created_at || new Date().toISOString()).run().catch(() => {});
+            }
+          }
+        }
+        if (Array.isArray(data.advance_requests)) {
+          for (const ar of data.advance_requests) {
+            if (ar.emp_id && ar.amount) {
+              await db.prepare(`
+                INSERT OR REPLACE INTO advance_requests (id, emp_id, amount, reason, status, request_date, period, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              `).bind(ar.id || null, ar.emp_id, ar.amount, ar.reason || '', ar.status || 'PENDING', ar.request_date || '', ar.period || '', ar.created_at || new Date().toISOString()).run().catch(() => {});
+            }
+          }
+        }
+        if (Array.isArray(data.attendance_settings)) {
+          for (const as of data.attendance_settings) {
+            if (as.key && as.value !== undefined) {
+              await db.prepare('INSERT OR REPLACE INTO attendance_settings (key, value) VALUES (?, ?)').bind(as.key, String(as.value)).run().catch(() => {});
+            }
+          }
+        }
+        restoredSummary.push('ข้อมูล PTN Time (ลงเวลา, ลา, โอที, เบิกฉุกเฉิน)');
+      }
+
+      await logSystemActivity(db, params.username || 'Admin', 'RESTORE_DATABASE', `Restored: ${restoredSummary.join(', ')}`);
 
       return {
         success: true,
-        message: `กู้คืนข้อมูลสำเร็จเรียบร้อยแล้ว (พนักงาน ${(data.employees||[]).length} คน, บันทึกงวด ${(data.monthly_inputs||[]).length} รายการ)`
+        summary: restoredSummary,
+        message: `กู้คืนข้อมูลสำเร็จ: ${restoredSummary.join(', ')}`
       };
     }
 

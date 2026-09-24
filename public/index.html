@@ -88,13 +88,16 @@
                 ไม่มีการแจ้งเตือนใหม่
               </div>
             </div>
-            <div style="padding:8px 12px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;gap:6px">
-              <button type="button" onclick="requestAdminBrowserNotification()" class="btn btn-outline btn-sm" style="flex:1;font-size:11px;padding:4px 8px;text-align:center">
-                <i class="fa-solid fa-desktop"></i> เปิดแจ้งเตือนหน้าจอ
-              </button>
-              <button type="button" onclick="testAdminNotification()" class="btn btn-slate btn-sm" style="font-size:11px;padding:4px 8px" title="ทดสอบเสียงและแจ้งเตือน">
-                ทดสอบ
-              </button>
+            <div style="padding:10px 14px;background:#f8fafc;border-top:1px solid #e2e8f0;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;gap:6px">
+                <button type="button" id="btnToggleWebPush" onclick="toggleWebPushSubscription()" class="btn btn-outline btn-sm" style="flex:1;font-size:11px;padding:5px 8px;text-align:center;font-weight:700">
+                  <i class="fa-solid fa-bell"></i> เปิดรับแจ้งเตือนหน้าจอ (Web Push)
+                </button>
+                <button type="button" onclick="sendTestWebPush()" class="btn btn-slate btn-sm" style="font-size:11px;padding:5px 10px" title="ทดสอบยิง Web Push เข้าเครื่องนี้ทันที">
+                  <i class="fa-solid fa-paper-plane"></i> ทดสอบ
+                </button>
+              </div>
+              <div id="webPushStatusText" style="font-size:10px;text-align:center;color:#64748b;line-height:1.3">⚪ ยังไม่ได้เปิดรับแจ้งเตือนบนอุปกรณ์นี้</div>
             </div>
           </div>
         </div>
@@ -272,6 +275,9 @@
               </button>
               <button type="button" class="btn btn-success" onclick="runPayrollRecalc()">
                 <i class="fa-solid fa-bolt"></i> คำนวณงวดนี้ใหม่
+              </button>
+              <button type="button" class="btn btn-slate" style="background:#7c3aed;color:#ffffff;border-color:#7c3aed;font-weight:700" onclick="broadcastPayslipPushNotification()" title="ส่งแจ้งเตือน Web Push เข้าเครื่องพนักงานทุกคน: เงินเดือนงวดนี้ออกแล้ว เช็กสลิปออนไลน์ได้ทันที">
+                <i class="fa-solid fa-bullhorn"></i> แจ้งเตือนสลิป (Web Push)
               </button>
             </div>
           </div>
@@ -467,7 +473,7 @@
               </div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap">
-              <button type="button" class="btn" style="background:#0284c7;color:#fff;border:1px solid #38bdf8;font-weight:700;font-size:12px" onclick="openBranchManagerModal()">
+              <button type="button" id="btnAttManageBranches" class="btn" style="background:#0284c7;color:#fff;border:1px solid #38bdf8;font-weight:700;font-size:12px" onclick="openBranchManagerModal()">
                 <i class="fa-solid fa-store"></i> จัดการสาขา &amp; กะเวลา (3-4 สาขา)
               </button>
               <a href="https://ptntime.pages.dev" target="_blank" class="btn" style="background:#fff;color:#1e3a8a;font-weight:700;font-size:12px">
@@ -479,10 +485,10 @@
               <a href="https://ptntime.pages.dev/print-qr.html" target="_blank" class="btn" style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3);font-weight:600;font-size:12px">
                 <i class="fa-solid fa-print"></i> พิมพ์ป้าย QR สาขา (A4)
               </a>
-              <button type="button" class="btn" style="background:#f59e0b;color:#78350f;font-weight:700;font-size:12px" onclick="openMasterQrModalFromPayroll()">
+              <button type="button" id="btnAttMasterQr" class="btn" style="background:#f59e0b;color:#78350f;font-weight:700;font-size:12px" onclick="openMasterQrModalFromPayroll()">
                 <i class="fa-solid fa-qrcode"></i> Master QR ปลดล็อกเครื่อง
               </button>
-              <button type="button" class="btn" style="background:#10b981;color:#fff;font-weight:700;font-size:12px" onclick="syncAttendanceToPayrollPeriod()">
+              <button type="button" id="btnAttSyncPeriod" class="btn" style="background:#10b981;color:#fff;font-weight:700;font-size:12px" onclick="syncAttendanceToPayrollPeriod()">
                 <i class="fa-solid fa-cloud-arrow-down"></i> ดึงเวลาเข้างวดนี้
               </button>
             </div>
@@ -622,7 +628,7 @@
             </div>
 
             <!-- SETTINGS CARD -->
-            <div class="card">
+            <div class="card" id="cardAttendanceSettings">
               <div class="card-header">
                 <div>
                   <div class="card-title"><i class="fa-solid fa-sliders text-blue"></i> ตั้งค่าระบบลงเวลา &amp; สวัสดิการออนไลน์</div>
@@ -1505,7 +1511,7 @@
             <div>
               <h2 style="font-size:16px;font-weight:800;color:#1e3a8a;margin:0" id="analyticsPrintCompName">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>
               <div style="font-size:13px;font-weight:700;color:#0f172a;margin-top:2px">รายงานวิเคราะห์ข้อมูลต้นทุนเงินเดือน &amp; สถิติการปฏิบัติงานบุคลากร (Payroll &amp; HR Analytics)</div>
-              <div style="font-size:11px;color:#475569;margin-top:2px">ปีที่วิเคราะห์: <strong id="analyticsPrintYearDisplay">2569</strong> | ขอบเขต: <strong id="analyticsPrintDeptDisplay">ทุกแผนก</strong></div>
+              <div style="font-size:11px;color:#475569;margin-top:2px">ปีที่วิเคราะห์: <strong id="analyticsPrintYearDisplay">2569</strong> | สาขา: <strong id="analyticsPrintBranchDisplay">ทุกสาขา</strong> | แผนก: <strong id="analyticsPrintDeptDisplay">ทุกแผนก</strong></div>
             </div>
             <div style="text-align:right;font-size:10.5px;color:#64748b">
               <div>วันที่ออกรายงาน: <span id="analyticsPrintDateDisplay">-</span></div>
@@ -1526,22 +1532,39 @@
               <select id="analyticsYearSelect" onchange="onAnalyticsFilterChanged()"></select>
             </div>
             <div class="analytics-filter-item">
+              <label style="font-size:12px;font-weight:700"><i class="fa-solid fa-store"></i> สาขา:</label>
+              <select id="analyticsBranchSelect" onchange="onAnalyticsFilterChanged()">
+                <option value="ALL">ทุกสาขา (All Branches)</option>
+              </select>
+            </div>
+            <div class="analytics-filter-item">
               <label style="font-size:12px;font-weight:700"><i class="fa-solid fa-building-user"></i> แผนก:</label>
               <select id="analyticsDeptSelect" onchange="onAnalyticsFilterChanged()">
                 <option value="ALL">ทุกแผนก (All)</option>
               </select>
             </div>
-            <button type="button" class="btn btn-outline btn-sm" onclick="loadAnalyticsData(false)">
+            <button type="button" class="btn btn-outline btn-sm" onclick="loadAnalyticsData(false)" title="รีเฟรชข้อมูลล่าสุด">
               <i class="fa-solid fa-rotate"></i> โหลดข้อมูลใหม่
             </button>
-            <button type="button" class="btn btn-slate btn-sm" onclick="printAnalyticsReport()">
-              <i class="fa-solid fa-print"></i> พิมพ์รายงาน
+            <button type="button" class="btn btn-slate btn-sm" onclick="printAnalyticsReport()" title="พิมพ์รายงานสรุปผลสำหรับผู้บริหาร (A4)">
+              <i class="fa-solid fa-print"></i> พิมพ์รายงาน A4
+            </button>
+            <button type="button" class="btn btn-success btn-sm" onclick="exportAnalyticsMatrixToExcel()" title="ส่งออกตารางการประเมินผลและสถิติรายบุคคลเป็นไฟล์ Excel">
+              <i class="fa-solid fa-file-excel"></i> ส่งออก Excel (CSV)
             </button>
           </div>
         </div>
 
-        <!-- 4 Top KPI Summary Cards -->
-        <div class="analytics-kpi-grid">
+        <!-- ========================================================================= -->
+        <!-- หมวดที่ 1: ภาพรวมสถิติสำคัญระดับองค์กร (Core Executive KPIs & Workforce) -->
+        <!-- ========================================================================= -->
+        <div class="analytics-section-header">
+          <span class="analytics-section-badge">หมวดที่ 1</span>
+          <h3 class="analytics-section-title"><i class="fa-solid fa-chart-pie" style="color:#2563eb"></i> ภาพรวมสถิติสำคัญระดับองค์กร (Executive KPI Summary &amp; Workforce Snapshot)</h3>
+        </div>
+
+        <!-- 5 Top KPI Summary Cards -->
+        <div class="analytics-kpi-grid" style="grid-template-columns:repeat(auto-fit, minmax(210px, 1fr))">
           <div class="analytics-kpi-card blue">
             <div class="analytics-kpi-top">
               <span class="analytics-kpi-title">ต้นทุนแรงงานรวมทั้งปี (Gross)</span>
@@ -1569,6 +1592,15 @@
             <div class="analytics-kpi-sub" id="kpiOtSub"><i class="fa-solid fa-business-time" style="color:#7c3aed"></i> 0 ชม.</div>
           </div>
 
+          <div class="analytics-kpi-card teal">
+            <div class="analytics-kpi-top">
+              <span class="analytics-kpi-title">ต้นทุนเฉลี่ยต่อพนักงาน (Cost/Head)</span>
+              <span class="analytics-kpi-badge" id="kpiCostPerHeadBadge" style="background:#ccfbf1;color:#0f766e"><i class="fa-solid fa-users"></i> ต่อเดือน</span>
+            </div>
+            <div class="analytics-kpi-val" id="kpiCostPerHeadVal">฿0</div>
+            <div class="analytics-kpi-sub" id="kpiCostPerHeadSub"><i class="fa-solid fa-chart-simple" style="color:#0d9488"></i> ค่าเฉลี่ย/คน/งวด</div>
+          </div>
+
           <div class="analytics-kpi-card orange">
             <div class="analytics-kpi-top">
               <span class="analytics-kpi-title">กองทุนสำรองเลี้ยงชีพ (PF สะสม)</span>
@@ -1579,7 +1611,15 @@
           </div>
         </div>
 
-        <!-- Row 1: Trend Line Chart + Dept Doughnut Chart -->
+        <!-- ========================================================================= -->
+        <!-- หมวดที่ 2: การวิเคราะห์แนวโน้ม & สัดส่วนต้นทุน (Cost Trends & Distribution) -->
+        <!-- ========================================================================= -->
+        <div class="analytics-section-header">
+          <span class="analytics-section-badge" style="background:#4338ca">หมวดที่ 2</span>
+          <h3 class="analytics-section-title"><i class="fa-solid fa-chart-area" style="color:#4338ca"></i> การวิเคราะห์แนวโน้ม &amp; สัดส่วนต้นทุน (Cost Trends &amp; Distribution Analysis)</h3>
+        </div>
+
+        <!-- Trend Line Chart + Dept/Branch Doughnut Chart -->
         <div class="analytics-grid-2">
           <div class="analytics-card">
             <div class="analytics-card-header">
@@ -1593,8 +1633,8 @@
 
           <div class="analytics-card">
             <div class="analytics-card-header">
-              <h3><i class="fa-solid fa-chart-pie" style="color:#7c3aed"></i> สัดส่วนค่าจ้างตามแผนก</h3>
-              <span class="analytics-tag">Department Share</span>
+              <h3><i class="fa-solid fa-chart-pie" style="color:#7c3aed"></i> สัดส่วนค่าจ้างตามแผนก &amp; สาขา</h3>
+              <span class="analytics-tag">Distribution Share</span>
             </div>
             <div class="analytics-chart-box">
               <canvas id="analyticsDeptChart"></canvas>
@@ -1602,13 +1642,13 @@
           </div>
         </div>
 
-        <!-- Row 2: OT Bar Chart + Leaderboard + Actionable Insights -->
-        <div class="analytics-grid-3">
-          <!-- Chart 3: OT by Dept -->
+        <!-- OT Bar Chart + Leaderboard -->
+        <div class="analytics-grid-2" style="grid-template-columns: 1fr 1fr">
+          <!-- Chart 3: OT by Dept / Branch -->
           <div class="analytics-card">
             <div class="analytics-card-header">
-              <h3><i class="fa-solid fa-business-time" style="color:#d97706"></i> แผนกที่ใช้ OT สูงสุด</h3>
-              <span class="analytics-tag">OT Hours</span>
+              <h3><i class="fa-solid fa-business-time" style="color:#d97706"></i> สถิติการใช้ชั่วโมง OT ตามแผนก &amp; สาขา</h3>
+              <span class="analytics-tag">OT Hours &amp; Pay</span>
             </div>
             <div class="analytics-chart-box">
               <canvas id="analyticsOtBarChart"></canvas>
@@ -1618,16 +1658,16 @@
           <!-- Attendance Leaderboard -->
           <div class="analytics-card">
             <div class="analytics-card-header">
-              <h3><i class="fa-solid fa-trophy" style="color:#eab308"></i> พนักงานดีเด่น (มาทำงานยอดเยี่ยม)</h3>
+              <h3><i class="fa-solid fa-trophy" style="color:#eab308"></i> ทำเนียบพนักงานดีเด่น (Top Attendance &amp; Diligence)</h3>
               <span class="analytics-tag">วินัยเวลาดีเด่น</span>
             </div>
-            <div style="overflow-x:auto;max-height:260px">
+            <div style="overflow-x:auto;max-height:280px">
               <table class="analytics-table">
                 <thead>
                   <tr>
                     <th style="width:40px">อันดับ</th>
                     <th>ชื่อ-นามสกุล</th>
-                    <th>แผนก</th>
+                    <th>สาขา / แผนก</th>
                     <th style="text-align:right">เบี้ยขยันสะสม</th>
                   </tr>
                 </thead>
@@ -1637,25 +1677,42 @@
               </table>
             </div>
           </div>
+        </div>
 
-          <!-- Actionable Management Advisory & Solutions -->
-          <div class="analytics-card" style="display:flex;flex-direction:column">
-            <div class="analytics-card-header">
-              <h3><i class="fa-solid fa-lightbulb" style="color:var(--primary)"></i> สรุปข้อเสนอแนะ &amp; แนวทางแก้ไข (Insights)</h3>
-              <span class="analytics-tag" style="background:#eff6ff;color:#1d4ed8;font-weight:700">Smart Solutions</span>
+        <!-- ========================================================================= -->
+        <!-- หมวดที่ 3: สรุปบทวิเคราะห์เชิงบริหาร & แนวทางแก้ไขอัตโนมัติ (Actionable Insights) -->
+        <!-- ========================================================================= -->
+        <div class="analytics-section-header">
+          <span class="analytics-section-badge" style="background:#059669">หมวดที่ 3</span>
+          <h3 class="analytics-section-title"><i class="fa-solid fa-lightbulb" style="color:#059669"></i> สรุปบทวิเคราะห์เชิงบริหาร &amp; แนวทางแก้ไขอัตโนมัติ (Actionable Insights &amp; Smart Solutions)</h3>
+        </div>
+
+        <div class="analytics-card" style="margin-bottom:20px">
+          <div class="analytics-card-header">
+            <div>
+              <h3><i class="fa-solid fa-wand-magic-sparkles" style="color:#059669"></i> ข้อเสนอแนะเชิงบริหารเพื่อการตัดสินใจ (Executive Decision Support)</h3>
+              <p style="font-size:12px;color:var(--text-muted);margin:2px 0 0">ระบบวิเคราะห์ข้อมูลอัตโนมัติเพื่อตรวจจับจุดผิดปกติ ชี้เป้าปัญหา และเสนอแนะแนวทางแก้ไขที่เป็นรูปธรรม</p>
             </div>
-            <div class="analytics-insights-container" id="analyticsInsightsContainer">
-              <!-- Dynamically populated via JavaScript -->
-            </div>
+            <span class="analytics-tag" style="background:#ecfdf5;color:#047857;font-weight:700">AI &amp; Rule-Based Advisory</span>
+          </div>
+          <div class="analytics-insights-container" id="analyticsInsightsContainer" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;padding:16px">
+            <!-- Dynamically populated via JavaScript -->
           </div>
         </div>
 
-        <!-- Row 3: Employee Appraisal & Performance Matrix (ปรับขึ้นเงินเดือน / ตักเตือน / พักงาน / ให้ออก) -->
-        <div class="analytics-card" style="margin-top:16px">
+        <!-- ========================================================================= -->
+        <!-- หมวดที่ 4: การประเมินผลการทำงานรายบุคคล & ตารางผลงาน (Performance Matrix) -->
+        <!-- ========================================================================= -->
+        <div class="analytics-section-header">
+          <span class="analytics-section-badge" style="background:#b91c1c">หมวดที่ 4</span>
+          <h3 class="analytics-section-title"><i class="fa-solid fa-user-shield" style="color:#b91c1c"></i> การประเมินผลการปฏิบัติงานรายบุคคล &amp; ตารางผลงาน (Employee Appraisal &amp; Performance Matrix)</h3>
+        </div>
+
+        <div class="analytics-card" style="margin-top:8px">
           <div class="analytics-card-header" style="flex-wrap:wrap;gap:10px">
             <div>
-              <h3><i class="fa-solid fa-user-shield" style="color:var(--primary)"></i> ระบบวิเคราะห์และประเมินผลการทำงานรายบุคคล (Employee Appraisal &amp; Performance Matrix)</h3>
-              <p style="font-size:12px;color:var(--text-muted);margin-top:3px">วิเคราะห์ความสม่ำเสมอในการทำงาน สถิติขาด/ลา/สาย/OT เพื่อจัดกลุ่มพนักงานและให้ข้อเสนอแนะเชิงบริหาร (ปรับเงินเดือน, เฝ้าระวัง, พักงาน, เลิกจ้าง)</p>
+              <h3><i class="fa-solid fa-users-gear" style="color:var(--primary)"></i> ตารางประเมินผลรายบุคคลเพื่อพิจารณาผลตอบแทน &amp; มาตรการวินัย (Merit &amp; Disciplinary Matrix)</h3>
+              <p style="font-size:12px;color:var(--text-muted);margin-top:3px">วิเคราะห์ความสม่ำเสมอในการทำงาน สถิติขาด/ลา/สาย/OT และการขอเบิกเงินล่วงหน้า เพื่อจัดกลุ่มพนักงานและให้ข้อเสนอแนะเชิงบริหาร</p>
             </div>
             <div class="analytics-filter-btn-group">
               <button type="button" class="analytics-filter-btn active" id="btnFilter-ALL" onclick="filterAnalyticsMatrix('ALL')">ทั้งหมด (<span id="matrixCountAll">0</span>)</button>
@@ -1701,25 +1758,40 @@
             </div>
           </div>
 
+          <!-- Matrix Table Search & Toolbar -->
+          <div style="padding:10px 16px;background:#f8fafc;border-bottom:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+              <i class="fa-solid fa-magnifying-glass text-muted"></i>
+              <input type="text" id="analyticsMatrixSearchInput" placeholder="ค้นหาชื่อ, รหัส, แผนก หรือสาขา..." oninput="onAnalyticsMatrixSearch(this.value)" style="padding:4px 10px;font-size:12px;border:1px solid #cbd5e1;border-radius:6px;width:240px;outline:none">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button type="button" class="btn btn-slate btn-sm" onclick="exportAnalyticsMatrixToExcel()" style="font-weight:700">
+                <i class="fa-solid fa-file-csv" style="color:#059669"></i> ส่งออกตารางนี้เป็น Excel (.CSV)
+              </button>
+            </div>
+          </div>
+
           <!-- Matrix Table -->
           <div style="overflow-x:auto">
             <table class="analytics-table" id="analyticsMatrixTable">
               <thead>
                 <tr style="background:#f8fafc">
-                  <th style="width:75px">รหัส</th>
-                  <th style="width:160px">ชื่อ-นามสกุล</th>
-                  <th style="width:110px">แผนก</th>
-                  <th style="width:95px;text-align:right">เงินเดือนฐาน</th>
-                  <th style="width:65px;text-align:center">ขาด (วัน)</th>
-                  <th style="width:65px;text-align:center">ลา (วัน)</th>
-                  <th style="width:90px;text-align:center">สาย (ครั้ง/บาท)</th>
-                  <th style="width:90px;text-align:right">เบี้ยขยันสะสม</th>
-                  <th style="width:145px;text-align:center">สถานะการประเมิน</th>
+                  <th style="width:70px">รหัส</th>
+                  <th style="width:150px">ชื่อ-นามสกุล</th>
+                  <th style="width:90px">สาขา</th>
+                  <th style="width:100px">แผนก</th>
+                  <th style="width:90px;text-align:right">เงินเดือนฐาน</th>
+                  <th style="width:60px;text-align:center">ขาด (วัน)</th>
+                  <th style="width:60px;text-align:center">ลา (วัน)</th>
+                  <th style="width:85px;text-align:center">สาย (ครั้ง/บาท)</th>
+                  <th style="width:85px;text-align:right">เบี้ยขยันสะสม</th>
+                  <th style="width:90px;text-align:right">เบิกเงินล่วงหน้า</th>
+                  <th style="width:130px;text-align:center">สถานะการประเมิน</th>
                   <th>ข้อเสนอแนะเชิงบริหาร &amp; การดำเนินการ (Action Recommendation)</th>
                 </tr>
               </thead>
               <tbody id="analyticsMatrixBody">
-                <tr><td colspan="10" class="text-center text-muted" style="padding:24px">กำลังประมวลผลข้อมูลการประเมิน...</td></tr>
+                <tr><td colspan="12" class="text-center text-muted" style="padding:24px">กำลังประมวลผลข้อมูลการประเมิน...</td></tr>
               </tbody>
             </table>
           </div>
@@ -2148,35 +2220,149 @@
             </div>
           </form>
         </div>
-        <!-- BACKUP & RESTORE SECTION -->
+
+        <!-- AI ASSISTANT & GEMINI SETTINGS SECTION -->
         <div class="card" style="max-width:680px;margin:24px auto 0">
-          <div class="card-header">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
             <div>
-              <div class="card-title"><i class="fa-solid fa-database" style="color:#2563eb"></i> สำรองและกู้คืนข้อมูลระบบ (Backup & Restore)</div>
-              <div class="card-sub">ดาวน์โหลดไฟล์สำรองข้อมูลทั้งหมด (.json) เพื่อเก็บรักษา หรือกู้คืนข้อมูลจากไฟล์สำรอง</div>
+              <div class="card-title"><i class="fa-solid fa-robot" style="color:#7c3aed"></i> ตั้งค่าผู้ช่วยปัญญาประดิษฐ์ (AI Assistant &amp; Gemini Settings)</div>
+              <div class="card-sub">เชื่อมต่อโมเดล Google Gemini 3.6 Flash ฟรี สำหรับตอบคำถามและวิเคราะห์ข้อมูลเงินเดือน</div>
+            </div>
+            <span id="geminiConnectionStatusBadge" class="badge" style="background:#f3e8ff;color:#7e22ce;border:1px solid #d8b4fe;font-size:11px;font-weight:700">
+              <i class="fa-solid fa-sparkles"></i> Gemini 3.6 Flash
+            </span>
+          </div>
+          <div style="padding:22px">
+            <div class="form-grid">
+              <div class="form-group">
+                <label style="display:flex;align-items:center;justify-content:space-between">
+                  <span><i class="fa-solid fa-key" style="color:#7c3aed"></i> Google Gemini API Key</span>
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="font-size:11px;color:#2563eb;text-decoration:none;font-weight:600">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> ขอ API Key ฟรี (Google AI Studio)
+                  </a>
+                </label>
+                <div style="position:relative;display:flex;align-items:center">
+                  <input type="password" id="inputGeminiApiKey" placeholder="ใส่ Google AI Studio API Key (เริ่มต้นด้วย AQ... หรือ AIza...)" style="padding-right:40px;font-family:monospace">
+                  <button type="button" onclick="toggleGeminiKeyVisibility()" style="position:absolute;right:8px;background:none;border:none;color:#64748b;cursor:pointer;padding:6px;font-size:14px" title="แสดง/ซ่อน Key">
+                    <i class="fa-solid fa-eye" id="iconToggleGeminiKey"></i>
+                  </button>
+                </div>
+                <small style="font-size:11px;color:#64748b;margin-top:4px;display:block;line-height:1.4">
+                  💡 ระบบติดตั้ง Key อัตโนมัติไว้ให้แล้ว หากคุณต้องการใช้ Key ส่วนตัวของคุณเอง สามารถใส่และกดบันทึกได้ทันที
+                </small>
+              </div>
+
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px">
+                <button type="button" class="btn btn-slate" onclick="testGeminiConnection()" id="btnTestGemini" style="padding:10px 18px">
+                  <i class="fa-solid fa-vial"></i> ทดสอบเชื่อมต่อ
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveGeminiApiKey()" id="btnSaveGemini" style="padding:10px 20px;background:#7c3aed;border-color:#6d28d9">
+                  <i class="fa-solid fa-floppy-disk"></i> บันทึก API Key
+                </button>
+              </div>
             </div>
           </div>
+        </div>
+
+        <!-- BACKUP & RESTORE SECTION -->
+        <div class="card" style="max-width:760px;margin:24px auto 0">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div class="card-title"><i class="fa-solid fa-database" style="color:#2563eb"></i> ศูนย์สำรองและกู้คืนข้อมูลระบบ (Enterprise Backup & Restore Hub)</div>
+              <div class="card-sub">สำรองข้อมูลครบถ้วน 100% ทุกตารางในฐานข้อมูล Cloudflare D1 พร้อมระบบตรวจเช็กไฟล์ และเลือกกู้คืนเฉพาะส่วน (Selective Restore)</div>
+            </div>
+            <span class="badge" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;font-size:11px;font-weight:700">
+              <i class="fa-solid fa-shield-halved"></i> Cloud D1 Safe
+            </span>
+          </div>
           <div style="padding:22px;display:flex;flex-direction:column;gap:16px">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;gap:16px">
+            
+            <!-- Backup Action Card -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:12px;gap:16px">
               <div>
-                <div style="font-weight:700;color:#0f172a;margin-bottom:2px"><i class="fa-solid fa-cloud-arrow-down" style="color:#059669"></i> สำรองข้อมูลทั้งหมด (Backup Database)</div>
-                <div style="font-size:12px;color:#64748b">ส่งออกข้อมูล ทะเบียนพนักงาน, เงินเดือน, บันทึกทุกงวด, ผู้ใช้งาน และการตั้งค่า เป็นไฟล์ JSON</div>
+                <div style="font-weight:700;color:#0f172a;margin-bottom:4px;display:flex;align-items:center;gap:8px">
+                  <i class="fa-solid fa-cloud-arrow-down" style="color:#059669;font-size:18px"></i> 
+                  สำรองข้อมูลทั้งระบบ 100% (Full Database Backup)
+                </div>
+                <div style="font-size:12px;color:#64748b;line-height:1.4">
+                  ดาวน์โหลดไฟล์ <b>.json</b> เก็บข้อมูลครบถ้วน: ทะเบียนพนักงาน, สาขาทั้งหมด, การผูกเครื่องลงเวลา, บันทึกเงินเดือนทุกงวด, ผู้ใช้งาน, Web Push และประวัติ PTN Time
+                </div>
               </div>
-              <button type="button" class="btn btn-primary" onclick="backupDatabase()" style="white-space:nowrap">
+              <button type="button" class="btn btn-primary" onclick="backupDatabase()" style="white-space:nowrap;padding:10px 18px;font-weight:700">
                 <i class="fa-solid fa-download"></i> ดาวน์โหลด Backup (.json)
               </button>
             </div>
 
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#fffbeb;border:1.5px solid #fef3c7;border-radius:10px;gap:16px">
+            <!-- Restore Action Card -->
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:#fffbeb;border:1.5px solid #fef3c7;border-radius:12px;gap:16px">
               <div>
-                <div style="font-weight:700;color:#92400e;margin-bottom:2px"><i class="fa-solid fa-cloud-arrow-up" style="color:#d97706"></i> กู้คืนข้อมูลระบบ (Restore Database)</div>
-                <div style="font-size:12px;color:#b45309">เลือกไฟล์สำรอง (.json) เพื่อกู้คืนข้อมูลทั้งหมดกลับเข้าสู่ระบบ</div>
+                <div style="font-weight:700;color:#92400e;margin-bottom:4px;display:flex;align-items:center;gap:8px">
+                  <i class="fa-solid fa-cloud-arrow-up" style="color:#d97706;font-size:18px"></i> 
+                  ตรวจสอบและกู้คืนข้อมูล (Inspect & Selective Restore)
+                </div>
+                <div style="font-size:12px;color:#b45309;line-height:1.4">
+                  นำไฟล์สำรองเข้าสู่ระบบ พร้อมหน้าต่างตรวจสอบข้อมูล (Preview) และเลือกกู้คืนเฉพาะส่วนที่ต้องการ โดยมีระบบ Auto-Safety Snapshot ป้องกันข้อมูลปัจจุบันสูญหาย
+                </div>
               </div>
               <div>
                 <input type="file" id="restoreBackupFileInput" accept=".json,application/json" style="display:none" onchange="handleRestoreBackupFile(event)">
-                <button type="button" class="btn btn-yellow" onclick="triggerRestoreBackup()" style="white-space:nowrap">
+                <button type="button" class="btn btn-yellow" onclick="triggerRestoreBackup()" style="white-space:nowrap;padding:10px 18px;font-weight:700">
                   <i class="fa-solid fa-upload"></i> เลือกไฟล์กู้คืน
                 </button>
+              </div>
+            </div>
+
+            <!-- Security & Safety Notice -->
+            <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;background:#f1f5f9;border-radius:10px;font-size:12px;color:#475569;line-height:1.5">
+              <i class="fa-solid fa-circle-info" style="color:#3b82f6;font-size:16px;margin-top:2px"></i>
+              <div>
+                <b>คำแนะนำความปลอดภัย:</b> ควรดาวน์โหลด Backup เก็บไว้อย่างน้อยเดือนละ 1 ครั้งหลังปิดงวดเงินเดือน และ Cloudflare D1 ยังรองรับ <b>Point-in-Time Recovery (Time Travel)</b> ย้อนเวลาฐานข้อมูลได้สูงสุด 30 วันผ่าน Cloudflare CLI
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- AI ASSISTANT & GEMINI SETTINGS SECTION -->
+        <div class="card" style="max-width:760px;margin:24px auto 0">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:36px;height:36px;border-radius:8px;background:#e0e7ff;color:#4338ca;display:flex;align-items:center;justify-content:center;font-size:18px">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+              </div>
+              <div>
+                <div class="card-title">ตั้งค่าผู้ช่วยปัญญาประดิษฐ์ (AI Assistant & Gemini Settings)</div>
+                <div class="card-sub">เชื่อมต่อ Google Gemini Flash API เพื่อให้ AI Chatbot ฉลาด วิเคราะห์ข้อมูลเชิงลึก และตอบคำถามได้เหมือนมนุษย์</div>
+              </div>
+            </div>
+            <span id="geminiConnectionStatusBadge" class="badge" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;font-size:11px;font-weight:700">
+              <i class="fa-solid fa-circle-check"></i> พร้อมใช้งาน
+            </span>
+          </div>
+          <div style="padding:22px;display:flex;flex-direction:column;gap:16px">
+            <div>
+              <label style="font-size:13px;font-weight:700;color:#334155;display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+                <span>🔑 Google Gemini API Key:</span>
+                <a href="https://aistudio.google.com" target="_blank" style="font-size:11px;color:#2563eb;text-decoration:none">
+                  <i class="fa-solid fa-arrow-up-right-from-square"></i> รับ API Key ฟรีจาก Google AI Studio
+                </a>
+              </label>
+              <div style="display:flex;gap:8px">
+                <div style="position:relative;flex:1">
+                  <input type="password" id="inputGeminiApiKey" class="form-control" placeholder="วาง Google Gemini API Key ที่นี่..." style="padding-right:40px;font-family:monospace">
+                  <button type="button" onclick="toggleGeminiKeyVisibility()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:none;color:#64748b;cursor:pointer;padding:4px 8px" title="แสดง/ซ่อน Key">
+                    <i id="iconToggleGeminiKey" class="fa-solid fa-eye"></i>
+                  </button>
+                </div>
+                <button type="button" class="btn btn-slate" onclick="testGeminiConnection()" style="white-space:nowrap;font-weight:600">
+                  <i class="fa-solid fa-vial"></i> ทดสอบเชื่อมต่อ
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveGeminiApiKey()" style="white-space:nowrap;font-weight:700">
+                  <i class="fa-solid fa-floppy-disk"></i> บันทึก Key
+                </button>
+              </div>
+              <div style="font-size:11.5px;color:#64748b;margin-top:6px;line-height:1.4">
+                💡 กุญแจ API Key จะถูกจัดเก็บอย่างปลอดภัยในฐานข้อมูล Cloudflare D1 ของบริษัท และสามารถอัปเดตเปลี่ยน Key ได้เองตลอดเวลา
               </div>
             </div>
           </div>
@@ -2490,7 +2676,7 @@
             </div>
 
             <!-- Branch Assignment Section -->
-            <div class="form-row-2" style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:12px;align-items:center">
+            <div class="form-row-2" style="background:#f0f9ff;border:1.5px solid #bae6fd;border-radius:var(--radius-md);padding:12px 14px;margin-bottom:12px;align-items:center">
               <div class="form-group" style="margin:0">
                 <label style="font-weight:700;color:#0369a1;font-size:12px"><i class="fa-solid fa-store"></i> สาขาประจำการหลัก (Branch) *</label>
                 <select id="mBranchId" style="font-weight:700;background:#ffffff;border-color:#7dd3fc">
@@ -2503,6 +2689,17 @@
                   <span>พนักงานหมุนเวียน (ลงเวลาได้ทุกสาขาตามพิกัดจริง)</span>
                 </label>
               </div>
+            </div>
+
+            <!-- Overtime (OT) Eligibility Option -->
+            <div class="form-group" style="background:#ecfdf5;border:1.5px solid #a7f3d0;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:12px">
+              <label style="display:inline-flex;align-items:center;gap:10px;font-size:12.5px;font-weight:700;color:#065f46;cursor:pointer">
+                <input type="checkbox" id="mIsOtEligible" checked style="width:18px;height:18px;accent-color:#059669;cursor:pointer">
+                <span><i class="fa-solid fa-business-time"></i> มีสิทธิ์ได้รับค่าล่วงเวลา (OT)</span>
+              </label>
+              <p style="margin:4px 0 0 28px;font-size:11px;color:#047857;line-height:1.4">
+                หากนำเครื่องหมายออก ระบบลงเวลาจะไม่คำนวณชั่วโมง OT และไม่คิดเงินค่าล่วงเวลาในสลิป (เหมาะสำหรับผู้จัดการหรือตำแหน่งเหมาจ่าย)
+              </p>
             </div>
 
             <!-- Probation Details Configuration Section -->
@@ -2719,6 +2916,7 @@
               <select id="mRole" onchange="onRoleTemplateChanged()" style="font-weight:600">
                 <option value="Super Admin">👑 Super Admin (ผู้ดูแลระบบสูงสุด - ทุกสิทธิ์รวมระบบลงเวลา)</option>
                 <option value="Admin / HR">👑 Admin / HR (ผู้ดูแลระบบ - คิดเงินเดือน)</option>
+                <option value="Supervisor">👔 Supervisor / หัวหน้างาน (ตรวจเวลา/อนุมัติใบลา/ไม่เห็นเงินเดือน)</option>
                 <option value="HR Payroll">💼 HR Payroll (ฝ่ายบุคคลคิดเงินเดือน)</option>
                 <option value="HR Time Attendance">⏱️ HR Attendance (ฝ่ายบุคคลบันทึกเวลา/ซ่อนเงินเดือน)</option>
                 <option value="Accounting / Finance">📊 Accounting / Finance (ฝ่ายการเงิน-บัญชี/รายงาน)</option>
@@ -2767,20 +2965,44 @@
               </div>
             </div>
 
-            <!-- Group 4: Dashboard & Reports -->
+            <!-- Group 4: Time Attendance & PTN Time -->
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
-              <div style="font-size:11.5px;font-weight:700;color:#7c3aed;margin-bottom:6px"><i class="fa-solid fa-chart-pie"></i> 4. แดชบอร์ด รายงาน &amp; การส่งออก (Dashboard &amp; Reports)</div>
+              <div style="font-size:11.5px;font-weight:700;color:#0ea5e9;margin-bottom:6px"><i class="fa-solid fa-camera"></i> 4. ระบบลงเวลา &amp; PTN Time (Time Attendance)</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_attendance" checked> ดูหน้าลงเวลา &amp; รูปเซลฟี่</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#0284c7;font-weight:600"><input type="checkbox" id="perm_approve_attendance" checked> อนุมัติ / ปฏิเสธ คำขอลา, OT, เบิกเงิน</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_unlock_device" checked> สร้าง Master QR ปลดล็อกเครื่อง</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_sync_ptn_time" checked> ซิงค์เวลาจาก PTN Time เข้างวดเงินเดือน</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#dc2626"><input type="checkbox" id="perm_manage_attendance_settings" checked> จัดการสาขา, พิกัด GPS &amp; กะเวลา</label>
+              </div>
+            </div>
+
+            <!-- Group 5: Document Center & Statutory Compliance -->
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+              <div style="font-size:11.5px;font-weight:700;color:#059669;margin-bottom:6px"><i class="fa-solid fa-folder-open"></i> 5. ศูนย์เอกสาร &amp; ธนาคาร (Document Center &amp; Banking)</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_documents" checked> เข้าใช้งานศูนย์เอกสาร</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_issue_salary_cert" checked> ออกหนังสือรับรองเงินเดือน (A4)</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_export_bank_files" checked> ส่งออกไฟล์โอนเงินธนาคาร (ttb/Direct)</label>
+                <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_export_tax_sso" checked> ส่งออกไฟล์ภาษี ภ.ง.ด.1 &amp; ปกส. สปส.1-10</label>
+              </div>
+            </div>
+
+            <!-- Group 6: Dashboard & Reports & Analytics -->
+            <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:8px">
+              <div style="font-size:11.5px;font-weight:700;color:#7c3aed;margin-bottom:6px"><i class="fa-solid fa-chart-pie"></i> 6. แดชบอร์ด &amp; วิเคราะห์ข้อมูล (Analytics &amp; Reports)</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_dash" checked> ดูแดชบอร์ดภาพรวม</label>
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_history" checked> ดูประวัติ &amp; สรุปประจำปี</label>
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_print_history" checked> พิมพ์รายงานประวัติ &amp; สรุปทั้งปี</label>
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_export_csv" checked> ส่งออกข้อมูลเป็นไฟล์ Excel / CSV</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#7c3aed;font-weight:600"><input type="checkbox" id="perm_view_analytics" checked> เข้าใช้งานระบบวิเคราะห์ Payroll Analytics</label>
               </div>
             </div>
 
-            <!-- Group 5: System Admin -->
+            <!-- Group 7: System Admin -->
             <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px">
-              <div style="font-size:11.5px;font-weight:700;color:#e11d48;margin-bottom:6px"><i class="fa-solid fa-sliders"></i> 5. ตั้งค่าระบบ &amp; ความปลอดภัย (System Administration)</div>
+              <div style="font-size:11.5px;font-weight:700;color:#e11d48;margin-bottom:6px"><i class="fa-solid fa-sliders"></i> 7. ตั้งค่าระบบ &amp; ความปลอดภัย (System Administration)</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_manage_users" checked> จัดการผู้ใช้งานระบบ</label>
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_company_settings" checked> แก้ไขข้อมูลบริษัท</label>
@@ -2799,7 +3021,8 @@
 
   
   <!-- AI PAYROLL ASSISTANT FLOATING BUTTON & DRAWER -->
-  <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" onclick="toggleAiChat()">
+  <button type="button" id="aiChatToggleBtn" class="ai-chat-btn" title="คลิกเพื่อเปิดแชท หรือลากเพื่อเคลื่อนย้ายตำแหน่ง">
+    <i class="fa-solid fa-grip-vertical" style="opacity:0.6;font-size:12px;margin-right:-2px;cursor:grab"></i>
     <i class="fa-solid fa-wand-magic-sparkles sparkle-icon"></i>
     <span>ผู้ช่วย AI</span>
   </button>
@@ -3714,7 +3937,138 @@
     </div>
   </div>
 
+  <!-- MODAL: RESTORE INSPECTION & SELECTIVE OPTIONS -->
+  <div class="modal-overlay" id="modalRestoreInspection">
+    <div class="modal-card wide" style="max-width:760px;width:95vw">
+      <div class="modal-header" style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:16px 20px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:36px;height:36px;border-radius:8px;background:#fef3c7;color:#d97706;display:flex;align-items:center;justify-content:center;font-size:18px">
+            <i class="fa-solid fa-file-shield"></i>
+          </div>
+          <div>
+            <div class="modal-title" style="font-size:16px;font-weight:700;color:#0f172a">ตรวจสอบและกู้คืนข้อมูลระบบ (Restore Inspection)</div>
+            <div style="font-size:12px;color:#64748b" id="restoreFileMetaName">ตรวจพบไฟล์สำรองข้อมูล</div>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalRestoreInspection')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="modal-body" style="padding:20px;max-height:75vh;overflow-y:auto;display:flex;flex-direction:column;gap:16px">
+        
+        <!-- File Summary Snapshot Cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:10px">
+          <div style="padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">
+            <div style="font-size:11px;color:#64748b;font-weight:600">วันที่ทำสำรอง</div>
+            <div style="font-size:13px;font-weight:700;color:#0f172a;margin-top:2px" id="lblRestoreDate">-</div>
+          </div>
+          <div style="padding:10px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px">
+            <div style="font-size:11px;color:#166534;font-weight:600">จำนวนพนักงาน</div>
+            <div style="font-size:14px;font-weight:800;color:#15803d;margin-top:2px" id="lblRestoreEmpCount">-</div>
+          </div>
+          <div style="padding:10px 14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px">
+            <div style="font-size:11px;color:#1e40af;font-weight:600">สาขาทั้งหมด</div>
+            <div style="font-size:14px;font-weight:800;color:#1d4ed8;margin-top:2px" id="lblRestoreBranchCount">-</div>
+          </div>
+          <div style="padding:10px 14px;background:#fdf4ff;border:1px solid #f0abfc;border-radius:10px">
+            <div style="font-size:11px;color:#86198f;font-weight:600">งวดเงินเดือน</div>
+            <div style="font-size:14px;font-weight:800;color:#a21caf;margin-top:2px" id="lblRestorePeriodsCount">-</div>
+          </div>
+        </div>
+
+        <!-- Auto Safety Snapshot Box -->
+        <div style="padding:14px 16px;background:#ecfdf5;border:1.5px solid #6ee7b7;border-radius:10px">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+            <input type="checkbox" id="chkAutoSafetyBackup" checked style="width:18px;height:18px;margin-top:2px;accent-color:#059669">
+            <div>
+              <div style="font-weight:700;color:#065f46;font-size:13px">
+                <i class="fa-solid fa-shield-heart" style="color:#059669"></i> ดาวน์โหลดข้อมูลปัจจุบันสำรองเก็บไว้อัตโนมัติก่อนเริ่มกู้คืน (Auto-Safety Snapshot)
+              </div>
+              <div style="font-size:11px;color:#047857;margin-top:2px;line-height:1.4">
+                ระบบจะสั่งดาวน์โหลดข้อมูลฐานข้อมูลสภาพปัจจุบันลงเครื่องของคุณก่อนทันที หากเลือกไฟล์ผิดสามารถกู้คืนย้อนกลับได้เสมอ (แนะนำอย่างยิ่ง)
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <!-- Selective Restore Options -->
+        <div style="border:1.5px solid #e2e8f0;border-radius:12px;overflow:hidden">
+          <div style="padding:10px 16px;background:#f1f5f9;font-weight:700;font-size:13px;color:#334155;display:flex;align-items:center;justify-content:space-between">
+            <span><i class="fa-solid fa-list-check" style="color:#2563eb"></i> เลือกรายการที่ต้องการกู้คืน (Selective Scope)</span>
+            <span style="font-size:11px;font-weight:600;color:#64748b">กำหนดได้ตามต้องการ</span>
+          </div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+            
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#1e293b;cursor:pointer">
+              <input type="checkbox" id="chkRestoreEmployees" checked style="width:16px;height:16px;accent-color:#2563eb">
+              <span>🧑‍💼 ทะเบียนพนักงาน (Employees) & 🏬 ข้อมูลสาขา (Branches)</span>
+            </label>
+
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#1e293b;cursor:pointer">
+              <input type="checkbox" id="chkRestoreDevices" checked style="width:16px;height:16px;accent-color:#2563eb">
+              <span>📱 การผูกเครื่องอุปกรณ์ลงเวลา (Employee Devices)</span>
+            </label>
+
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#1e293b;cursor:pointer">
+                <input type="checkbox" id="chkRestorePayroll" checked style="width:16px;height:16px;accent-color:#2563eb" onchange="toggleRestorePeriodOptions()">
+                <span>💰 รายการเงินเดือนและผลคำนวณ (Payroll Inputs & Calculations)</span>
+              </label>
+              <div id="restorePeriodScopeArea" style="margin-left:26px;display:flex;flex-direction:column;gap:6px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px">
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <span style="font-size:11px;font-weight:700;color:#64748b">เลือกระดับงวดที่ต้องการกู้คืน:</span>
+                  <button type="button" class="btn btn-slate" style="padding:2px 8px;font-size:11px" onclick="toggleSelectAllRestorePeriods()">เลือกทั้งหมด / ยกเลิก</button>
+                </div>
+                <div id="restorePeriodCheckboxes" style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px">
+                  <!-- Generated dynamically -->
+                </div>
+              </div>
+            </div>
+
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#1e293b;cursor:pointer">
+              <input type="checkbox" id="chkRestorePtnTime" checked style="width:16px;height:16px;accent-color:#2563eb">
+              <span>⏱️ ประวัติการลงเวลา & คำขอระบบ PTN Time (Time Logs, Leave, OT, Advance)</span>
+            </label>
+
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#1e293b;cursor:pointer">
+              <input type="checkbox" id="chkRestorePushSubs" checked style="width:16px;height:16px;accent-color:#2563eb">
+              <span>🔔 การลงทะเบียนรับแจ้งเตือน Web Push (Push Subscriptions)</span>
+            </label>
+
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#1e293b;cursor:pointer">
+              <input type="checkbox" id="chkRestoreSettings" checked style="width:16px;height:16px;accent-color:#2563eb">
+              <span>⚙️ การตั้งค่าระบบทั่วไป (System Settings)</span>
+            </label>
+
+            <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:#b91c1c;cursor:pointer">
+              <input type="checkbox" id="chkRestoreUsers" style="width:16px;height:16px;accent-color:#dc2626">
+              <span>👥 รายชื่อผู้ใช้งาน & รหัสผ่าน (Users & Passwords - ปกติไม่ต้องเลือกเพื่อไม่ให้ทับรหัสปัจจุบัน)</span>
+            </label>
+
+          </div>
+        </div>
+
+        <!-- Warning Callout -->
+        <div style="padding:12px 14px;background:#fff1f2;border:1.5px solid #fecdd3;border-radius:10px;display:flex;align-items:center;gap:10px">
+          <i class="fa-solid fa-triangle-exclamation" style="color:#e11d48;font-size:20px"></i>
+          <div style="font-size:12px;color:#9f1239;line-height:1.4">
+            <b>คำเตือน:</b> การกู้คืนข้อมูลจะทำการเขียนทับ (Overwrite) ข้อมูลในหมวดหมู่ที่คุณเลือก โปรดตรวจสอบความถูกต้องของไฟล์สำรองก่อนกดยืนยัน
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer" style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#f8fafc;border-top:1px solid #e2e8f0">
+        <button type="button" class="btn btn-slate" onclick="closeModal('modalRestoreInspection')">
+          <i class="fa-solid fa-xmark"></i> ยกเลิก
+        </button>
+        <button type="button" class="btn btn-yellow" id="btnConfirmExecuteRestore" onclick="executeSelectiveRestore()" style="font-weight:700;padding:10px 22px">
+          <i class="fa-solid fa-check-double"></i> ยืนยันการกู้คืนข้อมูล
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=8.1"></script>
+  <script src="js/app.js?v=8.2"></script>
 </body>
 </html>
