@@ -488,7 +488,11 @@ function getActualWorkingDaysInCutoff(startDate, endDate) {
 }
 
 async function handleAction(db, action, params) {
-  const period = params.period || getDefaultPeriod();
+  let period = params.period;
+  if (!period) {
+    const latestRow = await db.prepare('SELECT period FROM monthly_inputs ORDER BY id DESC LIMIT 1').first().catch(() => null);
+    period = (latestRow && latestRow.period) ? latestRow.period : getDefaultPeriod();
+  }
 
   switch (action) {
     // 1. AUTH (STRICT D1 DATABASE AUTHENTICATION)

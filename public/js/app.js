@@ -459,7 +459,8 @@ function initPeriodDropdowns() {
       return;
     }
   }
-  State.period = months[curM] + ' ' + curY;
+  // If no saved period, leave State.period empty so server returns the latest active period with data
+  State.period = '';
 }
 
 function onPeriodChanged() {
@@ -493,11 +494,14 @@ function resetToActualWorkDays() {
 
 // DATA LOADER & STATE SYNC
 function loadAppData() {
-  return callApi('getAppInitialData')
+  var payload = {};
+  if (State.period) payload.period = State.period;
+  return callApi('getAppInitialData', payload)
     .then(function(r) {
       if (!r.success) { showToast(r.message, 'error'); return; }
 
       State.period = r.period;
+      localStorage.setItem('ptn_last_period', State.period);
       State.workingDays = r.workingDays || 30;
       State.isClosed = r.isClosed || false;
       State.closedInfo = r.closedInfo || '';
@@ -525,6 +529,13 @@ function renderAllViews() {
   // Update Period Bar
   document.getElementById('periodPillDisplay').textContent = State.period;
   document.getElementById('periodWorkingDaysInput').value = State.workingDays;
+  if (State.period && State.period.indexOf(' ') > 0) {
+    var pParts = State.period.split(' ');
+    var mSel = document.getElementById('periodMonthSelect');
+    var ySel = document.getElementById('periodYearSelect');
+    if (mSel && pParts[0]) mSel.value = pParts[0];
+    if (ySel && pParts[1]) ySel.value = pParts[1];
+  }
   var statusEl = document.getElementById('periodStatusDisplay');
   if (State.isClosed) {
     statusEl.innerHTML = '<span class="status-badge" style="background:#fef2f2;color:#dc2626;border-color:#fecaca"><i class="fa-solid fa-lock"></i> ปิดงวดแล้ว</span>';
