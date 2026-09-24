@@ -7099,7 +7099,7 @@ function renderTimeAttendanceTodayLogs(logs) {
         '<div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div>' +
         (l.break_out ? '<div style="font-size:10.5px;color:#b45309;font-weight:700;margin-top:2px"><i class="fa-solid fa-mug-hot"></i> พัก ' + l.break_out + (l.break_in ? ' - ' + l.break_in : ' (กำลังพัก)') + (l.break_minutes > 0 ? ' (' + l.break_minutes + 'น.)' : '') + '</div>' : '') +
         (l.has_leave_conflict ? '<div style="font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px" title="พนักงานมีใบลาที่อนุมัติไว้ในวันนี้ แต่มาทำงานจริง ระบบตรวจจับอัตโนมัติและยกเว้นการหักวันลา"><i class="fa-solid fa-shield-halved text-amber"></i> <span>มีใบลาอนุมัติไว้แต่วันนี้มาทำงานจริง (ระบบบันทึกเวลาทำงานปกติ ไม่หักวันลา)</span></div>' : '') +
-        ((l.is_full_pay === 1 || l.is_full_pay === '1' || (l.remark && l.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) ? '<div style="font-size:10px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="ได้รับอนุมัติเลิกงานก่อนเนื่องจากงานเสร็จ ได้รับค่าแรงเต็มวัน ไม่หักเงิน"><i class="fa-solid fa-circle-check text-green"></i> <span>งานเสร็จ-จ่ายเต็มวัน (ไม่หักเงิน)</span></div>' : '') +
+        ((l.remark && l.remark.includes('สิทธิ์ประจำตำแหน่ง')) ? '<div style="font-size:10px;color:#6b21a8;background:#faf5ff;border:1px solid #d8b4fe;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="สิทธิ์ประจำตำแหน่ง: ระบบยกเว้นการหักเงินชั่วโมงขาดให้อัตโนมัติ (Fixed Salary Exempt)"><i class="fa-solid fa-sparkles text-purple"></i> <span>✨ สิทธิ์เต็มวัน (ไม่หักเวลาขาด)</span></div>' : ((l.is_full_pay === 1 || l.is_full_pay === '1' || (l.remark && l.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) ? '<div style="font-size:10px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="ได้รับอนุมัติเลิกงานก่อนเนื่องจากงานเสร็จ ได้รับค่าแรงเต็มวัน ไม่หักเงิน"><i class="fa-solid fa-circle-check text-green"></i> <span>งานเสร็จ-จ่ายเต็มวัน (ไม่หักเงิน)</span></div>' : '')) +
       '</td>' +
       '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
       '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
@@ -7225,17 +7225,29 @@ function viewAttendanceLogDetail(id) {
   document.getElementById('dtlEmpPosition').textContent = 'ตำแหน่ง: ' + (log.position || '-');
   document.getElementById('dtlDate').textContent = log.date || '-';
 
+  var isExempt = (log.remark && log.remark.includes('สิทธิ์ประจำตำแหน่ง'));
+  var isBranchFullPay = !isExempt && (log.is_full_pay === 1 || log.is_full_pay === '1' || (log.remark && log.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน')));
+
   var badgeHtml = '';
   if (log.status === 'GEOFENCE_FAIL') {
     badgeHtml = '<span style="background:#fef2f2;color:#b91c1c;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #fecaca;font-weight:700"><i class="fa-solid fa-triangle-exclamation"></i> นอกพิกัดสาขา</span>';
   } else if (log.status === 'SUNDAY_WORK') {
     badgeHtml = '<span style="background:#eff6ff;color:#1d4ed8;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #bfdbfe;font-weight:700"><i class="fa-solid fa-calendar-check"></i> ทำงานวันอาทิตย์</span>';
+  } else if (isExempt) {
+    badgeHtml = '<span style="background:#faf5ff;color:#6b21a8;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #d8b4fe;font-weight:700"><i class="fa-solid fa-sparkles text-purple"></i> ✨ สิทธิ์เต็มวัน (ไม่หักเวลาขาด)</span>';
+  } else if (isBranchFullPay) {
+    badgeHtml = '<span style="background:#ecfdf5;color:#047857;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #a7f3d0;font-weight:700"><i class="fa-solid fa-circle-check text-green"></i> ✨ งานเสร็จ-จ่ายเต็มวัน</span>';
   } else if ((Number(log.late_minutes) || 0) > 0) {
     badgeHtml = '<span style="background:#fff7ed;color:#c2410c;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #fed7aa;font-weight:700"><i class="fa-solid fa-clock"></i> มาสาย ' + log.late_minutes + ' นาที</span>';
   } else {
     badgeHtml = '<span style="background:#f0fdf4;color:#15803d;font-size:11.5px;padding:3px 8px;border-radius:6px;border:1px solid #bbf7d0;font-weight:700"><i class="fa-solid fa-check"></i> ปกติ (ในสาขา)</span>';
   }
   document.getElementById('dtlStatusBadge').innerHTML = badgeHtml;
+
+  var exemptBox = document.getElementById('dtlExemptNoticeBox');
+  if (exemptBox) {
+    exemptBox.style.display = isExempt ? 'block' : 'none';
+  }
 
   // 2. In section
   document.getElementById('dtlClockInTime').textContent = log.clock_in ? log.clock_in + ' น.' : 'ยังไม่บันทึก';
