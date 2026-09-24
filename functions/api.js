@@ -1157,7 +1157,7 @@ async function handleAction(db, action, params) {
       let timeLogsList = [];
       try {
         let tlSql = `
-          SELECT id, emp_id, date, clock_in, clock_out, work_hours, ot_hours, late_minutes, status, branch_id
+          SELECT id, emp_id, date, clock_in, clock_out, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark
           FROM time_logs
           WHERE date BETWEEN ? AND ?
         `;
@@ -1317,6 +1317,11 @@ async function handleAction(db, action, params) {
         const lateMins = Number(row.late_minutes) || 0;
 
         if (row.clock_in && row.clock_out && workHours > 0) {
+          const isFullPay = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน')));
+          if (isFullPay) {
+            // Early dismissal approved with full pay - waive missing hours deduction!
+            continue;
+          }
           if (workHours < targetHours) {
             const missing = Math.round((targetHours - workHours) * 100) / 100;
             missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + missing;
@@ -1938,6 +1943,32 @@ async function handleAction(db, action, params) {
       return { success: true, message: `ลบสาขา ${branchId} เรียบร้อยแล้ว` };
     }
 
+    // Toggle Branch Early Dismissal Mode (โหมดงานเสร็จ - จ่ายเต็มวัน)
+    case 'toggleBranchEarlyDismissal': {
+      const callerUser = params.username || 'Admin';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_attendance_settings')) || (await userHasPermission(db, callerUser, 'approve_attendance'));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการสาขา' };
+
+      const branchId = String(params.branchId || params.branch_id || '').trim();
+      const enabled = (params.enabled === true || params.enabled === 'true' || params.enabled === 1 || params.enabled === '1') ? 1 : 0;
+      if (!branchId) return { success: false, message: 'กรุณาระบุรหัสสาขา' };
+
+      await db.prepare('ALTER TABLE branches ADD COLUMN early_dismissal_full_pay INTEGER DEFAULT 0').run().catch(() => {});
+      await db.prepare('UPDATE branches SET early_dismissal_full_pay = ? WHERE branch_id = ?').bind(enabled, branchId).run();
+
+      const branch = await db.prepare('SELECT branch_name FROM branches WHERE branch_id = ?').bind(branchId).first();
+      const branchName = branch?.branch_name || branchId;
+      const statusText = enabled ? 'เปิดโหมดงานเสร็จ-เลิกงานก่อน (จ่ายค่าแรงเต็มวัน)' : 'ปิดโหมดงานเสร็จ (กลับสู่โหมดปกติ)';
+
+      await logSystemActivity(db, callerUser, 'TOGGLE_EARLY_DISMISSAL', `${statusText} สำหรับสาขา [${branchId}] ${branchName}`);
+      return { 
+        success: true, 
+        branchId, 
+        enabled: enabled === 1,
+        message: `${statusText} สำหรับสาขา ${branchName} เรียบร้อยแล้ว` 
+      };
+    }
+
     // 5.4.2 GET ATTENDANCE LOGS FOR DATE RANGE (EXPORT)
     case 'getAttendanceLogsRange': {
       const callerUser = params.username || 'Admin';
@@ -2183,12 +2214,14 @@ async function handleAction(db, action, params) {
       const allowed = (await userHasPermission(db, callerUser, 'approve_attendance')) || (await userHasPermission(db, callerUser, 'manage_attendance_settings'));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์แก้ไขข้อมูลลงเวลา' };
 
-      const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, status, remark } = params;
+      const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, status, remark, isFullPay } = params;
       if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการแก้ไข' };
+
+      const isFullPayVal = (isFullPay === 1 || isFullPay === '1' || isFullPay === true || isFullPay === 'true') ? 1 : 0;
 
       await db.prepare(`
         UPDATE time_logs
-        SET clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, overbreak_minutes = ?, late_minutes = ?, work_hours = ?, status = ?, remark = ?
+        SET clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, overbreak_minutes = ?, late_minutes = ?, work_hours = ?, status = ?, remark = ?, is_full_pay = ?
         WHERE id = ?
       `).bind(
         clockIn || null,
@@ -2201,6 +2234,7 @@ async function handleAction(db, action, params) {
         Number(workHours) || 0,
         status || 'NORMAL',
         remark || '',
+        isFullPayVal,
         id
       ).run();
 

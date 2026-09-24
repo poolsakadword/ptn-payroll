@@ -6870,6 +6870,7 @@ function loadTimeAttendanceDashboard() {
       if (r.branches) {
         State.branches = r.branches;
         populateBranchSelects();
+        renderBranchEarlyDismissalBar();
       }
 
       _currentAttendanceLogs = r.logsToday || [];
@@ -7093,6 +7094,7 @@ function renderTimeAttendanceTodayLogs(logs) {
         '<div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div>' +
         (l.break_out ? '<div style="font-size:10.5px;color:#b45309;font-weight:700;margin-top:2px"><i class="fa-solid fa-mug-hot"></i> พัก ' + l.break_out + (l.break_in ? ' - ' + l.break_in : ' (กำลังพัก)') + (l.break_minutes > 0 ? ' (' + l.break_minutes + 'น.)' : '') + '</div>' : '') +
         (l.has_leave_conflict ? '<div style="font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px" title="พนักงานมีใบลาที่อนุมัติไว้ในวันนี้ แต่มาทำงานจริง ระบบตรวจจับอัตโนมัติและยกเว้นการหักวันลา"><i class="fa-solid fa-shield-halved text-amber"></i> <span>มีใบลาอนุมัติไว้แต่วันนี้มาทำงานจริง (ระบบบันทึกเวลาทำงานปกติ ไม่หักวันลา)</span></div>' : '') +
+        ((l.is_full_pay === 1 || l.is_full_pay === '1' || (l.remark && l.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) ? '<div style="font-size:10px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="ได้รับอนุมัติเลิกงานก่อนเนื่องจากงานเสร็จ ได้รับค่าแรงเต็มวัน ไม่หักเงิน"><i class="fa-solid fa-circle-check text-green"></i> <span>งานเสร็จ-จ่ายเต็มวัน (ไม่หักเงิน)</span></div>' : '') +
       '</td>' +
       '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
       '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
@@ -7392,6 +7394,11 @@ function openEditAttendanceLogModal(id) {
   document.getElementById('editAttWorkHours').value = log.work_hours || 0;
   document.getElementById('editAttRemark').value = log.remark || '';
 
+  var isFullPay = (log.is_full_pay === 1 || log.is_full_pay === '1' || (log.remark && log.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน')));
+  if (document.getElementById('editAttIsFullPay')) {
+    document.getElementById('editAttIsFullPay').checked = !!isFullPay;
+  }
+
   openModal('modalAttendanceEdit');
 }
 
@@ -7408,6 +7415,7 @@ function saveAttendanceLogEditForm(e) {
   var workHours = Number(document.getElementById('editAttWorkHours').value) || 0;
   var status = document.getElementById('editAttStatus').value;
   var remark = document.getElementById('editAttRemark').value.trim();
+  var isFullPay = (document.getElementById('editAttIsFullPay') && document.getElementById('editAttIsFullPay').checked) ? 1 : 0;
 
   callApi('updateAttendanceLog', {
     id: id,
@@ -7420,6 +7428,7 @@ function saveAttendanceLogEditForm(e) {
     workHours: workHours,
     status: status,
     remark: remark,
+    isFullPay: isFullPay,
     username: (State.currentUser && State.currentUser.username) || 'Admin'
   })
     .then(function(r) {
@@ -7830,6 +7839,13 @@ function renderBranchManagerTable() {
       '</td>' +
       '<td class="text-center font-mono" style="font-size:11.5px;color:#0f766e;letter-spacing:1px">••••••</td>' +
       '<td class="text-center">' + statusBadge + '</td>' +
+      (function() {
+        var isEarly = (b.early_dismissal_full_pay === 1 || b.early_dismissal_full_pay === '1' || b.early_dismissal_full_pay === 'true' || b.early_dismissal_full_pay === true);
+        var earlyBtn = '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 8px;font-weight:700;background:' + (isEarly ? '#ecfdf5' : '#f8fafc') + ';color:' + (isEarly ? '#059669' : '#64748b') + ';border:1.5px solid ' + (isEarly ? '#10b981' : '#cbd5e1') + '" onclick="toggleBranchEarlyDismissal(\'' + esc(b.branch_id) + '\', ' + !isEarly + ')" title="คลิกเพื่อเปิด/ปิดโหมดงานเสร็จ">' +
+          (isEarly ? '🟢 เปิด (จ่ายเต็ม)' : '⚪ ปิด (ปกติ)') +
+        '</button>';
+        return '<td class="text-center">' + earlyBtn + '</td>';
+      })() +
       '<td class="text-center" style="white-space:nowrap">' +
         '<div style="display:inline-flex;gap:4px">' +
           '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 8px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd" onclick="openEditBranchModal(\'' + esc(b.branch_id) + '\')" title="แก้ไขสาขานี้">' +
@@ -7844,6 +7860,73 @@ function renderBranchManagerTable() {
   });
 
   tbody.innerHTML = html;
+}
+
+function renderBranchEarlyDismissalBar() {
+  var container = document.getElementById('containerBranchEarlySwitches');
+  if (!container) return;
+
+  var bList = State.branches || [];
+  if (!bList.length) {
+    container.innerHTML = '<span style="font-size:12px;color:#94a3b8">กำลังโหลดข้อมูลสาขา...</span>';
+    return;
+  }
+
+  var html = '';
+  bList.forEach(function(b) {
+    var isEarly = (b.early_dismissal_full_pay === 1 || b.early_dismissal_full_pay === '1' || b.early_dismissal_full_pay === 'true' || b.early_dismissal_full_pay === true);
+    var badgeBg = isEarly ? '#ecfdf5' : '#f8fafc';
+    var badgeBorder = isEarly ? '#10b981' : '#cbd5e1';
+    var textColor = isEarly ? '#047857' : '#475569';
+    var statusText = isEarly ? '🟢 เปิด (จ่ายเต็มวัน)' : '⚪ ปกติ';
+
+    html += '<div style="display:flex;align-items:center;gap:8px;background:' + badgeBg + ';border:1.5px solid ' + badgeBorder + ';padding:6px 12px;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:all 0.2s">' +
+      '<div style="font-weight:700;font-size:12px;color:' + textColor + '">' +
+        '<i class="fa-solid fa-store" style="margin-right:4px"></i>' + esc(b.branch_name) +
+      '</div>' +
+      '<label class="switch-toggle" style="position:relative;display:inline-block;width:38px;height:20px;cursor:pointer">' +
+        '<input type="checkbox" ' + (isEarly ? 'checked' : '') + ' onchange="toggleBranchEarlyDismissal(\'' + esc(b.branch_id) + '\', this.checked)" style="opacity:0;width:0;height:0">' +
+        '<span style="position:absolute;top:0;left:0;right:0;bottom:0;background:' + (isEarly ? '#10b981' : '#cbd5e1') + ';border-radius:20px;transition:0.3s;box-shadow:inset 0 1px 2px rgba(0,0,0,0.1)">' +
+          '<span style="position:absolute;content:\'\';height:14px;width:14px;left:' + (isEarly ? '20px' : '3px') + ';bottom:3px;background:white;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></span>' +
+        '</span>' +
+      '</label>' +
+      '<span style="font-size:11px;font-weight:700;color:' + textColor + '">' + statusText + '</span>' +
+    '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+function toggleBranchEarlyDismissal(branchId, enabled) {
+  var b = (State.branches || []).find(function(x) { return x.branch_id === branchId; });
+  var bName = b ? b.branch_name : branchId;
+
+  showToast('กำลัง' + (enabled ? 'เปิด' : 'ปิด') + 'โหมดงานเสร็จสาขา ' + bName + '...', 'info');
+
+  callApi('toggleBranchEarlyDismissal', {
+    branchId: branchId,
+    enabled: enabled,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (r && r.success) {
+        showToast(r.message || 'อัปเดตโหมดงานเสร็จสำเร็จ');
+        if (b) {
+          b.early_dismissal_full_pay = enabled ? 1 : 0;
+        }
+        renderBranchEarlyDismissalBar();
+        renderBranchManagerTable();
+      } else {
+        showToast(r ? r.message : 'ไม่สามารถอัปเดตได้', 'error');
+        renderBranchEarlyDismissalBar();
+        renderBranchManagerTable();
+      }
+    })
+    .catch(function(err) {
+      showToast('เกิดข้อผิดพลาด: ' + err.message, 'error');
+      renderBranchEarlyDismissalBar();
+      renderBranchManagerTable();
+    });
 }
 
 function openEditBranchModal(branchId) {
@@ -7870,6 +7953,8 @@ function openEditBranchModal(branchId) {
     document.getElementById('bRadius').value = b.radius_meters || 200;
     document.getElementById('bKioskPin').value = b.kiosk_pin || '123456';
     document.getElementById('bStatus').value = b.status || 'ACTIVE';
+    var isEarly = (b.early_dismissal_full_pay === 1 || b.early_dismissal_full_pay === '1' || b.early_dismissal_full_pay === 'true' || b.early_dismissal_full_pay === true);
+    if (document.getElementById('bEarlyDismissal')) document.getElementById('bEarlyDismissal').checked = !!isEarly;
   } else {
     var nextId = 'B0' + ((State.branches ? State.branches.length : 0) + 1);
     if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-plus text-blue"></i> <span>เพิ่มสาขาใหม่</span>';
@@ -7886,6 +7971,7 @@ function openEditBranchModal(branchId) {
     document.getElementById('bRadius').value = 200;
     document.getElementById('bKioskPin').value = '123456';
     document.getElementById('bStatus').value = 'ACTIVE';
+    if (document.getElementById('bEarlyDismissal')) document.getElementById('bEarlyDismissal').checked = false;
   }
 
   openModal('modalEditBranch');
@@ -7914,7 +8000,8 @@ function saveBranchForm(e) {
     lng: Number(document.getElementById('bLng').value) || 100.524123,
     radius_meters: Number(document.getElementById('bRadius').value) || 200,
     kiosk_pin: (document.getElementById('bKioskPin').value || '123456').trim(),
-    status: document.getElementById('bStatus').value || 'ACTIVE'
+    status: document.getElementById('bStatus').value || 'ACTIVE',
+    early_dismissal_full_pay: (document.getElementById('bEarlyDismissal') && document.getElementById('bEarlyDismissal').checked) ? 1 : 0
   };
 
   callApi('saveBranch', {
