@@ -496,6 +496,7 @@ function resetToActualWorkDays() {
 function loadAppData(isExplicitPeriodChange) {
   var payload = {};
   if (State.period) payload.period = State.period;
+  if (isExplicitPeriodChange) payload.forcePeriod = true;
   return callApi('getAppInitialData', payload)
     .then(function(r) {
       if (!r.success) { showToast(r.message, 'error'); return; }
@@ -580,7 +581,7 @@ function renderAllViews() {
       renderAnalyticsTab(true);
     }
   } catch(e) { console.error('renderAnalyticsTab error:', e); }
-  try { renderDocumentsTab(); } catch(e) { console.error('renderDocumentsTab error:', e); }
+  try { renderDocumentsTab(true); } catch(e) { console.error('renderDocumentsTab error:', e); }
   try { renderCompanySettings(); } catch(e) { console.error('renderCompanySettings error:', e); }
   try { renderUsersTable(); } catch(e) { console.error('renderUsersTable error:', e); }
 }
@@ -5810,9 +5811,9 @@ function switchDocCategory(cat) {
 }
 
 // Render Document Center Main Tab
-function renderDocumentsTab() {
+function renderDocumentsTab(silent) {
   if (!hasPermission('view_salary') && !hasPermission('all') && !hasPermission('manage_company')) {
-    showToast('คุณไม่มีสิทธิ์เข้าถึงศูนย์เอกสาร', 'warning');
+    if (!silent) showToast('คุณไม่มีสิทธิ์เข้าถึงศูนย์เอกสาร', 'warning');
     return;
   }
 
