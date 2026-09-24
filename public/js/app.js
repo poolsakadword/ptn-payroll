@@ -468,7 +468,7 @@ function onPeriodChanged() {
   var y = document.getElementById('periodYearSelect').value;
   State.period = m + ' ' + y;
   localStorage.setItem('ptn_last_period', State.period);
-  loadAppData();
+  loadAppData(true);
 }
 
 function setPeriodWorkingDays() {
@@ -476,7 +476,7 @@ function setPeriodWorkingDays() {
   callApi('savePeriodWorkDays', { workingDays: days })
     .then(function(r) {
       showToast(r.message || 'ตั้งค่าวันทำงานสำเร็จ');
-      loadAppData();
+      loadAppData(true);
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }
@@ -493,12 +493,19 @@ function resetToActualWorkDays() {
 }
 
 // DATA LOADER & STATE SYNC
-function loadAppData() {
+function loadAppData(isExplicitPeriodChange) {
   var payload = {};
   if (State.period) payload.period = State.period;
   return callApi('getAppInitialData', payload)
     .then(function(r) {
       if (!r.success) { showToast(r.message, 'error'); return; }
+
+      // If initial load or current period has no records, but another latest period has data, auto-switch to it
+      if (!isExplicitPeriodChange && (!r.inputRecords || r.inputRecords.length === 0) && r.latestActivePeriod && r.latestActivePeriod !== r.period) {
+        State.period = r.latestActivePeriod;
+        localStorage.setItem('ptn_last_period', State.period);
+        return loadAppData(true);
+      }
 
       State.period = r.period;
       localStorage.setItem('ptn_last_period', State.period);
@@ -525,42 +532,57 @@ function loadAppData() {
 }
 
 function renderAllViews() {
-  applyRolePermissions();
+  try { applyRolePermissions(); } catch(e) { console.error('applyRolePermissions error:', e); }
+
   // Update Period Bar
-  document.getElementById('periodPillDisplay').textContent = State.period;
-  document.getElementById('periodWorkingDaysInput').value = State.workingDays;
-  if (State.period && State.period.indexOf(' ') > 0) {
-    var pParts = State.period.split(' ');
-    var mSel = document.getElementById('periodMonthSelect');
-    var ySel = document.getElementById('periodYearSelect');
-    if (mSel && pParts[0]) mSel.value = pParts[0];
-    if (ySel && pParts[1]) ySel.value = pParts[1];
-  }
-  var statusEl = document.getElementById('periodStatusDisplay');
-  if (State.isClosed) {
-    statusEl.innerHTML = '<span class="status-badge" style="background:#fef2f2;color:#dc2626;border-color:#fecaca"><i class="fa-solid fa-lock"></i> ปิดงวดแล้ว</span>';
-    document.getElementById('periodCloseBtnContainer').innerHTML = '<button type="button" class="btn btn-slate btn-sm" onclick="reopenPeriod()"><i class="fa-solid fa-lock-open"></i> ปลดล็อคงวด</button>';
-  } else {
-    statusEl.innerHTML = '<span class="status-badge"><i class="fa-solid fa-circle-check"></i> เปิดใช้งานอยู่</span>';
-    document.getElementById('periodCloseBtnContainer').innerHTML = '<button type="button" class="btn btn-danger btn-sm" onclick="closePeriod()"><i class="fa-solid fa-lock"></i> ปิดงวดนี้</button>';
+  try {
+    var pill = document.getElementById('periodPillDisplay');
+    if (pill) pill.textContent = State.period;
+    var wInput = document.getElementById('periodWorkingDaysInput');
+    if (wInput) wInput.value = State.workingDays;
+    if (State.period && State.period.indexOf(' ') > 0) {
+      var pParts = State.period.split(' ');
+      var mSel = document.getElementById('periodMonthSelect');
+      var ySel = document.getElementById('periodYearSelect');
+      if (mSel && pParts[0]) mSel.value = pParts[0];
+      if (ySel && pParts[1]) ySel.value = pParts[1];
+    }
+    var statusEl = document.getElementById('periodStatusDisplay');
+    var closeBtnCont = document.getElementById('periodCloseBtnContainer');
+    if (statusEl) {
+      if (State.isClosed) {
+        statusEl.innerHTML = '<span class="status-badge" style="background:#fef2f2;color:#dc2626;border-color:#fecaca"><i class="fa-solid fa-lock"></i> ปิดงวดแล้ว</span>';
+        if (closeBtnCont) closeBtnCont.innerHTML = '<button type="button" class="btn btn-slate btn-sm" onclick="reopenPeriod()"><i class="fa-solid fa-lock-open"></i> ปลดล็อคงวด</button>';
+      } else {
+        statusEl.innerHTML = '<span class="status-badge"><i class="fa-solid fa-circle-check"></i> เปิดใช้งานอยู่</span>';
+        if (closeBtnCont) closeBtnCont.innerHTML = '<button type="button" class="btn btn-danger btn-sm" onclick="closePeriod()"><i class="fa-solid fa-lock"></i> ปิดงวดนี้</button>';
+      }
+    }
+
+    var compName = (State.company && State.company.companyName) || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+    var topBrand = document.getElementById('topBrandName');
+    if (topBrand) topBrand.textContent = compName;
+    var footerBrand = document.getElementById('footerBrandName');
+    if (footerBrand) footerBrand.textContent = compName;
+    var dashTitle = document.getElementById('dashTitle');
+    if (dashTitle) dashTitle.textContent = 'แดชบอร์ดสรุปยอดเงินเดือน - ' + compName;
+  } catch(e) {
+    console.error('Header update error:', e);
   }
 
-  // Update Headers & Company Info
-  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
-  document.getElementById('topBrandName').textContent = compName;
-  document.getElementById('footerBrandName').textContent = compName;
-  document.getElementById('dashTitle').textContent = 'แดชบอร์ดสรุปยอดเงินเดือน - ' + compName;
-
-  renderDashboard();
-  renderPayrollTable();
-  renderInputTable();
-  renderEmployeesTable();
-  renderHistoryTab();
-  if (document.getElementById('tab-analytics') && document.getElementById('tab-analytics').classList.contains('active')) {
-    renderAnalyticsTab(true);
-  }
-  renderCompanySettings();
-  renderUsersTable();
+  try { renderDashboard(); } catch(e) { console.error('renderDashboard error:', e); }
+  try { renderPayrollTable(); } catch(e) { console.error('renderPayrollTable error:', e); }
+  try { renderInputTable(); } catch(e) { console.error('renderInputTable error:', e); }
+  try { renderEmployeesTable(); } catch(e) { console.error('renderEmployeesTable error:', e); }
+  try { renderHistoryTab(true); } catch(e) { console.error('renderHistoryTab error:', e); }
+  try {
+    if (document.getElementById('tab-analytics') && document.getElementById('tab-analytics').classList.contains('active')) {
+      renderAnalyticsTab(true);
+    }
+  } catch(e) { console.error('renderAnalyticsTab error:', e); }
+  try { renderDocumentsTab(); } catch(e) { console.error('renderDocumentsTab error:', e); }
+  try { renderCompanySettings(); } catch(e) { console.error('renderCompanySettings error:', e); }
+  try { renderUsersTable(); } catch(e) { console.error('renderUsersTable error:', e); }
 }
 
 // 1. DASHBOARD RENDERER
@@ -991,7 +1013,7 @@ function renderEmployeesTable() {
     else if (bName.indexOf('ทหารไทย') >= 0 || bName.indexOf('TTB') >= 0) bankPill = '<span class="period-pill" style="background:#fff7ed;color:#c2410c;border-color:#fed7aa;font-size:10.5px">TTB</span>';
 
     // Device Lock Badge & Button (PTN Time Integration)
-    var devBadge = e.isDeviceBound ? (' <span class="period-pill" style="background:#eff6ff;color:#0284c7;border-color:#bae6fd;font-size:10px;padding:1px 6px" title="ผูกเครื่องแล้ว: ' + esc(e.boundDevice?.deviceName || 'Mobile Web') + '">📱 ผูกเครื่อง</span>') : '';
+    var devBadge = e.isDeviceBound ? (' <span class="period-pill" style="background:#eff6ff;color:#0284c7;border-color:#bae6fd;font-size:10px;padding:1px 6px" title="ผูกเครื่องแล้ว: ' + esc((e.boundDevice && e.boundDevice.deviceName) || 'Mobile Web') + '">📱 ผูกเครื่อง</span>') : '';
     var devUnlockBtn = e.isDeviceBound ? ('<button type="button" class="btn-icon" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button> ') : '';
 
     // Avatar HTML for Table & Card
@@ -1897,6 +1919,18 @@ function switchTab(tabId) {
     renderDocumentsTab();
   } else if (tabId === 'attendance') {
     loadTimeAttendanceDashboard();
+  } else if (tabId === 'employees') {
+    renderEmployeesTable();
+  } else if (tabId === 'company') {
+    renderCompanySettings();
+  } else if (tabId === 'users') {
+    renderUsersTable();
+  } else if (tabId === 'dashboard') {
+    renderDashboard();
+  } else if (tabId === 'payroll') {
+    renderPayrollTable();
+  } else if (tabId === 'input') {
+    renderInputTable();
   }
 }
 

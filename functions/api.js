@@ -490,7 +490,7 @@ function getActualWorkingDaysInCutoff(startDate, endDate) {
 async function handleAction(db, action, params) {
   let period = params.period;
   if (!period) {
-    const latestRow = await db.prepare('SELECT period FROM monthly_inputs ORDER BY id DESC LIMIT 1').first().catch(() => null);
+    const latestRow = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
     period = (latestRow && latestRow.period) ? latestRow.period : getDefaultPeriod();
   }
 
@@ -729,9 +729,13 @@ async function handleAction(db, action, params) {
         role: u.role || 'User'
       }));
 
+      const latestRowPeriod = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
+      const latestActivePeriod = (latestRowPeriod && latestRowPeriod.period) ? latestRowPeriod.period : period;
+
       return {
         success: true,
         period: period,
+        latestActivePeriod: latestActivePeriod,
         workingDays: workingDays,
         settings: settingsMap,
         isClosed: isClosed,
