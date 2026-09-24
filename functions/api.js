@@ -1323,22 +1323,31 @@ async function handleAction(db, action, params) {
         const isUndertimeExempt = (emp && (emp.is_undertime_exempt === 'true' || emp.is_undertime_exempt === true || emp.is_undertime_exempt === 1 || emp.is_undertime_exempt === '1'));
 
         if (row.clock_in && row.clock_out && workHours > 0) {
-          const isFullPay = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน')));
-          if (isFullPay || isUndertimeExempt) {
-            // Early dismissal approved with full pay OR employee is undertime exempt - waive missing hours deduction!
+          const isBranchEarlyDismissal = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) && !isUndertimeExempt;
+          if (isBranchEarlyDismissal) {
+            // Whole-branch early dismissal mode: entire day full pay waived
             continue;
           }
+
+          if (isUndertimeExempt) {
+            // Option A: Early departure is NOT deducted, BUT late arrival IS deducted normally!
+            if (lateMins > 0) {
+              const lateHours = Math.round((lateMins / 60) * 100) / 100;
+              missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
+              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
+            }
+            continue;
+          }
+
           if (workHours < targetHours) {
             const missing = Math.round((targetHours - workHours) * 100) / 100;
             missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + missing;
             earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (missing * hourlyRate);
           }
         } else if (row.clock_in && !row.clock_out && lateMins > 0) {
-          if (!isUndertimeExempt) {
-            const lateHours = Math.round((lateMins / 60) * 100) / 100;
-            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
-            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
-          }
+          const lateHours = Math.round((lateMins / 60) * 100) / 100;
+          missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
+          earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
         }
       }
 
