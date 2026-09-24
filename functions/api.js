@@ -624,6 +624,7 @@ async function handleAction(db, action, params) {
         branchId: e.branch_id || 'B01',
         allowAllBranches: e.allow_all_branches === 'true',
         isOtEligible: (e.is_ot_eligible !== 'false' && e.is_ot_eligible !== false),
+        isUndertimeExempt: (e.is_undertime_exempt === 'true' || e.is_undertime_exempt === true || e.is_undertime_exempt === 1 || e.is_undertime_exempt === '1'),
         baseSalary: Number(e.base_salary) || 0,
         bankName: e.bank_name || '',
         bankAccount: e.bank_account || '',
@@ -830,6 +831,7 @@ async function handleAction(db, action, params) {
       await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT "true"').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT "false"').run().catch(() => {});
       await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
       let probEndDate = emp.probationEndDate || '';
@@ -854,11 +856,12 @@ async function handleAction(db, action, params) {
       const branchIdVal = String(emp.branchId || emp.branch_id || 'B01').trim();
       const allowAllVal = (emp.allowAllBranches === 'true' || emp.allowAllBranches === true) ? 'true' : 'false';
       const isOtEligibleVal = (emp.isOtEligible === false || emp.isOtEligible === 'false') ? 'false' : 'true';
+      const isUndertimeExemptVal = (emp.isUndertimeExempt === true || emp.isUndertimeExempt === 'true' || emp.isUndertimeExempt === 1 || emp.isUndertimeExempt === '1') ? 'true' : 'false';
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -869,7 +872,8 @@ async function handleAction(db, action, params) {
         statusVal, probDays, probEndDate,
         photoUrlVal,
         branchIdVal, allowAllVal,
-        isOtEligibleVal
+        isOtEligibleVal,
+        isUndertimeExemptVal
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period
@@ -1316,10 +1320,12 @@ async function handleAction(db, action, params) {
         const workHours = Number(row.work_hours) || 0;
         const lateMins = Number(row.late_minutes) || 0;
 
+        const isUndertimeExempt = (emp && (emp.is_undertime_exempt === 'true' || emp.is_undertime_exempt === true || emp.is_undertime_exempt === 1 || emp.is_undertime_exempt === '1'));
+
         if (row.clock_in && row.clock_out && workHours > 0) {
           const isFullPay = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน')));
-          if (isFullPay) {
-            // Early dismissal approved with full pay - waive missing hours deduction!
+          if (isFullPay || isUndertimeExempt) {
+            // Early dismissal approved with full pay OR employee is undertime exempt - waive missing hours deduction!
             continue;
           }
           if (workHours < targetHours) {
@@ -1328,9 +1334,11 @@ async function handleAction(db, action, params) {
             earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (missing * hourlyRate);
           }
         } else if (row.clock_in && !row.clock_out && lateMins > 0) {
-          const lateHours = Math.round((lateMins / 60) * 100) / 100;
-          missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
-          earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
+          if (!isUndertimeExempt) {
+            const lateHours = Math.round((lateMins / 60) * 100) / 100;
+            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
+            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
+          }
         }
       }
 

@@ -2373,6 +2373,8 @@ function openAddEmployeeModal() {
   if (allBranchesCheck) allBranchesCheck.checked = false;
   var isOtCheck = document.getElementById('mIsOtEligible');
   if (isOtCheck) isOtCheck.checked = true;
+  var isUndertimeCheck = document.getElementById('mIsUndertimeExempt');
+  if (isUndertimeCheck) isUndertimeCheck.checked = false;
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
@@ -2416,6 +2418,8 @@ function openEditEmployeeModal(empId) {
   if (allBranchesCheck) allBranchesCheck.checked = (e.allowAllBranches === true || e.allowAllBranches === 'true');
   var isOtCheck = document.getElementById('mIsOtEligible');
   if (isOtCheck) isOtCheck.checked = (e.isOtEligible !== false && e.isOtEligible !== 'false');
+  var isUndertimeCheck = document.getElementById('mIsUndertimeExempt');
+  if (isUndertimeCheck) isUndertimeCheck.checked = (e.isUndertimeExempt === true || e.isUndertimeExempt === 'true');
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
   document.getElementById('empOrigId').value = e.empId;
@@ -2500,6 +2504,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
     branchId: branchIdVal,
     allowAllBranches: allowAllBranchesVal,
     isOtEligible: (document.getElementById('mIsOtEligible') ? document.getElementById('mIsOtEligible').checked : true),
+    isUndertimeExempt: (document.getElementById('mIsUndertimeExempt') ? document.getElementById('mIsUndertimeExempt').checked : false),
     status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
     probationDays: (document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119),
     probationEndDate: (document.getElementById('mProbationEndDate') ? document.getElementById('mProbationEndDate').value : ''),
