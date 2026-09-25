@@ -326,10 +326,10 @@
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="inputSearchInput" placeholder="ค้นหาบันทึกงวด (รหัส, ชื่อ)..." oninput="renderInputTable()">
               </div>
-              <button type="button" class="btn btn-yellow" onclick="batchPopulateEmployees()">
+              <button type="button" id="btnBatchPopulate" class="btn btn-yellow" onclick="batchPopulateEmployees()">
                 <i class="fa-solid fa-users-gear"></i> ดึงพนักงานทุกคนเข้างวดนี้
               </button>
-              <button type="button" class="btn btn-slate" style="background:#0284c7;color:#ffffff;border-color:#0284c7;font-weight:700" onclick="syncFromPtnTime()" title="ดึงข้อมูลเวลา ขาด ลา มาสาย OT และยอดเบิกเงินล่วงหน้า (รอบตัดวิก 26 ถึง 25) จากระบบ PTN Time อัตโนมัติ">
+              <button type="button" id="btnInputSyncFromPtnTime" class="btn btn-slate" style="background:#0284c7;color:#ffffff;border-color:#0284c7;font-weight:700" onclick="syncFromPtnTime()" title="ดึงข้อมูลเวลา ขาด ลา มาสาย OT และยอดเบิกเงินล่วงหน้า (รอบตัดวิก 26 ถึง 25) จากระบบ PTN Time อัตโนมัติ">
                 <i class="fa-solid fa-clock-rotate-left"></i> ดึงข้อมูลจาก PTN Time (1-Click)
               </button>
               <button type="button" class="btn btn-slate" style="background:#059669;color:#ffffff;border-color:#059669;font-weight:700" onclick="openImportAttendanceModal()" title="นำเข้าข้อมูลวันขาด ลากิจ ลาป่วย และ OT จากไฟล์ Excel หรือ CSV">
@@ -2125,7 +2125,7 @@
 
 <!-- 6. COMPANY SETTINGS TAB -->
       <div class="tab-content" id="tab-company">
-        <div class="card" style="max-width:680px;margin:0 auto">
+        <div class="card" id="cardCompanyProfile" style="max-width:680px;margin:0 auto">
           <div class="card-header">
             <div>
               <div class="card-title">ตั้งค่าข้อมูลบริษัท</div>
@@ -2334,7 +2334,7 @@
         </div>
 
         <!-- BACKUP & RESTORE SECTION -->
-        <div class="card" style="max-width:760px;margin:24px auto 0">
+        <div class="card" id="cardBackupHub" style="max-width:760px;margin:24px auto 0">
           <div class="card-header" style="display:flex;align-items:center;justify-content:space-between">
             <div>
               <div class="card-title"><i class="fa-solid fa-database" style="color:#2563eb"></i> ศูนย์สำรองและกู้คืนข้อมูลระบบ (Enterprise Backup & Restore Hub)</div>

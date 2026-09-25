@@ -46,9 +46,9 @@ window.addEventListener('beforeprint', function() {
 // GLOBAL PERMISSIONS HELPER
 function hasPermission(permKey) {
   if (!State.currentUser) return false;
-  var role = State.currentUser.role ? String(State.currentUser.role).toLowerCase() : '';
-  var username = State.currentUser.username ? String(State.currentUser.username).toLowerCase() : '';
-  if (username === 'admin' || role.indexOf('admin') >= 0) return true;
+  var role = State.currentUser.role ? String(State.currentUser.role).trim().toLowerCase() : '';
+  var username = State.currentUser.username ? String(State.currentUser.username).trim().toLowerCase() : '';
+  if (username === 'admin' || role === 'admin' || role === 'admin / hr' || role === 'super admin') return true;
   var perms = State.currentUser.permissions || [];
   if (perms.indexOf('all') >= 0) return true;
   return perms.indexOf(permKey) >= 0;
@@ -83,24 +83,24 @@ function applyRolePermissions() {
   var canViewInputs = hasPermission('view_inputs');
   var canViewEmp = hasPermission('view_emp');
   var canViewHistory = hasPermission('view_history');
-  var canManageCompany = hasPermission('manage_company') || hasPermission('manage_backup');
-  var canManageUsers = hasPermission('manage_users');
-  var canViewSalary = hasPermission('view_salary');
-  var canEditEmp = hasPermission('edit_emp');
-  var canDelEmp = hasPermission('del_emp');
-  var canEditInputs = hasPermission('edit_inputs');
-  var canPopulateInputs = hasPermission('populate_inputs');
-  var canCalcPayroll = hasPermission('calc_payroll');
-  var canClosePeriod = hasPermission('close_period');
-  var canPrintHistory = hasPermission('print_history');
-  var canExportCsv = hasPermission('export_csv');
+  var canManageCompany = hasPermission('manage_company') || hasPermission('manage_backup') || isSuperAdmin();
+  var canManageUsers = hasPermission('manage_users') || isSuperAdmin();
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+  var canEditEmp = hasPermission('edit_emp') || isSuperAdmin();
+  var canDelEmp = hasPermission('del_emp') || isSuperAdmin();
+  var canEditInputs = hasPermission('edit_inputs') || isSuperAdmin();
+  var canPopulateInputs = hasPermission('populate_inputs') || isSuperAdmin();
+  var canCalcPayroll = hasPermission('calc_payroll') || isSuperAdmin();
+  var canClosePeriod = hasPermission('close_period') || isSuperAdmin();
+  var canPrintHistory = hasPermission('print_history') || isSuperAdmin();
+  var canExportCsv = hasPermission('export_csv') || isSuperAdmin();
   var canViewAnalytics = hasPermission('view_analytics') || isSuperAdmin();
   var canViewAttendance = hasPermission('view_attendance') || isSuperAdmin();
   var canApproveAttendance = hasPermission('approve_attendance') || isSuperAdmin();
   var canUnlockDevice = hasPermission('unlock_device') || isSuperAdmin();
   var canSyncPtnTime = hasPermission('sync_ptn_time') || isSuperAdmin();
   var canManageAttendanceSettings = hasPermission('manage_attendance_settings') || isSuperAdmin();
-  var canViewDocuments = hasPermission('view_documents') || hasPermission('all') || isSuperAdmin() || canViewPayroll || canViewHistory;
+  var canViewDocuments = hasPermission('view_documents') || hasPermission('all') || isSuperAdmin();
   var canIssueSalaryCert = hasPermission('issue_salary_cert') || isSuperAdmin() || hasPermission('all');
   var canExportBankFiles = hasPermission('export_bank_files') || isSuperAdmin() || hasPermission('all');
   var canExportTaxSso = hasPermission('export_tax_sso') || isSuperAdmin() || hasPermission('all');
@@ -188,12 +188,16 @@ function applyRolePermissions() {
   // 4. Monthly Input Toolbar Buttons
   var btnAddInput = document.querySelector('button[onclick="openAddInputModal()"]');
   if (btnAddInput) btnAddInput.style.display = canEditInputs ? 'inline-flex' : 'none';
-  var btnPopulate = document.querySelector('button[onclick="populateEmployeesToCurrentPeriod()"]');
+  var btnPopulate = document.getElementById('btnBatchPopulate') || document.querySelector('button[onclick*="batchPopulateEmployees"]');
   if (btnPopulate) btnPopulate.style.display = canPopulateInputs ? 'inline-flex' : 'none';
+  var btnInputSync = document.getElementById('btnInputSyncFromPtnTime') || document.querySelector('button[onclick*="syncFromPtnTime()"]');
+  if (btnInputSync) btnInputSync.style.display = canSyncPtnTime ? 'inline-flex' : 'none';
 
   // 5. Payroll Toolbar Buttons
   var btnCalcPayroll = document.querySelector('button[onclick="runPayrollRecalc()"]');
   if (btnCalcPayroll) btnCalcPayroll.style.display = canCalcPayroll ? 'inline-flex' : 'none';
+  var btnPushSlip = document.querySelector('button[onclick*="broadcastPayslipPushNotification"]');
+  if (btnPushSlip) btnPushSlip.style.display = canCalcPayroll ? 'inline-flex' : 'none';
 
   // 6. Period Lock Button
   var periodCloseContainer = document.getElementById('periodCloseBtnContainer');
@@ -228,9 +232,15 @@ function applyRolePermissions() {
   if (btn50Twi) btn50Twi.style.display = canViewSalary ? 'inline-flex' : 'none';
 
   // 8. Export CSV Buttons
-  var exportBtns = document.querySelectorAll('button[onclick*="exportToCSV"], button[onclick*="exportActiveHistoryCsv"], button[onclick*="exportAllEmployeeHistory"], button[onclick*="exportTtbPayrollCsv"], button[onclick*="exportTtbDirectCreditTxt"]');
+  var exportBtns = document.querySelectorAll('button[onclick*="exportToCSV"], button[onclick*="exportActiveHistoryCsv"], button[onclick*="exportAllEmployeeHistory"]');
   exportBtns.forEach(function(b) {
     b.style.display = canExportCsv ? 'inline-flex' : 'none';
+  });
+
+  // 8.1 Export Bank Files Buttons (TTB CSV & TXT Direct Credit)
+  var ttbExportBtns = document.querySelectorAll('button[onclick*="exportTtbPayrollCsv"], button[onclick*="exportTtbDirectCreditTxt"]');
+  ttbExportBtns.forEach(function(b) {
+    b.style.display = canExportBankFiles ? 'inline-flex' : 'none';
   });
 
   // 9. Save & View Payslip Dual Buttons (Hide if no salary or payslip view permission)
@@ -259,6 +269,12 @@ function applyRolePermissions() {
   if (btnDocSso) btnDocSso.style.display = canExportTaxSso ? 'inline-flex' : 'none';
   var btnDocBank = document.getElementById('btnDocCatBank');
   if (btnDocBank) btnDocBank.style.display = canExportBankFiles ? 'inline-flex' : 'none';
+
+  // 12. Company Settings Sections Visibility
+  var cardComp = document.getElementById('cardCompanyProfile');
+  if (cardComp) cardComp.style.display = (hasPermission('manage_company') || isSuperAdmin()) ? 'block' : 'none';
+  var cardBkp = document.getElementById('cardBackupHub');
+  if (cardBkp) cardBkp.style.display = (hasPermission('manage_backup') || isSuperAdmin()) ? 'block' : 'none';
 }
 
 /**
@@ -326,6 +342,10 @@ function callApi(action, payload) {
   payload = payload || {};
   payload.action = action;
   payload.period = payload.period || State.period;
+  if (State.currentUser && State.currentUser.username) {
+    if (!payload.currentUsername) payload.currentUsername = State.currentUser.username;
+    if (!payload.username) payload.username = State.currentUser.username;
+  }
 
   return fetch(APP_CONFIG.getApiUrl(), {
     method: 'POST',
@@ -358,10 +378,10 @@ function navigateToAuthorizedTab() {
   else if (curId === 'tab-input' && hasPermission('view_inputs')) isAllowed = true;
   else if (curId === 'tab-employees' && hasPermission('view_emp')) isAllowed = true;
   else if (curId === 'tab-history' && hasPermission('view_history')) isAllowed = true;
-  else if (curId === 'tab-analytics' && (String(State.currentUser && State.currentUser.username || '').toLowerCase() === 'admin' || String(State.currentUser && State.currentUser.role || '').toLowerCase().indexOf('admin') >= 0 || hasPermission('all'))) isAllowed = true;
-  else if (curId === 'tab-documents' && (isSuperAdmin() || hasPermission('view_documents') || hasPermission('all') || hasPermission('view_payroll') || hasPermission('view_history'))) isAllowed = true;
-  else if (curId === 'tab-company' && (hasPermission('manage_company') || hasPermission('manage_backup'))) isAllowed = true;
-  else if (curId === 'tab-users' && hasPermission('manage_users')) isAllowed = true;
+  else if (curId === 'tab-analytics' && (hasPermission('view_analytics') || isSuperAdmin())) isAllowed = true;
+  else if (curId === 'tab-documents' && (isSuperAdmin() || hasPermission('view_documents') || hasPermission('all'))) isAllowed = true;
+  else if (curId === 'tab-company' && (hasPermission('manage_company') || hasPermission('manage_backup') || isSuperAdmin())) isAllowed = true;
+  else if (curId === 'tab-users' && (hasPermission('manage_users') || isSuperAdmin())) isAllowed = true;
 
   if (!isAllowed) {
     if (hasPermission('view_dash')) switchTab('dashboard');
@@ -770,12 +790,13 @@ function renderInputTable() {
     var pfRate = (i.pfRate !== null && i.pfRate !== undefined && !isNaN(Number(i.pfRate))) ? Number(i.pfRate) : 0;
     var pfAmt = (pfRate > 0) ? ((i.pfAmount !== undefined && i.pfAmount > 0) ? Number(i.pfAmount) : Math.round(baseSal * pfRate * 100) / 100) : 0;
 
-    var canViewSalary = hasPermission('view_salary');
-    var canEditInputs = hasPermission('edit_inputs');
+    var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+    var canEditInputs = hasPermission('edit_inputs') || isSuperAdmin();
+    var canSyncPtnTime = hasPermission('sync_ptn_time') || isSuperAdmin();
 
     h += '<tr>' +
       '<td class="text-center" style="width:40px">' +
-        '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' +
+        (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>') +
       '</td>' +
       '<td class="text-center font-mono">' + (i.no || (idx + 1)) + '</td>' +
       '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
@@ -800,10 +821,11 @@ function renderInputTable() {
       '<td class="text-right font-mono text-red font-bold">' + fmt(i.advanceDeduct || 0) + '</td>' +
       '<td class="text-right font-mono text-red">' + fmt(i.otherDeduct || 0) + '</td>' +
       '<td class="text-center">' +
+        (canSyncPtnTime ? '<button type="button" class="btn-icon" style="color:#0284c7;background:#e0f2fe;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(i.empId) + '\', \'' + esc(i.empName || '') + '\')" title="ดึงข้อมูล OT, วันลา และยอดเบิกเงินของ ' + esc(i.empName || i.empId) + ' จาก PTN Time"><i class="fa-solid fa-rotate"></i> ดึงเฉพาะคนนี้</button> ' : '') +
         (canEditInputs ?
-          '<button type="button" class="btn-icon" style="color:#0284c7;background:#e0f2fe;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(i.empId) + '\', \'' + esc(i.empName || '') + '\')" title="ดึงข้อมูล OT, วันลา และยอดเบิกเงินของ ' + esc(i.empName || i.empId) + ' จาก PTN Time"><i class="fa-solid fa-rotate"></i> ดึงเฉพาะคนนี้</button> ' +
           '<button type="button" class="btn-icon edit" onclick="openEditInputModal(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
-          '<button type="button" class="btn-icon del" onclick="deleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '<span class="text-muted">-</span>') +
+          '<button type="button" class="btn-icon del" onclick="deleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
+        (!canSyncPtnTime && !canEditInputs ? '<span class="text-muted">-</span>' : '') +
       '</td>' +
     '</tr>';
   });
@@ -849,6 +871,10 @@ function deselectAllInputRecords() {
 }
 
 function batchDeleteInputRecords() {
+  if (!hasPermission('edit_inputs') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด', 'warning');
+    return;
+  }
   var cbs = document.querySelectorAll('.input-row-checkbox:checked');
   var empIds = Array.from(cbs).map(function(cb) { return cb.value; });
   if (empIds.length === 0) {
@@ -920,9 +946,10 @@ function renderEmployeesTable() {
   var cardsDiv = document.getElementById('empCardsViewArea');
   if (!tbody) return;
 
-  var canViewSalary = hasPermission('view_salary');
-  var canEditEmp = hasPermission('edit_emp');
-  var canDelEmp = hasPermission('del_emp');
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+  var canEditEmp = hasPermission('edit_emp') || isSuperAdmin();
+  var canDelEmp = hasPermission('del_emp') || isSuperAdmin();
+  var canUnlockDevice = hasPermission('unlock_device') || isSuperAdmin();
   var isGeneralUser = !canViewSalary;
 
   // 1. Calculate and Update Top KPI Metrics
@@ -1067,7 +1094,7 @@ function renderEmployeesTable() {
 
     // Device Lock Badge & Button (PTN Time Integration)
     var devBadge = e.isDeviceBound ? (' <span class="period-pill" style="background:#eff6ff;color:#0284c7;border-color:#bae6fd;font-size:10px;padding:1px 6px" title="ผูกเครื่องแล้ว: ' + esc((e.boundDevice && e.boundDevice.deviceName) || 'Mobile Web') + '">📱 ผูกเครื่อง</span>') : '';
-    var devUnlockBtn = e.isDeviceBound ? ('<button type="button" class="btn-icon" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button> ') : '';
+    var devUnlockBtn = (e.isDeviceBound && canUnlockDevice) ? ('<button type="button" class="btn-icon" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button> ') : '';
 
     // Avatar HTML for Table & Card
     var avatarTableHtml = e.photoUrl
@@ -1179,7 +1206,7 @@ function renderEmployeesTable() {
       '</div>' +
 
       '<div style="display:flex;align-items:center;gap:6px;padding-top:6px">' +
-        (e.isDeviceBound ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;border-color:#fecaca;background:#fef2f2;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button>' : '') +
+        ((e.isDeviceBound && canUnlockDevice) ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;border-color:#fecaca;background:#fef2f2;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button>' : '') +
         (st === 'Probation' ? '<button type="button" class="btn btn-success btn-sm" style="flex:1" onclick="passProbation(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-check"></i> ผ่านโปร</button>' : '') +
         (canEditEmp ? '<button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไขประวัติ</button>' : '') +
         (canDelEmp ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;padding:4px 8px" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i></button>' : '') +
@@ -1193,6 +1220,10 @@ function renderEmployeesTable() {
 
 // REMOTE RESET DEVICE (Method 3: Remote Reset from Payroll)
 function remoteResetDevice(empId, empName) {
+  if (!hasPermission('unlock_device') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ปลดล็อคเครื่องพนักงาน', 'warning');
+    return;
+  }
   if (!empName) {
     var foundEmp = (State.employees || []).find(function(x) { return x.empId === empId; });
     empName = foundEmp ? foundEmp.fullName : empId;
@@ -1862,6 +1893,10 @@ function renderCompanySettings() {
 
 function savePayrollDefaults(e) {
   if (e && e.preventDefault) e.preventDefault();
+  if (!hasPermission('manage_company') && !hasPermission('calc_payroll')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์ตั้งค่านโยบายเงินเดือน', 'error');
+    return;
+  }
   var d = {
     defaultOtRate: Number(document.getElementById('cfgDefaultOtRate').value) || 40,
     defaultWorkDays: Number(document.getElementById('cfgDefaultWorkDays').value) || 30,
@@ -1883,6 +1918,10 @@ function savePayrollDefaults(e) {
 
 function saveCompanySettings(e) {
   if (e) e.preventDefault();
+  if (!hasPermission('manage_company')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์จัดการข้อมูลบริษัท', 'error');
+    return;
+  }
   var d = {
     companyName: document.getElementById('cfgCompanyName').value.trim(),
     address: document.getElementById('cfgCompanyAddress').value.trim(),
@@ -1938,6 +1977,10 @@ function loadAppAnnouncementSettings() {
 
 function saveAppAnnouncementFromAdmin(e) {
   if (e && e.preventDefault) e.preventDefault();
+  if (!hasPermission('manage_company')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์จัดการประกาศ', 'error');
+    return;
+  }
   var actCheck = document.getElementById('cfgAnnActive');
   var isActive = actCheck ? actCheck.checked : true;
 
@@ -2052,7 +2095,7 @@ function switchTab(tabId) {
   }
 
   // Documents tab
-  var canAccessDocuments = isSuperAdmin() || hasPermission('view_documents') || hasPermission('all') || hasPermission('view_payroll') || hasPermission('view_history');
+  var canAccessDocuments = isSuperAdmin() || hasPermission('view_documents') || hasPermission('all');
   if (tabId === 'documents' && !canAccessDocuments) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานศูนย์เอกสาร', 'warning');
     navigateToAuthorizedTab();
@@ -2129,6 +2172,10 @@ function closeModal(id) {
 
 // POPULATE ALL EMPLOYEES
 function batchPopulateEmployees() {
+  if (!hasPermission('populate_inputs') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงพนักงานเข้างวดนี้', 'warning');
+    return;
+  }
   if (State.isClosed) {
     if (!confirm('คำเตือน: งวด ' + State.period + ' ถูกปิดงวดแล้ว ต้องการนำเข้าข้อมูลหรือไม่?')) return;
   }
@@ -2144,6 +2191,10 @@ function batchPopulateEmployees() {
 
 // 1-CLICK SYNC ATTENDANCE, LEAVE, OT & SALARY ADVANCES FROM PTN TIME
 function syncFromPtnTime() {
+  if (!hasPermission('sync_ptn_time') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงข้อมูลจากระบบ PTN Time', 'warning');
+    return;
+  }
   if (State.isClosed) {
     if (!confirm('คำเตือน: งวด ' + State.period + ' ถูกปิดงวดแล้ว ต้องการดึงข้อมูลหรือไม่?')) return;
   }
@@ -2175,6 +2226,10 @@ function syncFromPtnTime() {
 
 // SYNC INDIVIDUAL EMPLOYEE ATTENDANCE, LEAVE, OT & ADVANCE FROM PTN TIME
 function syncFromPtnTimeForEmp(empId, empName) {
+  if (!hasPermission('sync_ptn_time') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงข้อมูลจากระบบ PTN Time', 'warning');
+    return Promise.resolve(null);
+  }
   if (!empId) return Promise.resolve(null);
   var nameStr = empName ? (' (' + empName + ')') : '';
   if (State.isClosed) {
@@ -2837,6 +2892,10 @@ function printPayslip() {
 
 // PERIOD CLOSE / REOPEN
 function closePeriod() {
+  if (!hasPermission('close_period')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์ปิดงวดเงินเดือน', 'error');
+    return;
+  }
   var lbl = document.getElementById('lblClosePeriodTarget');
   if (lbl) lbl.textContent = State.period;
   var chk = document.getElementById('chkClosePeriodAutoBackup');
@@ -2845,6 +2904,10 @@ function closePeriod() {
 }
 
 function confirmClosePeriodAction() {
+  if (!hasPermission('close_period')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์ปิดงวดเงินเดือน', 'error');
+    return;
+  }
   var btn = document.getElementById('btnExecuteClosePeriod');
   if (btn) {
     btn.disabled = true;
@@ -2886,6 +2949,10 @@ function confirmClosePeriodAction() {
 }
 
 function reopenPeriod() {
+  if (!hasPermission('close_period')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์เปิดงวดเงินเดือน', 'error');
+    return;
+  }
   if (!confirm('ยืนยันการปลดล็อคและเปิดงวด ' + State.period + ' ใช่หรือไม่?')) return;
   callApi('reopenPeriod', { username: (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin' })
     .then(function(r) {
@@ -2896,6 +2963,10 @@ function reopenPeriod() {
 }
 
 function runPayrollRecalc() {
+  if (!hasPermission('calc_payroll')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์ประมวลผลคำนวณเงินเดือน', 'error');
+    return;
+  }
   callApi('processPayroll')
     .then(function(r) {
       showToast(r.message || 'คำนวณเงินเดือนสำเร็จ');
@@ -3379,12 +3450,16 @@ function saveUserForm(e) {
 }
 
 function deleteUser(username) {
+  if (!hasPermission('manage_users')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์จัดการผู้ใช้งาน', 'error');
+    return;
+  }
   if (username.toLowerCase() === 'admin') {
     showToast('ไม่สามารถลบผู้ใช้งาน Admin หลักของระบบได้', 'error');
     return;
   }
   if (!confirm('ยืนยันการลบผู้ใช้งาน ' + username + ' ออกจากระบบ?')) return;
-  callApi('deleteUser', { username: username })
+  callApi('deleteUser', { targetUsername: username, usernameToDelete: username })
     .then(function(r) {
       if (r.success) {
         showToast(r.message || 'ลบผู้ใช้งานสำเร็จ');
@@ -3456,6 +3531,10 @@ function onEmpSsoInputChanged() {
 window.pendingRestoreBackupData = null;
 
 function backupDatabase(isAutoSafety) {
+  if (!isAutoSafety && !hasPermission('manage_backup')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์สำรองข้อมูลระบบ', 'error');
+    return Promise.reject(new Error('สิทธิ์ไม่เพียงพอ'));
+  }
   if (!isAutoSafety) showToast('กำลังเตรียมไฟล์สำรองข้อมูลทั้งระบบ...', 'info');
   return callApi('backupDatabase', { username: (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin' })
     .then(function(r) {
@@ -3487,6 +3566,10 @@ function backupDatabase(isAutoSafety) {
 }
 
 function triggerRestoreBackup() {
+  if (!hasPermission('manage_backup')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์กู้คืนข้อมูลระบบ', 'error');
+    return;
+  }
   var fileInput = document.getElementById('restoreBackupFileInput');
   if (fileInput) {
     fileInput.value = '';
@@ -3598,6 +3681,10 @@ function toggleSelectAllRestorePeriods() {
 }
 
 function executeSelectiveRestore() {
+  if (!hasPermission('manage_backup')) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์กู้คืนข้อมูลระบบ', 'error');
+    return;
+  }
   if (!window.pendingRestoreBackupData) {
     showToast('ไม่พบข้อมูลไฟล์สำรอง กรุณาเลือกไฟล์ใหม่อีกครั้ง', 'error');
     return;
@@ -3688,6 +3775,14 @@ function executeSelectiveRestore() {
 }
 
 function exportAllEmployeeHistory() {
+  if (!hasPermission('view_salary') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่มีสิทธิ์ดาวน์โหลดรายงานเงินเดือน', 'warning');
+    return;
+  }
+  if (!hasPermission('export_csv') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่มีสิทธิ์ส่งออกข้อมูล CSV', 'warning');
+    return;
+  }
   showToast('กำลังเตรียมข้อมูลประวัติพนักงานทั้งหมด...', 'info');
   callApi('getAllEmployeeHistory')
     .then(function(r) {
@@ -3751,8 +3846,12 @@ function exportAllEmployeeHistory() {
 }
 
 function printAllEmployeesBatch() {
-  if (!hasPermission('view_salary')) {
-    showToast('คุณไม่มีสิทธิ์พิมพ์รายงานประวัติพนักงานทุกคน', 'warning');
+  if (!hasPermission('view_salary') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่มีสิทธิ์พิมพ์รายงานประวัติพนักงาน', 'warning');
+    return;
+  }
+  if (!hasPermission('print_history') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: คุณไม่มีสิทธิ์พิมพ์รายงานประวัติพนักงาน', 'warning');
     return;
   }
   showToast('กำลังเตรียมเอกสารประวัติพนักงานทุกคนสำหรับพิมพ์...', 'info');
@@ -5816,6 +5915,7 @@ function renderMatrixTableRows() {
   var tbody = document.getElementById('analyticsMatrixBody');
   if (!tbody) return;
 
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
   var searchInput = document.getElementById('analyticsMatrixSearchInput');
   var query = (searchInput ? searchInput.value : '').trim().toLowerCase();
 
@@ -5853,7 +5953,7 @@ function renderMatrixTableRows() {
       '<td><strong>' + esc(e.fullName) + '</strong><span style="font-size:10.5px;color:#64748b">' + nick + '</span></td>' +
       '<td><span style="font-size:11px;color:#334155"><i class="fa-solid fa-store" style="color:#0284c7;font-size:10px"></i> ' + esc(e.branchName) + '</span></td>' +
       '<td>' + esc(e.department || '-') + '</td>' +
-      '<td style="text-align:right;font-family:monospace;font-weight:700">฿' + fmt(e.baseSalary) + '</td>' +
+      '<td style="text-align:right;font-family:monospace;font-weight:700">' + (canViewSalary ? ('฿' + fmt(e.baseSalary)) : '฿***') + '</td>' +
       '<td style="text-align:center;font-family:monospace;' + absentStyle + '">' + e.totalAbsent + '</td>' +
       '<td style="text-align:center;font-family:monospace">' + e.totalLeaves + '</td>' +
       '<td style="text-align:center;font-family:monospace;' + lateStyle + '">' + (e.lateCount > 0 ? e.lateCount + ' ครั้ง / ฿' + fmt(e.totalLateDeduct) : '0 / ฿0') + '</td>' +
@@ -5914,6 +6014,7 @@ function exportAnalyticsMatrixToExcel() {
   var csvRows = [];
   csvRows.push(headers.map(function(h) { return '"' + h.replace(/"/g, '""') + '"'; }).join(','));
 
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
   cachedCurrentMatrixData.forEach(function(e) {
     var catText = '';
     if (e.category === 'PROMOTION') catText = 'เกรด A+ (เด่นมาก / ปรับขึ้นเงินเดือน)';
@@ -5929,7 +6030,7 @@ function exportAnalyticsMatrixToExcel() {
       e.nickname || '',
       e.branchName || '',
       e.department || '',
-      e.baseSalary || 0,
+      canViewSalary ? (e.baseSalary || 0) : '***',
       e.totalAbsent || 0,
       e.totalLeaves || 0,
       e.lateCount || 0,
@@ -8130,8 +8231,8 @@ function toggleTimeWindowsUI(enabled) {
 // 🏢 MULTI-BRANCH MANAGEMENT CONTROLLERS
 // ==========================================
 function openBranchManagerModal() {
-  if (!isSuperAdmin()) {
-    showToast('สิทธิ์ไม่เพียงพอ: จัดการสาขาสงวนสิทธิ์เฉพาะ Super Admin เท่านั้น', 'warning');
+  if (!isSuperAdmin() && !hasPermission('manage_attendance_settings')) {
+    showToast('สิทธิ์ไม่เพียงพอ: จัดการสาขาสงวนสิทธิ์เฉพาะผู้ได้รับสิทธิ์จัดการสาขาหรือ Super Admin เท่านั้น', 'warning');
     return;
   }
   openModal('modalBranchManager');
@@ -9268,6 +9369,10 @@ function sendTestWebPush() {
 }
 
 function broadcastPayslipPushNotification(period) {
+  if (!hasPermission('calc_payroll') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์การส่งแจ้งเตือนเฉพาะผู้มีสิทธิ์คำนวณเงินเดือนหรือ Super Admin เท่านั้น', 'warning');
+    return;
+  }
   var targetPeriod = period || State.period || 'ล่าสุด';
   var msg = 'เงินเดือนงวด ' + targetPeriod + '  เช็กสลิปออนไลน์ได้ทันที';
   if (!confirm('ยืนยันส่งการแจ้งเตือน Web Push ไปยังพนักงานทุกคนใช่หรือไม่?\n\nข้อความที่จะส่ง:\n"บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด: ' + msg + '"')) {

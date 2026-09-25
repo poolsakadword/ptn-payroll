@@ -765,6 +765,10 @@ async function handleAction(db, action, params) {
 
     // 2.1 SAVE PAYROLL DEFAULTS
     case 'savePayrollDefaults': {
+      const callerUser = params.currentUsername || params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await userHasPermission(db, callerUser, 'calc_payroll')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ตั้งค่านโยบายเงินเดือน' };
+
       const d = params.defaults || {};
       if (d.defaultOtRate !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultOtRate", ?)').bind(String(d.defaultOtRate)).run();
       if (d.defaultWorkDays !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultWorkDays", ?)').bind(String(d.defaultWorkDays)).run();
@@ -775,7 +779,7 @@ async function handleAction(db, action, params) {
       if (d.defaultProbationDays !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultProbationDays", ?)').bind(String(d.defaultProbationDays)).run();
 
       await calculateAndSavePayroll(db, period);
-      await logSystemActivity(db, params.username || 'Admin', 'SETTINGS_UPDATE', 'อัปเดตค่านโยบายและค่าเริ่มต้นการคำนวณเงินเดือน');
+      await logSystemActivity(db, callerUser || 'Admin', 'SETTINGS_UPDATE', 'อัปเดตค่านโยบายและค่าเริ่มต้นการคำนวณเงินเดือน');
       return { success: true, message: 'บันทึกค่านโยบายและค่าเริ่มต้นระบบเงินเดือนเรียบร้อยแล้ว' };
     }
 
@@ -800,7 +804,11 @@ async function handleAction(db, action, params) {
     }
 
     // 4. EMPLOYEE MASTER CRUD
-        case 'batchImportEmployees': {
+    case 'batchImportEmployees': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'edit_emp')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์นำเข้าข้อมูลพนักงาน' };
+
       const list = params.employees || [];
       if (!Array.isArray(list) || list.length === 0) {
         return { success: false, message: 'ไม่พบรายการข้อมูลพนักงานที่จะนำเข้า' };
@@ -835,6 +843,10 @@ async function handleAction(db, action, params) {
     }
 
     case 'saveEmployee': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'edit_emp')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เพิ่มหรือแก้ไขข้อมูลพนักงาน' };
+
       const emp = params.employee || {};
       const origId = params.origId;
       if (!emp.empId || !emp.fullName) return { success: false, message: 'กรุณากรอกรหัสและชื่อพนักงาน' };
@@ -915,6 +927,10 @@ async function handleAction(db, action, params) {
     }
 
     case 'deleteEmployee': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'del_emp')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลพนักงาน' };
+
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
       const emp = await db.prepare('SELECT full_name FROM employees WHERE emp_id = ?').bind(empId).first();
@@ -929,6 +945,10 @@ async function handleAction(db, action, params) {
     }
 
     case 'resetEmployeeDevice': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'unlock_device')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ปลดล็อคเครื่องพนักงาน' };
+
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
 
@@ -946,6 +966,10 @@ async function handleAction(db, action, params) {
 
     // 5. MONTHLY INPUT CRUD & BATCH POPULATE
     case 'saveInputRecord': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์บันทึกข้อมูลประจำงวด' };
+
       const r = params.record || {};
       const origEmpId = params.origEmpId;
       if (!r.empId) return { success: false, message: 'กรุณาเลือกรหัสพนักงาน' };
@@ -979,6 +1003,10 @@ async function handleAction(db, action, params) {
     }
 
     case 'deleteInputRecord': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด' };
+
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
       await db.prepare('DELETE FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, empId).run();
@@ -989,6 +1017,10 @@ async function handleAction(db, action, params) {
     }
 
     case 'batchDeleteInputRecords': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด' };
+
       const empIds = Array.isArray(params.empIds) ? params.empIds : [];
       if (empIds.length === 0) return { success: false, message: 'กรุณาเลือกรายการที่ต้องการลบ' };
 
@@ -1005,6 +1037,10 @@ async function handleAction(db, action, params) {
     }
 
     case 'populateEmployeesToPeriod': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'populate_inputs')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงพนักงานเข้างวดนี้' };
+
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
       const employees = empQuery.results || [];
       if (employees.length === 0) {
@@ -1064,6 +1100,10 @@ async function handleAction(db, action, params) {
 
     // 5.1 SYNC ATTENDANCE, LEAVES, OT & ADVANCE FROM PTN TIME (ALL OR INDIVIDUAL)
     case 'syncFromPtnTime': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'sync_ptn_time')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงข้อมูลจากระบบ PTN Time' };
+
       const dates = await getCutoffDatesForPeriod(db, period);
       const startDate = dates.startDate;
       const endDate = dates.endDate;
@@ -2317,7 +2357,12 @@ async function handleAction(db, action, params) {
 
     // 6. PROCESS PAYROLL
     case 'processPayroll': {
+      const callerUser = params.currentUsername || params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'calc_payroll')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ประมวลผลเงินเดือน' };
+
       const count = await calculateAndSavePayroll(db, period);
+      await logSystemActivity(db, callerUser || 'Admin', 'CALC_PAYROLL', `ประมวลผลคำนวณเงินเดือนงวด ${period} (${count} รายการ)`);
       return { success: true, period: period, count: count, message: `ประมวลผลคำนวณเงินเดือนงวด ${period} สำเร็จ (${count} รายการ)` };
     }
 
@@ -2903,6 +2948,10 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
 
         // 15. BATCH IMPORT ATTENDANCE CSV
     case 'importAttendanceBatch': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์นำเข้าข้อมูลประจำงวด' };
+
       const records = params.records || [];
       if (!Array.isArray(records) || records.length === 0) {
         return { success: false, message: 'ไม่พบรายการข้อมูลที่ต้องการนำเข้า' };
@@ -2946,6 +2995,10 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
 
         // 16. PASS PROBATION ACTION
     case 'passProbation': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'edit_emp')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์อนุมัติผ่านโปร' };
+
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
 
@@ -2962,6 +3015,10 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
     }
 
     case 'saveCompanyInfo': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการข้อมูลบริษัท' };
+
       const cfg = params.settings || {};
       if (cfg.companyName) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CompanyName", ?)').bind(cfg.companyName).run();
       if (cfg.address !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("Address", ?)').bind(cfg.address).run();
@@ -2990,6 +3047,10 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
     }
 
     case 'saveAppAnnouncement': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการประกาศ' };
+
       const ann = params.announcement || {};
       const val = typeof ann === 'string' ? ann : JSON.stringify(ann);
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("app_announcement", ?)').bind(val).run();
@@ -2999,6 +3060,10 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
 
     // 9. PERIOD LOCK / UNLOCK
     case 'closePeriod': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'close_period')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ปิดงวดเงินเดือน' };
+
       await calculateAndSavePayroll(db, period);
       const timeStr = new Date().toISOString().replace('T', ' ').substring(0, 19);
       const val = `CLOSED|${timeStr}|${params.username || 'Admin'}`;
@@ -3008,6 +3073,10 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
     }
 
     case 'reopenPeriod': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'close_period')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เปิดงวดเงินเดือน' };
+
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, "OPEN")').bind(`Period_Status_${period}`).run();
       await logSystemActivity(db, params.username || 'Admin', 'PERIOD_REOPEN', `ปลดล็อคเปิดงวดประจำเดือน ${period}`);
       return { success: true, period: period, isClosed: false, message: `ปลดล็อคและเปิดงวดประจำเดือน ${period} เรียบร้อยแล้ว` };
@@ -3015,6 +3084,10 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
 
     // 10. USER MANAGEMENT
     case 'saveUser': {
+      const callerUser = params.currentUsername || params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_users')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการผู้ใช้งาน' };
+
       const u = params.user || {};
       const origUser = params.origUser;
       if (!u.username) return { success: false, message: 'กรุณากรอก Username' };
@@ -3035,14 +3108,24 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
     }
 
     case 'deleteUser': {
-      const username = params.username;
+      const callerUser = params.currentUsername || params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_users')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการผู้ใช้งาน' };
+
+      const username = params.targetUsername || params.usernameToDelete || params.username;
       if (!username) return { success: false, message: 'Missing username' };
+      if (username.toLowerCase() === 'admin') return { success: false, message: 'ไม่สามารถลบผู้ใช้ Admin หลักได้' };
       await db.prepare('DELETE FROM users WHERE username = ?').bind(username).run();
+      await logSystemActivity(db, callerUser || 'Admin', 'USER_DELETE', `ลบผู้ใช้งาน: ${username}`);
       return { success: true, message: `ลบผู้ใช้ ${username} เรียบร้อยแล้ว` };
     }
 
         // 11. BACKUP & RESTORE DATABASE (ENTERPRISE FULL TABLE COVERAGE & SELECTIVE RESTORE)
     case 'backupDatabase': {
+      const callerUser = params.currentUsername || params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_backup')) || (await userHasPermission(db, callerUser, 'close_period')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์สำรองข้อมูล' };
+
       await ensureBranchTables(db);
       await ensurePushTables(db);
 
@@ -3116,6 +3199,10 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
     }
 
     case 'restoreDatabase': {
+      const callerUser = params.currentUsername || params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_backup')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์กู้คืนข้อมูล' };
+
       await ensureBranchTables(db);
       await ensurePushTables(db);
 
