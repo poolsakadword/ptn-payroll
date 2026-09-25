@@ -722,12 +722,21 @@ async function handleAction(db, action, params) {
       }
 
       // Users
-      const usersQuery = await db.prepare('SELECT username, password, role FROM users ORDER BY username ASC').all();
-      const users = (usersQuery.results || []).map(u => ({
-        username: u.username,
-        password: u.password,
-        role: u.role || 'User'
-      }));
+      const usersQuery = await db.prepare('SELECT username, password, role, permissions FROM users ORDER BY username ASC').all();
+      const users = (usersQuery.results || []).map(u => {
+        let perms = [];
+        try {
+          perms = u.permissions ? (typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions) : getDefaultRolePermissions(u.role);
+        } catch(e) {
+          perms = getDefaultRolePermissions(u.role);
+        }
+        return {
+          username: u.username,
+          password: u.password,
+          role: u.role || 'User',
+          permissions: perms
+        };
+      });
 
       const latestRowPeriod = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
       const latestActivePeriod = (latestRowPeriod && latestRowPeriod.period) ? latestRowPeriod.period : period;
@@ -3008,7 +3017,8 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
     case 'saveUser': {
       const u = params.user || {};
       const origUser = params.origUser;
-      if (!u.username || !u.password) return { success: false, message: 'กรุณากรอก Username และ Password' };
+      if (!u.username) return { success: false, message: 'กรุณากรอก Username' };
+      if (!origUser && !u.password) return { success: false, message: 'กรุณากรอก Password' };
       await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
       if (origUser && origUser !== u.username) {
         await db.prepare('DELETE FROM users WHERE username = ?').bind(origUser).run();

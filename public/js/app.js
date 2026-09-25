@@ -3102,6 +3102,41 @@ function parseAndImportEmployeesCSV(csvText) {
 }
 
 // USER MANAGEMENT HANDLERS
+function getDefaultRolePermissions(role) {
+  var r = String(role || '').toLowerCase();
+  if (r.indexOf('super') >= 0 || r === 'admin / hr' || r === 'admin') {
+    return ['all'];
+  } else if (r.indexOf('supervisor') >= 0) {
+    return [
+      'view_emp', 'view_attendance', 'approve_attendance', 'unlock_device'
+    ];
+  } else if (r.indexOf('payroll') >= 0 || r === 'hr') {
+    return [
+      'view_dash', 'view_emp', 'view_salary', 'edit_emp',
+      'view_inputs', 'edit_inputs', 'populate_inputs',
+      'view_payroll', 'calc_payroll', 'view_payslip',
+      'view_history', 'print_history', 'export_csv',
+      'view_analytics', 'view_documents', 'issue_salary_cert',
+      'export_bank_files', 'export_tax_sso', 'view_attendance', 'sync_ptn_time'
+    ];
+  } else if (r.indexOf('attendance') >= 0) {
+    return [
+      'view_emp', 'view_inputs', 'edit_inputs', 'populate_inputs',
+      'view_attendance', 'approve_attendance', 'unlock_device',
+      'sync_ptn_time', 'view_history', 'print_history'
+    ];
+  } else if (r.indexOf('accounting') >= 0 || r.indexOf('finance') >= 0) {
+    return [
+      'view_dash', 'view_payroll', 'view_payslip',
+      'view_history', 'print_history', 'export_csv',
+      'view_analytics', 'view_documents', 'export_bank_files', 'export_tax_sso'
+    ];
+  } else {
+    // General User
+    return ['view_emp'];
+  }
+}
+
 function onRoleTemplateChanged() {
   var role = document.getElementById('mRole').value;
   var allPerms = [
@@ -3172,7 +3207,12 @@ function openAddUserModal() {
   document.getElementById('userOrigUsername').value = '';
   document.getElementById('mUsername').value = '';
   document.getElementById('mUsername').disabled = false;
-  document.getElementById('mPassword').value = '';
+  var passInput = document.getElementById('mPassword');
+  if (passInput) {
+    passInput.value = '';
+    passInput.required = true;
+    passInput.placeholder = 'รหัสผ่าน';
+  }
   document.getElementById('mRole').value = 'HR Payroll';
   onRoleTemplateChanged();
   openModal('userModal');
@@ -3185,7 +3225,12 @@ function openEditUserModal(username) {
   document.getElementById('userOrigUsername').value = u.username;
   document.getElementById('mUsername').value = u.username;
   document.getElementById('mUsername').disabled = (u.username === 'admin');
-  document.getElementById('mPassword').value = '';
+  var passInput = document.getElementById('mPassword');
+  if (passInput) {
+    passInput.value = '';
+    passInput.required = false;
+    passInput.placeholder = 'เว้นว่างไว้หากไม่ต้องการเปลี่ยนรหัสผ่าน';
+  }
 
   var roleSel = document.getElementById('mRole');
   var matchedRole = false;
@@ -3199,8 +3244,15 @@ function openEditUserModal(username) {
   if (!matchedRole) roleSel.value = 'Custom';
 
   // Apply user's active permissions to checkboxes
-  var perms = u.permissions || [];
-  var isAll = perms.indexOf('all') >= 0 || u.username === 'admin';
+  var perms = u.permissions;
+  if (typeof perms === 'string') {
+    try { perms = JSON.parse(perms); } catch(e) { perms = []; }
+  }
+  if (!perms || !Array.isArray(perms) || perms.length === 0) {
+    perms = getDefaultRolePermissions(u.role);
+  }
+  perms = perms || [];
+  var isAll = perms.indexOf('all') >= 0 || u.username === 'admin' || (u.role && (u.role.toLowerCase().indexOf('super') >= 0 || u.role.toLowerCase().indexOf('admin') >= 0));
 
   var permMapping = {
     'perm_view_emp': ['view_emp'],
@@ -3257,7 +3309,7 @@ function saveUserForm(e) {
 
   // Collect checked permissions
   var perms = [];
-  if (role === 'Admin / HR' || role === 'Admin' || u === 'admin') {
+  if (role === 'Super Admin' || role === 'Admin / HR' || role === 'Admin' || u === 'admin') {
     perms = ['all'];
   } else {
     var permElements = [
