@@ -7251,6 +7251,184 @@ function setAttendanceFilterThisMonth() {
   loadTimeAttendanceDashboard();
 }
 
+var _activeAttendanceEmpDropdownIdx = -1;
+
+function openAttendanceEmpDropdown() {
+  var menu = document.getElementById('attFilterEmpDropdown');
+  if (menu) {
+    var searchInput = document.getElementById('attFilterEmpSearchInput');
+    filterAttendanceEmpDropdown(searchInput ? searchInput.value : '');
+    menu.style.display = 'block';
+  }
+}
+
+function closeAttendanceEmpDropdown() {
+  var menu = document.getElementById('attFilterEmpDropdown');
+  if (menu) {
+    menu.style.display = 'none';
+  }
+  _activeAttendanceEmpDropdownIdx = -1;
+}
+
+function toggleAttendanceEmpDropdown(e) {
+  if (e) e.stopPropagation();
+  var menu = document.getElementById('attFilterEmpDropdown');
+  if (menu) {
+    if (menu.style.display === 'block') {
+      closeAttendanceEmpDropdown();
+    } else {
+      openAttendanceEmpDropdown();
+    }
+  }
+}
+
+function selectAttendanceEmp(empId, displayText) {
+  _currentAttendanceEmpId = empId || 'ALL';
+  var selMain = document.getElementById('attFilterEmp');
+  if (selMain) selMain.value = _currentAttendanceEmpId;
+
+  var searchInput = document.getElementById('attFilterEmpSearchInput');
+  var clearBtn = document.getElementById('btnAttEmpSearchClear');
+  var chevronIcon = document.getElementById('iconAttEmpDropdownChevron');
+
+  if (searchInput) {
+    if (_currentAttendanceEmpId === 'ALL') {
+      searchInput.value = '';
+      searchInput.placeholder = '🔍 พิมพ์ชื่อ / รหัส / ชื่อเล่น...';
+    } else {
+      searchInput.value = displayText || _currentAttendanceEmpId;
+    }
+  }
+
+  if (clearBtn && chevronIcon) {
+    if (_currentAttendanceEmpId === 'ALL') {
+      clearBtn.style.display = 'none';
+      chevronIcon.style.display = 'block';
+    } else {
+      clearBtn.style.display = 'block';
+      chevronIcon.style.display = 'none';
+    }
+  }
+
+  closeAttendanceEmpDropdown();
+  loadTimeAttendanceDashboard();
+}
+
+function clearAttendanceEmpSearch(e) {
+  if (e) e.stopPropagation();
+  selectAttendanceEmp('ALL', '');
+}
+
+function filterAttendanceEmpDropdown(query) {
+  var menu = document.getElementById('attFilterEmpDropdown');
+  if (!menu) return;
+
+  var q = (query || '').trim().toLowerCase();
+  var list = _currentAttendanceEmployeeList || [];
+
+  // Filter items matching query
+  var filtered = list.filter(function(e) {
+    if (!q) return true;
+    var idMatch = (e.emp_id || '').toLowerCase().includes(q);
+    var nameMatch = (e.name || e.full_name || '').toLowerCase().includes(q);
+    var nickMatch = (e.nickname || '').toLowerCase().includes(q);
+    var deptMatch = (e.department || '').toLowerCase().includes(q);
+    return idMatch || nameMatch || nickMatch || deptMatch;
+  });
+
+  var html = '';
+
+  // Top item: All Employees
+  var isAllSelected = (_currentAttendanceEmpId === 'ALL');
+  html += '<div class="att-emp-item ' + (isAllSelected ? 'selected' : '') + '" onclick="selectAttendanceEmp(\'ALL\', \'\')" style="padding:7px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:' + (isAllSelected ? '#eff6ff' : 'transparent') + ';color:' + (isAllSelected ? '#1d4ed8' : '#0f172a') + ';margin-bottom:2px;font-weight:' + (isAllSelected ? '700' : '500') + '">' +
+    '<div style="display:flex;align-items:center;gap:8px">' +
+      '<span style="width:24px;height:24px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:11px">👥</span>' +
+      '<span style="font-size:12px">พนักงานทุกคน (All)</span>' +
+    '</div>' +
+    (isAllSelected ? '<i class="fa-solid fa-check text-blue" style="font-size:11px"></i>' : '') +
+  '</div>';
+
+  if (filtered.length === 0) {
+    html += '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:12px"><i class="fa-solid fa-user-slash" style="font-size:18px;display:block;margin-bottom:4px;opacity:0.6"></i>ไม่พบพนักงานที่ค้นหา</div>';
+  } else {
+    html += '<div style="height:1px;background:#e2e8f0;margin:3px 0"></div>';
+    filtered.forEach(function(e) {
+      var isSelected = (_currentAttendanceEmpId === e.emp_id);
+      var displayName = (e.name || e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '');
+      var displayFull = e.emp_id + ' - ' + displayName;
+
+      html += '<div class="att-emp-item ' + (isSelected ? 'selected' : '') + '" onclick="selectAttendanceEmp(\'' + esc(e.emp_id) + '\', \'' + esc(displayFull) + '\')" style="padding:6px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;background:' + (isSelected ? '#eff6ff' : 'transparent') + ';color:' + (isSelected ? '#1d4ed8' : '#0f172a') + ';font-size:12px;margin-bottom:1px;transition:background 0.15s" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'' + (isSelected ? '#eff6ff' : 'transparent') + '\'">' +
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          '<div style="font-weight:' + (isSelected ? '700' : '600') + ';overflow:hidden;text-overflow:ellipsis">' + esc(displayName) + '</div>' +
+          '<div style="font-size:10.5px;color:#64748b;display:flex;gap:4px;align-items:center;margin-top:1px">' +
+            '<span style="background:#e0f2fe;color:#0369a1;padding:0 4px;border-radius:3px;font-weight:600">' + esc(e.emp_id) + '</span>' +
+            (e.department ? '<span style="color:#64748b">• ' + esc(e.department) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        (isSelected ? '<i class="fa-solid fa-check text-blue" style="font-size:11px;flex-shrink:0"></i>' : '') +
+      '</div>';
+    });
+  }
+
+  menu.innerHTML = html;
+  menu.style.display = 'block';
+}
+
+function handleAttendanceEmpKeydown(e) {
+  var menu = document.getElementById('attFilterEmpDropdown');
+  if (!menu || menu.style.display !== 'block') {
+    if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      openAttendanceEmpDropdown();
+    }
+    return;
+  }
+
+  var items = menu.querySelectorAll('.att-emp-item');
+  if (items.length === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _activeAttendanceEmpDropdownIdx++;
+    if (_activeAttendanceEmpDropdownIdx >= items.length) _activeAttendanceEmpDropdownIdx = 0;
+    updateAttendanceDropdownHighlight(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _activeAttendanceEmpDropdownIdx--;
+    if (_activeAttendanceEmpDropdownIdx < 0) _activeAttendanceEmpDropdownIdx = items.length - 1;
+    updateAttendanceDropdownHighlight(items);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (_activeAttendanceEmpDropdownIdx >= 0 && _activeAttendanceEmpDropdownIdx < items.length) {
+      items[_activeAttendanceEmpDropdownIdx].click();
+    }
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeAttendanceEmpDropdown();
+  }
+}
+
+function updateAttendanceDropdownHighlight(items) {
+  items.forEach(function(it, idx) {
+    if (idx === _activeAttendanceEmpDropdownIdx) {
+      it.style.background = '#e2e8f0';
+      it.scrollIntoView({ block: 'nearest' });
+    } else {
+      it.style.background = it.classList.contains('selected') ? '#eff6ff' : 'transparent';
+    }
+  });
+}
+
+// Global click listener to close dropdown when clicking outside
+if (typeof window._attEmpClickBound === 'undefined') {
+  window._attEmpClickBound = true;
+  document.addEventListener('click', function(e) {
+    var comboWrapper = document.getElementById('attFilterEmpComboWrapper');
+    if (comboWrapper && !comboWrapper.contains(e.target)) {
+      closeAttendanceEmpDropdown();
+    }
+  });
+}
+
 function onAttendanceEmpFilterChanged() {
   var empEl = document.getElementById('attFilterEmp');
   _currentAttendanceEmpId = empEl ? empEl.value : 'ALL';
@@ -7258,17 +7436,14 @@ function onAttendanceEmpFilterChanged() {
 }
 
 function resetAttendanceEmpFilter() {
-  var empEl = document.getElementById('attFilterEmp');
-  if (empEl) empEl.value = 'ALL';
-  _currentAttendanceEmpId = 'ALL';
-  loadTimeAttendanceDashboard();
+  selectAttendanceEmp('ALL', '');
 }
 
 function populateAttendanceEmployeeSelects(empList) {
   if (!empList || !Array.isArray(empList)) return;
   _currentAttendanceEmployeeList = empList;
 
-  // 1. Main filter dropdown
+  // 1. Main filter dropdown & search input
   var selMain = document.getElementById('attFilterEmp');
   if (selMain) {
     var currVal = selMain.value || _currentAttendanceEmpId || 'ALL';
@@ -7282,6 +7457,24 @@ function populateAttendanceEmployeeSelects(empList) {
       selMain.value = currVal;
     } else {
       selMain.value = 'ALL';
+    }
+  }
+
+  // Update Search input text & clear button
+  var searchInput = document.getElementById('attFilterEmpSearchInput');
+  var clearBtn = document.getElementById('btnAttEmpSearchClear');
+  var chevronIcon = document.getElementById('iconAttEmpDropdownChevron');
+  if (searchInput) {
+    if (_currentAttendanceEmpId && _currentAttendanceEmpId !== 'ALL') {
+      var found = empList.find(function(x) { return x.emp_id === _currentAttendanceEmpId; });
+      if (found) {
+        searchInput.value = found.emp_id + ' - ' + (found.name || found.full_name || '') + (found.nickname ? ' (' + found.nickname + ')' : '');
+      }
+      if (clearBtn) clearBtn.style.display = 'block';
+      if (chevronIcon) chevronIcon.style.display = 'none';
+    } else {
+      if (clearBtn) clearBtn.style.display = 'none';
+      if (chevronIcon) chevronIcon.style.display = 'block';
     }
   }
 
