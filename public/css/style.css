@@ -478,6 +478,18 @@ table.data-table tr:hover td { background: #f8fafc; }
   max-width: 920px;
   width: 95%;
 }
+
+/* TOP-LEVEL PHOTO PREVIEW LIGHTBOX (ALWAYS ON TOP OF OTHER MODALS) */
+#modalAttendancePhotoPreview {
+  z-index: 1200 !important;
+  background: rgba(15, 23, 42, 0.75) !important;
+  backdrop-filter: blur(4px) !important;
+}
+#modalAttendancePhotoPreview .modal-card {
+  z-index: 1201 !important;
+  box-shadow: 0 25px 60px -10px rgba(0, 0, 0, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
 .modal-body {
   padding: 18px 24px;
   overflow-y: auto;

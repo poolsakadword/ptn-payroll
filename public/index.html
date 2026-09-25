@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=9.3">
+  <link rel="stylesheet" href="css/style.css?v=9.8">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -3509,28 +3509,6 @@
     </div>
   </div>
 
-  <!-- PHOTO PREVIEW MODAL -->
-  <div class="modal-overlay" id="modalAttendancePhotoPreview">
-    <div class="modal-card" style="max-width:520px;width:95vw;text-align:center">
-      <div class="modal-header" style="text-align:left">
-        <div class="modal-title" id="photoPreviewModalTitle" style="display:flex;align-items:center;gap:8px">
-          <i class="fa-solid fa-image text-blue"></i>
-          <span>ภาพถ่ายเซลฟี่ยืนยันตัวตน</span>
-        </div>
-        <button type="button" class="modal-close-btn" onclick="closeModal('modalAttendancePhotoPreview')"><i class="fa-solid fa-xmark"></i></button>
-      </div>
-      <div class="modal-body" style="padding:16px">
-        <div style="font-size:12px;color:#64748b;margin-bottom:10px" id="photoPreviewModalSub">-</div>
-        <div style="background:#000;border-radius:12px;overflow:hidden;max-height:480px;display:flex;align-items:center;justify-content:center">
-          <img id="photoPreviewModalImg" src="" alt="Selfie Preview" style="width:100%;max-height:480px;object-fit:contain">
-        </div>
-      </div>
-      <div class="modal-footer" style="display:flex;justify-content:flex-end">
-        <button type="button" class="btn btn-slate" onclick="closeModal('modalAttendancePhotoPreview')">ปิด</button>
-      </div>
-    </div>
-  </div>
-
   <!-- ATTENDANCE DETAIL MODAL -->
   <div class="modal-overlay" id="modalAttendanceDetail">
     <div class="modal-card wide" style="max-width:720px;width:95vw">
@@ -3791,6 +3769,28 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- PHOTO PREVIEW MODAL (TOP-LEVEL LIGHTBOX OVERLAY) -->
+  <div class="modal-overlay" id="modalAttendancePhotoPreview" onclick="if(event.target === this) closeModal('modalAttendancePhotoPreview')" style="z-index:1200">
+    <div class="modal-card" style="max-width:560px;width:95vw;text-align:center;box-shadow:0 25px 60px -10px rgba(0,0,0,0.7)">
+      <div class="modal-header" style="text-align:left">
+        <div class="modal-title" id="photoPreviewModalTitle" style="display:flex;align-items:center;gap:8px">
+          <i class="fa-solid fa-image text-blue"></i>
+          <span>ภาพถ่ายเซลฟี่ยืนยันตัวตน</span>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalAttendancePhotoPreview')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" style="padding:16px">
+        <div style="font-size:12px;color:#64748b;margin-bottom:10px" id="photoPreviewModalSub">-</div>
+        <div style="background:#000;border-radius:12px;overflow:hidden;max-height:520px;display:flex;align-items:center;justify-content:center">
+          <img id="photoPreviewModalImg" src="" alt="Selfie Preview" style="width:100%;max-height:520px;object-fit:contain">
+        </div>
+      </div>
+      <div class="modal-footer" style="display:flex;justify-content:flex-end">
+        <button type="button" class="btn btn-slate" onclick="closeModal('modalAttendancePhotoPreview')">ปิด</button>
+      </div>
     </div>
   </div>
 
@@ -4223,6 +4223,6 @@
   </div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.7"></script>
+  <script src="js/app.js?v=9.8"></script>
 </body>
 </html>

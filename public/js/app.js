@@ -2103,14 +2103,28 @@ function switchTab(tabId) {
   }
 }
 
+var _modalZIndexCounter = 500;
 function openModal(id) {
   var el = document.getElementById(id);
-  if (el) el.classList.add('active');
+  if (el) {
+    _modalZIndexCounter += 20;
+    if (id === 'modalAttendancePhotoPreview') {
+      el.style.zIndex = Math.max(_modalZIndexCounter, 1200);
+    } else {
+      el.style.zIndex = _modalZIndexCounter;
+    }
+    el.classList.add('active');
+  }
 }
 
 function closeModal(id) {
   var el = document.getElementById(id);
-  if (el) el.classList.remove('active');
+  if (el) {
+    el.classList.remove('active');
+    if (!document.querySelector('.modal-overlay.active, .modal.active')) {
+      _modalZIndexCounter = 500;
+    }
+  }
 }
 
 // POPULATE ALL EMPLOYEES
