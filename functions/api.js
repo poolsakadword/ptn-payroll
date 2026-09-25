@@ -146,6 +146,7 @@ async function ensureBranchTables(db) {
 
     await db.prepare("ALTER TABLE employees ADD COLUMN branch_id TEXT DEFAULT 'B01'").run().catch(() => {});
     await db.prepare("ALTER TABLE employees ADD COLUMN allow_all_branches TEXT DEFAULT 'false'").run().catch(() => {});
+    await db.prepare("ALTER TABLE employees ADD COLUMN diligence_allowance REAL").run().catch(() => {});
     await db.prepare("ALTER TABLE time_logs ADD COLUMN branch_id TEXT").run().catch(() => {});
     await db.prepare("ALTER TABLE time_logs ADD COLUMN branch_name TEXT").run().catch(() => {});
     await db.prepare("UPDATE employees SET branch_id = 'B01' WHERE branch_id IS NULL OR branch_id = ''").run().catch(() => {});
@@ -651,6 +652,7 @@ async function handleAction(db, action, params) {
         probationDays: Number(e.probation_days) || 119,
         probationEndDate: e.probation_end_date || '',
         remark: e.remark || '',
+        diligenceAllowance: (e.diligence_allowance !== null && e.diligence_allowance !== undefined && !isNaN(Number(e.diligence_allowance))) ? Number(e.diligence_allowance) : null,
         isDeviceBound: !!deviceMap[e.emp_id],
         boundDevice: deviceMap[e.emp_id] || null
       }));
@@ -750,12 +752,36 @@ async function handleAction(db, action, params) {
       const latestRowPeriod = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
       const latestActivePeriod = (latestRowPeriod && latestRowPeriod.period) ? latestRowPeriod.period : period;
 
+      const getSetNum = (k, def) => {
+        const row = (settingsRows.results || []).find(r => r.key === k);
+        return (row && row.value !== undefined && row.value !== null && !isNaN(Number(row.value))) ? Number(row.value) : def;
+      };
+      const getSetBool = (k, def) => {
+        const row = (settingsRows.results || []).find(r => r.key === k);
+        return row ? (row.value !== 'false') : def;
+      };
+
+      const payrollDefaults = {
+        defaultOtRate: getSetNum('DefaultOtRate', 40),
+        defaultWorkDays: getSetNum('DefaultWorkDays', 30),
+        absentFactor: getSetNum('AbsentFactor', 1.5),
+        leaveFactor: getSetNum('LeaveFactor', 1.0),
+        sickLeaveQuota: getSetNum('SickLeaveQuota', 10),
+        defaultPfRate: getSetNum('DefaultPfRate', 0.05),
+        defaultProbationDays: getSetNum('DefaultProbationDays', 119),
+        diligenceAllowance: getSetNum('DiligenceAllowance', 1000),
+        diligenceLateGraceMins: getSetNum('DiligenceLateGraceMins', 2),
+        diligenceLateMaxCount: getSetNum('DiligenceLateMaxCount', 1),
+        autoDiligenceEnabled: getSetBool('AutoDiligenceEnabled', true)
+      };
+
       return {
         success: true,
         period: period,
         latestActivePeriod: latestActivePeriod,
         workingDays: workingDays,
         settings: settingsMap,
+        payrollDefaults: payrollDefaults,
         isClosed: isClosed,
         closedInfo: closedInfo,
         employees: employees,
@@ -786,6 +812,10 @@ async function handleAction(db, action, params) {
       if (d.sickLeaveQuota !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("SickLeaveQuota", ?)').bind(String(d.sickLeaveQuota)).run();
       if (d.defaultPfRate !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultPfRate", ?)').bind(String(d.defaultPfRate)).run();
       if (d.defaultProbationDays !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DefaultProbationDays", ?)').bind(String(d.defaultProbationDays)).run();
+      if (d.diligenceAllowance !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DiligenceAllowance", ?)').bind(String(d.diligenceAllowance)).run();
+      if (d.diligenceLateGraceMins !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DiligenceLateGraceMins", ?)').bind(String(d.diligenceLateGraceMins)).run();
+      if (d.diligenceLateMaxCount !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DiligenceLateMaxCount", ?)').bind(String(d.diligenceLateMaxCount)).run();
+      if (d.autoDiligenceEnabled !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("AutoDiligenceEnabled", ?)').bind(String(d.autoDiligenceEnabled)).run();
 
       await calculateAndSavePayroll(db, period);
       await logSystemActivity(db, callerUser || 'Admin', 'SETTINGS_UPDATE', 'อัปเดตค่านโยบายและค่าเริ่มต้นการคำนวณเงินเดือน');
@@ -876,6 +906,7 @@ async function handleAction(db, action, params) {
       await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT "true"').run().catch(() => {});
       await db.prepare('ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT "false"').run().catch(() => {});
+      await db.prepare('ALTER TABLE employees ADD COLUMN diligence_allowance REAL').run().catch(() => {});
       await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
       let probEndDate = emp.probationEndDate || '';
@@ -901,11 +932,14 @@ async function handleAction(db, action, params) {
       const allowAllVal = (emp.allowAllBranches === 'true' || emp.allowAllBranches === true) ? 'true' : 'false';
       const isOtEligibleVal = (emp.isOtEligible === false || emp.isOtEligible === 'false') ? 'false' : 'true';
       const isUndertimeExemptVal = (emp.isUndertimeExempt === true || emp.isUndertimeExempt === 'true' || emp.isUndertimeExempt === 1 || emp.isUndertimeExempt === '1') ? 'true' : 'false';
+      const diligenceAllowanceVal = (emp.diligenceAllowance !== undefined && emp.diligenceAllowance !== null && emp.diligenceAllowance !== '' && !isNaN(Number(emp.diligenceAllowance)))
+        ? Number(emp.diligenceAllowance)
+        : null;
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -917,7 +951,8 @@ async function handleAction(db, action, params) {
         photoUrlVal,
         branchIdVal, allowAllVal,
         isOtEligibleVal,
-        isUndertimeExemptVal
+        isUndertimeExemptVal,
+        diligenceAllowanceVal
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period
@@ -1423,12 +1458,23 @@ async function handleAction(db, action, params) {
         }
       }
 
-      // 5. Merge into monthly_inputs
-      const defOtRow = await db.prepare('SELECT value FROM settings WHERE key = "DefaultOtRate"').first().catch(() => null);
-      const fallbackOtRate = (defOtRow && defOtRow.value && !isNaN(Number(defOtRow.value))) ? Number(defOtRow.value) : 40;
+      // 5. Merge into monthly_inputs & Evaluate Diligence Allowance
+      const getSetVal = (k, def) => {
+        const row = settingsList.find(r => r.key === k);
+        return (row && row.value !== undefined && row.value !== null && !isNaN(Number(row.value))) ? Number(row.value) : def;
+      };
+      const fallbackOtRate = getSetVal('DefaultOtRate', 40);
+      const diligenceAllowance = getSetVal('DiligenceAllowance', 1000);
+      const diligenceLateGraceMins = getSetVal('DiligenceLateGraceMins', 2);
+      const diligenceLateMaxCount = getSetVal('DiligenceLateMaxCount', 1);
+      const autoDiligenceRow = settingsList.find(r => r.key === 'AutoDiligenceEnabled');
+      const autoDiligenceEnabled = autoDiligenceRow ? (autoDiligenceRow.value !== 'false') : true;
 
       let syncedCount = 0;
       let nextNo = 0;
+      let diligenceQualifiedList = [];
+      let diligenceDisqualifiedList = [];
+      let targetEmpDiligenceResult = null;
 
       if (targetEmpId) {
         const exist = existingMap[targetEmpId];
@@ -1453,7 +1499,6 @@ async function handleAction(db, action, params) {
 
         const exist = existingMap[emp.emp_id] || {};
         const absentDays = Number(exist.absent_days) || 0;
-        const allowance = Number(exist.allowance) || 0;
         const bonus = Number(exist.bonus) || 0;
         const othDed = Number(exist.other_deduct) || 0;
         const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : fallbackOtRate;
@@ -1480,6 +1525,85 @@ async function handleAction(db, action, params) {
           lateDeduct = 0;
         }
 
+        // --- AUTOMATIC DILIGENCE ALLOWANCE (คำนวณเบี้ยขยันอัตโนมัติ) ---
+        let allowance = 0;
+        let empDisqualifyReasons = [];
+
+        if (autoDiligenceEnabled) {
+          if (!employeeHasLogs[emp.emp_id]) {
+            empDisqualifyReasons.push('ไม่มีประวัติการลงเวลาในงวดนี้');
+          } else {
+            if (absentDays > 0) {
+              empDisqualifyReasons.push(`ขาดงาน ${absentDays} วัน`);
+            }
+            if (leaveDays > 0) {
+              empDisqualifyReasons.push(`ลากิจ ${leaveDays} วัน`);
+            }
+            if (sickLeaveDays > 0) {
+              empDisqualifyReasons.push(`ลาป่วยมีใบรับรองแพทย์ ${sickLeaveDays} วัน`);
+            }
+            if (unpaidSickLeaveDays > 0) {
+              empDisqualifyReasons.push(`ลาป่วยไม่มีใบรับรองแพทย์ ${unpaidSickLeaveDays} วัน`);
+            }
+            if (calcEarlyDeduct > 0) {
+              const mHrs = Math.round((missingHoursMap[emp.emp_id] || 0) * 100) / 100;
+              empDisqualifyReasons.push(`ออกก่อนเวลา/ขาดช่วง ${mHrs} ชม.`);
+            }
+
+            // Check late arrivals in non-Sunday logs
+            const empLogs = timeLogsList.filter(l => l.emp_id === emp.emp_id);
+            let lateOccurrences = 0;
+            let excessiveLateDays = [];
+
+            for (const l of empLogs) {
+              const logDate = new Date(l.date + 'T00:00:00Z');
+              if (logDate.getUTCDay() === 0) continue; // Skip Sunday
+
+              const lMins = Number(l.late_minutes) || 0;
+              if (lMins > 0) {
+                lateOccurrences++;
+                if (lMins > diligenceLateGraceMins) {
+                  excessiveLateDays.push(`วันที่ ${l.date.substring(8)} (สาย ${lMins} น. > เกณฑ์ ${diligenceLateGraceMins} น.)`);
+                }
+              }
+            }
+
+            if (excessiveLateDays.length > 0) {
+              empDisqualifyReasons.push(`สายเกินเกณฑ์: ${excessiveLateDays.join(', ')}`);
+            } else if (lateOccurrences > diligenceLateMaxCount) {
+              empDisqualifyReasons.push(`มาสาย ${lateOccurrences} ครั้ง (เกินโควตา ${diligenceLateMaxCount} ครั้ง)`);
+            }
+          }
+
+          const targetAllowance = (emp.diligence_allowance !== null && emp.diligence_allowance !== undefined && !isNaN(Number(emp.diligence_allowance)) && Number(emp.diligence_allowance) > 0)
+            ? Number(emp.diligence_allowance)
+            : diligenceAllowance;
+
+          if (empDisqualifyReasons.length === 0) {
+            allowance = targetAllowance;
+            diligenceQualifiedList.push({
+              empId: emp.emp_id,
+              name: emp.full_name || emp.emp_id,
+              allowance: targetAllowance
+            });
+            if (targetEmpId === emp.emp_id) {
+              targetEmpDiligenceResult = { status: 'QUALIFIED', allowance: targetAllowance, reason: 'มาทำงานครบ ตรงต่อเวลา' };
+            }
+          } else {
+            allowance = 0;
+            diligenceDisqualifiedList.push({
+              empId: emp.emp_id,
+              name: emp.full_name || emp.emp_id,
+              reasons: empDisqualifyReasons
+            });
+            if (targetEmpId === emp.emp_id) {
+              targetEmpDiligenceResult = { status: 'DISQUALIFIED', allowance: 0, reason: empDisqualifyReasons.join('; ') };
+            }
+          }
+        } else {
+          allowance = Number(exist.allowance) || 0;
+        }
+
         await db.prepare(`
           INSERT OR REPLACE INTO monthly_inputs
           (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
@@ -1501,8 +1625,12 @@ async function handleAction(db, action, params) {
         const empLeaveTotal = (empL.sickCert || 0) + (empL.sickNoCert || 0) + (empL.business || 0);
         const empMissingHrs = Math.round((missingHoursMap[targetEmpId] || 0) * 100) / 100;
         const empEarlyDed = Math.round((earlyDeductMap[targetEmpId] || 0) * 100) / 100;
+        const diligenceEarned = targetEmpDiligenceResult && targetEmpDiligenceResult.status === 'QUALIFIED';
+        const empDiligenceMsg = autoDiligenceEnabled
+          ? (diligenceEarned ? `, ได้รับเบี้ยขยัน ฿${targetEmpDiligenceResult.allowance.toLocaleString()}` : `, เบี้ยขยัน ฿0 (${targetEmpDiligenceResult ? targetEmpDiligenceResult.reason : 'ตัดสิทธิ์'})`)
+          : '';
 
-        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time พนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''})`);
+        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time พนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${empDiligenceMsg})`);
 
         return {
           success: true,
@@ -1514,9 +1642,12 @@ async function handleAction(db, action, params) {
           leaveTotal: empLeaveTotal,
           missingHours: empMissingHrs,
           lateDeduct: empEarlyDed,
+          allowance: targetEmpDiligenceResult ? targetEmpDiligenceResult.allowance : 0,
+          diligenceStatus: targetEmpDiligenceResult ? targetEmpDiligenceResult.status : 'NONE',
+          diligenceReason: targetEmpDiligenceResult ? targetEmpDiligenceResult.reason : '',
           workingDays: periodWorkDays,
           autoAdjustedLeaves: autoAdjustedLeaves.filter(a => a.empId === targetEmpId),
-          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลาสุทธิ ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length > 0 ? `, ตรวจพบมาทำงานในวันลา ${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length} วัน (ยกเว้นการหักวันลาอัตโนมัติ)` : ''})`
+          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลาสุทธิ ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${empDiligenceMsg}${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length > 0 ? `, ตรวจพบมาทำงานในวันลา ${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length} วัน (ยกเว้นการหักวันลาอัตโนมัติ)` : ''})`
         };
       }
 
@@ -1531,8 +1662,12 @@ async function handleAction(db, action, params) {
       if (autoAdjustedLeaves.length > 0) {
         adjustSummary = `, ตรวจพบและยกเว้นวันลาที่มาทำงานจริง ${autoAdjustedLeaves.length} รายการ`;
       }
+      let diligenceSummary = '';
+      if (autoDiligenceEnabled) {
+        diligenceSummary = `, เบี้ยขยัน: ได้รับ ${diligenceQualifiedList.length} คน, ตัดสิทธิ์ ${diligenceDisqualifiedList.length} คน`;
+      }
 
-      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ลาสุทธิ ${totalLeaveCount} วัน, ขาด/ออกก่อน ${totalMissingHours} ชม. หัก ฿${totalEarlyDeduct.toLocaleString()}${adjustSummary})`);
+      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ลาสุทธิ ${totalLeaveCount} วัน, ขาด/ออกก่อน ${totalMissingHours} ชม. หัก ฿${totalEarlyDeduct.toLocaleString()}${diligenceSummary}${adjustSummary})`);
 
       return {
         success: true,
@@ -1547,7 +1682,11 @@ async function handleAction(db, action, params) {
         totalEarlyDeduct: totalEarlyDeduct,
         workingDays: periodWorkDays,
         autoAdjustedLeaves: autoAdjustedLeaves,
-        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, ลาสุทธิ ${totalLeaveCount} วัน${totalMissingHours > 0 ? `, ขาด/ออกก่อนรวม ${totalMissingHours} ชม. หักรวม ฿${totalEarlyDeduct.toLocaleString()}` : ''}${adjustSummary})`
+        diligenceQualifiedCount: diligenceQualifiedList.length,
+        diligenceDisqualifiedCount: diligenceDisqualifiedList.length,
+        diligenceQualified: diligenceQualifiedList,
+        diligenceDisqualified: diligenceDisqualifiedList,
+        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, ลาสุทธิ ${totalLeaveCount} วัน${totalMissingHours > 0 ? `, ขาด/ออกก่อนรวม ${totalMissingHours} ชม. หักรวม ฿${totalEarlyDeduct.toLocaleString()}` : ''}${diligenceSummary}${adjustSummary})`
       };
     }
 

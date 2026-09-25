@@ -304,7 +304,11 @@ var State = {
     leaveFactor: 1.0,
     sickLeaveQuota: 10,
     defaultPfRate: 0.05,
-    defaultProbationDays: 119
+    defaultProbationDays: 119,
+    diligenceAllowance: 1000,
+    diligenceLateGraceMins: 2,
+    diligenceLateMaxCount: 1,
+    autoDiligenceEnabled: true
   },
   annualSickMap: {}
 };
@@ -1886,6 +1890,10 @@ function renderCompanySettings() {
   if (document.getElementById('cfgSickLeaveQuota')) document.getElementById('cfgSickLeaveQuota').value = pd.sickLeaveQuota !== undefined ? pd.sickLeaveQuota : 10;
   if (document.getElementById('cfgDefaultPfRate')) document.getElementById('cfgDefaultPfRate').value = pd.defaultPfRate !== undefined ? pd.defaultPfRate : 0.05;
   if (document.getElementById('cfgDefaultProbationDays')) document.getElementById('cfgDefaultProbationDays').value = pd.defaultProbationDays !== undefined ? pd.defaultProbationDays : 119;
+  if (document.getElementById('cfgDiligenceAllowance')) document.getElementById('cfgDiligenceAllowance').value = pd.diligenceAllowance !== undefined ? pd.diligenceAllowance : 1000;
+  if (document.getElementById('cfgDiligenceLateGraceMins')) document.getElementById('cfgDiligenceLateGraceMins').value = pd.diligenceLateGraceMins !== undefined ? pd.diligenceLateGraceMins : 2;
+  if (document.getElementById('cfgDiligenceLateMaxCount')) document.getElementById('cfgDiligenceLateMaxCount').value = pd.diligenceLateMaxCount !== undefined ? pd.diligenceLateMaxCount : 1;
+  if (document.getElementById('cfgAutoDiligenceEnabled')) document.getElementById('cfgAutoDiligenceEnabled').checked = pd.autoDiligenceEnabled !== false;
 
   // Load PTN Time announcement settings
   loadAppAnnouncementSettings();
@@ -1904,7 +1912,11 @@ function savePayrollDefaults(e) {
     leaveFactor: Number(document.getElementById('cfgLeaveFactor').value) || 1.0,
     sickLeaveQuota: Number(document.getElementById('cfgSickLeaveQuota').value) || 10,
     defaultPfRate: Number(document.getElementById('cfgDefaultPfRate').value) || 0.05,
-    defaultProbationDays: Number(document.getElementById('cfgDefaultProbationDays').value) || 119
+    defaultProbationDays: Number(document.getElementById('cfgDefaultProbationDays').value) || 119,
+    diligenceAllowance: document.getElementById('cfgDiligenceAllowance') ? Number(document.getElementById('cfgDiligenceAllowance').value) : 1000,
+    diligenceLateGraceMins: document.getElementById('cfgDiligenceLateGraceMins') ? Number(document.getElementById('cfgDiligenceLateGraceMins').value) : 2,
+    diligenceLateMaxCount: document.getElementById('cfgDiligenceLateMaxCount') ? Number(document.getElementById('cfgDiligenceLateMaxCount').value) : 1,
+    autoDiligenceEnabled: document.getElementById('cfgAutoDiligenceEnabled') ? document.getElementById('cfgAutoDiligenceEnabled').checked : true
   };
   callApi('savePayrollDefaults', { defaults: d })
     .then(function(r) {
@@ -2287,6 +2299,8 @@ function syncCurrentEmpFromModal() {
             document.getElementById('miUnpaidSickLeaveDays').value = rRecord.unpaidSickLeaveDays || 0;
           }
           if (document.getElementById('miLeaveDays')) document.getElementById('miLeaveDays').value = rRecord.leaveDays || 0;
+          if (document.getElementById('miAllowance')) document.getElementById('miAllowance').value = rRecord.allowance || 0;
+          if (document.getElementById('miLateDeduct')) document.getElementById('miLateDeduct').value = rRecord.lateDeduct || 0;
           updateSickQuotaBadge();
           showToast('อัปเดตข้อมูลในแบบฟอร์มเรียบร้อยแล้ว');
         }
@@ -2681,6 +2695,7 @@ function openAddEmployeeModal() {
   var ssoLbl = document.getElementById('mDefaultSsoLabel');
   if (ssoLbl) { ssoLbl.textContent = '(750฿)'; ssoLbl.style.color = '#dc2626'; }
   document.getElementById('mDefaultTax').value = '0';
+  if (document.getElementById('mDiligenceAllowance')) document.getElementById('mDiligenceAllowance').value = '';
   openModal('empModal');
 }
 
@@ -2753,6 +2768,9 @@ function openEditEmployeeModal(empId) {
     ssoLbl.style.color = hasSso ? '#dc2626' : '#94a3b8';
   }
   document.getElementById('mDefaultTax').value = (e.defaultTax || 0);
+  if (document.getElementById('mDiligenceAllowance')) {
+    document.getElementById('mDiligenceAllowance').value = (e.diligenceAllowance !== undefined && e.diligenceAllowance !== null) ? e.diligenceAllowance : '';
+  }
   openModal('empModal');
 }
 
@@ -2768,6 +2786,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
   var hasSso = document.getElementById('mHasSso') ? document.getElementById('mHasSso').checked : true;
   var ssoVal = isUser ? (existingEmp ? (existingEmp.defaultSso !== undefined ? existingEmp.defaultSso : 0) : 0) : (hasSso ? (Number(document.getElementById('mDefaultSso').value) || 0) : 0);
   var taxVal = isUser ? (existingEmp ? existingEmp.defaultTax : 0) : (Number(document.getElementById('mDefaultTax').value) || 0);
+  var diligenceVal = (document.getElementById('mDiligenceAllowance') && document.getElementById('mDiligenceAllowance').value !== '') ? Number(document.getElementById('mDiligenceAllowance').value) : null;
 
   var branchIdVal = (document.getElementById('mBranchId') && document.getElementById('mBranchId').value) || 'B01';
   var allowAllBranchesVal = (document.getElementById('mAllowAllBranches') && document.getElementById('mAllowAllBranches').checked) || false;
@@ -2798,7 +2817,8 @@ function saveEmployeeForm(e, openPayslipAfter) {
     remark: document.getElementById('mRemark').value.trim(),
     pfRate: pfRate,
     defaultSso: ssoVal,
-    defaultTax: taxVal
+    defaultTax: taxVal,
+    diligenceAllowance: diligenceVal
   };
 
   if (!d.empId || !d.fullName) { showToast('กรุณากรอกรหัสและชื่อพนักงาน', 'error'); return; }

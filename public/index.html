@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=9.12">
+  <link rel="stylesheet" href="css/style.css?v=9.13">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -2475,6 +2475,38 @@
                 <label><i class="fa-solid fa-user-clock text-blue"></i> ระยะเวลาทดลองงานมาตรฐาน (วัน)</label>
                 <input type="number" id="cfgDefaultProbationDays" min="0" max="365" step="1" value="119">
               </div>
+
+              <!-- DILIGENCE ALLOWANCE POLICY (นโยบายเบี้ยขยันอัตโนมัติ) -->
+              <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:var(--radius-md);padding:14px 16px;margin-top:6px;margin-bottom:8px">
+                <div style="font-weight:700;color:#166534;font-size:12.5px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+                  <span style="display:flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-award" style="color:#16a34a"></i> นโยบายเบี้ยขยันอัตโนมัติ (Automated Diligence Allowance Policy)
+                  </span>
+                  <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;cursor:pointer;color:#1e293b;font-weight:600">
+                    <input type="checkbox" id="cfgAutoDiligenceEnabled" checked style="accent-color:#16a34a;width:15px;height:15px"> คำนวณเบี้ยขยันอัตโนมัติเมื่อกดดึงเวลา
+                  </label>
+                </div>
+                <div class="form-row-3">
+                  <div class="form-group" style="margin-bottom:6px">
+                    <label style="font-size:11.5px"><i class="fa-solid fa-coins text-green"></i> ยอดเบี้ยขยันมาตรฐาน (บาท/เดือน) *</label>
+                    <input type="number" id="cfgDiligenceAllowance" min="0" step="50" value="1000" required>
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px">
+                    <label style="font-size:11.5px"><i class="fa-solid fa-clock" style="color:#d97706"></i> สายอนุโลมไม่เกิน (นาที/ครั้ง) *</label>
+                    <input type="number" id="cfgDiligenceLateGraceMins" min="0" max="60" step="1" value="2" required>
+                    <small style="font-size:10px;color:#64748b;display:block;margin-top:2px">สายเกินนาทีนี้ในวันใดก็ตาม = ตัดสิทธิ์ทันที</small>
+                  </div>
+                  <div class="form-group" style="margin-bottom:6px">
+                    <label style="font-size:11.5px"><i class="fa-solid fa-repeat" style="color:#d97706"></i> สายได้สูงสุดไม่เกิน (ครั้ง/งวด) *</label>
+                    <input type="number" id="cfgDiligenceLateMaxCount" min="0" max="10" step="1" value="1" required>
+                    <small style="font-size:10px;color:#64748b;display:block;margin-top:2px">สายรวมเกินจำนวนครั้งนี้ = ตัดสิทธิ์ทันที</small>
+                  </div>
+                </div>
+                <div style="font-size:11px;color:#15803d;margin-top:8px;padding:6px 10px;background:#dcfce7;border-radius:6px;line-height:1.5">
+                  <i class="fa-solid fa-shield-halved"></i> <strong>เกณฑ์การตัดสิทธิ์อัตโนมัติ:</strong> ขาดงาน &ge; 1 วัน | ลากิจ &ge; 1 วัน | ลาป่วย (ทั้งมีและไม่มีใบรับรองแพทย์) &ge; 1 วัน | ออกก่อนเวลา/ขาดช่วง | มาสายเกินเกณฑ์ &rarr; ระบบจะตั้งเบี้ยขยันเป็น ฿0 ทันที
+                </div>
+              </div>
+
               <button type="submit" class="btn btn-primary" style="justify-content:center;padding:11px">
                 <i class="fa-solid fa-floppy-disk"></i> บันทึกค่านโยบายเงินเดือน
               </button>
@@ -3019,12 +3051,12 @@
                   </div>
                 </div>
               </div>
-              <div class="form-row-2">
+              <div class="form-row-3">
                 <div class="form-group">
                   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
                     <label style="color:#dc2626;font-weight:700"><i class="fa-solid fa-hospital-user"></i> ประกันสังคม (SSO)</label>
                     <label style="font-size:11.5px;cursor:pointer;color:#dc2626;display:inline-flex;align-items:center;gap:5px;font-weight:600">
-                      <input type="checkbox" id="mHasSso" onchange="onEmpHasSsoChanged()" checked style="width:15px;height:15px;cursor:pointer"> หักประกันสังคม (SSO)
+                      <input type="checkbox" id="mHasSso" onchange="onEmpHasSsoChanged()" checked style="width:15px;height:15px;cursor:pointer"> หัก SSO
                     </label>
                   </div>
                   <div style="display:flex;align-items:center;gap:8px">
@@ -3035,6 +3067,10 @@
                 <div class="form-group">
                   <label>ภาษีเริ่มต้น (Tax Default)</label>
                   <input type="number" id="mDefaultTax" value="0">
+                </div>
+                <div class="form-group">
+                  <label><i class="fa-solid fa-coins text-green"></i> เบี้ยขยันรายบุคคล (บาท)</label>
+                  <input type="number" id="mDiligenceAllowance" placeholder="ตามนโยบาย (฿1,000)">
                 </div>
               </div>
             </div>
@@ -4415,6 +4451,6 @@
   </div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.12"></script>
+  <script src="js/app.js?v=9.13"></script>
 </body>
 </html>
