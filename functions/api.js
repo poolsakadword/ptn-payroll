@@ -1653,27 +1653,123 @@ async function handleAction(db, action, params) {
       await db.prepare("ALTER TABLE time_logs ADD COLUMN overbreak_minutes INTEGER DEFAULT 0").run().catch(() => {});
 
       const branchFilter = String(params.branchId || params.branch_id || '').trim();
+      const empFilter = String(params.empId || params.emp_id || '').trim();
+      const reqEmpFilter = String(params.requestEmpId || params.request_emp_id || empFilter || '').trim();
+      const dateMode = String(params.dateMode || 'SINGLE').toUpperCase(); // 'SINGLE', 'MONTH', 'RANGE'
+      const filterMonth = params.month ? String(params.month).trim() : (filterDate ? filterDate.substring(0, 7) : today.substring(0, 7));
+      const startDate = params.startDate ? String(params.startDate).trim() : '';
+      const endDate = params.endDate ? String(params.endDate).trim() : '';
 
-      // 1. Logs for Selected Date (or Today) with Employee Info and Branch Info
+      // 1.0 Employees list for search & selector
+      const empRows = await db.prepare(`
+        SELECT emp_id, full_name, nickname, department, position, branch_id, photo_url
+        FROM employees
+        WHERE status != 'Resigned'
+        ORDER BY emp_id ASC
+      `).all().catch(() => ({ results: [] }));
+      const employeeList = empRows.results || [];
+
+      const isIndividual = Boolean(empFilter && empFilter !== 'ALL');
+      let selectedEmp = null;
+      let empSummary = null;
+
+      // 1. Logs for Selected Date (or Today) or Individual Multi-Day History
       let logsQuery;
-      if (branchFilter && branchFilter !== 'ALL') {
+      if (isIndividual) {
+        selectedEmp = employeeList.find(e => e.emp_id === empFilter) || (await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empFilter).first().catch(() => null));
+        
+        let dateClause = "l.date = ?";
+        let dateBinds = [filterDate];
+
+        if (dateMode === 'RANGE' && startDate && endDate) {
+          dateClause = "l.date BETWEEN ? AND ?";
+          dateBinds = [startDate, endDate];
+        } else if (dateMode === 'MONTH') {
+          dateClause = "l.date LIKE ?";
+          dateBinds = [filterMonth + '-%'];
+        }
+
         logsQuery = await db.prepare(`
-          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
+          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id, b.branch_name
           FROM time_logs l
           LEFT JOIN employees e ON l.emp_id = e.emp_id
-          WHERE l.date = ? AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))
-          ORDER BY l.clock_in DESC
-        `).bind(filterDate, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
+          LEFT JOIN branches b ON (l.branch_id = b.branch_id OR (l.branch_id IS NULL AND e.branch_id = b.branch_id))
+          WHERE l.emp_id = ? AND ${dateClause}
+          ORDER BY l.date DESC, l.clock_in DESC
+        `).bind(empFilter, ...dateBinds).all().catch(() => ({ results: [] }));
+
       } else {
-        logsQuery = await db.prepare(`
-          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
-          FROM time_logs l
-          LEFT JOIN employees e ON l.emp_id = e.emp_id
-          WHERE l.date = ?
-          ORDER BY l.clock_in DESC
-        `).bind(filterDate).all().catch(() => ({ results: [] }));
+        if (branchFilter && branchFilter !== 'ALL') {
+          logsQuery = await db.prepare(`
+            SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id, b.branch_name
+            FROM time_logs l
+            LEFT JOIN employees e ON l.emp_id = e.emp_id
+            LEFT JOIN branches b ON (l.branch_id = b.branch_id OR (l.branch_id IS NULL AND e.branch_id = b.branch_id))
+            WHERE l.date = ? AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))
+            ORDER BY l.clock_in DESC
+          `).bind(filterDate, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
+        } else {
+          logsQuery = await db.prepare(`
+            SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id, b.branch_name
+            FROM time_logs l
+            LEFT JOIN employees e ON l.emp_id = e.emp_id
+            LEFT JOIN branches b ON (l.branch_id = b.branch_id OR (l.branch_id IS NULL AND e.branch_id = b.branch_id))
+            WHERE l.date = ?
+            ORDER BY l.clock_in DESC
+          `).bind(filterDate).all().catch(() => ({ results: [] }));
+        }
       }
       const logsToday = logsQuery.results || [];
+
+      // Compute Individual Mini Summary if individual mode
+      if (isIndividual) {
+        let daysWorked = 0;
+        let totalWorkHours = 0;
+        let totalOtHours = 0;
+        let lateCount = 0;
+        let totalLateMinutes = 0;
+        let missingClockOutCount = 0;
+        let anomalyCount = 0;
+
+        for (const l of logsToday) {
+          if (l.clock_in) daysWorked++;
+          totalWorkHours += Number(l.work_hours || 0);
+          totalOtHours += Number(l.ot_hours || 0);
+          if ((Number(l.late_minutes) || 0) > 0) {
+            lateCount++;
+            totalLateMinutes += Number(l.late_minutes || 0);
+          }
+          if (l.clock_in && !l.clock_out) {
+            missingClockOutCount++;
+          }
+          if (l.status === 'ANOMALY' || l.status === 'GEOFENCE_FAIL' || (l.overbreak_minutes || 0) > 0) {
+            anomalyCount++;
+          }
+        }
+
+        const appLeavesQ = await db.prepare(`
+          SELECT SUM(days) as sum_days FROM leave_requests WHERE emp_id = ? AND status = 'APPROVED'
+        `).bind(empFilter).first().catch(() => null);
+        const appAdvQ = await db.prepare(`
+          SELECT SUM(amount) as sum_amount FROM advance_requests WHERE emp_id = ? AND status = 'APPROVED'
+        `).bind(empFilter).first().catch(() => null);
+        const appOtQ = await db.prepare(`
+          SELECT SUM(actual_hours) as sum_ot FROM ot_requests WHERE emp_id = ? AND status = 'APPROVED'
+        `).bind(empFilter).first().catch(() => null);
+
+        empSummary = {
+          daysWorked,
+          totalWorkHours: Math.round(totalWorkHours * 100) / 100,
+          totalOtHours: Math.round(totalOtHours * 100) / 100,
+          lateCount,
+          totalLateMinutes,
+          missingClockOutCount,
+          anomalyCount,
+          approvedLeaveDays: Number(appLeavesQ?.sum_days || 0),
+          approvedAdvanceAmount: Number(appAdvQ?.sum_amount || 0),
+          approvedOtHours: Number(appOtQ?.sum_ot || 0)
+        };
+      }
 
       // Auto-detect: check if any clocked-in employees have an approved leave request on filterDate
       try {
@@ -1711,7 +1807,7 @@ async function handleAction(db, action, params) {
       const reqType = String(params.requestType || 'ALL').toUpperCase(); // 'ALL', 'LEAVE', 'OT', 'ADVANCE'
       const reqDate = params.requestDate ? String(params.requestDate).trim() : ''; // 'YYYY-MM-DD'
 
-      // 2. Leaves (Filtered by Status, Type & Date)
+      // 2. Leaves (Filtered by Status, Type, Employee & Date)
       let pendingLeaves = [];
       if (reqType === 'ALL' || reqType === 'LEAVE') {
         const leaveConds = [];
@@ -1724,9 +1820,17 @@ async function handleAction(db, action, params) {
           leaveConds.push("lr.status = 'PENDING'");
         }
 
+        if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+          leaveConds.push("lr.emp_id = ?");
+          leaveBinds.push(reqEmpFilter);
+        }
+
         if (reqDate) {
           leaveConds.push("(substr(lr.created_at, 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
           leaveBinds.push(reqDate, reqDate);
+        } else if (isIndividual && dateMode === 'MONTH') {
+          leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ?)");
+          leaveBinds.push(filterMonth + '-%', filterMonth + '-%');
         }
 
         const leaveWhere = leaveConds.length > 0 ? "WHERE " + leaveConds.join(" AND ") : "";
@@ -1741,7 +1845,7 @@ async function handleAction(db, action, params) {
         pendingLeaves = leavesQuery.results || [];
       }
 
-      // 3. OTs (Filtered by Status, Type & Date)
+      // 3. OTs (Filtered by Status, Type, Employee & Date)
       let pendingOts = [];
       if (reqType === 'ALL' || reqType === 'OT') {
         const otConds = [];
@@ -1754,9 +1858,17 @@ async function handleAction(db, action, params) {
           otConds.push("ot.status = 'PENDING'");
         }
 
+        if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+          otConds.push("ot.emp_id = ?");
+          otBinds.push(reqEmpFilter);
+        }
+
         if (reqDate) {
           otConds.push("(ot.date = ? OR substr(ot.created_at, 1, 10) = ?)");
           otBinds.push(reqDate, reqDate);
+        } else if (isIndividual && dateMode === 'MONTH') {
+          otConds.push("ot.date LIKE ?");
+          otBinds.push(filterMonth + '-%');
         }
 
         const otWhere = otConds.length > 0 ? "WHERE " + otConds.join(" AND ") : "";
@@ -1771,7 +1883,7 @@ async function handleAction(db, action, params) {
         pendingOts = otsQuery.results || [];
       }
 
-      // 4. Advances (Filtered by Status, Type & Date)
+      // 4. Advances (Filtered by Status, Type, Employee & Date)
       let pendingAdvances = [];
       if (reqType === 'ALL' || reqType === 'ADVANCE') {
         const advConds = [];
@@ -1784,9 +1896,17 @@ async function handleAction(db, action, params) {
           advConds.push("ar.status = 'PENDING'");
         }
 
+        if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+          advConds.push("ar.emp_id = ?");
+          advBinds.push(reqEmpFilter);
+        }
+
         if (reqDate) {
           advConds.push("(ar.request_date = ? OR substr(ar.created_at, 1, 10) = ?)");
           advBinds.push(reqDate, reqDate);
+        } else if (isIndividual && dateMode === 'MONTH') {
+          advConds.push("ar.request_date LIKE ?");
+          advBinds.push(filterMonth + '-%');
         }
 
         const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
@@ -1843,6 +1963,14 @@ async function handleAction(db, action, params) {
         success: true,
         today,
         date: filterDate,
+        dateMode,
+        filterMonth,
+        startDate,
+        endDate,
+        isIndividualView: isIndividual,
+        selectedEmp,
+        empSummary,
+        employeeList,
         logsToday,
         pendingLeaves,
         pendingOts,

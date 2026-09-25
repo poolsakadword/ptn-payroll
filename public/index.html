@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=9.8">
+  <link rel="stylesheet" href="css/style.css?v=9.9">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -525,28 +525,121 @@
                 <div class="card-sub" id="attLogsSubTitle">บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตน</div>
               </div>
               <div class="toolbar" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <!-- Branch Filter -->
                 <div style="display:flex;align-items:center;gap:6px">
                   <label style="font-size:12px;font-weight:700;color:#334155"><i class="fa-solid fa-store text-blue"></i> สาขา:</label>
-                  <select id="attFilterBranch" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600;min-width:140px" onchange="loadTimeAttendanceDashboard()">
+                  <select id="attFilterBranch" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600;min-width:130px" onchange="loadTimeAttendanceDashboard()">
                     <option value="ALL">🏢 ทุกสาขา (All)</option>
                   </select>
                 </div>
+
+                <!-- Employee Filter -->
                 <div style="display:flex;align-items:center;gap:6px">
-                  <label style="font-size:12px;font-weight:700;color:#334155"><i class="fa-regular fa-calendar text-blue"></i> วันที่:</label>
-                  <input type="date" id="attFilterDate" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600" onchange="loadTimeAttendanceDashboard()">
+                  <label style="font-size:12px;font-weight:700;color:#334155"><i class="fa-solid fa-user text-blue"></i> พนักงาน:</label>
+                  <select id="attFilterEmp" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600;min-width:160px;max-width:220px" onchange="onAttendanceEmpFilterChanged()">
+                    <option value="ALL">👥 พนักงานทุกคน (All)</option>
+                  </select>
                 </div>
-                <button type="button" class="btn btn-slate btn-sm" onclick="setAttendanceFilterToday()" title="กลับไปดูวันนี้">
-                  วันนี้
-                </button>
+
+                <!-- Date Mode Filter -->
+                <div style="display:flex;align-items:center;gap:6px">
+                  <label style="font-size:12px;font-weight:700;color:#334155"><i class="fa-regular fa-calendar-days text-blue"></i> มุมมอง:</label>
+                  <select id="attFilterDateMode" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600;min-width:105px" onchange="onAttendanceDateModeChanged()">
+                    <option value="SINGLE">📅 รายวัน</option>
+                    <option value="MONTH">🗓️ รายเดือน</option>
+                    <option value="RANGE">⏳ กำหนดช่วง</option>
+                  </select>
+                </div>
+
+                <!-- SINGLE DATE -->
+                <div id="attFilterDateWrapSingle" style="display:flex;align-items:center;gap:6px">
+                  <input type="date" id="attFilterDate" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600" onchange="loadTimeAttendanceDashboard()">
+                  <button type="button" class="btn btn-slate btn-sm" onclick="setAttendanceFilterToday()" title="กลับไปดูวันนี้">
+                    วันนี้
+                  </button>
+                </div>
+
+                <!-- MONTH -->
+                <div id="attFilterDateWrapMonth" style="display:none;align-items:center;gap:6px">
+                  <input type="month" id="attFilterMonth" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600" onchange="loadTimeAttendanceDashboard()">
+                  <button type="button" class="btn btn-slate btn-sm" onclick="setAttendanceFilterThisMonth()" title="ดูเดือนปัจจุบัน">
+                    เดือนนี้
+                  </button>
+                </div>
+
+                <!-- RANGE -->
+                <div id="attFilterDateWrapRange" style="display:none;align-items:center;gap:6px">
+                  <input type="date" id="attFilterStartDate" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600" onchange="loadTimeAttendanceDashboard()">
+                  <span style="font-size:12px;color:#64748b">ถึง</span>
+                  <input type="date" id="attFilterEndDate" class="period-select" style="padding:4px 8px;font-size:12px;font-weight:600" onchange="loadTimeAttendanceDashboard()">
+                </div>
+
+                <!-- Actions -->
                 <button type="button" class="btn btn-slate btn-sm" onclick="loadTimeAttendanceDashboard()" title="รีเฟรชข้อมูล">
                   <i class="fa-solid fa-rotate-right"></i>
                 </button>
-                <button type="button" class="btn btn-slate btn-sm" onclick="exportAttendanceTodayCsv()" title="ส่งออกข้อมูลลงเวลาของวันนี้เป็นไฟล์ CSV (Excel)" style="font-weight:700">
-                  <i class="fa-solid fa-file-csv text-green"></i> Export วันนี้
+                <button type="button" id="btnAttPrintTimesheet" class="btn btn-sm" onclick="printIndividualAttendanceTimesheet()" style="display:none;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-weight:700" title="พิมพ์ประวัติลงเวลา A4">
+                  <i class="fa-solid fa-print"></i> พิมพ์ Timesheet
+                </button>
+                <button type="button" class="btn btn-slate btn-sm" onclick="exportAttendanceTodayCsv()" title="ส่งออกข้อมูลลงเวลาเป็นไฟล์ CSV (Excel)" style="font-weight:700">
+                  <i class="fa-solid fa-file-csv text-green"></i> Export CSV
                 </button>
                 <button type="button" class="btn btn-primary btn-sm" onclick="openExportAttendanceModal()" title="ส่งออกข้อมูลลงเวลาตามช่วงวันที่หรือรอบตัดวิก (Excel/CSV)" style="font-weight:700;background:#0284c7;border-color:#0284c7">
-                  <i class="fa-solid fa-file-excel"></i> Export ช่วงวันที่ / รอบตัดวิก
+                  <i class="fa-solid fa-file-excel"></i> Export รอบตัดวิก
                 </button>
+              </div>
+            </div>
+
+            <!-- INDIVIDUAL EMPLOYEE SUMMARY BAR (Hidden by default, shown when empId !== 'ALL') -->
+            <div id="attIndividualSummaryBar" style="display:none;padding:12px 16px;background:linear-gradient(135deg, #f0fdf4 0%, #eff6ff 100%);border-bottom:1.5px solid #bfdbfe">
+              <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div style="width:38px;height:38px;border-radius:10px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px">
+                    <i class="fa-solid fa-user-check"></i>
+                  </div>
+                  <div>
+                    <div style="font-weight:800;font-size:14px;color:#0f172a" id="attIndivEmpName">-</div>
+                    <div style="font-size:11.5px;color:#475569" id="attIndivEmpSub">-</div>
+                  </div>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <span class="period-pill" style="background:#fff;border-color:#cbd5e1;font-size:11px" id="attIndivPeriodBadge"><i class="fa-regular fa-calendar"></i> -</span>
+                  <button type="button" class="btn btn-sm btn-outline" onclick="resetAttendanceEmpFilter()" style="font-size:11px;padding:3px 8px;background:#fff" title="ดูพนักงานทุกคน">
+                    <i class="fa-solid fa-xmark"></i> ดูทุกคน
+                  </button>
+                </div>
+              </div>
+
+              <!-- KPI MINI TILES -->
+              <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(110px, 1fr));gap:8px">
+                <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">
+                  <div style="font-size:10.5px;color:#64748b;font-weight:600">วันทำงานจริง</div>
+                  <div style="font-size:16px;font-weight:800;color:#047857" id="attIndivDaysWorked">0 <span style="font-size:11px;font-weight:500;color:#64748b">วัน</span></div>
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">
+                  <div style="font-size:10.5px;color:#64748b;font-weight:600">ชม. ทำงานรวม</div>
+                  <div style="font-size:16px;font-weight:800;color:#1d4ed8" id="attIndivTotalHours">0 <span style="font-size:11px;font-weight:500;color:#64748b">ชม.</span></div>
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">
+                  <div style="font-size:10.5px;color:#64748b;font-weight:600">OT ที่อนุมัติ</div>
+                  <div style="font-size:16px;font-weight:800;color:#b45309" id="attIndivOtHours">0 <span style="font-size:11px;font-weight:500;color:#64748b">ชม.</span></div>
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">
+                  <div style="font-size:10.5px;color:#64748b;font-weight:600">มาสาย</div>
+                  <div style="font-size:16px;font-weight:800;color:#c2410c" id="attIndivLateCount">0 <span style="font-size:11px;font-weight:500;color:#64748b">ครั้ง</span></div>
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">
+                  <div style="font-size:10.5px;color:#64748b;font-weight:600">ยังไม่สแกนออก</div>
+                  <div style="font-size:16px;font-weight:800;color:#dc2626" id="attIndivMissingOut">0 <span style="font-size:11px;font-weight:500;color:#64748b">วัน</span></div>
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">
+                  <div style="font-size:10.5px;color:#64748b;font-weight:600">ลางาน (อนุมัติ)</div>
+                  <div style="font-size:16px;font-weight:800;color:#2563eb" id="attIndivLeaveDays">0 <span style="font-size:11px;font-weight:500;color:#64748b">วัน</span></div>
+                </div>
+                <div style="background:#fff;border-radius:8px;padding:8px 10px;border:1px solid #e2e8f0;box-shadow:0 1px 2px rgba(0,0,0,0.03)">
+                  <div style="font-size:10.5px;color:#64748b;font-weight:600">เบิกเงิน (อนุมัติ)</div>
+                  <div style="font-size:16px;font-weight:800;color:#059669" id="attIndivAdvanceAmount">฿0</div>
+                </div>
               </div>
             </div>
 
@@ -573,6 +666,7 @@
                       <input type="checkbox" id="attSelectAllLogs" onchange="toggleSelectAllAttendanceLogs(this)" title="เลือกทั้งหมด" style="cursor:pointer;accent-color:#2563eb;width:15px;height:15px">
                     </th>
                     <th style="width:38px" class="text-center">#</th>
+                    <th id="thAttDate" style="width:105px;display:none" class="text-center">วันที่</th>
                     <th style="width:55px" class="text-center">รูปเข้า</th>
                     <th style="width:55px" class="text-center">รูปออก</th>
                     <th style="width:75px">รหัส</th>
@@ -587,7 +681,7 @@
                   </tr>
                 </thead>
                 <tbody id="attLogsTableBody">
-                  <tr><td colspan="11" class="text-center text-muted" style="padding:24px">กำลังโหลดข้อมูล...</td></tr>
+                  <tr><td colspan="12" class="text-center text-muted" style="padding:24px">กำลังโหลดข้อมูล...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -612,8 +706,18 @@
                 </div>
               </div>
 
-              <!-- FILTER CONTROLS BAR: ประเภทคำขอ & วันเดือนปี -->
+              <!-- FILTER CONTROLS BAR: พนักงาน, ประเภทคำขอ & วันเดือนปี -->
               <div style="padding:8px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;font-size:12px">
+                <!-- Request Employee Filter -->
+                <div style="display:inline-flex;align-items:center;gap:6px">
+                  <label for="attReqEmpFilter" style="font-weight:700;color:#334155;white-space:nowrap;display:flex;align-items:center;gap:4px">
+                    <i class="fa-solid fa-user text-blue"></i> พนักงาน:
+                  </label>
+                  <select id="attReqEmpFilter" onchange="onAttendanceReqFiltersChanged()" style="font-size:11.5px;padding:3.5px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#0f172a;font-weight:600;max-width:130px;cursor:pointer;outline:none">
+                    <option value="ALL">👥 ทุกคน</option>
+                  </select>
+                </div>
+
                 <div style="display:inline-flex;align-items:center;gap:6px">
                   <label for="attReqTypeFilter" style="font-weight:700;color:#334155;white-space:nowrap;display:flex;align-items:center;gap:4px">
                     <i class="fa-solid fa-layer-group text-blue"></i> ประเภท:
@@ -4223,6 +4327,6 @@
   </div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.8"></script>
+  <script src="js/app.js?v=9.9"></script>
 </body>
 </html>
