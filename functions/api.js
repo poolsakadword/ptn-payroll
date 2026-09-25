@@ -772,9 +772,15 @@ async function handleAction(db, action, params) {
 
     // 3. PERIOD WORK DAYS
     case 'savePeriodWorkDays': {
+      const callerUser = params.username || 'Admin';
+      const allowed = (await isUserSuperAdmin(db, callerUser)) || (await userHasPermission(db, callerUser, 'calc_payroll'));
+      if (!allowed) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: การตั้งค่าวันทำงานสงวนสิทธิ์เฉพาะ Super Admin และ Admin เท่านั้น' };
+      }
       const days = Number(params.workingDays) || 30;
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_WorkDays_${period}`, String(days)).run();
       const count = await calculateAndSavePayroll(db, period, days);
+      await logSystemActivity(db, callerUser, 'SET_WORK_DAYS', `ตั้งค่าจำนวนวันทำงานงวด ${period} เป็น ${days} วัน`);
       return { success: true, period: period, workingDays: days, count: count, message: `ตั้งค่าจำนวนวันทำงานงวด ${period} เป็น ${days} วัน เรียบร้อยแล้ว` };
     }
 

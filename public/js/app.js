@@ -203,6 +203,22 @@ function applyRolePermissions() {
     periodCloseContainer.style.display = 'inline-block';
   }
 
+  // 6.1 Period Working Days (Only Super Admin, Admin, or calc_payroll can change)
+  var canSetWorkDays = isSuperAdmin() || hasPermission('calc_payroll');
+  var btnSetWorkDays = document.querySelector('button[onclick="setPeriodWorkingDays()"]');
+  var btnActualWorkDays = document.querySelector('button[onclick="resetToActualWorkDays()"]');
+  var inputWorkDays = document.getElementById('periodWorkingDaysInput');
+
+  if (btnSetWorkDays) btnSetWorkDays.style.display = canSetWorkDays ? 'inline-flex' : 'none';
+  if (btnActualWorkDays) btnActualWorkDays.style.display = canSetWorkDays ? 'inline-flex' : 'none';
+  if (inputWorkDays) {
+    inputWorkDays.readOnly = !canSetWorkDays;
+    inputWorkDays.disabled = !canSetWorkDays;
+    inputWorkDays.style.backgroundColor = canSetWorkDays ? '#ffffff' : '#f1f5f9';
+    inputWorkDays.style.cursor = canSetWorkDays ? 'text' : 'not-allowed';
+    inputWorkDays.title = canSetWorkDays ? 'ระบุจำนวนวันทำงาน' : 'สงวนสิทธิ์การแก้ไขเฉพาะ Admin / ฝ่ายคำนวณเงินเดือน';
+  }
+
   // 7. History Print & 50 Twi Buttons
   var btnPrintActive = document.querySelector('button[onclick="printActiveHistoryReport()"]');
   if (btnPrintActive) btnPrintActive.style.display = canPrintHistory ? 'inline-flex' : 'none';
@@ -474,13 +490,23 @@ function onPeriodChanged() {
 }
 
 function setPeriodWorkingDays() {
+  var canSetWorkDays = isSuperAdmin() || hasPermission('calc_payroll');
+  if (!canSetWorkDays) {
+    showToast('สิทธิ์ไม่เพียงพอ: การตั้งค่าวันทำงานสงวนสิทธิ์เฉพาะ Super Admin และ Admin เท่านั้น', 'warning');
+    return;
+  }
   var inputEl = document.getElementById('periodWorkingDaysInput');
   var days = Number(inputEl ? inputEl.value : 30) || 30;
   if (days < 1 || days > 31) {
     showToast('กรุณาระบุจำนวนวันทำงานระหว่าง 1 ถึง 31 วัน', 'error');
     return;
   }
-  callApi('savePeriodWorkDays', { workingDays: days, period: State.period, forcePeriod: true })
+  callApi('savePeriodWorkDays', {
+    workingDays: days,
+    period: State.period,
+    forcePeriod: true,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
     .then(function(r) {
       State.workingDays = days;
       showToast(r.message || ('บันทึกจำนวนวันทำงานงวด ' + (r.period || State.period) + ' เป็น ' + days + ' วัน สำเร็จ'));
@@ -490,6 +516,11 @@ function setPeriodWorkingDays() {
 }
 
 function resetToActualWorkDays() {
+  var canSetWorkDays = isSuperAdmin() || hasPermission('calc_payroll');
+  if (!canSetWorkDays) {
+    showToast('สิทธิ์ไม่เพียงพอ: การตั้งค่าวันทำงานสงวนสิทธิ์เฉพาะ Super Admin และ Admin เท่านั้น', 'warning');
+    return;
+  }
   callApi('getActualWorkDays', { period: State.period, forcePeriod: true })
     .then(function(r) {
       if (!r.success) { showToast(r.message || 'ไม่สามารถคำนวณวันทำงานได้', 'error'); return; }
@@ -497,7 +528,12 @@ function resetToActualWorkDays() {
       if (inputEl) inputEl.value = r.actualDays;
       State.workingDays = r.actualDays;
       showToast('คำนวณวันทำงานจริงงวด ' + r.period + ' (จ.-ส.): ' + r.actualDays + ' วัน กำลังบันทึก...');
-      return callApi('savePeriodWorkDays', { workingDays: r.actualDays, period: State.period, forcePeriod: true });
+      return callApi('savePeriodWorkDays', {
+        workingDays: r.actualDays,
+        period: State.period,
+        forcePeriod: true,
+        username: (State.currentUser && State.currentUser.username) || 'Admin'
+      });
     })
     .then(function(r) {
       if (r) {
