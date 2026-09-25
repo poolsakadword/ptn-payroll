@@ -7418,13 +7418,17 @@ function updateAttendanceDropdownHighlight(items) {
   });
 }
 
-// Global click listener to close dropdown when clicking outside
+// Global click listener to close dropdowns when clicking outside
 if (typeof window._attEmpClickBound === 'undefined') {
   window._attEmpClickBound = true;
   document.addEventListener('click', function(e) {
     var comboWrapper = document.getElementById('attFilterEmpComboWrapper');
     if (comboWrapper && !comboWrapper.contains(e.target)) {
       closeAttendanceEmpDropdown();
+    }
+    var reqComboWrapper = document.getElementById('attReqEmpComboWrapper');
+    if (reqComboWrapper && !reqComboWrapper.contains(e.target)) {
+      closeAttendanceReqEmpDropdown();
     }
   });
 }
@@ -7478,7 +7482,7 @@ function populateAttendanceEmployeeSelects(empList) {
     }
   }
 
-  // 2. Request filter dropdown
+  // 2. Request filter dropdown & search input
   var selReq = document.getElementById('attReqEmpFilter');
   if (selReq) {
     var currReqVal = selReq.value || _currentAttendanceRequestEmpId || 'ALL';
@@ -7494,6 +7498,189 @@ function populateAttendanceEmployeeSelects(empList) {
       selReq.value = 'ALL';
     }
   }
+
+  // Update Request Search input text & clear button
+  var reqSearchInput = document.getElementById('attReqEmpSearchInput');
+  var reqClearBtn = document.getElementById('btnAttReqEmpSearchClear');
+  var reqChevronIcon = document.getElementById('iconAttReqEmpDropdownChevron');
+  if (reqSearchInput) {
+    if (_currentAttendanceRequestEmpId && _currentAttendanceRequestEmpId !== 'ALL') {
+      var foundReq = empList.find(function(x) { return x.emp_id === _currentAttendanceRequestEmpId; });
+      if (foundReq) {
+        reqSearchInput.value = foundReq.emp_id + ' - ' + (foundReq.name || foundReq.full_name || '') + (foundReq.nickname ? ' (' + foundReq.nickname + ')' : '');
+      }
+      if (reqClearBtn) reqClearBtn.style.display = 'block';
+      if (reqChevronIcon) reqChevronIcon.style.display = 'none';
+    } else {
+      if (reqClearBtn) reqClearBtn.style.display = 'none';
+      if (reqChevronIcon) reqChevronIcon.style.display = 'block';
+    }
+  }
+}
+
+var _activeAttendanceReqEmpDropdownIdx = -1;
+
+function openAttendanceReqEmpDropdown() {
+  var menu = document.getElementById('attReqEmpDropdown');
+  if (menu) {
+    var searchInput = document.getElementById('attReqEmpSearchInput');
+    filterAttendanceReqEmpDropdown(searchInput ? searchInput.value : '');
+    menu.style.display = 'block';
+  }
+}
+
+function closeAttendanceReqEmpDropdown() {
+  var menu = document.getElementById('attReqEmpDropdown');
+  if (menu) {
+    menu.style.display = 'none';
+  }
+  _activeAttendanceReqEmpDropdownIdx = -1;
+}
+
+function toggleAttendanceReqEmpDropdown(e) {
+  if (e) e.stopPropagation();
+  var menu = document.getElementById('attReqEmpDropdown');
+  if (menu) {
+    if (menu.style.display === 'block') {
+      closeAttendanceReqEmpDropdown();
+    } else {
+      openAttendanceReqEmpDropdown();
+    }
+  }
+}
+
+function selectAttendanceReqEmp(empId, displayText) {
+  _currentAttendanceRequestEmpId = empId || 'ALL';
+  var selReq = document.getElementById('attReqEmpFilter');
+  if (selReq) selReq.value = _currentAttendanceRequestEmpId;
+
+  var searchInput = document.getElementById('attReqEmpSearchInput');
+  var clearBtn = document.getElementById('btnAttReqEmpSearchClear');
+  var chevronIcon = document.getElementById('iconAttReqEmpDropdownChevron');
+
+  if (searchInput) {
+    if (_currentAttendanceRequestEmpId === 'ALL') {
+      searchInput.value = '';
+      searchInput.placeholder = '🔍 ค้นหาพนักงาน...';
+    } else {
+      searchInput.value = displayText || _currentAttendanceRequestEmpId;
+    }
+  }
+
+  if (clearBtn && chevronIcon) {
+    if (_currentAttendanceRequestEmpId === 'ALL') {
+      clearBtn.style.display = 'none';
+      chevronIcon.style.display = 'block';
+    } else {
+      clearBtn.style.display = 'block';
+      chevronIcon.style.display = 'none';
+    }
+  }
+
+  closeAttendanceReqEmpDropdown();
+  loadTimeAttendanceDashboard();
+}
+
+function clearAttendanceReqEmpSearch(e) {
+  if (e) e.stopPropagation();
+  selectAttendanceReqEmp('ALL', '');
+}
+
+function filterAttendanceReqEmpDropdown(query) {
+  var menu = document.getElementById('attReqEmpDropdown');
+  if (!menu) return;
+
+  var q = (query || '').trim().toLowerCase();
+  var list = _currentAttendanceEmployeeList || [];
+
+  var filtered = list.filter(function(e) {
+    if (!q) return true;
+    var idMatch = (e.emp_id || '').toLowerCase().includes(q);
+    var nameMatch = (e.name || e.full_name || '').toLowerCase().includes(q);
+    var nickMatch = (e.nickname || '').toLowerCase().includes(q);
+    var deptMatch = (e.department || '').toLowerCase().includes(q);
+    return idMatch || nameMatch || nickMatch || deptMatch;
+  });
+
+  var html = '';
+
+  var isAllSelected = (_currentAttendanceRequestEmpId === 'ALL');
+  html += '<div class="att-req-emp-item ' + (isAllSelected ? 'selected' : '') + '" onclick="selectAttendanceReqEmp(\'ALL\', \'\')" style="padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;background:' + (isAllSelected ? '#eff6ff' : 'transparent') + ';color:' + (isAllSelected ? '#1d4ed8' : '#0f172a') + ';margin-bottom:2px;font-weight:' + (isAllSelected ? '700' : '500') + '">' +
+    '<div style="display:flex;align-items:center;gap:6px">' +
+      '<span style="width:20px;height:20px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;font-size:10px">👥</span>' +
+      '<span style="font-size:11.5px">ทุกคน (All)</span>' +
+    '</div>' +
+    (isAllSelected ? '<i class="fa-solid fa-check text-blue" style="font-size:10px"></i>' : '') +
+  '</div>';
+
+  if (filtered.length === 0) {
+    html += '<div style="padding:14px;text-align:center;color:#94a3b8;font-size:11.5px"><i class="fa-solid fa-user-slash" style="font-size:16px;display:block;margin-bottom:3px;opacity:0.6"></i>ไม่พบพนักงาน</div>';
+  } else {
+    html += '<div style="height:1px;background:#e2e8f0;margin:3px 0"></div>';
+    filtered.forEach(function(e) {
+      var isSelected = (_currentAttendanceRequestEmpId === e.emp_id);
+      var displayName = (e.name || e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '');
+      var displayFull = e.emp_id + ' - ' + displayName;
+
+      html += '<div class="att-req-emp-item ' + (isSelected ? 'selected' : '') + '" onclick="selectAttendanceReqEmp(\'' + esc(e.emp_id) + '\', \'' + esc(displayFull) + '\')" style="padding:5px 8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px;background:' + (isSelected ? '#eff6ff' : 'transparent') + ';color:' + (isSelected ? '#1d4ed8' : '#0f172a') + ';font-size:11.5px;margin-bottom:1px;transition:background 0.15s" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'' + (isSelected ? '#eff6ff' : 'transparent') + '\'">' +
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+          '<div style="font-weight:' + (isSelected ? '700' : '600') + ';overflow:hidden;text-overflow:ellipsis">' + esc(displayName) + '</div>' +
+          '<div style="font-size:10px;color:#64748b;display:flex;gap:4px;align-items:center;margin-top:1px">' +
+            '<span style="background:#e0f2fe;color:#0369a1;padding:0 3px;border-radius:3px;font-weight:600">' + esc(e.emp_id) + '</span>' +
+            (e.department ? '<span style="color:#64748b">• ' + esc(e.department) + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        (isSelected ? '<i class="fa-solid fa-check text-blue" style="font-size:10px;flex-shrink:0"></i>' : '') +
+      '</div>';
+    });
+  }
+
+  menu.innerHTML = html;
+  menu.style.display = 'block';
+}
+
+function handleAttendanceReqEmpKeydown(e) {
+  var menu = document.getElementById('attReqEmpDropdown');
+  if (!menu || menu.style.display !== 'block') {
+    if (e.key === 'ArrowDown' || e.key === 'Enter') {
+      openAttendanceReqEmpDropdown();
+    }
+    return;
+  }
+
+  var items = menu.querySelectorAll('.att-req-emp-item');
+  if (items.length === 0) return;
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _activeAttendanceReqEmpDropdownIdx++;
+    if (_activeAttendanceReqEmpDropdownIdx >= items.length) _activeAttendanceReqEmpDropdownIdx = 0;
+    updateAttendanceReqDropdownHighlight(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _activeAttendanceReqEmpDropdownIdx--;
+    if (_activeAttendanceReqEmpDropdownIdx < 0) _activeAttendanceReqEmpDropdownIdx = items.length - 1;
+    updateAttendanceReqDropdownHighlight(items);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (_activeAttendanceReqEmpDropdownIdx >= 0 && _activeAttendanceReqEmpDropdownIdx < items.length) {
+      items[_activeAttendanceReqEmpDropdownIdx].click();
+    }
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeAttendanceReqEmpDropdown();
+  }
+}
+
+function updateAttendanceReqDropdownHighlight(items) {
+  items.forEach(function(it, idx) {
+    if (idx === _activeAttendanceReqEmpDropdownIdx) {
+      it.style.background = '#e2e8f0';
+      it.scrollIntoView({ block: 'nearest' });
+    } else {
+      it.style.background = it.classList.contains('selected') ? '#eff6ff' : 'transparent';
+    }
+  });
 }
 
 function onAttendanceReqFiltersChanged() {
@@ -7527,13 +7714,11 @@ function resetAttendanceRequestFilters() {
   _currentAttendanceRequestStatus = 'PENDING';
   _currentAttendanceRequestType = 'ALL';
   _currentAttendanceRequestDate = '';
-  _currentAttendanceRequestEmpId = 'ALL';
+  selectAttendanceReqEmp('ALL', '');
   var typeEl = document.getElementById('attReqTypeFilter');
   if (typeEl) typeEl.value = 'ALL';
   var dateEl = document.getElementById('attReqDateFilter');
   if (dateEl) dateEl.value = '';
-  var empEl = document.getElementById('attReqEmpFilter');
-  if (empEl) empEl.value = 'ALL';
   ['PENDING', 'APPROVED', 'REJECTED', 'ALL'].forEach(function(s) {
     var btn = document.getElementById('btnAttReqFilter_' + s);
     if (btn) {
