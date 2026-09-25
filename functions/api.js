@@ -436,17 +436,26 @@ async function getCutoffDatesForPeriod(db, periodStr) {
   let month = new Date().getMonth() + 1; // 1-12
 
   if (periodStr) {
-    for (let i = 0; i < thaiMonths.length; i++) {
-      if (periodStr.includes(thaiMonths[i])) {
-        month = i + 1;
-        break;
-      }
-    }
-    const numMatches = periodStr.match(/\d{4}/);
-    if (numMatches) {
-      let y = parseInt(numMatches[0], 10);
+    const str = String(periodStr).trim();
+    const ymMatch = str.match(/^(\d{4})-(\d{1,2})$/);
+    if (ymMatch) {
+      let y = parseInt(ymMatch[1], 10);
       if (y > 2400) y -= 543; // BE to CE
       yearCE = y;
+      month = parseInt(ymMatch[2], 10);
+    } else {
+      for (let i = 0; i < thaiMonths.length; i++) {
+        if (str.includes(thaiMonths[i])) {
+          month = i + 1;
+          break;
+        }
+      }
+      const numMatches = str.match(/\d{4}/);
+      if (numMatches) {
+        let y = parseInt(numMatches[0], 10);
+        if (y > 2400) y -= 543; // BE to CE
+        yearCE = y;
+      }
     }
   }
 
@@ -1655,10 +1664,16 @@ async function handleAction(db, action, params) {
       const branchFilter = String(params.branchId || params.branch_id || '').trim();
       const empFilter = String(params.empId || params.emp_id || '').trim();
       const reqEmpFilter = String(params.requestEmpId || params.request_emp_id || empFilter || '').trim();
-      const dateMode = String(params.dateMode || 'SINGLE').toUpperCase(); // 'SINGLE', 'MONTH', 'RANGE'
+      const dateMode = String(params.dateMode || 'SINGLE').toUpperCase(); // 'SINGLE', 'MONTH', 'PERIOD', 'RANGE'
       const filterMonth = params.month ? String(params.month).trim() : (filterDate ? filterDate.substring(0, 7) : today.substring(0, 7));
+      const filterPeriod = params.period ? String(params.period).trim() : filterMonth;
       const startDate = params.startDate ? String(params.startDate).trim() : '';
       const endDate = params.endDate ? String(params.endDate).trim() : '';
+
+      let cutoffInfo = null;
+      if (dateMode === 'PERIOD') {
+        cutoffInfo = await getCutoffDatesForPeriod(db, filterPeriod);
+      }
 
       // 1.0 Employees list for search & selector
       const empRows = await db.prepare(`
@@ -1673,22 +1688,26 @@ async function handleAction(db, action, params) {
       let selectedEmp = null;
       let empSummary = null;
 
-      // 1. Logs for Selected Date (or Today) or Individual Multi-Day History
+      // 1. Logs for Selected Date (or Today) or Multi-Day History
+      let dateClause = "l.date = ?";
+      let dateBinds = [filterDate];
+
+      if (dateMode === 'RANGE' && startDate && endDate) {
+        dateClause = "l.date BETWEEN ? AND ?";
+        dateBinds = [startDate, endDate];
+      } else if (dateMode === 'MONTH') {
+        dateClause = "l.date LIKE ?";
+        dateBinds = [filterMonth + '-%'];
+      } else if (dateMode === 'PERIOD') {
+        if (!cutoffInfo) cutoffInfo = await getCutoffDatesForPeriod(db, filterPeriod);
+        dateClause = "l.date BETWEEN ? AND ?";
+        dateBinds = [cutoffInfo.startDate, cutoffInfo.endDate];
+      }
+
       let logsQuery;
       if (isIndividual) {
         selectedEmp = employeeList.find(e => e.emp_id === empFilter) || (await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empFilter).first().catch(() => null));
         
-        let dateClause = "l.date = ?";
-        let dateBinds = [filterDate];
-
-        if (dateMode === 'RANGE' && startDate && endDate) {
-          dateClause = "l.date BETWEEN ? AND ?";
-          dateBinds = [startDate, endDate];
-        } else if (dateMode === 'MONTH') {
-          dateClause = "l.date LIKE ?";
-          dateBinds = [filterMonth + '-%'];
-        }
-
         logsQuery = await db.prepare(`
           SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id, b.branch_name
           FROM time_logs l
@@ -1705,18 +1724,20 @@ async function handleAction(db, action, params) {
             FROM time_logs l
             LEFT JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN branches b ON (l.branch_id = b.branch_id OR (l.branch_id IS NULL AND e.branch_id = b.branch_id))
-            WHERE l.date = ? AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))
-            ORDER BY l.clock_in DESC
-          `).bind(filterDate, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
+            WHERE ${dateClause} AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))
+            ORDER BY l.date DESC, l.clock_in DESC
+            LIMIT 500
+          `).bind(...dateBinds, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
         } else {
           logsQuery = await db.prepare(`
             SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id, b.branch_name
             FROM time_logs l
             LEFT JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN branches b ON (l.branch_id = b.branch_id OR (l.branch_id IS NULL AND e.branch_id = b.branch_id))
-            WHERE l.date = ?
-            ORDER BY l.clock_in DESC
-          `).bind(filterDate).all().catch(() => ({ results: [] }));
+            WHERE ${dateClause}
+            ORDER BY l.date DESC, l.clock_in DESC
+            LIMIT 500
+          `).bind(...dateBinds).all().catch(() => ({ results: [] }));
         }
       }
       const logsToday = logsQuery.results || [];
@@ -1747,15 +1768,46 @@ async function handleAction(db, action, params) {
           }
         }
 
+        let sumLeaveClause = "emp_id = ? AND status = 'APPROVED'";
+        let sumAdvClause = "emp_id = ? AND status = 'APPROVED'";
+        let sumOtClause = "emp_id = ? AND status = 'APPROVED'";
+        let sumBindsLeave = [empFilter];
+        let sumBindsAdv = [empFilter];
+        let sumBindsOt = [empFilter];
+
+        if (dateMode === 'RANGE' && startDate && endDate) {
+          sumLeaveClause += " AND (start_date <= ? AND end_date >= ?)";
+          sumBindsLeave.push(endDate, startDate);
+          sumAdvClause += " AND (request_date BETWEEN ? AND ?)";
+          sumBindsAdv.push(startDate, endDate);
+          sumOtClause += " AND (date BETWEEN ? AND ?)";
+          sumBindsOt.push(startDate, endDate);
+        } else if (dateMode === 'MONTH') {
+          sumLeaveClause += " AND (start_date LIKE ? OR end_date LIKE ?)";
+          sumBindsLeave.push(filterMonth + '-%', filterMonth + '-%');
+          sumAdvClause += " AND (request_date LIKE ?)";
+          sumBindsAdv.push(filterMonth + '-%');
+          sumOtClause += " AND (date LIKE ?)";
+          sumBindsOt.push(filterMonth + '-%');
+        } else if (dateMode === 'PERIOD') {
+          if (!cutoffInfo) cutoffInfo = await getCutoffDatesForPeriod(db, filterPeriod);
+          sumLeaveClause += " AND (start_date <= ? AND end_date >= ?)";
+          sumBindsLeave.push(cutoffInfo.endDate, cutoffInfo.startDate);
+          sumAdvClause += " AND (request_date BETWEEN ? AND ?)";
+          sumBindsAdv.push(cutoffInfo.startDate, cutoffInfo.endDate);
+          sumOtClause += " AND (date BETWEEN ? AND ?)";
+          sumBindsOt.push(cutoffInfo.startDate, cutoffInfo.endDate);
+        }
+
         const appLeavesQ = await db.prepare(`
-          SELECT SUM(days) as sum_days FROM leave_requests WHERE emp_id = ? AND status = 'APPROVED'
-        `).bind(empFilter).first().catch(() => null);
+          SELECT SUM(days) as sum_days FROM leave_requests WHERE ${sumLeaveClause}
+        `).bind(...sumBindsLeave).first().catch(() => null);
         const appAdvQ = await db.prepare(`
-          SELECT SUM(amount) as sum_amount FROM advance_requests WHERE emp_id = ? AND status = 'APPROVED'
-        `).bind(empFilter).first().catch(() => null);
+          SELECT SUM(amount) as sum_amount FROM advance_requests WHERE ${sumAdvClause}
+        `).bind(...sumBindsAdv).first().catch(() => null);
         const appOtQ = await db.prepare(`
-          SELECT SUM(actual_hours) as sum_ot FROM ot_requests WHERE emp_id = ? AND status = 'APPROVED'
-        `).bind(empFilter).first().catch(() => null);
+          SELECT SUM(actual_hours) as sum_ot FROM ot_requests WHERE ${sumOtClause}
+        `).bind(...sumBindsOt).first().catch(() => null);
 
         empSummary = {
           daysWorked,
@@ -1805,9 +1857,19 @@ async function handleAction(db, action, params) {
 
       const reqStatus = String(params.requestStatus || 'PENDING').toUpperCase();
       const reqType = String(params.requestType || 'ALL').toUpperCase(); // 'ALL', 'LEAVE', 'OT', 'ADVANCE'
+      const reqDateMode = String(params.requestDateMode || (params.requestDate ? 'SINGLE' : 'ALL')).toUpperCase(); // 'ALL', 'SINGLE', 'MONTH', 'PERIOD', 'RANGE'
       const reqDate = params.requestDate ? String(params.requestDate).trim() : ''; // 'YYYY-MM-DD'
+      const reqMonth = params.requestMonth ? String(params.requestMonth).trim() : ''; // 'YYYY-MM'
+      const reqPeriod = params.requestPeriod ? String(params.requestPeriod).trim() : (reqMonth || filterPeriod);
+      const reqStartDate = params.requestStartDate ? String(params.requestStartDate).trim() : '';
+      const reqEndDate = params.requestEndDate ? String(params.requestEndDate).trim() : '';
 
-      // 2. Leaves (Filtered by Status, Type, Employee & Date)
+      let reqCutoff = null;
+      if (reqDateMode === 'PERIOD') {
+        reqCutoff = await getCutoffDatesForPeriod(db, reqPeriod);
+      }
+
+      // 2. Leaves (Filtered by Status, Type, Employee & Date Mode)
       let pendingLeaves = [];
       if (reqType === 'ALL' || reqType === 'LEAVE') {
         const leaveConds = [];
@@ -1825,12 +1887,18 @@ async function handleAction(db, action, params) {
           leaveBinds.push(reqEmpFilter);
         }
 
-        if (reqDate) {
+        if (reqDateMode === 'SINGLE' && reqDate) {
           leaveConds.push("(substr(lr.created_at, 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
           leaveBinds.push(reqDate, reqDate);
-        } else if (isIndividual && dateMode === 'MONTH') {
-          leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ?)");
-          leaveBinds.push(filterMonth + '-%', filterMonth + '-%');
+        } else if (reqDateMode === 'MONTH' && reqMonth) {
+          leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ? OR substr(lr.created_at, 1, 7) = ?)");
+          leaveBinds.push(reqMonth + '-%', reqMonth + '-%', reqMonth);
+        } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+          leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(lr.created_at, 1, 10) BETWEEN ? AND ?))");
+          leaveBinds.push(reqCutoff.endDate, reqCutoff.startDate, reqCutoff.startDate, reqCutoff.endDate);
+        } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+          leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(lr.created_at, 1, 10) BETWEEN ? AND ?))");
+          leaveBinds.push(reqEndDate, reqStartDate, reqStartDate, reqEndDate);
         }
 
         const leaveWhere = leaveConds.length > 0 ? "WHERE " + leaveConds.join(" AND ") : "";
@@ -1845,7 +1913,7 @@ async function handleAction(db, action, params) {
         pendingLeaves = leavesQuery.results || [];
       }
 
-      // 3. OTs (Filtered by Status, Type, Employee & Date)
+      // 3. OTs (Filtered by Status, Type, Employee & Date Mode)
       let pendingOts = [];
       if (reqType === 'ALL' || reqType === 'OT') {
         const otConds = [];
@@ -1863,12 +1931,18 @@ async function handleAction(db, action, params) {
           otBinds.push(reqEmpFilter);
         }
 
-        if (reqDate) {
+        if (reqDateMode === 'SINGLE' && reqDate) {
           otConds.push("(ot.date = ? OR substr(ot.created_at, 1, 10) = ?)");
           otBinds.push(reqDate, reqDate);
-        } else if (isIndividual && dateMode === 'MONTH') {
-          otConds.push("ot.date LIKE ?");
-          otBinds.push(filterMonth + '-%');
+        } else if (reqDateMode === 'MONTH' && reqMonth) {
+          otConds.push("(ot.date LIKE ? OR substr(ot.created_at, 1, 7) = ?)");
+          otBinds.push(reqMonth + '-%', reqMonth);
+        } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+          otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(ot.created_at, 1, 10) BETWEEN ? AND ?))");
+          otBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
+        } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+          otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(ot.created_at, 1, 10) BETWEEN ? AND ?))");
+          otBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
         }
 
         const otWhere = otConds.length > 0 ? "WHERE " + otConds.join(" AND ") : "";
@@ -1883,7 +1957,7 @@ async function handleAction(db, action, params) {
         pendingOts = otsQuery.results || [];
       }
 
-      // 4. Advances (Filtered by Status, Type, Employee & Date)
+      // 4. Advances (Filtered by Status, Type, Employee & Date Mode)
       let pendingAdvances = [];
       if (reqType === 'ALL' || reqType === 'ADVANCE') {
         const advConds = [];
@@ -1901,12 +1975,18 @@ async function handleAction(db, action, params) {
           advBinds.push(reqEmpFilter);
         }
 
-        if (reqDate) {
+        if (reqDateMode === 'SINGLE' && reqDate) {
           advConds.push("(ar.request_date = ? OR substr(ar.created_at, 1, 10) = ?)");
           advBinds.push(reqDate, reqDate);
-        } else if (isIndividual && dateMode === 'MONTH') {
-          advConds.push("ar.request_date LIKE ?");
-          advBinds.push(filterMonth + '-%');
+        } else if (reqDateMode === 'MONTH' && reqMonth) {
+          advConds.push("(ar.request_date LIKE ? OR substr(ar.created_at, 1, 7) = ?)");
+          advBinds.push(reqMonth + '-%', reqMonth);
+        } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+          advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(ar.created_at, 1, 10) BETWEEN ? AND ?))");
+          advBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
+        } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+          advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(ar.created_at, 1, 10) BETWEEN ? AND ?))");
+          advBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
         }
 
         const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
@@ -1959,10 +2039,20 @@ async function handleAction(db, action, params) {
       };
       for (const r of setRows.results || []) attSettings[r.key] = r.value;
 
+      let dateDisplay = filterDate;
+      if (dateMode === 'PERIOD' && cutoffInfo) {
+        dateDisplay = `รอบตัดวิก (${cutoffInfo.startDate} ถึง ${cutoffInfo.endDate})`;
+      } else if (dateMode === 'MONTH') {
+        dateDisplay = `เดือน ${filterMonth}`;
+      } else if (dateMode === 'RANGE') {
+        dateDisplay = `${startDate} ถึง ${endDate}`;
+      }
+
       return {
         success: true,
         today,
         date: filterDate,
+        dateDisplay,
         dateMode,
         filterMonth,
         startDate,
@@ -1975,6 +2065,8 @@ async function handleAction(db, action, params) {
         pendingLeaves,
         pendingOts,
         pendingAdvances,
+        cutoffDates: cutoffInfo,
+        reqCutoffDates: reqCutoff,
         settings: attSettings,
         branches,
         kpi: {

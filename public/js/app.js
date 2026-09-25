@@ -7174,14 +7174,124 @@ var _currentAttendanceLogs = [];
 var _currentAttendanceSettings = {};
 var _currentAttendanceRequestStatus = 'PENDING';
 var _currentAttendanceRequestType = 'ALL';
+var _currentAttendanceRequestDateMode = 'ALL';
 var _currentAttendanceRequestDate = '';
+var _currentAttendanceRequestMonth = '';
+var _currentAttendanceRequestPeriod = '';
+var _currentAttendanceRequestStartDate = '';
+var _currentAttendanceRequestEndDate = '';
 var _currentAttendanceRequestEmpId = 'ALL';
 var _currentAttendanceEmpId = 'ALL';
 var _currentAttendanceDateMode = 'SINGLE';
+var _currentAttendancePeriod = '';
 var _currentAttendanceEmployeeList = [];
 var _currentAttendanceEmpSummary = null;
 var _currentAttendanceIsIndividual = false;
 var _currentAttendanceSelectedEmpInfo = null;
+
+function getAttendanceCutoffDatesClient(periodStr, customCutDay) {
+  var cutDay = customCutDay;
+  if (!cutDay) {
+    if (_currentAttendanceSettings && _currentAttendanceSettings.cutoff_day) {
+      cutDay = Number(_currentAttendanceSettings.cutoff_day);
+    } else if (State.settings && State.settings.cutoff_day) {
+      cutDay = Number(State.settings.cutoff_day);
+    } else {
+      var cutEl = document.getElementById('attSetCutoffDay');
+      if (cutEl && cutEl.value) cutDay = Number(cutEl.value);
+    }
+  }
+  if (!cutDay || isNaN(cutDay) || cutDay < 1 || cutDay > 31) cutDay = 25;
+
+  var yearCE = new Date().getFullYear();
+  var month = new Date().getMonth() + 1;
+
+  if (periodStr) {
+    var str = String(periodStr).trim();
+    var ym = str.match(/^(\d{4})-(\d{1,2})$/);
+    if (ym) {
+      var y = parseInt(ym[1], 10);
+      if (y > 2400) y -= 543;
+      yearCE = y;
+      month = parseInt(ym[2], 10);
+    }
+  }
+
+  var prevMonth = month - 1;
+  var prevYear = yearCE;
+  if (prevMonth < 1) {
+    prevMonth = 12;
+    prevYear -= 1;
+  }
+
+  var startDate, endDate;
+  if (cutDay >= 30) {
+    var daysInMonth = new Date(yearCE, month, 0).getDate();
+    var actualEndDay = Math.min(cutDay, daysInMonth);
+    startDate = yearCE + '-' + String(month).padStart(2, '0') + '-01';
+    endDate = yearCE + '-' + String(month).padStart(2, '0') + '-' + String(actualEndDay).padStart(2, '0');
+  } else {
+    var startDay = cutDay + 1;
+    startDate = prevYear + '-' + String(prevMonth).padStart(2, '0') + '-' + String(startDay).padStart(2, '0');
+    endDate = yearCE + '-' + String(month).padStart(2, '0') + '-' + String(cutDay).padStart(2, '0');
+  }
+
+  var thaiShortMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var sParts = startDate.split('-');
+  var eParts = endDate.split('-');
+  var sDay = parseInt(sParts[2], 10);
+  var sMon = thaiShortMonths[parseInt(sParts[1], 10) - 1];
+  var sYear = parseInt(sParts[0], 10) + 543;
+  var eDay = parseInt(eParts[2], 10);
+  var eMon = thaiShortMonths[parseInt(eParts[1], 10) - 1];
+  var eYear = parseInt(eParts[0], 10) + 543;
+
+  var label = sDay + ' ' + sMon + ' ' + sYear + ' - ' + eDay + ' ' + eMon + ' ' + eYear;
+
+  return {
+    startDate: startDate,
+    endDate: endDate,
+    month: month,
+    yearCE: yearCE,
+    cutoffDay: cutDay,
+    label: label
+  };
+}
+
+function updateAttendancePeriodBadge() {
+  var periodInput = document.getElementById('attFilterPeriod');
+  var badge = document.getElementById('attFilterPeriodCutoffBadge');
+  if (badge) {
+    var pVal = periodInput ? periodInput.value : '';
+    if (!pVal) {
+      var nowUtc = new Date();
+      var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+      pVal = bangkok.toISOString().substring(0, 7);
+      if (periodInput) periodInput.value = pVal;
+    }
+    var info = getAttendanceCutoffDatesClient(pVal);
+    badge.innerHTML = '<i class="fa-solid fa-arrows-rotate" style="font-size:10px"></i> ' + esc(info.label);
+  }
+}
+
+function onAttendancePeriodChanged() {
+  var periodInput = document.getElementById('attFilterPeriod');
+  _currentAttendancePeriod = periodInput ? periodInput.value : '';
+  updateAttendancePeriodBadge();
+  loadTimeAttendanceDashboard();
+}
+
+function setAttendanceFilterThisPeriod() {
+  var periodInput = document.getElementById('attFilterPeriod');
+  if (periodInput) {
+    var nowUtc = new Date();
+    var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    periodInput.value = bangkok.toISOString().substring(0, 7);
+    _currentAttendancePeriod = periodInput.value;
+  }
+  updateAttendancePeriodBadge();
+  loadTimeAttendanceDashboard();
+}
 
 function setAttendanceRequestFilter(status) {
   _currentAttendanceRequestStatus = status || 'PENDING';
@@ -7208,10 +7318,12 @@ function onAttendanceDateModeChanged() {
 
   var wrapSingle = document.getElementById('attFilterDateWrapSingle');
   var wrapMonth = document.getElementById('attFilterDateWrapMonth');
+  var wrapPeriod = document.getElementById('attFilterDateWrapPeriod');
   var wrapRange = document.getElementById('attFilterDateWrapRange');
 
   if (wrapSingle) wrapSingle.style.display = (_currentAttendanceDateMode === 'SINGLE' ? 'flex' : 'none');
   if (wrapMonth) wrapMonth.style.display = (_currentAttendanceDateMode === 'MONTH' ? 'flex' : 'none');
+  if (wrapPeriod) wrapPeriod.style.display = (_currentAttendanceDateMode === 'PERIOD' ? 'flex' : 'none');
   if (wrapRange) wrapRange.style.display = (_currentAttendanceDateMode === 'RANGE' ? 'flex' : 'none');
 
   if (_currentAttendanceDateMode === 'MONTH') {
@@ -7221,6 +7333,14 @@ function onAttendanceDateModeChanged() {
       var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
       monthInput.value = bangkok.toISOString().substring(0, 7);
     }
+  } else if (_currentAttendanceDateMode === 'PERIOD') {
+    var periodInput = document.getElementById('attFilterPeriod');
+    if (periodInput && !periodInput.value) {
+      var nowUtc = new Date();
+      var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+      periodInput.value = bangkok.toISOString().substring(0, 7);
+    }
+    updateAttendancePeriodBadge();
   } else if (_currentAttendanceDateMode === 'RANGE') {
     var startInput = document.getElementById('attFilterStartDate');
     var endInput = document.getElementById('attFilterEndDate');
@@ -7683,25 +7803,129 @@ function updateAttendanceReqDropdownHighlight(items) {
   });
 }
 
+function onAttendanceReqDateModeChanged() {
+  var modeEl = document.getElementById('attReqDateMode');
+  _currentAttendanceRequestDateMode = modeEl ? modeEl.value : 'ALL';
+
+  var wrapSingle = document.getElementById('attReqDateWrapSingle');
+  var wrapMonth = document.getElementById('attReqDateWrapMonth');
+  var wrapPeriod = document.getElementById('attReqDateWrapPeriod');
+  var wrapRange = document.getElementById('attReqDateWrapRange');
+
+  if (wrapSingle) wrapSingle.style.display = (_currentAttendanceRequestDateMode === 'SINGLE' ? 'inline-flex' : 'none');
+  if (wrapMonth) wrapMonth.style.display = (_currentAttendanceRequestDateMode === 'MONTH' ? 'inline-flex' : 'none');
+  if (wrapPeriod) wrapPeriod.style.display = (_currentAttendanceRequestDateMode === 'PERIOD' ? 'inline-flex' : 'none');
+  if (wrapRange) wrapRange.style.display = (_currentAttendanceRequestDateMode === 'RANGE' ? 'inline-flex' : 'none');
+
+  var nowUtc = new Date();
+  var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+  var todayStr = bangkok.toISOString().substring(0, 10);
+  var currentMonthStr = bangkok.toISOString().substring(0, 7);
+
+  if (_currentAttendanceRequestDateMode === 'SINGLE') {
+    var dateInput = document.getElementById('attReqDate') || document.getElementById('attReqDateFilter');
+    if (dateInput && !dateInput.value) {
+      dateInput.value = todayStr;
+    }
+  } else if (_currentAttendanceRequestDateMode === 'MONTH') {
+    var monthInput = document.getElementById('attReqMonth');
+    if (monthInput && !monthInput.value) {
+      monthInput.value = currentMonthStr;
+    }
+  } else if (_currentAttendanceRequestDateMode === 'PERIOD') {
+    var periodInput = document.getElementById('attReqPeriod');
+    if (periodInput && !periodInput.value) {
+      periodInput.value = currentMonthStr;
+    }
+    updateAttendanceReqPeriodBadge();
+  } else if (_currentAttendanceRequestDateMode === 'RANGE') {
+    var startInput = document.getElementById('attReqStartDate');
+    var endInput = document.getElementById('attReqEndDate');
+    if (startInput && !startInput.value) {
+      var firstDay = new Date(bangkok.getFullYear(), bangkok.getMonth(), 1);
+      var m = String(firstDay.getMonth() + 1).padStart(2, '0');
+      var d = String(firstDay.getDate()).padStart(2, '0');
+      startInput.value = firstDay.getFullYear() + '-' + m + '-' + d;
+    }
+    if (endInput && !endInput.value) {
+      endInput.value = todayStr;
+    }
+  }
+
+  loadTimeAttendanceDashboard();
+}
+
+function updateAttendanceReqPeriodBadge() {
+  var periodInput = document.getElementById('attReqPeriod');
+  var badge = document.getElementById('attReqPeriodCutoffBadge');
+  if (badge) {
+    var pVal = periodInput ? periodInput.value : '';
+    if (!pVal) {
+      var nowUtc = new Date();
+      var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+      pVal = bangkok.toISOString().substring(0, 7);
+      if (periodInput) periodInput.value = pVal;
+    }
+    var info = getAttendanceCutoffDatesClient(pVal);
+    badge.innerHTML = '<i class="fa-solid fa-arrows-rotate" style="font-size:9.5px"></i> ' + esc(info.label);
+  }
+}
+
+function onAttendanceReqPeriodChanged() {
+  updateAttendanceReqPeriodBadge();
+  loadTimeAttendanceDashboard();
+}
+
+function setAttendanceReqPeriodCurrent() {
+  var periodInput = document.getElementById('attReqPeriod');
+  if (periodInput) {
+    var nowUtc = new Date();
+    var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    periodInput.value = bangkok.toISOString().substring(0, 7);
+  }
+  updateAttendanceReqPeriodBadge();
+  loadTimeAttendanceDashboard();
+}
+
+function setAttendanceReqMonthCurrent() {
+  var monthInput = document.getElementById('attReqMonth');
+  if (monthInput) {
+    var nowUtc = new Date();
+    var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    monthInput.value = bangkok.toISOString().substring(0, 7);
+  }
+  loadTimeAttendanceDashboard();
+}
+
 function onAttendanceReqFiltersChanged() {
   var typeEl = document.getElementById('attReqTypeFilter');
-  var dateEl = document.getElementById('attReqDateFilter');
   var empEl = document.getElementById('attReqEmpFilter');
+  var dateEl = document.getElementById('attReqDate') || document.getElementById('attReqDateFilter');
+  var monthEl = document.getElementById('attReqMonth');
+  var periodEl = document.getElementById('attReqPeriod');
+  var startEl = document.getElementById('attReqStartDate');
+  var endEl = document.getElementById('attReqEndDate');
+
   _currentAttendanceRequestType = typeEl ? typeEl.value : 'ALL';
-  _currentAttendanceRequestDate = dateEl ? dateEl.value : '';
   _currentAttendanceRequestEmpId = empEl ? empEl.value : 'ALL';
+  _currentAttendanceRequestDate = dateEl ? dateEl.value : '';
+  _currentAttendanceRequestMonth = monthEl ? monthEl.value : '';
+  _currentAttendanceRequestPeriod = periodEl ? periodEl.value : '';
+  _currentAttendanceRequestStartDate = startEl ? startEl.value : '';
+  _currentAttendanceRequestEndDate = endEl ? endEl.value : '';
+
   loadTimeAttendanceDashboard();
 }
 
 function clearAttendanceReqDateFilter() {
-  var dateEl = document.getElementById('attReqDateFilter');
-  if (dateEl) dateEl.value = '';
-  _currentAttendanceRequestDate = '';
-  loadTimeAttendanceDashboard();
+  var modeEl = document.getElementById('attReqDateMode');
+  if (modeEl) modeEl.value = 'ALL';
+  _currentAttendanceRequestDateMode = 'ALL';
+  onAttendanceReqDateModeChanged();
 }
 
 function setAttendanceReqDateToday() {
-  var dateEl = document.getElementById('attReqDateFilter');
+  var dateEl = document.getElementById('attReqDate') || document.getElementById('attReqDateFilter');
   var nowUtc = new Date();
   var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
   var todayStr = bangkok.toISOString().substring(0, 10);
@@ -7713,12 +7937,18 @@ function setAttendanceReqDateToday() {
 function resetAttendanceRequestFilters() {
   _currentAttendanceRequestStatus = 'PENDING';
   _currentAttendanceRequestType = 'ALL';
+  _currentAttendanceRequestDateMode = 'ALL';
   _currentAttendanceRequestDate = '';
+  _currentAttendanceRequestMonth = '';
+  _currentAttendanceRequestPeriod = '';
+  _currentAttendanceRequestStartDate = '';
+  _currentAttendanceRequestEndDate = '';
   selectAttendanceReqEmp('ALL', '');
   var typeEl = document.getElementById('attReqTypeFilter');
   if (typeEl) typeEl.value = 'ALL';
-  var dateEl = document.getElementById('attReqDateFilter');
-  if (dateEl) dateEl.value = '';
+  var modeEl = document.getElementById('attReqDateMode');
+  if (modeEl) modeEl.value = 'ALL';
+  onAttendanceReqDateModeChanged();
   ['PENDING', 'APPROVED', 'REJECTED', 'ALL'].forEach(function(s) {
     var btn = document.getElementById('btnAttReqFilter_' + s);
     if (btn) {
@@ -7733,7 +7963,6 @@ function resetAttendanceRequestFilters() {
       }
     }
   });
-  loadTimeAttendanceDashboard();
 }
 
 function calcHaversineDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -7766,9 +7995,17 @@ function loadTimeAttendanceDashboard() {
   var filterEmp = (document.getElementById('attFilterEmp') && document.getElementById('attFilterEmp').value) || _currentAttendanceEmpId || 'ALL';
   var dateMode = (document.getElementById('attFilterDateMode') && document.getElementById('attFilterDateMode').value) || _currentAttendanceDateMode || 'SINGLE';
   var filterMonth = (document.getElementById('attFilterMonth') && document.getElementById('attFilterMonth').value) || '';
+  var filterPeriod = (document.getElementById('attFilterPeriod') && document.getElementById('attFilterPeriod').value) || _currentAttendancePeriod || '';
   var filterStartDate = (document.getElementById('attFilterStartDate') && document.getElementById('attFilterStartDate').value) || '';
   var filterEndDate = (document.getElementById('attFilterEndDate') && document.getElementById('attFilterEndDate').value) || '';
+
   var reqEmpId = (document.getElementById('attReqEmpFilter') && document.getElementById('attReqEmpFilter').value) || _currentAttendanceRequestEmpId || 'ALL';
+  var reqDateMode = (document.getElementById('attReqDateMode') && document.getElementById('attReqDateMode').value) || _currentAttendanceRequestDateMode || 'ALL';
+  var reqDate = (document.getElementById('attReqDate') && document.getElementById('attReqDate').value) || _currentAttendanceRequestDate || '';
+  var reqMonth = (document.getElementById('attReqMonth') && document.getElementById('attReqMonth').value) || _currentAttendanceRequestMonth || '';
+  var reqPeriod = (document.getElementById('attReqPeriod') && document.getElementById('attReqPeriod').value) || _currentAttendanceRequestPeriod || '';
+  var reqStartDate = (document.getElementById('attReqStartDate') && document.getElementById('attReqStartDate').value) || _currentAttendanceRequestStartDate || '';
+  var reqEndDate = (document.getElementById('attReqEndDate') && document.getElementById('attReqEndDate').value) || _currentAttendanceRequestEndDate || '';
 
   var logsBody = document.getElementById('attLogsTableBody');
   if (logsBody) {
@@ -7781,11 +8018,17 @@ function loadTimeAttendanceDashboard() {
     empId: filterEmp,
     dateMode: dateMode,
     month: filterMonth,
+    period: filterPeriod,
     startDate: filterStartDate,
     endDate: filterEndDate,
     requestStatus: _currentAttendanceRequestStatus,
     requestType: _currentAttendanceRequestType,
-    requestDate: _currentAttendanceRequestDate,
+    requestDateMode: reqDateMode,
+    requestDate: reqDate,
+    requestMonth: reqMonth,
+    requestPeriod: reqPeriod,
+    requestStartDate: reqStartDate,
+    requestEndDate: reqEndDate,
     requestEmpId: reqEmpId,
     username: (State.currentUser && State.currentUser.username) || 'Admin'
   })
@@ -7815,6 +8058,16 @@ function loadTimeAttendanceDashboard() {
       var btnPrintTimesheet = document.getElementById('btnAttPrintTimesheet');
       if (btnPrintTimesheet) {
         btnPrintTimesheet.style.display = _currentAttendanceIsIndividual ? 'inline-flex' : 'none';
+      }
+
+      // Update Cutoff Badges from backend response
+      if (r.cutoffDates && r.cutoffDates.label) {
+        var badge = document.getElementById('attFilterPeriodCutoffBadge');
+        if (badge) badge.innerHTML = '<i class="fa-solid fa-arrows-rotate" style="font-size:10px"></i> ' + esc(r.cutoffDates.label);
+      }
+      if (r.reqCutoffDates && r.reqCutoffDates.label) {
+        var reqBadge = document.getElementById('attReqPeriodCutoffBadge');
+        if (reqBadge) reqBadge.innerHTML = '<i class="fa-solid fa-arrows-rotate" style="font-size:9.5px"></i> ' + esc(r.reqCutoffDates.label);
       }
 
       // 1. Update KPI
@@ -7868,8 +8121,9 @@ function loadTimeAttendanceDashboard() {
         }
       } else {
         if (indivBar) indivBar.style.display = 'none';
-        if (subTitle && (r.date || r.today)) {
-          subTitle.textContent = 'บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตน ประจำวันที่ ' + (r.date || r.today);
+        if (subTitle) {
+          var displayPeriod = r.dateDisplay || (r.date || r.today);
+          subTitle.textContent = 'บันทึกเวลาเข้า-ออก พิกัด และรูปถ่ายยืนยันตัวตน ' + (r.dateMode === 'SINGLE' ? 'ประจำวันที่ ' : 'ช่วง ') + displayPeriod;
         }
       }
 
@@ -9315,7 +9569,10 @@ function exportAttendanceTodayCsv() {
   var filename = '';
   if (_currentAttendanceIsIndividual) {
     var periodSuffix = '';
-    if (_currentAttendanceDateMode === 'MONTH') {
+    if (_currentAttendanceDateMode === 'PERIOD') {
+      var pInput = document.getElementById('attFilterPeriod');
+      periodSuffix = (pInput ? pInput.value : 'period') + '_cutoff';
+    } else if (_currentAttendanceDateMode === 'MONTH') {
       var mInput = document.getElementById('attFilterMonth');
       periodSuffix = mInput ? mInput.value : 'monthly';
     } else if (_currentAttendanceDateMode === 'RANGE') {
@@ -9327,7 +9584,21 @@ function exportAttendanceTodayCsv() {
     }
     filename = 'PTN_Timesheet_' + (_currentAttendanceEmpId || 'EMP') + '_' + periodSuffix + '.csv';
   } else {
-    filename = 'PTN_Attendance_Daily_' + dateStr + (branchStr !== 'ALL' ? ('_' + branchStr) : '') + '.csv';
+    var periodSuffixAll = '';
+    if (_currentAttendanceDateMode === 'PERIOD') {
+      var pInputAll = document.getElementById('attFilterPeriod');
+      periodSuffixAll = (pInputAll ? pInputAll.value : 'period') + '_cutoff';
+    } else if (_currentAttendanceDateMode === 'MONTH') {
+      var mInputAll = document.getElementById('attFilterMonth');
+      periodSuffixAll = mInputAll ? mInputAll.value : 'monthly';
+    } else if (_currentAttendanceDateMode === 'RANGE') {
+      var sInputAll = document.getElementById('attFilterStartDate');
+      var eInputAll = document.getElementById('attFilterEndDate');
+      periodSuffixAll = (sInputAll ? sInputAll.value : '') + '_to_' + (eInputAll ? eInputAll.value : '');
+    } else {
+      periodSuffixAll = dateStr;
+    }
+    filename = 'PTN_Attendance_' + periodSuffixAll + (branchStr !== 'ALL' ? ('_' + branchStr) : '') + '.csv';
   }
 
   var csv = generateAttendanceCsvString(_currentAttendanceLogs);
