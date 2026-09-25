@@ -472,22 +472,36 @@ function onPeriodChanged() {
 }
 
 function setPeriodWorkingDays() {
-  var days = Number(document.getElementById('periodWorkingDaysInput').value) || 30;
-  callApi('savePeriodWorkDays', { workingDays: days })
+  var inputEl = document.getElementById('periodWorkingDaysInput');
+  var days = Number(inputEl ? inputEl.value : 30) || 30;
+  if (days < 1 || days > 31) {
+    showToast('กรุณาระบุจำนวนวันทำงานระหว่าง 1 ถึง 31 วัน', 'error');
+    return;
+  }
+  callApi('savePeriodWorkDays', { workingDays: days, period: State.period, forcePeriod: true })
     .then(function(r) {
-      showToast(r.message || 'ตั้งค่าวันทำงานสำเร็จ');
+      State.workingDays = days;
+      showToast(r.message || ('บันทึกจำนวนวันทำงานงวด ' + (r.period || State.period) + ' เป็น ' + days + ' วัน สำเร็จ'));
       loadAppData(true);
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }
 
 function resetToActualWorkDays() {
-  callApi('getActualWorkDays')
+  callApi('getActualWorkDays', { period: State.period, forcePeriod: true })
     .then(function(r) {
       if (!r.success) { showToast(r.message || 'ไม่สามารถคำนวณวันทำงานได้', 'error'); return; }
-      document.getElementById('periodWorkingDaysInput').value = r.actualDays;
-      showToast('คำนวณวันทำงานจริงงวด ' + r.period + ' (จ.-ส.): ' + r.actualDays + ' วัน');
-      setPeriodWorkingDays();
+      var inputEl = document.getElementById('periodWorkingDaysInput');
+      if (inputEl) inputEl.value = r.actualDays;
+      State.workingDays = r.actualDays;
+      showToast('คำนวณวันทำงานจริงงวด ' + r.period + ' (จ.-ส.): ' + r.actualDays + ' วัน กำลังบันทึก...');
+      return callApi('savePeriodWorkDays', { workingDays: r.actualDays, period: State.period, forcePeriod: true });
+    })
+    .then(function(r) {
+      if (r) {
+        showToast(r.message || ('บันทึกวันทำงานจริงงวด ' + (r.period || State.period) + ' เรียบร้อยแล้ว'));
+        loadAppData(true);
+      }
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }

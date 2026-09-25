@@ -492,15 +492,6 @@ async function handleAction(db, action, params) {
   if (!period) {
     const latestRow = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
     period = (latestRow && latestRow.period) ? latestRow.period : getDefaultPeriod();
-  } else if (!params.forcePeriod) {
-    // If requested period has no monthly inputs and not forced by user, automatically default to latest period with data
-    const countRow = await db.prepare('SELECT COUNT(*) as count FROM monthly_inputs WHERE period = ?').bind(period).first().catch(() => null);
-    if (!countRow || countRow.count === 0) {
-      const latestRow = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
-      if (latestRow && latestRow.period) {
-        period = latestRow.period;
-      }
-    }
   }
 
   switch (action) {
