@@ -146,8 +146,8 @@ function applyRolePermissions() {
 
     if (!allowed) {
       if (canViewDash) switchTab('dashboard');
-      else if (canViewEmp) switchTab('employees');
       else if (canViewAttendance) switchTab('attendance');
+      else if (canViewEmp) switchTab('employees');
       else if (canViewInputs) switchTab('input');
       else if (canViewPayroll) switchTab('payroll');
       else if (canViewHistory) switchTab('history');
@@ -337,17 +337,19 @@ function navigateToAuthorizedTab() {
   // If on a forbidden tab or first login, switch to primary allowed tab
   var isAllowed = false;
   if (curId === 'tab-dashboard' && hasPermission('view_dash')) isAllowed = true;
+  else if (curId === 'tab-attendance' && (isSuperAdmin() || hasPermission('view_attendance'))) isAllowed = true;
   else if (curId === 'tab-payroll' && hasPermission('view_payroll')) isAllowed = true;
   else if (curId === 'tab-input' && hasPermission('view_inputs')) isAllowed = true;
   else if (curId === 'tab-employees' && hasPermission('view_emp')) isAllowed = true;
   else if (curId === 'tab-history' && hasPermission('view_history')) isAllowed = true;
-  else if (curId === 'tab-attendance' && isSuperAdmin()) isAllowed = true;
   else if (curId === 'tab-analytics' && (String(State.currentUser && State.currentUser.username || '').toLowerCase() === 'admin' || String(State.currentUser && State.currentUser.role || '').toLowerCase().indexOf('admin') >= 0 || hasPermission('all'))) isAllowed = true;
+  else if (curId === 'tab-documents' && (isSuperAdmin() || hasPermission('view_documents') || hasPermission('all') || hasPermission('view_payroll') || hasPermission('view_history'))) isAllowed = true;
   else if (curId === 'tab-company' && (hasPermission('manage_company') || hasPermission('manage_backup'))) isAllowed = true;
   else if (curId === 'tab-users' && hasPermission('manage_users')) isAllowed = true;
 
   if (!isAllowed) {
     if (hasPermission('view_dash')) switchTab('dashboard');
+    else if (hasPermission('view_attendance')) switchTab('attendance');
     else if (hasPermission('view_emp')) switchTab('employees');
     else if (hasPermission('view_inputs')) switchTab('input');
     else if (hasPermission('view_payroll')) switchTab('payroll');
@@ -634,11 +636,11 @@ function renderDashboard() {
       '<td class="text-blue font-bold">' + esc(row.period) + '</td>' +
       '<td class="font-mono font-bold">' + esc(row.empId) + '</td>' +
       '<td class="font-bold">' + esc(row.name) + '</td>' +
-      '<td class="text-right font-mono">' + fmt(row.baseSalary) + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + fmt(row.grossPay) + '</td>' +
-      '<td class="text-right font-mono font-bold text-red bg-red-light">' + fmt(row.totalDeductions) + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light">' + fmt(row.netPay) + '</td>' +
-      '<td class="text-center"><button type="button" class="btn btn-slate btn-sm" onclick="viewPayslip(\'' + esc(row.empId) + '\')"><i class="fa-solid fa-file-invoice"></i> สลิป</button></td>' +
+      '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.baseSalary) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + (canViewSalary ? fmt(row.grossPay) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(row.totalDeductions) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light">' + (canViewSalary ? fmt(row.netPay) : '฿***') + '</td>' +
+      '<td class="text-center">' + (canViewSalary ? '<button type="button" class="btn btn-slate btn-sm" onclick="viewPayslip(\'' + esc(row.empId) + '\')"><i class="fa-solid fa-file-invoice"></i> สลิป</button>' : '<span class="text-muted" style="font-size:11px">-</span>') + '</td>' +
     '</tr>';
   });
   tbody.innerHTML = h;
@@ -962,7 +964,7 @@ function renderEmployeesTable() {
 
   // Adjust table header based on role
   if (thead) {
-    if (isGeneralUser) {
+    if (isGeneralUser || !canViewSalary) {
       thead.innerHTML = '<tr>' +
         '<th style="width:85px">รหัส</th>' +
         '<th>พนักงาน</th>' +
@@ -991,7 +993,7 @@ function renderEmployeesTable() {
   }
 
   if (list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="' + (isGeneralUser ? '9' : '10') + '" class="text-center text-muted" style="padding:32px">' + (q ? 'ไม่พบพนักงานที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ไม่มีรายการพนักงานในหมวดนี้') + '</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="' + ((isGeneralUser || !canViewSalary) ? '9' : '10') + '" class="text-center text-muted" style="padding:32px">' + (q ? 'ไม่พบพนักงานที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ไม่มีรายการพนักงานในหมวดนี้') + '</td></tr>';
     if (cardsDiv) cardsDiv.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:36px;color:var(--text-muted);font-size:13px"><i class="fa-solid fa-users-slash" style="font-size:24px;margin-bottom:8px;display:block"></i>ไม่พบข้อมูลพนักงาน</div>';
     return;
   }
@@ -1046,7 +1048,7 @@ function renderEmployeesTable() {
     var branchBadgeHtml = '<div style="font-size:11px;color:#0369a1;font-weight:600;margin-top:2px"><i class="fa-solid fa-store" style="font-size:10px;margin-right:2px"></i> ' + esc(branchNameDisplay) + roamingText + '</div>';
 
     // 1. Render Table Row
-    if (isGeneralUser) {
+    if (isGeneralUser || !canViewSalary) {
       hTable += '<tr>' +
         '<td class="font-mono font-bold text-blue">' + esc(e.empId) + '</td>' +
         '<td>' +
@@ -1957,6 +1959,49 @@ function switchTab(tabId) {
     tabId = 'employees';
   }
 
+  // Dashboard tab
+  if (tabId === 'dashboard' && !hasPermission('view_dash')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานแดชบอร์ดสรุปยอดเงินเดือน', 'warning');
+    navigateToAuthorizedTab();
+    return;
+  }
+
+  // Payroll tab
+  if (tabId === 'payroll' && !hasPermission('view_payroll')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบคำนวณเงินเดือน', 'warning');
+    navigateToAuthorizedTab();
+    return;
+  }
+
+  // Input tab
+  if (tabId === 'input' && !hasPermission('view_inputs')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานบันทึกข้อมูลประจำงวด', 'warning');
+    navigateToAuthorizedTab();
+    return;
+  }
+
+  // Attendance tab
+  var canAccessAttendance = isSuperAdmin() || hasPermission('view_attendance');
+  if (tabId === 'attendance' && !canAccessAttendance) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา', 'warning');
+    navigateToAuthorizedTab();
+    return;
+  }
+
+  // Employees tab
+  if (tabId === 'employees' && !hasPermission('view_emp')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานทะเบียนพนักงาน', 'warning');
+    navigateToAuthorizedTab();
+    return;
+  }
+
+  // History tab
+  if (tabId === 'history' && !hasPermission('view_history')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานประวัติการทำงาน', 'warning');
+    navigateToAuthorizedTab();
+    return;
+  }
+
   // Analytics tab
   var canAccessAnalytics = Boolean(
     String(State.currentUser && State.currentUser.username || '').toLowerCase() === 'admin' ||
@@ -1966,13 +2011,7 @@ function switchTab(tabId) {
   );
   if (tabId === 'analytics' && !canAccessAnalytics) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบวิเคราะห์ Payroll Analytics', 'warning');
-    return;
-  }
-
-  // Attendance tab
-  var canAccessAttendance = isSuperAdmin() || hasPermission('view_attendance');
-  if (tabId === 'attendance' && !canAccessAttendance) {
-    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา', 'warning');
+    navigateToAuthorizedTab();
     return;
   }
 
@@ -1980,6 +2019,21 @@ function switchTab(tabId) {
   var canAccessDocuments = isSuperAdmin() || hasPermission('view_documents') || hasPermission('all') || hasPermission('view_payroll') || hasPermission('view_history');
   if (tabId === 'documents' && !canAccessDocuments) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานศูนย์เอกสาร', 'warning');
+    navigateToAuthorizedTab();
+    return;
+  }
+
+  // Company tab
+  if (tabId === 'company' && !(hasPermission('manage_company') || hasPermission('manage_backup'))) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานข้อมูลบริษัท', 'warning');
+    navigateToAuthorizedTab();
+    return;
+  }
+
+  // Users tab
+  if (tabId === 'users' && !hasPermission('manage_users')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานจัดการผู้ใช้งาน', 'warning');
+    navigateToAuthorizedTab();
     return;
   }
 
@@ -7001,9 +7055,9 @@ function calcHaversineDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 function loadTimeAttendanceDashboard() {
-  if (!isSuperAdmin()) {
-    showToast('สิทธิ์ไม่เพียงพอ: หน้าลงเวลาสงวนสิทธิ์เฉพาะ Super Admin เท่านั้น', 'warning');
-    switchTab('dashboard');
+  if (!isSuperAdmin() && !hasPermission('view_attendance')) {
+    showToast('สิทธิ์ไม่เพียงพอ: หน้าลงเวลาสงวนสิทธิ์เฉพาะผู้มีสิทธิ์เข้าใช้งานระบบลงเวลาเท่านั้น', 'warning');
+    navigateToAuthorizedTab();
     return;
   }
 
