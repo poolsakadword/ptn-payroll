@@ -1817,6 +1817,9 @@ function renderCompanySettings() {
   if (document.getElementById('cfgSickLeaveQuota')) document.getElementById('cfgSickLeaveQuota').value = pd.sickLeaveQuota !== undefined ? pd.sickLeaveQuota : 10;
   if (document.getElementById('cfgDefaultPfRate')) document.getElementById('cfgDefaultPfRate').value = pd.defaultPfRate !== undefined ? pd.defaultPfRate : 0.05;
   if (document.getElementById('cfgDefaultProbationDays')) document.getElementById('cfgDefaultProbationDays').value = pd.defaultProbationDays !== undefined ? pd.defaultProbationDays : 119;
+
+  // Load PTN Time announcement settings
+  loadAppAnnouncementSettings();
 }
 
 function savePayrollDefaults(e) {
@@ -1861,6 +1864,67 @@ function saveCompanySettings(e) {
       loadAppData();
     })
     .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+// 6.1 PTN TIME APP POPUP ANNOUNCEMENT CONTROLLERS
+function updateAnnToggleState(el) {
+  var isChecked = el ? el.checked : false;
+  var lbl = document.getElementById('annToggleStatusText');
+  if (lbl) {
+    lbl.textContent = isChecked ? 'เปิดใช้งาน' : 'ปิดใช้งาน';
+    lbl.style.color = isChecked ? '#16a34a' : '#dc2626';
+  }
+}
+
+function loadAppAnnouncementSettings() {
+  callApi('getAppAnnouncement', {})
+    .then(function(r) {
+      if (r && r.announcement) {
+        var a = r.announcement;
+        var actCheck = document.getElementById('cfgAnnActive');
+        if (actCheck) {
+          actCheck.checked = (a.active !== false && a.active !== 'false');
+          updateAnnToggleState(actCheck);
+        }
+        if (document.getElementById('cfgAnnTag')) document.getElementById('cfgAnnTag').value = a.tag || '🚨 ประกาศสำคัญ';
+        if (document.getElementById('cfgAnnBannerTitle')) document.getElementById('cfgAnnBannerTitle').value = a.bannerTitle || 'PTN TIME GO LIVE!';
+        if (document.getElementById('cfgAnnTitle')) document.getElementById('cfgAnnTitle').value = a.title || 'เริ่มใช้งานระบบ PTN Time บันทึกเวลาเต็มรูปแบบ';
+        if (document.getElementById('cfgAnnBody')) document.getElementById('cfgAnnBody').value = a.body || '';
+        if (document.getElementById('cfgAnnSubnote')) document.getElementById('cfgAnnSubnote').value = a.subnote || '';
+      }
+    })
+    .catch(function(err) {
+      console.warn('Load announcement note:', err);
+    });
+}
+
+function saveAppAnnouncementFromAdmin(e) {
+  if (e && e.preventDefault) e.preventDefault();
+  var actCheck = document.getElementById('cfgAnnActive');
+  var isActive = actCheck ? actCheck.checked : true;
+
+  var annObj = {
+    id: 'ann_' + Date.now(),
+    active: isActive,
+    tag: (document.getElementById('cfgAnnTag') ? document.getElementById('cfgAnnTag').value.trim() : '') || '🚨 ประกาศสำคัญ',
+    bannerTitle: (document.getElementById('cfgAnnBannerTitle') ? document.getElementById('cfgAnnBannerTitle').value.trim() : '') || 'PTN TIME GO LIVE!',
+    title: (document.getElementById('cfgAnnTitle') ? document.getElementById('cfgAnnTitle').value.trim() : '') || 'ประกาศสำคัญ',
+    body: (document.getElementById('cfgAnnBody') ? document.getElementById('cfgAnnBody').value.trim() : '') || '',
+    subnote: document.getElementById('cfgAnnSubnote') ? document.getElementById('cfgAnnSubnote').value.trim() : '',
+    updatedAt: new Date().toISOString()
+  };
+
+  callApi('saveAppAnnouncement', {
+    announcement: annObj,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      showToast(r.message || 'บันทึกประกาศเรียบร้อยแล้ว');
+      loadAppAnnouncementSettings();
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึกประกาศ', 'error');
+    });
 }
 
 // 7. USERS RENDERER
@@ -2669,18 +2733,57 @@ function printPayslip() {
 
 // PERIOD CLOSE / REOPEN
 function closePeriod() {
-  if (!confirm('ยืนยันการปิดงวด ' + State.period + ' ใช่หรือไม่? (ผลการคำนวณจะถูกล็อค)')) return;
-  callApi('closePeriod')
-    .then(function(r) {
-      showToast(r.message || 'ปิดงวดสำเร็จ');
-      loadAppData();
-    })
-    .catch(function(e) { showToast(e.message, 'error'); });
+  var lbl = document.getElementById('lblClosePeriodTarget');
+  if (lbl) lbl.textContent = State.period;
+  var chk = document.getElementById('chkClosePeriodAutoBackup');
+  if (chk) chk.checked = true;
+  openModal('modalClosePeriodConfirm');
+}
+
+function confirmClosePeriodAction() {
+  var btn = document.getElementById('btnExecuteClosePeriod');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังดำเนินการ...';
+  }
+
+  var doBackup = document.getElementById('chkClosePeriodAutoBackup') ? document.getElementById('chkClosePeriodAutoBackup').checked : false;
+
+  var executeClose = function() {
+    callApi('closePeriod', { username: (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin' })
+      .then(function(r) {
+        closeModal('modalClosePeriodConfirm');
+        showToast(r.message || 'ปิดงวดประจำเดือนสำเร็จ (ล็อคผลการคำนวณแล้ว)');
+        loadAppData();
+      })
+      .catch(function(e) {
+        showToast(e.message, 'error');
+      })
+      .finally(function() {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-lock"></i> ยืนยันปิดงวดและล็อคข้อมูล';
+        }
+      });
+  };
+
+  if (doBackup) {
+    showToast('กำลังดาวน์โหลดสำรองข้อมูลประจำงวด ' + State.period + ' ก่อนปิดงวด...', 'info');
+    backupDatabase(true)
+      .then(function() {
+        setTimeout(executeClose, 800);
+      })
+      .catch(function() {
+        executeClose();
+      });
+  } else {
+    executeClose();
+  }
 }
 
 function reopenPeriod() {
   if (!confirm('ยืนยันการปลดล็อคและเปิดงวด ' + State.period + ' ใช่หรือไม่?')) return;
-  callApi('reopenPeriod')
+  callApi('reopenPeriod', { username: (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin' })
     .then(function(r) {
       showToast(r.message || 'เปิดงวดสำเร็จ');
       loadAppData();
@@ -3198,7 +3301,7 @@ window.pendingRestoreBackupData = null;
 
 function backupDatabase(isAutoSafety) {
   if (!isAutoSafety) showToast('กำลังเตรียมไฟล์สำรองข้อมูลทั้งระบบ...', 'info');
-  return callApi('backupDatabase', { username: (window.currentUser && window.currentUser.username) || 'Admin' })
+  return callApi('backupDatabase', { username: (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin' })
     .then(function(r) {
       if (!r.success || !r.backup) {
         showToast(r.message || 'ไม่สามารถสำรองข้อมูลได้', 'error');
@@ -3389,7 +3492,7 @@ function executeSelectiveRestore() {
     callApi('restoreDatabase', {
       backup: window.pendingRestoreBackupData,
       options: options,
-      username: (window.currentUser && window.currentUser.username) || 'Admin'
+      username: (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin'
     })
       .then(function(r) {
         if (r.success) {
