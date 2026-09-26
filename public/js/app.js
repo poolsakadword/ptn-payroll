@@ -8090,17 +8090,28 @@ function loadTimeAttendanceDashboard() {
         if (reqBadge) reqBadge.innerHTML = '<i class="fa-solid fa-arrows-rotate" style="font-size:9.5px"></i> ' + esc(r.reqCutoffDates.label);
       }
 
-      // 1. Update KPI
+      // 1. Update KPI (All 5 Cards)
       if (r.kpi) {
         var elIn = document.getElementById('attKpiClockedIn');
+        var elNot = document.getElementById('attKpiNotClockedIn');
         var elLate = document.getElementById('attKpiLate');
         var elPend = document.getElementById('attKpiPending');
         var elTot = document.getElementById('attKpiTotal');
         if (elIn) elIn.innerHTML = (r.kpi.clockedIn || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
+        if (elNot) elNot.innerHTML = (r.kpi.notClockedIn || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
         if (elLate) elLate.innerHTML = (r.kpi.late || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
         if (elPend) elPend.innerHTML = (r.kpi.pendingApprovals || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">รายการ</span>';
         if (elTot) elTot.innerHTML = (r.kpi.totalEmployees || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
       }
+
+      // Cache breakdown & pending datasets for clickable dashboard modal
+      State.attendanceBreakdown = r.attendanceBreakdown || null;
+      State.attendancePendingData = {
+        leaves: r.pendingLeaves || [],
+        ots: r.pendingOts || [],
+        advances: r.pendingAdvances || []
+      };
+      State.attendanceDateDisplay = r.dateDisplay || r.date || r.today || '';
 
       // 2. Subtitle & Individual Summary Bar
       var subTitle = document.getElementById('attLogsSubTitle');
@@ -9066,6 +9077,487 @@ function previewAttendancePhoto(url, title, sub) {
   if (subEl) subEl.textContent = sub || '';
 
   openModal('modalAttendancePhotoPreview');
+}
+
+// ==============================================================================
+// CLICKABLE ATTENDANCE KPI MODAL SYSTEM (ALL 5 CARDS)
+// ==============================================================================
+var _currentAttKpiMode = 'NOT_CLOCKED_IN';
+var _currentAttKpiSubFilter = 'ALL';
+
+function openAttendanceKpiModal(mode) {
+  _currentAttKpiMode = mode || 'NOT_CLOCKED_IN';
+  _currentAttKpiSubFilter = 'ALL';
+
+  var searchInput = document.getElementById('attKpiModalSearchInput');
+  if (searchInput) searchInput.value = '';
+
+  var header = document.getElementById('attKpiModalHeader');
+  var icon = document.getElementById('attKpiModalIcon');
+  var title = document.getElementById('attKpiModalTitle');
+  var badge = document.getElementById('attKpiModalBadge');
+  var sub = document.getElementById('attKpiModalSub');
+  var tabsContainer = document.getElementById('attKpiModalSubFilterContainer');
+  var footerHint = document.getElementById('attKpiModalFooterHint');
+
+  var bd = State.attendanceBreakdown || {};
+  var clockedInList = bd.clockedInList || [];
+  var notClockedInList = bd.notClockedInList || [];
+  var lateList = bd.lateList || [];
+  var branchSummary = bd.branchSummary || [];
+  var pending = State.attendancePendingData || { leaves: [], ots: [], advances: [] };
+  var totalPending = (pending.leaves.length || 0) + (pending.ots.length || 0) + (pending.advances.length || 0);
+  var targetDateDisplay = State.attendanceDateDisplay || bd.targetDate || 'วันนี้';
+
+  if (_currentAttKpiMode === 'CLOCKED_IN') {
+    if (header) header.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
+    if (icon) icon.innerHTML = '<i class="fa-solid fa-user-check"></i>';
+    if (title) title.textContent = 'พนักงานที่เข้างานแล้ววันนี้ (Present)';
+    if (badge) {
+      badge.textContent = clockedInList.length + ' คน';
+      badge.style.color = '#059669';
+    }
+    if (sub) sub.textContent = 'ข้อมูลการสแกนเวลาเข้างาน ประจำวันที่ ' + targetDateDisplay;
+    if (tabsContainer) {
+      tabsContainer.innerHTML = '<button type="button" class="btn btn-sm btn-primary" id="attKpiTab_ALL" onclick="setAttendanceKpiSubFilter(\'ALL\')" style="font-size:11px;padding:3px 10px;border-radius:20px">ทั้งหมด (' + clockedInList.length + ')</button>';
+    }
+    if (footerHint) footerHint.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#10b981"></span> <span>พนักงานเข้างานตามมาตรฐาน มีบันทึกเวลาและหลักฐานครบถ้วน</span>';
+
+  } else if (_currentAttKpiMode === 'NOT_CLOCKED_IN') {
+    var withLeaveCount = notClockedInList.filter(function(x) { return x.hasLeave; }).length;
+    var noExcuseCount = notClockedInList.length - withLeaveCount;
+
+    if (header) header.style.background = 'linear-gradient(135deg, #e11d48 0%, #be123c 100%)';
+    if (icon) icon.innerHTML = '<i class="fa-solid fa-user-xmark"></i>';
+    if (title) title.textContent = 'พนักงานที่ยังไม่เข้างานวันนี้ (Not Clocked In)';
+    if (badge) {
+      badge.textContent = notClockedInList.length + ' คน';
+      badge.style.color = '#e11d48';
+    }
+    if (sub) sub.textContent = 'ยังไม่มีข้อมูลการสแกนเข้างาน ประจำวันที่ ' + targetDateDisplay + ' (มีใบลา ' + withLeaveCount + ' คน, ยังไม่แจ้ง ' + noExcuseCount + ' คน)';
+    if (tabsContainer) {
+      tabsContainer.innerHTML = 
+        '<button type="button" class="btn btn-sm btn-primary" id="attKpiTab_ALL" onclick="setAttendanceKpiSubFilter(\'ALL\')" style="font-size:11px;padding:3px 10px;border-radius:20px">ทั้งหมด (' + notClockedInList.length + ')</button>' +
+        '<button type="button" class="btn btn-sm btn-slate" id="attKpiTab_NO_EXCUSE" onclick="setAttendanceKpiSubFilter(\'NO_EXCUSE\')" style="font-size:11px;padding:3px 10px;border-radius:20px">ยังไม่แจ้ง (' + noExcuseCount + ')</button>' +
+        '<button type="button" class="btn btn-sm btn-slate" id="attKpiTab_LEAVE" onclick="setAttendanceKpiSubFilter(\'LEAVE\')" style="font-size:11px;padding:3px 10px;border-radius:20px">มีใบลา (' + withLeaveCount + ')</button>';
+    }
+    if (footerHint) footerHint.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#e11d48"></span> <span>สามารถกดโทรติดต่อพนักงานที่ไม่เข้างานได้ทันทีผ่านปุ่มโทรศัพท์</span>';
+
+  } else if (_currentAttKpiMode === 'LATE') {
+    if (header) header.style.background = 'linear-gradient(135deg, #d97706 0%, #b45309 100%)';
+    if (icon) icon.innerHTML = '<i class="fa-solid fa-user-clock"></i>';
+    if (title) title.textContent = 'พนักงานที่มาสายวันนี้ (Late Today)';
+    if (badge) {
+      badge.textContent = lateList.length + ' คน';
+      badge.style.color = '#d97706';
+    }
+    if (sub) sub.textContent = 'สแกนเข้างานเกินเวลาเริ่มกะตามที่สาขากำหนดไว้';
+    if (tabsContainer) {
+      tabsContainer.innerHTML = '<button type="button" class="btn btn-sm btn-primary" id="attKpiTab_ALL" onclick="setAttendanceKpiSubFilter(\'ALL\')" style="font-size:11px;padding:3px 10px;border-radius:20px">ทั้งหมด (' + lateList.length + ')</button>';
+    }
+    if (footerHint) footerHint.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b"></span> <span>เกณฑ์เบี้ยขยัน: อนุญาตให้สายได้ไม่เกิน 2 นาที/ครั้ง (1 ครั้งต่องวด)</span>';
+
+  } else if (_currentAttKpiMode === 'PENDING') {
+    if (header) header.style.background = 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)';
+    if (icon) icon.innerHTML = '<i class="fa-solid fa-clipboard-check"></i>';
+    if (title) title.textContent = 'คำขอรออนุมัติจาก PTN Time (Pending Requests)';
+    if (badge) {
+      badge.textContent = totalPending + ' รายการ';
+      badge.style.color = '#7c3aed';
+    }
+    if (sub) sub.textContent = 'คำขอลาหยุด, ขอทำ OT และขอเบิกเงินฉุกเฉินล่วงหน้า';
+    if (tabsContainer) {
+      tabsContainer.innerHTML = 
+        '<button type="button" class="btn btn-sm btn-primary" id="attKpiTab_ALL" onclick="setAttendanceKpiSubFilter(\'ALL\')" style="font-size:11px;padding:3px 10px;border-radius:20px">ทั้งหมด (' + totalPending + ')</button>' +
+        '<button type="button" class="btn btn-sm btn-slate" id="attKpiTab_LEAVE" onclick="setAttendanceKpiSubFilter(\'LEAVE\')" style="font-size:11px;padding:3px 10px;border-radius:20px">ลา (' + (pending.leaves.length || 0) + ')</button>' +
+        '<button type="button" class="btn btn-sm btn-slate" id="attKpiTab_OT" onclick="setAttendanceKpiSubFilter(\'OT\')" style="font-size:11px;padding:3px 10px;border-radius:20px">OT (' + (pending.ots.length || 0) + ')</button>' +
+        '<button type="button" class="btn btn-sm btn-slate" id="attKpiTab_ADVANCE" onclick="setAttendanceKpiSubFilter(\'ADVANCE\')" style="font-size:11px;padding:3px 10px;border-radius:20px">เบิกเงิน (' + (pending.advances.length || 0) + ')</button>';
+    }
+    if (footerHint) footerHint.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#8b5cf6"></span> <span>สามารถตรวจสอบเอกสารแนบและกด อนุมัติ / ปฏิเสธ ได้ทันที</span>';
+
+  } else if (_currentAttKpiMode === 'TOTAL_STAFF') {
+    var allStaff = State.employees || [];
+    if (header) header.style.background = 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)';
+    if (icon) icon.innerHTML = '<i class="fa-solid fa-users"></i>';
+    if (title) title.textContent = 'สรุปพนักงานประจำการทั้งหมด (Total Staff)';
+    if (badge) {
+      badge.textContent = allStaff.length + ' คน';
+      badge.style.color = '#2563eb';
+    }
+    if (sub) sub.textContent = 'อัตรากำลังพลแยกตามสาขาและสถานะการลงเวลาวันนี้';
+    if (tabsContainer) {
+      tabsContainer.innerHTML = '<button type="button" class="btn btn-sm btn-primary" id="attKpiTab_ALL" onclick="setAttendanceKpiSubFilter(\'ALL\')" style="font-size:11px;padding:3px 10px;border-radius:20px">สรุป 4 สาขา</button>';
+    }
+    if (footerHint) footerHint.innerHTML = '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3b82f6"></span> <span>พนักงานสถานะ Active ทุกคนในระบบ PTN Payroll</span>';
+  }
+
+  renderAttendanceKpiModalList();
+  openModal('modalAttendanceKpiDetails');
+}
+
+function setAttendanceKpiSubFilter(tab) {
+  _currentAttKpiSubFilter = tab || 'ALL';
+  var tabs = ['ALL', 'LEAVE', 'NO_EXCUSE', 'OT', 'ADVANCE'];
+  tabs.forEach(function(t) {
+    var btn = document.getElementById('attKpiTab_' + t);
+    if (btn) {
+      if (t === _currentAttKpiSubFilter) {
+        btn.className = 'btn btn-sm btn-primary';
+      } else {
+        btn.className = 'btn btn-sm btn-slate';
+      }
+    }
+  });
+  renderAttendanceKpiModalList();
+}
+
+function renderAttendanceKpiModalList() {
+  var container = document.getElementById('attKpiModalContentContainer');
+  if (!container) return;
+
+  var q = '';
+  var searchInput = document.getElementById('attKpiModalSearchInput');
+  if (searchInput) q = searchInput.value.trim().toLowerCase();
+
+  var bd = State.attendanceBreakdown || {};
+  var clockedInList = bd.clockedInList || [];
+  var notClockedInList = bd.notClockedInList || [];
+  var lateList = bd.lateList || [];
+  var branchSummary = bd.branchSummary || [];
+  var pending = State.attendancePendingData || { leaves: [], ots: [], advances: [] };
+
+  var html = '';
+
+  if (_currentAttKpiMode === 'CLOCKED_IN') {
+    var list = clockedInList.filter(function(item) {
+      if (q) {
+        var str = ((item.name || '') + ' ' + (item.empId || '') + ' ' + (item.nickname || '') + ' ' + (item.dept || '') + ' ' + (item.branchName || '')).toLowerCase();
+        if (str.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    if (list.length === 0) {
+      html = '<div style="text-align:center;padding:40px 20px;color:#94a3b8"><i class="fa-solid fa-user-check" style="font-size:36px;margin-bottom:10px;opacity:0.4"></i><div style="font-size:13px;font-weight:600">ไม่พบรายชื่อพนักงานที่เข้างานตามเงื่อนไขที่ค้นหา</div></div>';
+    } else {
+      html = list.map(function(item) {
+        var photoBtn = '';
+        if (item.inPhotoUrl) {
+          photoBtn = '<button type="button" class="btn btn-slate btn-xs" onclick="previewAttendancePhoto(\'' + esc(item.inPhotoUrl) + '\', \'เข้างาน: ' + esc(item.name) + '\', \'เวลา ' + esc(item.clockIn) + ' น.\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px"><i class="fa-solid fa-camera text-blue"></i> ดูรูปเซลฟี่</button>';
+        }
+        var initials = (item.nickname || item.name || 'P').substring(0, 2);
+        return '<div style="padding:12px 14px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:border-color 0.2s" onmouseover="this.style.borderColor=\'#10b981\'" onmouseout="this.style.borderColor=\'#e2e8f0\'">' +
+          '<div style="display:flex;align-items:center;gap:12px;min-width:0">' +
+            '<div style="width:38px;height:38px;border-radius:10px;background:#ecfdf5;color:#059669;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">' +
+              esc(initials) +
+            '</div>' +
+            '<div style="min-width:0">' +
+              '<div style="font-size:13px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+                '<span>' + esc(item.name) + '</span>' +
+                (item.nickname ? '<span style="font-size:11.5px;color:#64748b">(' + esc(item.nickname) + ')</span>' : '') +
+                '<span style="font-family:monospace;font-size:11px;color:#64748b;font-weight:400">[' + esc(item.empId) + ']</span>' +
+              '</div>' +
+              '<div style="font-size:11px;color:#64748b;margin-top:2px">' +
+                esc(item.dept || '-') + ' • <span style="color:#0369a1">' + esc(item.branchName || 'สำนักงานใหญ่') + '</span>' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
+            '<div style="font-size:12.5px;font-weight:800;color:#059669;display:flex;align-items:center;gap:4px">' +
+              '<i class="fa-solid fa-clock" style="font-size:11px"></i> ' + esc(item.clockIn || '-') + ' น.' +
+            '</div>' +
+            '<div style="display:flex;align-items:center;gap:6px">' +
+              (item.workHours > 0 ? '<span style="font-size:10.5px;color:#64748b">~' + Number(item.workHours).toFixed(1) + ' ชม.</span>' : '') +
+              photoBtn +
+            '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+  } else if (_currentAttKpiMode === 'NOT_CLOCKED_IN') {
+    var list = notClockedInList.filter(function(item) {
+      if (_currentAttKpiSubFilter === 'LEAVE' && !item.hasLeave) return false;
+      if (_currentAttKpiSubFilter === 'NO_EXCUSE' && item.hasLeave) return false;
+      if (q) {
+        var str = ((item.name || '') + ' ' + (item.empId || '') + ' ' + (item.nickname || '') + ' ' + (item.dept || '') + ' ' + (item.branchName || '')).toLowerCase();
+        if (str.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    if (list.length === 0) {
+      html = '<div style="text-align:center;padding:40px 20px;color:#94a3b8"><i class="fa-solid fa-circle-check text-green" style="font-size:36px;margin-bottom:10px"></i><div style="font-size:13px;font-weight:600;color:#0f172a">พนักงานทุกคนเข้างานครบแล้ว หรือไม่พบรายการตามที่ค้นหา</div></div>';
+    } else {
+      html = list.map(function(item) {
+        var isLeave = item.hasLeave;
+        var badgeHtml = '';
+        var cardBg = isLeave ? '#fffbeb' : '#fff5f5';
+        var cardBorder = isLeave ? '#fef08a' : '#fecdd3';
+        var initials = (item.nickname || item.name || 'U').substring(0, 2);
+
+        if (isLeave) {
+          badgeHtml = '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;background:#fef3c7;color:#92400e;font-size:11px;font-weight:700;border:1px solid #fde68a">' +
+            '<i class="fa-solid fa-calendar-check text-amber"></i> ' + esc(item.leaveType || 'ลางาน (อนุมัติแล้ว)') +
+          '</span>';
+        } else {
+          badgeHtml = '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:20px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:700;border:1px solid #fecdd3">' +
+            '<i class="fa-solid fa-circle-xmark text-red"></i> ยังไม่ลงเวลา (ไม่มีใบลา)' +
+          '</span>';
+        }
+
+        var phoneBtn = '';
+        if (item.phone) {
+          phoneBtn = '<a href="tel:' + esc(item.phone) + '" class="btn btn-slate btn-xs" style="text-decoration:none;font-size:11px;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center;gap:4px;font-weight:600">' +
+            '<i class="fa-solid fa-phone" style="color:#10b981;font-size:10px"></i> ' + esc(item.phone) +
+          '</a>';
+        } else {
+          phoneBtn = '<span style="font-size:10.5px;color:#94a3b8">ไม่มีเบอร์โทร</span>';
+        }
+
+        return '<div style="padding:12px 14px;border:1.5px solid ' + cardBorder + ';border-radius:12px;background:' + cardBg + ';display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px">' +
+          '<div style="display:flex;align-items:center;gap:12px;min-width:240px">' +
+            '<div style="width:40px;height:40px;border-radius:10px;background:' + (isLeave ? '#f59e0b' : '#ef4444') + ';color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">' +
+              esc(initials) +
+            '</div>' +
+            '<div>' +
+              '<div style="font-size:13px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+                '<span>' + esc(item.name) + '</span>' +
+                (item.nickname ? '<span style="font-size:11.5px;color:#64748b">(' + esc(item.nickname) + ')</span>' : '') +
+                '<span style="font-family:monospace;font-size:11px;color:#64748b;font-weight:400">[' + esc(item.empId) + ']</span>' +
+              '</div>' +
+              '<div style="font-size:11px;color:#64748b;margin-top:2px">' +
+                esc(item.dept || '-') + ' • <span style="color:#0369a1">' + esc(item.branchName || 'สำนักงานใหญ่') + '</span>' +
+              '</div>' +
+              '<div style="font-size:10.5px;color:#475569;margin-top:2px">' +
+                '<i class="fa-regular fa-clock" style="margin-right:3px"></i> กะเวลา: ' + esc(item.shiftText || '09:30 - 19:00 น.') +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">' +
+            badgeHtml +
+            phoneBtn +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+  } else if (_currentAttKpiMode === 'LATE') {
+    var list = lateList.filter(function(item) {
+      if (q) {
+        var str = ((item.name || '') + ' ' + (item.empId || '') + ' ' + (item.nickname || '') + ' ' + (item.dept || '') + ' ' + (item.branchName || '')).toLowerCase();
+        if (str.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    if (list.length === 0) {
+      html = '<div style="text-align:center;padding:40px 20px;color:#94a3b8"><i class="fa-solid fa-circle-check text-green" style="font-size:36px;margin-bottom:10px"></i><div style="font-size:13px;font-weight:600;color:#0f172a">ยอดเยี่ยม! วันนี้ไม่มีพนักงานมาสายเลย</div></div>';
+    } else {
+      html = list.map(function(item) {
+        var initials = (item.nickname || item.name || 'L').substring(0, 2);
+        var phoneBtn = item.phone ? '<a href="tel:' + esc(item.phone) + '" class="btn btn-slate btn-xs" style="text-decoration:none;font-size:10.5px;padding:3px 8px;border-radius:6px"><i class="fa-solid fa-phone text-green"></i> ' + esc(item.phone) + '</a>' : '';
+
+        return '<div style="padding:12px 14px;border:1.5px solid #fed7aa;border-radius:12px;background:#fffaf5;display:flex;align-items:center;justify-content:space-between;gap:12px">' +
+          '<div style="display:flex;align-items:center;gap:12px">' +
+            '<div style="width:40px;height:40px;border-radius:10px;background:#f97316;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0">' +
+              esc(initials) +
+            '</div>' +
+            '<div>' +
+              '<div style="font-size:13px;font-weight:700;color:#0f172a;display:flex;align-items:center;gap:6px">' +
+                '<span>' + esc(item.name) + '</span>' +
+                (item.nickname ? '<span style="font-size:11.5px;color:#64748b">(' + esc(item.nickname) + ')</span>' : '') +
+                '<span style="font-family:monospace;font-size:11px;color:#64748b">[' + esc(item.empId) + ']</span>' +
+              '</div>' +
+              '<div style="font-size:11px;color:#64748b;margin-top:2px">' +
+                esc(item.dept || '-') + ' • <span style="color:#0369a1">' + esc(item.branchName || 'สำนักงานใหญ่') + '</span>' +
+              '</div>' +
+              '<div style="font-size:11px;color:#c2410c;font-weight:600;margin-top:2px">' +
+                '<i class="fa-solid fa-triangle-exclamation" style="margin-right:3px"></i> สแกนเข้า: ' + esc(item.clockIn || '-') + ' น. (เวลากะเริ่ม: ' + esc(item.shiftStart || '09:30') + ' น.)' +
+              '</div>' +
+            '</div>' +
+          '</div>' +
+          '<div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:5px">' +
+            '<span style="display:inline-block;padding:3px 10px;border-radius:20px;background:#ffedd5;color:#9a3412;font-size:12px;font-weight:800;border:1px solid #fed7aa">' +
+              'สาย ' + Number(item.lateMinutes || 0) + ' นาที' +
+            '</span>' +
+            phoneBtn +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+  } else if (_currentAttKpiMode === 'PENDING') {
+    var rawLeaves = pending.leaves || [];
+    var rawOts = pending.ots || [];
+    var rawAdvances = pending.advances || [];
+
+    var combined = [];
+    rawLeaves.forEach(function(l) {
+      combined.push({
+        type: 'leave',
+        id: l.id,
+        empId: l.emp_id,
+        name: l.full_name || l.emp_id,
+        dept: l.department || '',
+        title: 'ขอลาหยุด (' + (l.leave_type || 'ลา') + ')',
+        sub: 'วันที่: ' + (l.start_date || '') + ' ถึง ' + (l.end_date || '') + ' (' + (l.days_count || 1) + ' วัน)',
+        reason: l.reason || '-',
+        color: '#7c3aed'
+      });
+    });
+    rawOts.forEach(function(o) {
+      combined.push({
+        type: 'ot',
+        id: o.id,
+        empId: o.emp_id,
+        name: o.full_name || o.emp_id,
+        dept: o.department || '',
+        title: 'ขอทำ OT (' + (o.hours || 0) + ' ชม.)',
+        sub: 'วันที่: ' + (o.date || '') + ' เวลา ' + (o.start_time || '') + ' - ' + (o.end_time || ''),
+        reason: o.reason || '-',
+        color: '#2563eb'
+      });
+    });
+    rawAdvances.forEach(function(a) {
+      combined.push({
+        type: 'advance',
+        id: a.id,
+        empId: a.emp_id,
+        name: a.full_name || a.emp_id,
+        dept: a.department || '',
+        title: 'ขอเบิกเงินฉุกเฉินล่วงหน้า (' + formatMoney(a.amount || 0) + ' บาท)',
+        sub: 'วันที่ขอ: ' + (a.request_date || (a.created_at ? a.created_at.substring(0, 10) : '')),
+        reason: a.reason || '-',
+        color: '#059669'
+      });
+    });
+
+    var list = combined.filter(function(item) {
+      if (_currentAttKpiSubFilter === 'LEAVE' && item.type !== 'leave') return false;
+      if (_currentAttKpiSubFilter === 'OT' && item.type !== 'ot') return false;
+      if (_currentAttKpiSubFilter === 'ADVANCE' && item.type !== 'advance') return false;
+      if (q) {
+        var str = ((item.name || '') + ' ' + (item.empId || '') + ' ' + (item.title || '') + ' ' + (item.reason || '')).toLowerCase();
+        if (str.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    if (list.length === 0) {
+      html = '<div style="text-align:center;padding:40px 20px;color:#94a3b8"><i class="fa-solid fa-clipboard-check text-green" style="font-size:36px;margin-bottom:10px"></i><div style="font-size:13px;font-weight:600;color:#0f172a">ไม่มีคำขอรออนุมัติในหมวดหมู่นี้</div></div>';
+    } else {
+      html = list.map(function(item) {
+        return '<div style="padding:14px;border:1.5px solid #e9d5ff;border-radius:12px;background:#faf5ff;display:flex;flex-direction:column;gap:8px">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">' +
+            '<div style="display:flex;align-items:center;gap:8px">' +
+              '<span style="font-size:13px;font-weight:700;color:#0f172a">' + esc(item.name) + '</span>' +
+              '<span style="font-family:monospace;font-size:11px;color:#64748b">[' + esc(item.empId) + ']</span>' +
+              (item.dept ? '<span style="font-size:11px;color:#64748b">(' + esc(item.dept) + ')</span>' : '') +
+            '</div>' +
+            '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:#f3e8ff;color:#6b21a8;border:1px solid #d8b4fe">' +
+              esc(item.title) +
+            '</span>' +
+          '</div>' +
+          '<div style="font-size:11.5px;color:#475569">' +
+            '<i class="fa-regular fa-clock" style="margin-right:4px"></i> ' + esc(item.sub) +
+          '</div>' +
+          '<div style="font-size:11.5px;color:#334155;background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0">' +
+            '<strong>เหตุผล:</strong> ' + esc(item.reason) +
+          '</div>' +
+          '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:4px">' +
+            '<button type="button" class="btn btn-sm btn-success" onclick="approveAttendanceItem(\'' + item.type + '\', ' + item.id + ', \'APPROVE\')" style="font-size:11.5px;padding:4px 12px;font-weight:700">' +
+              '<i class="fa-solid fa-check"></i> อนุมัติ' +
+            '</button>' +
+            '<button type="button" class="btn btn-sm btn-danger" onclick="approveAttendanceItem(\'' + item.type + '\', ' + item.id + ', \'REJECT\')" style="font-size:11.5px;padding:4px 12px;font-weight:700">' +
+              '<i class="fa-solid fa-xmark"></i> ปฏิเสธ' +
+            '</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+  } else if (_currentAttKpiMode === 'TOTAL_STAFF') {
+    var branchCards = branchSummary.map(function(b) {
+      return '<div style="padding:14px;border:1.5px solid #bfdbfe;border-radius:12px;background:#eff6ff;display:flex;flex-direction:column;gap:10px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between">' +
+          '<div style="font-weight:700;font-size:13px;color:#1e3a8a"><i class="fa-solid fa-building" style="margin-right:4px;color:#2563eb"></i> ' + esc(b.branchName) + '</div>' +
+          '<span style="font-size:11.5px;font-weight:800;padding:2px 8px;border-radius:20px;background:#2563eb;color:#fff">' + Number(b.totalStaff || 0) + ' คน</span>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:6px;text-align:center">' +
+          '<div style="background:#fff;padding:8px 4px;border-radius:8px;border:1px solid #cbd5e1">' +
+            '<div style="font-size:10px;font-weight:600;color:#059669">เข้างานแล้ว</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#059669">' + Number(b.clockedIn || 0) + '</div>' +
+          '</div>' +
+          '<div style="background:#fff;padding:8px 4px;border-radius:8px;border:1px solid #cbd5e1">' +
+            '<div style="font-size:10px;font-weight:600;color:#dc2626">ยังไม่เข้า</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#dc2626">' + Number(b.notClockedIn || 0) + '</div>' +
+          '</div>' +
+          '<div style="background:#fff;padding:8px 4px;border-radius:8px;border:1px solid #cbd5e1">' +
+            '<div style="font-size:10px;font-weight:600;color:#d97706">มาสาย</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#d97706">' + Number(b.late || 0) + '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="font-size:10.5px;color:#64748b;text-align:center">' +
+          'เวลากะปกติ: ' + esc(b.workStartTime || '09:30') + ' - ' + esc(b.workEndTime || '19:00') + ' น.' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    html = '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:10px">' + branchCards + '</div>';
+  }
+
+  container.innerHTML = html;
+}
+
+function copyAttendanceKpiList() {
+  var bd = State.attendanceBreakdown || {};
+  var text = '';
+  var dateStr = State.attendanceDateDisplay || bd.targetDate || 'วันนี้';
+
+  if (_currentAttKpiMode === 'NOT_CLOCKED_IN') {
+    var list = bd.notClockedInList || [];
+    text = '📋 รายชื่อพนักงานที่ยังไม่เข้างาน (' + dateStr + ') รวม ' + list.length + ' คน:\n\n';
+    list.forEach(function(item, idx) {
+      text += (idx + 1) + '. ' + item.name + ' (' + (item.nickname || '-') + ') [' + item.empId + '] - ' + item.branchName + '\n' +
+        '   สถานะ: ' + (item.hasLeave ? ('มีใบลา (' + item.leaveType + ')') : 'ยังไม่แจ้งสาเหตุ') + '\n' +
+        '   เบอร์โทร: ' + (item.phone || '-') + '\n\n';
+    });
+  } else if (_currentAttKpiMode === 'CLOCKED_IN') {
+    var list = bd.clockedInList || [];
+    text = '📋 รายชื่อพนักงานที่เข้างานแล้ว (' + dateStr + ') รวม ' + list.length + ' คน:\n\n';
+    list.forEach(function(item, idx) {
+      text += (idx + 1) + '. ' + item.name + ' (' + (item.nickname || '-') + ') [' + item.empId + '] - เข้างาน: ' + (item.clockIn || '-') + ' น. (' + item.branchName + ')\n';
+    });
+  } else if (_currentAttKpiMode === 'LATE') {
+    var list = bd.lateList || [];
+    text = '📋 รายชื่อพนักงานที่มาสาย (' + dateStr + ') รวม ' + list.length + ' คน:\n\n';
+    list.forEach(function(item, idx) {
+      text += (idx + 1) + '. ' + item.name + ' (' + (item.nickname || '-') + ') [' + item.empId + '] - สาย ' + item.lateMinutes + ' นาที (สแกน ' + item.clockIn + ' น.) เบอร์โทร: ' + (item.phone || '-') + '\n';
+    });
+  } else if (_currentAttKpiMode === 'PENDING') {
+    var p = State.attendancePendingData || { leaves: [], ots: [], advances: [] };
+    text = '📋 รายการคำขอรออนุมัติ PTN Time (' + dateStr + '):\n' +
+      '- คำขอลา: ' + (p.leaves.length || 0) + ' รายการ\n' +
+      '- ขอ OT: ' + (p.ots.length || 0) + ' รายการ\n' +
+      '- ขอเบิกเงิน: ' + (p.advances.length || 0) + ' รายการ\n';
+  } else if (_currentAttKpiMode === 'TOTAL_STAFF') {
+    var list = bd.branchSummary || [];
+    text = '📋 สรุปอัตรากำลังพล 4 สาขา (' + dateStr + '):\n\n';
+    list.forEach(function(b) {
+      text += b.branchName + ': ทั้งหมด ' + b.totalStaff + ' คน (เข้าแล้ว ' + b.clockedIn + ' คน, ยังไม่เข้า ' + b.notClockedIn + ' คน, สาย ' + b.late + ' คน)\n';
+    });
+  }
+
+  if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(function() {
+      showToast('คัดลอกรายชื่อเรียบร้อยแล้ว', 'success');
+    }).catch(function() {
+      showToast('ไม่สามารถคัดลอกได้อัตโนมัติ', 'warning');
+    });
+  } else {
+    showToast('คัดลอกรายชื่อเรียบร้อยแล้ว', 'success');
+  }
 }
 
 function saveAttendanceSettingsFromPayroll(e) {

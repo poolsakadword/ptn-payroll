@@ -1527,13 +1527,25 @@ footer {
   gap: 14px;
   margin-bottom: 16px;
 }
+.square-kpi-grid.five-cols {
+  grid-template-columns: repeat(5, 1fr);
+}
+@media (max-width: 1200px) {
+  .square-kpi-grid.five-cols {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
 @media (max-width: 900px) {
   .square-kpi-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  .square-kpi-grid.five-cols {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
-@media (max-width: 480px) {
-  .square-kpi-grid {
+@media (max-width: 520px) {
+  .square-kpi-grid,
+  .square-kpi-grid.five-cols {
     grid-template-columns: 1fr;
   }
 }
@@ -1555,6 +1567,17 @@ footer {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   border-color: #cbd5e1;
+}
+.square-kpi-card.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+.square-kpi-card.clickable:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+.square-kpi-card.clickable:active {
+  transform: translateY(-1px);
 }
 .square-kpi-card.blue { border-left: 4px solid var(--primary); }
 .square-kpi-card.green { border-left: 4px solid var(--success); }

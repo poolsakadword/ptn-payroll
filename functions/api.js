@@ -1816,7 +1816,7 @@ async function handleAction(db, action, params) {
 
       // 1.0 Employees list for search & selector
       const empRows = await db.prepare(`
-        SELECT emp_id, full_name, nickname, department, position, branch_id, photo_url
+        SELECT emp_id, full_name, nickname, department, position, branch_id, photo_url, phone
         FROM employees
         WHERE status != 'Resigned'
         ORDER BY emp_id ASC
@@ -1848,7 +1848,7 @@ async function handleAction(db, action, params) {
         selectedEmp = employeeList.find(e => e.emp_id === empFilter) || (await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empFilter).first().catch(() => null));
         
         logsQuery = await db.prepare(`
-          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id, b.branch_name
+          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.phone, e.photo_url, e.branch_id as emp_branch_id, b.branch_name
           FROM time_logs l
           LEFT JOIN employees e ON l.emp_id = e.emp_id
           LEFT JOIN branches b ON (l.branch_id = b.branch_id OR (l.branch_id IS NULL AND e.branch_id = b.branch_id))
@@ -1859,7 +1859,7 @@ async function handleAction(db, action, params) {
       } else {
         if (branchFilter && branchFilter !== 'ALL') {
           logsQuery = await db.prepare(`
-            SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id, b.branch_name
+            SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.phone, e.photo_url, e.branch_id as emp_branch_id, b.branch_name
             FROM time_logs l
             LEFT JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN branches b ON (l.branch_id = b.branch_id OR (l.branch_id IS NULL AND e.branch_id = b.branch_id))
@@ -1869,7 +1869,7 @@ async function handleAction(db, action, params) {
           `).bind(...dateBinds, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
         } else {
           logsQuery = await db.prepare(`
-            SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id, b.branch_name
+            SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.phone, e.photo_url, e.branch_id as emp_branch_id, b.branch_name
             FROM time_logs l
             LEFT JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN branches b ON (l.branch_id = b.branch_id OR (l.branch_id IS NULL AND e.branch_id = b.branch_id))
@@ -2140,11 +2140,130 @@ async function handleAction(db, action, params) {
         pendingAdvances = advQuery.results || [];
       }
 
-      // 5. KPI & Settings
-      const empCountRow = await db.prepare('SELECT COUNT(*) as c FROM employees WHERE status != "Resigned"').first().catch(() => ({ c: 0 }));
-      const totalEmployees = empCountRow?.c || 0;
-      const clockedIn = logsToday.filter(x => x.clock_in).length;
-      const late = logsToday.filter(x => (x.late_minutes || 0) > 0).length;
+      // 5. KPI & Attendance Breakdown for All 5 Cards
+      const targetDate = filterDate || today;
+      const branchMap = {};
+      for (const b of branches) branchMap[b.branch_id] = b;
+
+      const activeEmps = (branchFilter && branchFilter !== 'ALL')
+        ? employeeList.filter(e => e.branch_id === branchFilter)
+        : employeeList;
+
+      // Map logs on targetDate
+      const targetLogsMap = {};
+      const clockedInList = [];
+      const lateList = [];
+
+      for (const log of logsToday) {
+        if (log.clock_in && (!log.date || log.date === targetDate)) {
+          if (!targetLogsMap[log.emp_id]) {
+            targetLogsMap[log.emp_id] = log;
+          }
+          clockedInList.push({
+            id: log.id,
+            empId: log.emp_id,
+            name: log.full_name || '',
+            nickname: log.nickname || '',
+            dept: log.department || '',
+            position: log.position || '',
+            branchId: log.branch_id || log.emp_branch_id || '',
+            branchName: log.branch_name || (branchMap[log.branch_id || log.emp_branch_id]?.branch_name) || '',
+            clockIn: log.clock_in || '',
+            clockOut: log.clock_out || '',
+            inPhotoUrl: log.in_photo_url || '',
+            outPhotoUrl: log.out_photo_url || '',
+            workHours: Number(log.work_hours || 0),
+            lateMinutes: Number(log.late_minutes || 0),
+            status: log.status || 'NORMAL',
+            phone: log.phone || ''
+          });
+
+          if ((Number(log.late_minutes) || 0) > 0) {
+            const bInfo = branchMap[log.branch_id || log.emp_branch_id] || {};
+            lateList.push({
+              id: log.id,
+              empId: log.emp_id,
+              name: log.full_name || '',
+              nickname: log.nickname || '',
+              dept: log.department || '',
+              position: log.position || '',
+              branchId: log.branch_id || log.emp_branch_id || '',
+              branchName: log.branch_name || bInfo.branch_name || '',
+              clockIn: log.clock_in || '',
+              lateMinutes: Number(log.late_minutes || 0),
+              shiftStart: bInfo.work_start_time || '09:30',
+              phone: log.phone || ''
+            });
+          }
+        }
+      }
+
+      // Approved leaves on targetDate
+      let leaveOnTargetDateMap = {};
+      try {
+        const approvedLeavesOnDate = await db.prepare(`
+          SELECT lr.*, e.full_name, e.nickname, e.phone
+          FROM leave_requests lr
+          LEFT JOIN employees e ON lr.emp_id = e.emp_id
+          WHERE lr.status = 'APPROVED'
+            AND ? >= lr.start_date AND ? <= lr.end_date
+        `).bind(targetDate, targetDate).all().catch(() => ({ results: [] }));
+        for (const lr of (approvedLeavesOnDate.results || [])) {
+          leaveOnTargetDateMap[lr.emp_id] = lr;
+        }
+      } catch(e) {
+        console.warn('leave on target date query error:', e);
+      }
+
+      // Unclocked employees (Active employees who did NOT clock in on targetDate)
+      const notClockedInList = [];
+      for (const emp of activeEmps) {
+        if (!targetLogsMap[emp.emp_id]) {
+          const empBranch = branchMap[emp.branch_id] || {};
+          const branchName = empBranch.branch_name || emp.branch_id || 'สำนักงานใหญ่';
+          const shiftStart = empBranch.work_start_time || '09:30';
+          const shiftEnd = empBranch.work_end_time || '19:00';
+          const lr = leaveOnTargetDateMap[emp.emp_id];
+
+          notClockedInList.push({
+            empId: emp.emp_id,
+            name: emp.full_name || '',
+            nickname: emp.nickname || '',
+            dept: emp.department || '',
+            position: emp.position || '',
+            branchId: emp.branch_id || 'B01',
+            branchName: branchName,
+            phone: emp.phone || '',
+            photoUrl: emp.photo_url || '',
+            shiftStart: shiftStart,
+            shiftEnd: shiftEnd,
+            shiftText: `${shiftStart} - ${shiftEnd} น.`,
+            hasLeave: Boolean(lr),
+            leaveType: lr ? (lr.leave_type || 'ลาหยุด') : null,
+            leaveReason: lr ? (lr.reason || '') : null,
+            leaveDays: lr ? (lr.days_count || 1) : 0,
+            type: lr ? 'LEAVE' : 'NO_EXCUSE'
+          });
+        }
+      }
+
+      // Branch staffing summary
+      const branchSummary = branches.map(b => {
+        const bEmps = employeeList.filter(e => e.branch_id === b.branch_id);
+        const bIn = clockedInList.filter(c => (c.branchId === b.branch_id));
+        const bNot = notClockedInList.filter(n => (n.branchId === b.branch_id));
+        const bLate = lateList.filter(l => (l.branchId === b.branch_id));
+        return {
+          branchId: b.branch_id,
+          branchName: b.branch_name,
+          workStartTime: b.work_start_time || '09:30',
+          workEndTime: b.work_end_time || '19:00',
+          totalStaff: bEmps.length,
+          clockedIn: bIn.length,
+          notClockedIn: bNot.length,
+          late: bLate.length
+        };
+      });
 
       const pendingCountRow = await db.prepare(`
         SELECT 
@@ -2153,6 +2272,14 @@ async function handleAction(db, action, params) {
           (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending
       `).first().catch(() => ({ total_pending: 0 }));
       const pendingApprovals = pendingCountRow?.total_pending || 0;
+
+      const kpi = {
+        totalEmployees: activeEmps.length,
+        clockedIn: clockedInList.length,
+        notClockedIn: notClockedInList.length,
+        late: lateList.length,
+        pendingApprovals
+      };
 
       // Settings
       const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
@@ -2208,11 +2335,13 @@ async function handleAction(db, action, params) {
         reqCutoffDates: reqCutoff,
         settings: attSettings,
         branches,
-        kpi: {
-          totalEmployees,
-          clockedIn,
-          late,
-          pendingApprovals
+        kpi,
+        attendanceBreakdown: {
+          targetDate,
+          clockedInList,
+          notClockedInList,
+          lateList,
+          branchSummary
         }
       };
     }
