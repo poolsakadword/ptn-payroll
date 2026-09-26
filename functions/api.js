@@ -2355,7 +2355,12 @@ async function handleAction(db, action, params) {
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์อนุมัติคำขอ' };
 
       const { type, id, decision, rejectionReason } = params;
-      const status = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+      let status = 'APPROVED';
+      if (decision === 'REJECT') {
+        status = 'REJECTED';
+      } else if (decision === 'PENDING' || decision === 'RESET') {
+        status = 'PENDING';
+      }
 
       if (decision === 'DELETE') {
         if (type === 'leave') {
@@ -2374,7 +2379,7 @@ async function handleAction(db, action, params) {
           UPDATE leave_requests 
           SET status = ?, approver_id = ?, approved_at = CURRENT_TIMESTAMP, rejection_reason = ?
           WHERE id = ?
-        `).bind(status, approverId, rejectionReason || '', id).run();
+        `).bind(status, approverId, status === 'REJECTED' ? (rejectionReason || '') : '', id).run();
       } else if (type === 'ot') {
         await db.prepare(`
           UPDATE ot_requests 
@@ -2386,11 +2391,12 @@ async function handleAction(db, action, params) {
           UPDATE advance_requests 
           SET status = ?, approver_id = ?, approved_at = CURRENT_TIMESTAMP, rejection_reason = ?
           WHERE id = ?
-        `).bind(status, approverId, rejectionReason || '', id).run();
+        `).bind(status, approverId, status === 'REJECTED' ? (rejectionReason || '') : '', id).run();
       }
 
       await logSystemActivity(db, approverId, 'ATTENDANCE_APPROVAL', `${status} คำขอ ${type} (ID: ${id})`);
-      return { success: true, message: `ดำเนินการ ${decision === 'APPROVE' ? 'อนุมัติ' : 'ปฏิเสธ'} คำขอเรียบร้อยแล้ว` };
+      const msg = status === 'APPROVED' ? 'อนุมัติคำขอเรียบร้อยแล้ว' : (status === 'PENDING' ? 'เปลี่ยนสถานะเป็นรออนุมัติแล้ว' : 'ปฏิเสธคำขอเรียบร้อยแล้ว');
+      return { success: true, message: msg };
     }
 
     // 5.3.1 DELETE ATTENDANCE REQUEST (PERMANENT DELETE FOR LEAVE, OT, ADVANCE)
@@ -2414,6 +2420,47 @@ async function handleAction(db, action, params) {
 
       await logSystemActivity(db, callerUser, 'DELETE_ATTENDANCE_REQUEST', `ลบคำขอ ${type} ID: ${id}`);
       return { success: true, message: `ลบคำขอ ${type} ออกจากระบบเรียบร้อยแล้ว` };
+    }
+
+    // 5.3.2 UPDATE ATTENDANCE REQUEST (EDIT DETAILS FOR LEAVE, OT, ADVANCE)
+    case 'updateAttendanceRequest': {
+      const callerUser = params.username || 'Admin';
+      const allowed = await userHasPermission(db, callerUser, 'approve_attendance');
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์แก้ไขคำขอ' };
+
+      const { type, id, updates } = params;
+      if (!type || !id || !updates) return { success: false, message: 'ระบุข้อมูลไม่ครบถ้วน' };
+
+      if (type === 'leave') {
+        const { leaveType, startDate, endDate, daysCount, reason, status } = updates;
+        const validStatus = status || 'PENDING';
+        await db.prepare(`
+          UPDATE leave_requests
+          SET leave_type = ?, start_date = ?, end_date = ?, days_count = ?, reason = ?, status = ?
+          WHERE id = ?
+        `).bind(leaveType, startDate, endDate, Number(daysCount) || 1.0, reason || '', validStatus, id).run();
+      } else if (type === 'ot') {
+        const { date, startTime, endTime, hours, reason, status } = updates;
+        const validStatus = status || 'PENDING';
+        await db.prepare(`
+          UPDATE ot_requests
+          SET date = ?, start_time = ?, end_time = ?, planned_hours = ?, actual_hours = ?, reason = ?, status = ?
+          WHERE id = ?
+        `).bind(date, startTime || '', endTime || '', Number(hours) || 0, Number(hours) || 0, reason || '', validStatus, id).run();
+      } else if (type === 'advance') {
+        const { requestDate, amount, reason, status } = updates;
+        const validStatus = status || 'PENDING';
+        await db.prepare(`
+          UPDATE advance_requests
+          SET request_date = ?, amount = ?, reason = ?, status = ?
+          WHERE id = ?
+        `).bind(requestDate, Number(amount) || 0, reason || '', validStatus, id).run();
+      } else {
+        return { success: false, message: 'ประเภทคำขอไม่ถูกต้อง' };
+      }
+
+      await logSystemActivity(db, callerUser, 'UPDATE_ATTENDANCE_REQUEST', `แก้ไขข้อมูลคำขอ ${type} (ID: ${id})`);
+      return { success: true, message: `บันทึกการแก้ไขคำขอ ${type} เรียบร้อยแล้ว` };
     }
 
     // 5.4 GET MASTER UNLOCK QR TOKEN

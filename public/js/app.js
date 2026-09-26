@@ -8276,6 +8276,11 @@ function loadTimeAttendanceDashboard() {
       renderTimeAttendanceTodayLogs(_currentAttendanceLogs, _currentAttendanceIsIndividual);
       renderTimeAttendanceApprovals(r.pendingLeaves || [], r.pendingOts || [], r.pendingAdvances || []);
 
+      var kpiModal = document.getElementById('modalAttendanceKpiDetails');
+      if (kpiModal && kpiModal.classList.contains('active')) {
+        renderAttendanceKpiModalList();
+      }
+
       // Reset selection
       var masterCb = document.getElementById('attSelectAllLogs');
       if (masterCb) masterCb.checked = false;
@@ -8905,12 +8910,16 @@ function getAttendanceActionButtons(type, item) {
   if (status === 'PENDING') {
     html += '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#991b1b;font-weight:700" onclick="approveAttendanceRequest(\'' + type + '\', ' + item.id + ', \'REJECT\')"><i class="fa-solid fa-xmark"></i> ปฏิเสธ</button>';
     html += '<button type="button" class="btn btn-sm btn-green" style="font-weight:700" onclick="approveAttendanceRequest(\'' + type + '\', ' + item.id + ', \'APPROVE\')"><i class="fa-solid fa-check"></i> อนุมัติ</button>';
+    html += '<button type="button" class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;font-weight:600;border:1px solid #bae6fd" title="แก้ไขรายละเอียดคำขอ" onclick="openEditAttendanceRequestModal(\'' + type + '\', ' + item.id + ')"><i class="fa-solid fa-pen-to-square"></i> แก้ไข</button>';
     html += '<button type="button" class="btn btn-sm" style="background:#fff;color:#ef4444;font-weight:600;border:1px solid #fca5a5" title="ลบคำขอนี้ออกจากระบบถาวร" onclick="deleteAttendanceRequest(\'' + type + '\', ' + item.id + ')"><i class="fa-solid fa-trash-can"></i> ลบ</button>';
   } else if (status === 'APPROVED') {
+    html += '<button type="button" class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;font-weight:600;border:1px solid #bae6fd" title="แก้ไขรายละเอียดคำขอ" onclick="openEditAttendanceRequestModal(\'' + type + '\', ' + item.id + ')"><i class="fa-solid fa-pen-to-square"></i> แก้ไข</button>';
     html += '<button type="button" class="btn btn-sm" style="background:#fff7ed;color:#c2410c;font-weight:700;border:1px solid #fed7aa" title="ยกเลิกการอนุมัติและลบคำขอ" onclick="approveAttendanceRequest(\'' + type + '\', ' + item.id + ', \'DELETE\')"><i class="fa-solid fa-ban"></i> ยกเลิกอนุมัติ</button>';
     html += '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;font-weight:700;border:1px solid #fca5a5" title="ลบคำขอนี้ออกจากระบบถาวร" onclick="deleteAttendanceRequest(\'' + type + '\', ' + item.id + ')"><i class="fa-solid fa-trash-can"></i> ลบคำขอ</button>';
   } else {
     // REJECTED
+    html += '<button type="button" class="btn btn-sm btn-green" style="font-weight:700" title="เปลี่ยนใจกลับมาอนุมัติคำขอนี้" onclick="approveAttendanceRequest(\'' + type + '\', ' + item.id + ', \'APPROVE\')"><i class="fa-solid fa-rotate-left"></i> เปลี่ยนเป็นอนุมัติ</button>';
+    html += '<button type="button" class="btn btn-sm" style="background:#f0f9ff;color:#0369a1;font-weight:600;border:1px solid #bae6fd" title="แก้ไขรายละเอียดคำขอ" onclick="openEditAttendanceRequestModal(\'' + type + '\', ' + item.id + ')"><i class="fa-solid fa-pen-to-square"></i> แก้ไข</button>';
     html += '<button type="button" class="btn btn-sm" style="background:#fee2e2;color:#dc2626;font-weight:700;border:1px solid #fca5a5" title="ลบคำขอนี้ออกจากระบบถาวร" onclick="deleteAttendanceRequest(\'' + type + '\', ' + item.id + ')"><i class="fa-solid fa-trash-can"></i> ลบคำขอ</button>';
   }
   return html;
@@ -8920,6 +8929,12 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
   var container = document.getElementById('attPendingListContainer');
   var countEl = document.getElementById('attPendingCountDisplay');
   if (!container) return;
+
+  State.attendanceCurrentRequests = {
+    leave: leaves || [],
+    ot: ots || [],
+    advance: advances || []
+  };
 
   var total = (leaves ? leaves.length : 0) + (ots ? ots.length : 0) + (advances ? advances.length : 0);
   if (countEl) countEl.textContent = total;
@@ -9070,6 +9085,161 @@ function deleteAttendanceRequest(type, id) {
     })
     .catch(function(err) {
       showToast(err.message || 'เกิดข้อผิดพลาดในการลบคำขอ', 'error');
+    });
+}
+
+function openEditAttendanceRequestModal(type, id) {
+  var item = null;
+  // Try current active/filtered requests list
+  if (State.attendanceCurrentRequests && State.attendanceCurrentRequests[type]) {
+    item = State.attendanceCurrentRequests[type].find(function(x) { return Number(x.id) === Number(id); });
+  }
+  // Fallback to State.attendancePendingData
+  if (!item && State.attendancePendingData) {
+    var key = type === 'leave' ? 'leaves' : (type === 'ot' ? 'ots' : 'advances');
+    if (State.attendancePendingData[key]) {
+      item = State.attendancePendingData[key].find(function(x) { return Number(x.id) === Number(id); });
+    }
+  }
+
+  if (!item) {
+    showToast('ไม่พบข้อมูลคำขอที่ต้องการแก้ไข', 'error');
+    return;
+  }
+
+  // Set hidden values
+  var typeEl = document.getElementById('editAttReqType');
+  var idEl = document.getElementById('editAttReqId');
+  if (typeEl) typeEl.value = type;
+  if (idEl) idEl.value = id;
+
+  // Set employee info & badge
+  var nameEl = document.getElementById('editAttReqEmpName');
+  var deptEl = document.getElementById('editAttReqEmpDept');
+  var badgeEl = document.getElementById('editAttReqTypeBadge');
+  if (nameEl) nameEl.textContent = (item.full_name || item.emp_id) + (item.emp_id ? ' [' + item.emp_id + ']' : '');
+  if (deptEl) deptEl.textContent = item.department || '-';
+
+  var leaveSection = document.getElementById('editAttReqLeaveFields');
+  var otSection = document.getElementById('editAttReqOtFields');
+  var advSection = document.getElementById('editAttReqAdvanceFields');
+
+  if (type === 'leave') {
+    if (badgeEl) {
+      badgeEl.textContent = 'คำขอลางาน';
+      badgeEl.style.background = '#dbeafe';
+      badgeEl.style.color = '#1d4ed8';
+    }
+    if (leaveSection) leaveSection.style.display = 'flex';
+    if (otSection) otSection.style.display = 'none';
+    if (advSection) advSection.style.display = 'none';
+
+    var leaveTypeEl = document.getElementById('editAttReqLeaveType');
+    var startDateEl = document.getElementById('editAttReqLeaveStartDate');
+    var endDateEl = document.getElementById('editAttReqLeaveEndDate');
+    var daysEl = document.getElementById('editAttReqLeaveDaysCount');
+
+    if (leaveTypeEl) leaveTypeEl.value = item.leave_type || 'SICK_WITH_CERT';
+    if (startDateEl) startDateEl.value = item.start_date || '';
+    if (endDateEl) endDateEl.value = item.end_date || '';
+    if (daysEl) daysEl.value = item.days_count || 1;
+  } else if (type === 'ot') {
+    if (badgeEl) {
+      badgeEl.textContent = 'คำขอทำ OT';
+      badgeEl.style.background = '#fef3c7';
+      badgeEl.style.color = '#b45309';
+    }
+    if (leaveSection) leaveSection.style.display = 'none';
+    if (otSection) otSection.style.display = 'flex';
+    if (advSection) advSection.style.display = 'none';
+
+    var otDateEl = document.getElementById('editAttReqOtDate');
+    var otStartEl = document.getElementById('editAttReqOtStartTime');
+    var otEndEl = document.getElementById('editAttReqOtEndTime');
+    var otHoursEl = document.getElementById('editAttReqOtHours');
+
+    if (otDateEl) otDateEl.value = item.date || '';
+    if (otStartEl) otStartEl.value = item.start_time || '';
+    if (otEndEl) otEndEl.value = item.end_time || '';
+    if (otHoursEl) otHoursEl.value = item.planned_hours || item.actual_hours || item.hours || 0;
+  } else if (type === 'advance') {
+    if (badgeEl) {
+      badgeEl.textContent = 'คำขอเบิกเงินล่วงหน้า';
+      badgeEl.style.background = '#d1fae5';
+      badgeEl.style.color = '#047857';
+    }
+    if (leaveSection) leaveSection.style.display = 'none';
+    if (otSection) otSection.style.display = 'none';
+    if (advSection) advSection.style.display = 'flex';
+
+    var advDateEl = document.getElementById('editAttReqAdvDate');
+    var advAmtEl = document.getElementById('editAttReqAdvAmount');
+
+    if (advDateEl) advDateEl.value = item.request_date || (item.created_at ? String(item.created_at).substring(0, 10) : '');
+    if (advAmtEl) advAmtEl.value = item.amount || 0;
+  }
+
+  var reasonEl = document.getElementById('editAttReqReason');
+  var statusEl = document.getElementById('editAttReqStatus');
+  if (reasonEl) reasonEl.value = item.reason || '';
+  if (statusEl) statusEl.value = item.status || 'PENDING';
+
+  openModal('modalEditAttendanceRequest');
+}
+
+function saveEditAttendanceRequestForm(event) {
+  if (event) event.preventDefault();
+  var type = document.getElementById('editAttReqType').value;
+  var id = document.getElementById('editAttReqId').value;
+  if (!type || !id) return;
+
+  var updates = {};
+  if (type === 'leave') {
+    updates = {
+      leaveType: document.getElementById('editAttReqLeaveType').value,
+      startDate: document.getElementById('editAttReqLeaveStartDate').value,
+      endDate: document.getElementById('editAttReqLeaveEndDate').value,
+      daysCount: parseFloat(document.getElementById('editAttReqLeaveDaysCount').value) || 1,
+      reason: document.getElementById('editAttReqReason').value.trim(),
+      status: document.getElementById('editAttReqStatus').value
+    };
+  } else if (type === 'ot') {
+    updates = {
+      date: document.getElementById('editAttReqOtDate').value,
+      startTime: document.getElementById('editAttReqOtStartTime').value,
+      endTime: document.getElementById('editAttReqOtEndTime').value,
+      hours: parseFloat(document.getElementById('editAttReqOtHours').value) || 0,
+      reason: document.getElementById('editAttReqReason').value.trim(),
+      status: document.getElementById('editAttReqStatus').value
+    };
+  } else if (type === 'advance') {
+    updates = {
+      requestDate: document.getElementById('editAttReqAdvDate').value,
+      amount: parseFloat(document.getElementById('editAttReqAdvAmount').value) || 0,
+      reason: document.getElementById('editAttReqReason').value.trim(),
+      status: document.getElementById('editAttReqStatus').value
+    };
+  }
+
+  callApi('updateAttendanceRequest', {
+    type: type,
+    id: id,
+    updates: updates,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      closeModal('modalEditAttendanceRequest');
+      showToast(r.message || 'บันทึกการแก้ไขคำขอสำเร็จแล้ว', 'success');
+      loadTimeAttendanceDashboard();
+      var kpiModal = document.getElementById('modalAttendanceKpiDetails');
+      if (kpiModal && kpiModal.classList.contains('active')) {
+        setTimeout(function() {
+          renderAttendanceKpiModalList();
+        }, 400);
+      }
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
     });
 }
 
@@ -9480,10 +9650,13 @@ function renderAttendanceKpiModalList() {
               '</button>' +
             '</div>' : '') +
           '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:4px">' +
-            '<button type="button" class="btn btn-sm btn-success" onclick="approveAttendanceItem(\'' + item.type + '\', ' + item.id + ', \'APPROVE\')" style="font-size:11.5px;padding:4px 12px;font-weight:700">' +
+            '<button type="button" class="btn btn-sm" onclick="openEditAttendanceRequestModal(\'' + item.type + '\', ' + item.id + ')" style="font-size:11.5px;padding:4px 12px;font-weight:700;background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd">' +
+              '<i class="fa-solid fa-pen-to-square"></i> แก้ไข' +
+            '</button>' +
+            '<button type="button" class="btn btn-sm btn-success" onclick="approveAttendanceRequest(\'' + item.type + '\', ' + item.id + ', \'APPROVE\')" style="font-size:11.5px;padding:4px 12px;font-weight:700">' +
               '<i class="fa-solid fa-check"></i> อนุมัติ' +
             '</button>' +
-            '<button type="button" class="btn btn-sm btn-danger" onclick="approveAttendanceItem(\'' + item.type + '\', ' + item.id + ', \'REJECT\')" style="font-size:11.5px;padding:4px 12px;font-weight:700">' +
+            '<button type="button" class="btn btn-sm btn-danger" onclick="approveAttendanceRequest(\'' + item.type + '\', ' + item.id + ', \'REJECT\')" style="font-size:11.5px;padding:4px 12px;font-weight:700">' +
               '<i class="fa-solid fa-xmark"></i> ปฏิเสธ' +
             '</button>' +
           '</div>' +
