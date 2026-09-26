@@ -1803,6 +1803,141 @@ async function handleAction(db, action, params) {
       };
     }
 
+    // 5.2.1 DEDICATED LIGHTWEIGHT ATTENDANCE REQUESTS FOR APPROVALS CENTER TAB
+    case 'getAttendanceRequests': {
+      const callerUser = params.username || 'Admin';
+      const isAllowed = await userHasPermission(db, callerUser, 'view_attendance');
+      if (!isAllowed) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา' };
+      }
+
+      const reqStatus = String(params.requestStatus || 'PENDING').toUpperCase(); // 'PENDING', 'APPROVED', 'REJECTED', 'ALL'
+      const reqType = String(params.requestType || 'ALL').toUpperCase(); // 'ALL', 'LEAVE', 'OT', 'ADVANCE'
+      const reqDateMode = String(params.requestDateMode || 'ALL').toUpperCase(); // 'ALL', 'SINGLE', 'MONTH', 'PERIOD', 'RANGE'
+      const reqDate = params.requestDate ? String(params.requestDate).trim() : '';
+      const reqMonth = params.requestMonth ? String(params.requestMonth).trim() : '';
+      const reqPeriod = params.requestPeriod ? String(params.requestPeriod).trim() : '';
+      const reqStartDate = params.requestStartDate ? String(params.requestStartDate).trim() : '';
+      const reqEndDate = params.requestEndDate ? String(params.requestEndDate).trim() : '';
+      const reqEmpFilter = String(params.requestEmpId || params.empId || 'ALL').trim();
+
+      let reqCutoff = null;
+      if (reqDateMode === 'PERIOD' && reqPeriod) {
+        reqCutoff = await getCutoffDatesForPeriod(db, reqPeriod);
+      }
+
+      // 1. Leave conditions
+      const leaveConds = [];
+      const leaveBinds = [];
+      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+        leaveConds.push("lr.status = ?");
+        leaveBinds.push(reqStatus);
+      } else if (reqStatus === 'PENDING') {
+        leaveConds.push("lr.status = 'PENDING'");
+      }
+      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+        leaveConds.push("lr.emp_id = ?");
+        leaveBinds.push(reqEmpFilter);
+      }
+      if (reqDateMode === 'SINGLE' && reqDate) {
+        leaveConds.push("(substr(datetime(lr.created_at, '+7 hours'), 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
+        leaveBinds.push(reqDate, reqDate);
+      } else if (reqDateMode === 'MONTH' && reqMonth) {
+        leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ? OR substr(datetime(lr.created_at, '+7 hours'), 1, 7) = ?)");
+        leaveBinds.push(reqMonth + '-%', reqMonth + '-%', reqMonth);
+      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+        leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+        leaveBinds.push(reqCutoff.endDate, reqCutoff.startDate, reqCutoff.startDate, reqCutoff.endDate);
+      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+        leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+        leaveBinds.push(reqEndDate, reqStartDate, reqStartDate, reqEndDate);
+      }
+      const leaveWhere = leaveConds.length > 0 ? "WHERE " + leaveConds.join(" AND ") : "";
+
+      // 2. OT conditions
+      const otConds = [];
+      const otBinds = [];
+      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+        otConds.push("ot.status = ?");
+        otBinds.push(reqStatus);
+      } else if (reqStatus === 'PENDING') {
+        otConds.push("ot.status = 'PENDING'");
+      }
+      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+        otConds.push("ot.emp_id = ?");
+        otBinds.push(reqEmpFilter);
+      }
+      if (reqDateMode === 'SINGLE' && reqDate) {
+        otConds.push("(ot.date = ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 10) = ?)");
+        otBinds.push(reqDate, reqDate);
+      } else if (reqDateMode === 'MONTH' && reqMonth) {
+        otConds.push("(ot.date LIKE ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 7) = ?)");
+        otBinds.push(reqMonth + '-%', reqMonth);
+      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+        otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+        otBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
+      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+        otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+        otBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
+      }
+      const otWhere = otConds.length > 0 ? "WHERE " + otConds.join(" AND ") : "";
+
+      // 3. Advance conditions
+      const advConds = [];
+      const advBinds = [];
+      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+        advConds.push("ar.status = ?");
+        advBinds.push(reqStatus);
+      } else if (reqStatus === 'PENDING') {
+        advConds.push("ar.status = 'PENDING'");
+      }
+      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+        advConds.push("ar.emp_id = ?");
+        advBinds.push(reqEmpFilter);
+      }
+      if (reqDateMode === 'SINGLE' && reqDate) {
+        advConds.push("(ar.request_date = ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 10) = ?)");
+        advBinds.push(reqDate, reqDate);
+      } else if (reqDateMode === 'MONTH' && reqMonth) {
+        advConds.push("(ar.request_date LIKE ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 7) = ?)");
+        advBinds.push(reqMonth + '-%', reqMonth);
+      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+        advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+        advBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
+      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+        advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+        advBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
+      }
+      const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
+
+      // Sequential execution (ultra fast & zero Worker limit risk)
+      let pendingLeaves = [];
+      if (reqType === 'ALL' || reqType === 'LEAVE') {
+        const r = await db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT 150`).bind(...leaveBinds).all().catch(() => ({ results: [] }));
+        pendingLeaves = r.results || [];
+      }
+
+      let pendingOts = [];
+      if (reqType === 'ALL' || reqType === 'OT') {
+        const r = await db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT 150`).bind(...otBinds).all().catch(() => ({ results: [] }));
+        pendingOts = r.results || [];
+      }
+
+      let pendingAdvances = [];
+      if (reqType === 'ALL' || reqType === 'ADVANCE') {
+        const r = await db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 150`).bind(...advBinds).all().catch(() => ({ results: [] }));
+        pendingAdvances = r.results || [];
+      }
+
+      return {
+        success: true,
+        pendingLeaves,
+        pendingOts,
+        pendingAdvances,
+        reqCutoffDates: reqCutoff
+      };
+    }
+
     // 5.2 TIME ATTENDANCE ADMIN DASHBOARD (CENTRALIZED IN PAYROLL)
     case 'getTimeAttendanceDashboard': {
       const callerUser = params.username || 'Admin';
@@ -2075,30 +2210,20 @@ async function handleAction(db, action, params) {
       }
       const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
 
-      // 3. PARALLEL EXECUTION OF INDEPENDENT QUERIES (SAVES ~80% LATENCY & D1 CONTENTION)
-      const branchPromise = db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
-      const leavesPromise = (reqType === 'ALL' || reqType === 'LEAVE')
-        ? db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT 100`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
-        : Promise.resolve({ results: [] });
-      const otsPromise = (reqType === 'ALL' || reqType === 'OT')
-        ? db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT 100`).bind(...otBinds).all().catch(() => ({ results: [] }))
-        : Promise.resolve({ results: [] });
-      const advPromise = (reqType === 'ALL' || reqType === 'ADVANCE')
-        ? db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 100`).bind(...advBinds).all().catch(() => ({ results: [] }))
-        : Promise.resolve({ results: [] });
-      const approvedLeavesPromise = db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE lr.status = 'APPROVED' AND ? >= lr.start_date AND ? <= lr.end_date`).bind(targetDate, targetDate).all().catch(() => ({ results: [] }));
-      const pendingCountPromise = db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 }));
-      const settingsPromise = db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
-
-      const [branchRows, leavesQuery, otsQuery, advQuery, approvedLeavesOnDate, pendingCountRow, setRows] = await Promise.all([
-        branchPromise,
-        leavesPromise,
-        otsPromise,
-        advPromise,
-        approvedLeavesPromise,
-        pendingCountPromise,
-        settingsPromise
-      ]);
+      // 3. EXECUTE INDEPENDENT QUERIES SEQUENTIALLY TO PREVENT CLOUDFLARE WORKER RESOURCE LIMIT (ERROR 1102 / 503)
+      const branchRows = await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
+      const leavesQuery = (reqType === 'ALL' || reqType === 'LEAVE')
+        ? await db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT 100`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
+        : { results: [] };
+      const otsQuery = (reqType === 'ALL' || reqType === 'OT')
+        ? await db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT 100`).bind(...otBinds).all().catch(() => ({ results: [] }))
+        : { results: [] };
+      const advQuery = (reqType === 'ALL' || reqType === 'ADVANCE')
+        ? await db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 100`).bind(...advBinds).all().catch(() => ({ results: [] }))
+        : { results: [] };
+      const approvedLeavesOnDate = await db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE lr.status = 'APPROVED' AND ? >= lr.start_date AND ? <= lr.end_date`).bind(targetDate, targetDate).all().catch(() => ({ results: [] }));
+      const pendingCountRow = await db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 }));
+      const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
 
       const branches = branchRows.results || [];
       const pendingLeaves = leavesQuery.results || [];

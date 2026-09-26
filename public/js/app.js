@@ -7349,7 +7349,7 @@ function setAttendanceRequestFilter(status) {
       }
     }
   });
-  loadTimeAttendanceDashboard();
+  loadAttendanceRequests();
 }
 
 function onAttendanceDateModeChanged() {
@@ -7738,7 +7738,7 @@ function selectAttendanceReqEmp(empId, displayText) {
   }
 
   closeAttendanceReqEmpDropdown();
-  loadTimeAttendanceDashboard();
+  loadAttendanceRequests();
 }
 
 function clearAttendanceReqEmpSearch(e) {
@@ -7892,7 +7892,7 @@ function onAttendanceReqDateModeChanged() {
     }
   }
 
-  loadTimeAttendanceDashboard();
+  loadAttendanceRequests();
 }
 
 function updateAttendanceReqPeriodBadge() {
@@ -7913,7 +7913,7 @@ function updateAttendanceReqPeriodBadge() {
 
 function onAttendanceReqPeriodChanged() {
   updateAttendanceReqPeriodBadge();
-  loadTimeAttendanceDashboard();
+  loadAttendanceRequests();
 }
 
 function setAttendanceReqPeriodCurrent() {
@@ -7924,7 +7924,7 @@ function setAttendanceReqPeriodCurrent() {
     periodInput.value = bangkok.toISOString().substring(0, 7);
   }
   updateAttendanceReqPeriodBadge();
-  loadTimeAttendanceDashboard();
+  loadAttendanceRequests();
 }
 
 function setAttendanceReqMonthCurrent() {
@@ -7934,7 +7934,7 @@ function setAttendanceReqMonthCurrent() {
     var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
     monthInput.value = bangkok.toISOString().substring(0, 7);
   }
-  loadTimeAttendanceDashboard();
+  loadAttendanceRequests();
 }
 
 function onAttendanceReqFiltersChanged() {
@@ -7954,7 +7954,7 @@ function onAttendanceReqFiltersChanged() {
   _currentAttendanceRequestStartDate = startEl ? startEl.value : '';
   _currentAttendanceRequestEndDate = endEl ? endEl.value : '';
 
-  loadTimeAttendanceDashboard();
+  loadAttendanceRequests();
 }
 
 function clearAttendanceReqDateFilter() {
@@ -7971,7 +7971,7 @@ function setAttendanceReqDateToday() {
   var todayStr = bangkok.toISOString().substring(0, 10);
   if (dateEl) dateEl.value = todayStr;
   _currentAttendanceRequestDate = todayStr;
-  loadTimeAttendanceDashboard();
+  loadAttendanceRequests();
 }
 
 function resetAttendanceRequestFilters() {
@@ -8003,6 +8003,70 @@ function resetAttendanceRequestFilters() {
       }
     }
   });
+}
+
+var _loadAttendanceRequestsSeq = 0;
+function loadAttendanceRequests() {
+  var currentSeq = ++_loadAttendanceRequestsSeq;
+  var container = document.getElementById('attPendingListContainer');
+  if (container) {
+    container.innerHTML = '<div class="text-muted text-center" style="padding:32px 16px;font-size:12.5px">' +
+      '<i class="fa-solid fa-spinner fa-spin" style="font-size:26px;color:#2563eb;display:block;margin-bottom:8px"></i>' +
+      '<div style="font-weight:700;color:#334155;font-size:13px">กำลังโหลดรายการคำขอ...</div>' +
+      '<div style="font-size:11.5px;color:#64748b;margin-top:2px">กรุณารอสักครู่</div>' +
+      '</div>';
+  }
+
+  var reqEmpId = (document.getElementById('attReqEmpFilter') && document.getElementById('attReqEmpFilter').value) || _currentAttendanceRequestEmpId || 'ALL';
+  var reqDateMode = (document.getElementById('attReqDateMode') && document.getElementById('attReqDateMode').value) || _currentAttendanceRequestDateMode || 'ALL';
+  var reqDate = (document.getElementById('attReqDate') && document.getElementById('attReqDate').value) || _currentAttendanceRequestDate || '';
+  var reqMonth = (document.getElementById('attReqMonth') && document.getElementById('attReqMonth').value) || _currentAttendanceRequestMonth || '';
+  var reqPeriod = (document.getElementById('attReqPeriod') && document.getElementById('attReqPeriod').value) || _currentAttendanceRequestPeriod || '';
+  var reqStartDate = (document.getElementById('attReqStartDate') && document.getElementById('attReqStartDate').value) || _currentAttendanceRequestStartDate || '';
+  var reqEndDate = (document.getElementById('attReqEndDate') && document.getElementById('attReqEndDate').value) || _currentAttendanceRequestEndDate || '';
+
+  callApi('getAttendanceRequests', {
+    requestStatus: _currentAttendanceRequestStatus,
+    requestType: _currentAttendanceRequestType,
+    requestDateMode: reqDateMode,
+    requestDate: reqDate,
+    requestMonth: reqMonth,
+    requestPeriod: reqPeriod,
+    requestStartDate: reqStartDate,
+    requestEndDate: reqEndDate,
+    requestEmpId: reqEmpId,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (currentSeq !== _loadAttendanceRequestsSeq) return;
+      if (!r || !r.success) {
+        if (container) {
+          container.innerHTML = '<div class="text-center" style="padding:26px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">' +
+            '<i class="fa-solid fa-triangle-exclamation" style="font-size:24px;color:#ef4444;display:block;margin-bottom:8px"></i>' +
+            '<div style="font-weight:700;color:#991b1b;font-size:13px">โหลดข้อมูลคำขอไม่สำเร็จ</div>' +
+            '<div style="font-size:11.5px;color:#b91c1c;margin-top:2px">' + esc(r && r.message ? r.message : 'เกิดข้อผิดพลาดในการโหลด') + '</div>' +
+            '<div style="margin-top:10px"><button type="button" class="btn btn-sm btn-primary" onclick="loadAttendanceRequests()"><i class="fa-solid fa-rotate-right"></i> กดเพื่อลองใหม่อีกครั้ง</button></div>' +
+            '</div>';
+        }
+        return;
+      }
+      if (r.reqCutoffDates && r.reqCutoffDates.label) {
+        var reqBadge = document.getElementById('attReqPeriodCutoffBadge');
+        if (reqBadge) reqBadge.innerHTML = '<i class="fa-solid fa-arrows-rotate" style="font-size:9.5px"></i> ' + esc(r.reqCutoffDates.label);
+      }
+      renderTimeAttendanceApprovals(r.pendingLeaves || [], r.pendingOts || [], r.pendingAdvances || []);
+    })
+    .catch(function(err) {
+      if (currentSeq !== _loadAttendanceRequestsSeq) return;
+      if (container) {
+        container.innerHTML = '<div class="text-center" style="padding:26px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px">' +
+          '<i class="fa-solid fa-triangle-exclamation" style="font-size:24px;color:#ef4444;display:block;margin-bottom:8px"></i>' +
+          '<div style="font-weight:700;color:#991b1b;font-size:13px">โหลดข้อมูลคำขอไม่สำเร็จ</div>' +
+          '<div style="font-size:11.5px;color:#b91c1c;margin-top:2px">' + esc(err.message || err) + '</div>' +
+          '<div style="margin-top:10px"><button type="button" class="btn btn-sm btn-primary" onclick="loadAttendanceRequests()"><i class="fa-solid fa-rotate-right"></i> กดเพื่อลองใหม่อีกครั้ง</button></div>' +
+          '</div>';
+      }
+    });
 }
 
 function calcHaversineDistanceMeters(lat1, lon1, lat2, lon2) {
@@ -8355,6 +8419,10 @@ function loadTimeAttendanceDashboard() {
       if (logsBody) {
         logsBody.innerHTML = '<tr><td colspan="14" class="text-center text-red" style="padding:24px;background:#fef2f2"><i class="fa-solid fa-triangle-exclamation" style="font-size:22px;display:block;margin-bottom:6px"></i>โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '<div style="margin-top:10px"><button type="button" class="btn btn-sm btn-primary" onclick="loadTimeAttendanceDashboard()" style="padding:5px 14px;font-size:12px;font-weight:600;border-radius:6px"><i class="fa-solid fa-rotate-right"></i> กดเพื่อลองใหม่อีกครั้ง</button></div></td></tr>';
       }
+      var pendingBox = document.getElementById('attPendingListContainer');
+      if (pendingBox && _activeAttendanceSubTab === 'approvals') {
+        pendingBox.innerHTML = '<div class="text-center" style="padding:26px 16px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px"><i class="fa-solid fa-triangle-exclamation" style="font-size:24px;color:#ef4444;display:block;margin-bottom:8px"></i><div style="font-weight:700;color:#991b1b;font-size:13px">โหลดข้อมูลไม่สำเร็จ: ' + esc(err.message || err) + '</div><div style="margin-top:10px"><button type="button" class="btn btn-sm btn-primary" onclick="loadAttendanceRequests()"><i class="fa-solid fa-rotate-right"></i> กดเพื่อลองใหม่อีกครั้ง</button></div></div>';
+      }
     });
 }
 
@@ -8400,6 +8468,7 @@ function switchAttendanceSubTab(tabName) {
         State.attendanceCurrentRequests.advance || []
       );
     }
+    loadAttendanceRequests();
   } else if (tabName === 'branches') {
     renderBranchManagerTable();
   }
@@ -9894,6 +9963,7 @@ function approveAttendanceRequest(type, id, decision) {
   })
     .then(function(r) {
       showToast(r.message || ('ดำเนินการ ' + actionText + ' สำเร็จ'));
+      loadAttendanceRequests();
       loadTimeAttendanceDashboard();
     })
     .catch(function(err) {
@@ -9914,6 +9984,7 @@ function deleteAttendanceRequest(type, id) {
   })
     .then(function(r) {
       showToast(r.message || 'ลบคำขอสำเร็จแล้ว', 'success');
+      loadAttendanceRequests();
       loadTimeAttendanceDashboard();
     })
     .catch(function(err) {
@@ -10063,6 +10134,7 @@ function saveEditAttendanceRequestForm(event) {
     .then(function(r) {
       closeModal('modalEditAttendanceRequest');
       showToast(r.message || 'บันทึกการแก้ไขคำขอสำเร็จแล้ว', 'success');
+      loadAttendanceRequests();
       loadTimeAttendanceDashboard();
       var kpiModal = document.getElementById('modalAttendanceKpiDetails');
       if (kpiModal && kpiModal.classList.contains('active')) {
