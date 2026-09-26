@@ -350,6 +350,59 @@ async function ensurePushTables(db) {
   }
 }
 
+async function ensureTimeAttendanceTables(db) {
+  try {
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS time_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        emp_id TEXT NOT NULL,
+        date TEXT NOT NULL,
+        clock_in TEXT,
+        clock_out TEXT,
+        in_lat REAL,
+        in_lng REAL,
+        out_lat REAL,
+        out_lng REAL,
+        in_photo_url TEXT,
+        out_photo_url TEXT,
+        late_minutes INTEGER DEFAULT 0,
+        work_hours REAL DEFAULT 0,
+        ot_hours REAL DEFAULT 0,
+        status TEXT DEFAULT 'NORMAL',
+        remark TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run().catch(() => {});
+
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out TEXT").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in TEXT").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_photo_url TEXT").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_photo_url TEXT").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_lat REAL").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_lng REAL").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_lat REAL").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_lng REAL").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN break_minutes INTEGER DEFAULT 0").run().catch(() => {});
+    await db.prepare("ALTER TABLE time_logs ADD COLUMN overbreak_minutes INTEGER DEFAULT 0").run().catch(() => {});
+    await db.prepare("ALTER TABLE leave_requests ADD COLUMN medical_cert_url TEXT").run().catch(() => {});
+  } catch(e) {
+    console.error('ensureTimeAttendanceTables note:', e);
+  }
+}
+
+let _globalSchemaEnsured = false;
+async function ensureGlobalSchemas(db) {
+  if (_globalSchemaEnsured) return;
+  _globalSchemaEnsured = true;
+  try {
+    await ensureBranchTables(db);
+    await ensurePushTables(db);
+    await ensureTimeAttendanceTables(db);
+  } catch(e) {
+    console.warn('ensureGlobalSchemas note:', e);
+  }
+}
+
 /**
  * ==============================================================================
  * PTN Payroll System V4.0 - Clean Enterprise Cloudflare D1 Backend
@@ -382,8 +435,7 @@ export async function onRequest(context) {
   }
 
   try {
-    await ensureBranchTables(db);
-    await ensurePushTables(db);
+    await ensureGlobalSchemas(db);
 
     let action = 'getAppInitialData';
     let params = {};
@@ -1765,43 +1817,6 @@ async function handleAction(db, action, params) {
       const bangkokTime = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
       const today = bangkokTime.toISOString().substring(0, 10);
       const filterDate = params.date || today;
-
-      // Ensure tables exist
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS time_logs (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          emp_id TEXT NOT NULL,
-          date TEXT NOT NULL,
-          clock_in TEXT,
-          clock_out TEXT,
-          in_lat REAL,
-          in_lng REAL,
-          out_lat REAL,
-          out_lng REAL,
-          in_photo_url TEXT,
-          out_photo_url TEXT,
-          late_minutes INTEGER DEFAULT 0,
-          work_hours REAL DEFAULT 0,
-          ot_hours REAL DEFAULT 0,
-          status TEXT DEFAULT 'NORMAL',
-          remark TEXT,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run().catch(() => {});
-
-      // Safe schema migrations for break tracking columns
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out TEXT").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in TEXT").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_photo_url TEXT").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_photo_url TEXT").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_lat REAL").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_out_lng REAL").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_lat REAL").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_lng REAL").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN break_minutes INTEGER DEFAULT 0").run().catch(() => {});
-      await db.prepare("ALTER TABLE time_logs ADD COLUMN overbreak_minutes INTEGER DEFAULT 0").run().catch(() => {});
-      await db.prepare("ALTER TABLE leave_requests ADD COLUMN medical_cert_url TEXT").run().catch(() => {});
-
       const branchFilter = String(params.branchId || params.branch_id || '').trim();
       const empFilter = String(params.empId || params.emp_id || '').trim();
       const reqEmpFilter = String(params.requestEmpId || params.request_emp_id || empFilter || '').trim();

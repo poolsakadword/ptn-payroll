@@ -337,8 +337,9 @@ function showToast(msg, type) {
   }, 4000);
 }
 
-// API CLIENT
-function callApi(action, payload) {
+// API CLIENT (WITH AUTOMATIC RETRY FOR TRANSIENT SERVER/DATABASE LOCK ERRORS)
+function callApi(action, payload, retryCount) {
+  retryCount = retryCount || 0;
   if (typeof action === 'object' && action !== null) {
     payload = action;
     action = payload.action;
@@ -357,8 +358,25 @@ function callApi(action, payload) {
     body: JSON.stringify(payload)
   })
   .then(function(res) {
-    if (!res.ok) throw new Error('HTTP Error: ' + res.status);
+    if (!res.ok) {
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && retryCount < 2) {
+        return new Promise(function(resolve) { setTimeout(resolve, 800 * (retryCount + 1)); })
+          .then(function() {
+            return callApi(action, payload, retryCount + 1);
+          });
+      }
+      throw new Error('HTTP Error: ' + res.status);
+    }
     return res.json();
+  })
+  .catch(function(err) {
+    if (retryCount < 2 && err && err.message && (err.message.indexOf('Failed to fetch') !== -1 || err.message.indexOf('NetworkError') !== -1)) {
+      return new Promise(function(resolve) { setTimeout(resolve, 800 * (retryCount + 1)); })
+        .then(function() {
+          return callApi(action, payload, retryCount + 1);
+        });
+    }
+    throw err;
   });
 }
 
@@ -7997,7 +8015,9 @@ function calcHaversineDistanceMeters(lat1, lon1, lat2, lon2) {
   return Math.round(R * c);
 }
 
+var _loadAttendanceReqSeq = 0;
 function loadTimeAttendanceDashboard() {
+  var currentReqSeq = ++_loadAttendanceReqSeq;
   if (!isSuperAdmin() && !hasPermission('view_attendance')) {
     showToast('สิทธิ์ไม่เพียงพอ: หน้าลงเวลาสงวนสิทธิ์เฉพาะผู้มีสิทธิ์เข้าใช้งานระบบลงเวลาเท่านั้น', 'warning');
     navigateToAuthorizedTab();
@@ -8053,6 +8073,7 @@ function loadTimeAttendanceDashboard() {
     username: (State.currentUser && State.currentUser.username) || 'Admin'
   })
     .then(function(r) {
+      if (currentReqSeq !== _loadAttendanceReqSeq) return;
       if (!r || !r.success) {
         showToast(r && r.message ? r.message : 'ไม่สามารถโหลดข้อมูลเวลาทำงานได้', 'error');
         return;
@@ -8317,8 +8338,9 @@ function loadTimeAttendanceDashboard() {
       updateAttendanceBatchToolbar();
     })
     .catch(function(err) {
+      if (currentReqSeq !== _loadAttendanceReqSeq) return;
       if (logsBody) {
-        logsBody.innerHTML = '<tr><td colspan="14" class="text-center text-red" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '</td></tr>';
+        logsBody.innerHTML = '<tr><td colspan="14" class="text-center text-red" style="padding:24px;background:#fef2f2"><i class="fa-solid fa-triangle-exclamation" style="font-size:22px;display:block;margin-bottom:6px"></i>โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '<div style="margin-top:10px"><button type="button" class="btn btn-sm btn-primary" onclick="loadTimeAttendanceDashboard()" style="padding:5px 14px;font-size:12px;font-weight:600;border-radius:6px"><i class="fa-solid fa-rotate-right"></i> กดเพื่อลองใหม่อีกครั้ง</button></div></td></tr>';
       }
     });
 }
