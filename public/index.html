@@ -543,20 +543,25 @@
               <span>1. บันทึกเวลาประจำวัน</span>
             </button>
 
+            <button type="button" id="attSubTabBtn_summary" class="btn btn-sm" onclick="switchAttendanceSubTab('summary')" style="background:#ffffff;color:#475569;border:1px solid #cbd5e1;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px">
+              <i class="fa-solid fa-chart-column text-blue"></i>
+              <span>2. สรุปสถิติ &amp; รายงานประจำงวด</span>
+            </button>
+
             <button type="button" id="attSubTabBtn_approvals" class="btn btn-sm" onclick="switchAttendanceSubTab('approvals')" style="background:#ffffff;color:#475569;border:1px solid #cbd5e1;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px">
               <i class="fa-solid fa-clipboard-check text-orange"></i>
-              <span>2. ศูนย์อนุมัติคำขอ</span>
+              <span>3. ศูนย์อนุมัติคำขอ</span>
               <span id="attSubTabBadgeApprovals" style="display:none;background:#e11d48;color:#ffffff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px">0</span>
             </button>
 
             <button type="button" id="attSubTabBtn_settings" class="btn btn-sm" onclick="switchAttendanceSubTab('settings')" style="background:#ffffff;color:#475569;border:1px solid #cbd5e1;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px">
               <i class="fa-solid fa-sliders text-blue"></i>
-              <span>3. ตั้งค่าระบบ &amp; สิทธิพิเศษ</span>
+              <span>4. ตั้งค่าระบบ &amp; สิทธิพิเศษ</span>
             </button>
 
             <button type="button" id="attSubTabBtn_branches" class="btn btn-sm" onclick="switchAttendanceSubTab('branches')" style="background:#ffffff;color:#475569;border:1px solid #cbd5e1;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px">
               <i class="fa-solid fa-store" style="color:#059669"></i>
-              <span>4. จัดการ 4 สาขา &amp; พิกัด GPS</span>
+              <span>5. จัดการ 4 สาขา &amp; พิกัด GPS</span>
             </button>
           </div>
 
@@ -772,7 +777,242 @@
           </div>
         </div>
 
-        <!-- SUB-TAB PANE 2: PENDING APPROVALS -->
+        <!-- SUB-TAB PANE 2: ATTENDANCE PERIOD SUMMARY & REPORTS -->
+        <div id="attSubTabPane_summary" style="display:none">
+          <!-- 1. Toolbar / Filter Card -->
+          <div class="card" style="margin-bottom:16px;padding:12px 16px;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:2px">
+                    <i class="fa-solid fa-calendar-days text-blue"></i> เลือกงวดประจำเดือน:
+                  </label>
+                  <select id="attSumPeriodSelect" class="period-select" style="font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#1e3a8a;min-width:240px" onchange="onAttendanceSummaryPeriodChange()">
+                    <!-- options populated by JS -->
+                  </select>
+                </div>
+
+                <div>
+                  <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:2px">
+                    <i class="fa-solid fa-store text-blue"></i> เลือกสาขา:
+                  </label>
+                  <select id="attSumBranchSelect" class="period-select" style="font-size:12.5px;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;color:#334155;min-width:150px" onchange="loadAttendancePeriodSummary()">
+                    <option value="ALL">🏢 ทุกสาขา (All)</option>
+                  </select>
+                </div>
+
+                <!-- Toggle View Mode Pills -->
+                <div style="margin-top:14px;display:inline-flex;background:#f1f5f9;padding:2px;border-radius:8px;border:1px solid #cbd5e1">
+                  <button type="button" id="attSumViewBtn_all" class="btn btn-sm" onclick="switchAttendanceSummaryView('ALL')" style="font-size:12px;font-weight:700;padding:5px 12px;border-radius:6px;background:#2563eb;color:#fff;box-shadow:0 1px 2px rgba(37,99,235,0.2)">
+                    <i class="fa-solid fa-table-cells"></i> สรุปรวมทุกคน
+                  </button>
+                  <button type="button" id="attSumViewBtn_single" class="btn btn-sm" onclick="switchAttendanceSummaryView('SINGLE')" style="font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;background:transparent;color:#475569">
+                    <i class="fa-solid fa-user"></i> ใบลงเวลารายบุคคล
+                  </button>
+                </div>
+
+                <!-- Single Employee Picker (Shown only in single mode) -->
+                <div id="attSumSingleEmpPickerWrapper" style="display:none;margin-top:14px">
+                  <select id="attSumSingleEmpSelect" class="period-select" style="font-size:12.5px;font-weight:700;padding:6px 12px;border-radius:8px;border:1px solid #3b82f6;background:#eff6ff;color:#1e40af;min-width:220px" onchange="onAttendanceSummarySingleEmpChange()">
+                    <!-- Options populated by JS -->
+                  </select>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <button type="button" class="btn btn-sm" onclick="exportAttendanceSummaryCsv()" style="background:#059669;color:#ffffff;border:1px solid #047857;font-weight:700;font-size:12px;padding:6px 12px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(5,150,105,0.2)" title="ส่งออกข้อมูลเป็นไฟล์ Excel (.csv)">
+                  <i class="fa-solid fa-file-excel"></i>
+                  <span>ดาวน์โหลด Excel</span>
+                </button>
+
+                <button type="button" class="btn btn-sm" onclick="printAttendanceSummaryReport()" style="background:#0f172a;color:#ffffff;border:1px solid #020617;font-weight:700;font-size:12px;padding:6px 12px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(15,23,42,0.2)" title="พิมพ์รายงานขนาด A4">
+                  <i class="fa-solid fa-print"></i>
+                  <span id="attSumPrintBtnText">พิมพ์สรุปรวม (A4)</span>
+                </button>
+
+                <button type="button" class="btn btn-slate btn-sm" onclick="loadAttendancePeriodSummary()" style="font-size:12px;font-weight:600;padding:6px 10px;border-radius:8px" title="รีเฟรชข้อมูล">
+                  <i class="fa-solid fa-rotate-right"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. Master View: ALL EMPLOYEES SUMMARY TABLE -->
+          <div id="attSumAllContainer" class="card" style="padding:20px;border-radius:12px;background:#ffffff;border:1px solid #e2e8f0">
+            <!-- Header Paper Style -->
+            <div style="border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+              <div>
+                <div style="font-size:17px;font-weight:800;color:#0f172a;letter-spacing:-0.2px">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</div>
+                <div style="font-size:14px;font-weight:700;color:#1e40af;margin-top:2px">รายงานสรุปวันทำงาน ขาด ลา มาสาย และ OT ของพนักงาน (ประจำงวด)</div>
+                <div style="font-size:12px;color:#64748b;margin-top:3px" id="attSumCutoffText">รอบงวด: กำลังโหลด...</div>
+              </div>
+              <div style="text-align:right;font-size:11.5px;color:#64748b">
+                <div>วันที่จัดทำ: <span id="attSumPrintDate">-</span></div>
+                <div>ฝ่ายทรัพยากรบุคคล (HR)</div>
+              </div>
+            </div>
+
+            <!-- Top 4 KPI Metrics -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px;margin-bottom:16px">
+              <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px">
+                <span style="font-size:11px;font-weight:700;color:#1d4ed8;display:block">พนักงานทั้งหมด</span>
+                <span id="attSumKpiStaff" style="font-size:18px;font-weight:800;color:#1e3a8a">0 คน</span>
+              </div>
+              <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:10px 14px">
+                <span style="font-size:11px;font-weight:700;color:#dc2626;display:block">ขาดงานรวม</span>
+                <span id="attSumKpiAbsent" style="font-size:18px;font-weight:800;color:#991b1b">0 วัน</span>
+              </div>
+              <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px">
+                <span style="font-size:11px;font-weight:700;color:#ea580c;display:block">มาสายรวม</span>
+                <span id="attSumKpiLate" style="font-size:18px;font-weight:800;color:#9a3412">0 ครั้ง</span>
+              </div>
+              <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:10px 14px">
+                <span style="font-size:11px;font-weight:700;color:#7e22ce;display:block">OT สะสมรวม</span>
+                <span id="attSumKpiOt" style="font-size:18px;font-weight:800;color:#581c87">0 ชม.</span>
+              </div>
+            </div>
+
+            <!-- Clean Spreadsheet-Style Table -->
+            <div class="table-wrapper" style="overflow-x:auto;border:1px solid #cbd5e1;border-radius:8px">
+              <table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left">
+                <thead>
+                  <tr style="background:#f8fafc;color:#1e293b;border-bottom:2px solid #cbd5e1;font-weight:700;text-align:center">
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;width:40px">ลำดับ</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;width:65px">รหัส</th>
+                    <th style="padding:9px 8px;border:1px solid #cbd5e1;text-align:left;min-width:140px">ชื่อ-นามสกุล (ชื่อเล่น)</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;text-align:left;width:100px">สาขา</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#eff6ff;color:#1e40af;font-weight:800;width:70px">มาทำงาน<br>(วัน)</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#fef2f2;color:#991b1b;width:85px">ขาดงาน<br>(วัน/ครั้ง)</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#f0f9ff;color:#075985;width:85px">ลาป่วยมีใบ<br>(วัน/ครั้ง)</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#fffbeb;color:#92400e;width:85px">ลาป่วยไม่มีใบ<br>(วัน/ครั้ง)</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#faf5ff;color:#6b21a8;width:85px">ลากิจ<br>(วัน/ครั้ง)</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#fff7ed;color:#9a3412;font-weight:800;width:95px">มาสาย<br>(ครั้ง/นาที)</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#eef2ff;color:#3730a3;width:75px">OT รวม<br>(ชั่วโมง)</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;width:90px">เบี้ยขยัน</th>
+                    <th style="padding:9px 6px;border:1px solid #cbd5e1;width:70px" class="no-print">ดูรายคน</th>
+                  </tr>
+                </thead>
+                <tbody id="attSumTableBody">
+                  <tr><td colspan="13" class="text-center text-muted" style="padding:28px">กำลังโหลดข้อมูลรายงานสรุป...</td></tr>
+                </tbody>
+                <tfoot id="attSumTableFoot" style="background:#f1f5f9;font-weight:800;border-top:2px solid #94a3b8;text-align:center">
+                  <!-- Populated by JS -->
+                </tfoot>
+              </table>
+            </div>
+
+            <!-- Signatures Section (Visible in Print & Bottom of Report) -->
+            <div style="margin-top:36px;padding-top:16px;display:grid;grid-template-columns:repeat(3, 1fr);gap:20px;text-align:center;font-size:12px;color:#334155">
+              <div>
+                <p style="margin-bottom:38px">ลงชื่อ ................................................................</p>
+                <p style="font-weight:700">( ................................................................ )</p>
+                <p style="font-size:11px;color:#64748b;margin-top:3px">เจ้าหน้าที่ผู้จัดทำรายงาน (HR)</p>
+              </div>
+              <div>
+                <p style="margin-bottom:38px">ลงชื่อ ................................................................</p>
+                <p style="font-weight:700">( ................................................................ )</p>
+                <p style="font-size:11px;color:#64748b;margin-top:3px">ผู้จัดการแผนก / หัวหน้าสาขา</p>
+              </div>
+              <div>
+                <p style="margin-bottom:38px">ลงชื่อ ................................................................</p>
+                <p style="font-weight:700">( ................................................................ )</p>
+                <p style="font-size:11px;color:#64748b;margin-top:3px">ผู้อนุมัติจ่ายเงินเดือน (ผู้บริหาร)</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Individual View: SINGLE EMPLOYEE TIMESHEET -->
+          <div id="attSumSingleContainer" class="card" style="display:none;padding:24px;border-radius:12px;background:#ffffff;border:1px solid #e2e8f0;max-width:860px;margin:0 auto">
+            <div style="border-bottom:2px solid #e2e8f0;padding-bottom:12px;margin-bottom:16px;text-align:center">
+              <div style="font-size:18px;font-weight:800;color:#0f172a">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</div>
+              <div style="font-size:14px;font-weight:700;color:#1e40af;margin-top:2px">ใบสรุปเวลาทำงานและประวัติการขาด ลา มาสาย ประจำงวด (รายบุคคล)</div>
+              <div style="font-size:12px;color:#64748b;margin-top:3px" id="attSingleCutoffText">รอบงวด: -</div>
+            </div>
+
+            <!-- Employee Info Header Card -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;margin-bottom:14px;display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:10px;font-size:12px">
+              <div><span style="color:#64748b">รหัสพนักงาน:</span> <strong id="attSingleEmpId" style="color:#1e40af;font-family:monospace;font-size:13px">-</strong></div>
+              <div><span style="color:#64748b">ชื่อ-นามสกุล:</span> <strong id="attSingleFullName">-</strong></div>
+              <div><span style="color:#64748b">ชื่อเล่น:</span> <strong id="attSingleNickname">-</strong></div>
+              <div><span style="color:#64748b">สาขาที่สังกัด:</span> <strong id="attSingleBranch">-</strong></div>
+            </div>
+
+            <!-- Stat Boxes Summary -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(105px, 1fr));gap:8px;margin-bottom:16px;text-align:center;font-size:11.5px">
+              <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px">
+                <span style="color:#1d4ed8;font-weight:600;display:block">มาทำงาน</span>
+                <strong id="attSinglePresent" style="font-size:14px;color:#1e3a8a">-</strong>
+              </div>
+              <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:8px">
+                <span style="color:#dc2626;font-weight:600;display:block">ขาดงาน</span>
+                <strong id="attSingleAbsent" style="font-size:14px;color:#991b1b">-</strong>
+              </div>
+              <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px">
+                <span style="color:#0284c7;font-weight:600;display:block">ป่วยมีใบ</span>
+                <strong id="attSingleSickCert" style="font-size:14px;color:#0369a1">-</strong>
+              </div>
+              <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:8px">
+                <span style="color:#d97706;font-weight:600;display:block">ป่วยไม่มีใบ</span>
+                <strong id="attSingleSickNoCert" style="font-size:14px;color:#b45309">-</strong>
+              </div>
+              <div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:8px;padding:8px">
+                <span style="color:#7c3aed;font-weight:600;display:block">ลากิจ</span>
+                <strong id="attSingleBusiness" style="font-size:14px;color:#6d28d9">-</strong>
+              </div>
+              <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px">
+                <span style="color:#ea580c;font-weight:600;display:block">มาสาย</span>
+                <strong id="attSingleLate" style="font-size:14px;color:#c2410c">-</strong>
+              </div>
+              <div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px">
+                <span style="color:#4338ca;font-weight:600;display:block">OT รวม</span>
+                <strong id="attSingleOt" style="font-size:14px;color:#3730a3">-</strong>
+              </div>
+            </div>
+
+            <!-- Daily Punch Log Table -->
+            <div style="margin-bottom:24px">
+              <div style="font-size:12px;font-weight:700;color:#334155;margin-bottom:6px">
+                <i class="fa-solid fa-list-check text-blue"></i> บันทึกการลงเวลารายวันประจำงวด:
+              </div>
+              <div class="table-wrapper" style="border:1px solid #cbd5e1;border-radius:8px;max-height:480px;overflow-y:auto">
+                <table style="width:100%;border-collapse:collapse;font-size:11.5px;text-align:center">
+                  <thead>
+                    <tr style="background:#f1f5f9;font-weight:700;border-bottom:1px solid #cbd5e1">
+                      <th style="padding:6px;border:1px solid #cbd5e1;width:75px">วันที่</th>
+                      <th style="padding:6px;border:1px solid #cbd5e1;width:50px">วัน</th>
+                      <th style="padding:6px;border:1px solid #cbd5e1;width:80px">เวลาเข้า</th>
+                      <th style="padding:6px;border:1px solid #cbd5e1;width:80px">เวลาออก</th>
+                      <th style="padding:6px;border:1px solid #cbd5e1;width:75px">สาย (นาที)</th>
+                      <th style="padding:6px;border:1px solid #cbd5e1;width:70px">OT (ชม.)</th>
+                      <th style="padding:6px;border:1px solid #cbd5e1;text-align:left">สถานะการทำงาน / การลา</th>
+                      <th style="padding:6px;border:1px solid #cbd5e1;text-align:left">หมายเหตุ</th>
+                    </tr>
+                  </thead>
+                  <tbody id="attSingleDailyLogsBody">
+                    <!-- Populated by JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Signatures for Individual Sheet -->
+            <div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:30px;text-align:center;font-size:12px;color:#334155">
+              <div>
+                <p style="margin-bottom:34px">ลงชื่อ ................................................................ ผู้ขอรับรอง</p>
+                <p style="font-weight:700">( <span id="attSingleSignEmpName">................................................................</span> )</p>
+                <p style="font-size:11px;color:#64748b;margin-top:3px">พนักงานผู้ลงเวลา</p>
+              </div>
+              <div>
+                <p style="margin-bottom:34px">ลงชื่อ ................................................................ ผู้ตรวจสอบ</p>
+                <p style="font-weight:700">( ................................................................ )</p>
+                <p style="font-size:11px;color:#64748b;margin-top:3px">เจ้าหน้าที่ฝ่ายบุคคล / หัวหน้างาน</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUB-TAB PANE 3: PENDING APPROVALS -->
         <div id="attSubTabPane_approvals" style="display:none">
           <div class="card">
               <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
@@ -4883,7 +5123,10 @@
     </div>
   </div>
 
+  <!-- Hidden Attendance Print Container -->
+  <div id="attendancePrintContainer" style="display:none"></div>
+
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.22"></script>
+  <script src="js/app.js?v=9.23"></script>
 </body>
 </html>

@@ -668,14 +668,20 @@ footer {
   body.printing-salary-cert #appShell,
   body.printing-50twi #appShell,
   body.printing-payroll-summary #appShell,
+  body.printing-attendance-summary #appShell,
+  body.printing-attendance-individual #appShell,
   body.printing-payslip .main-container,
   body.printing-salary-cert .main-container,
   body.printing-50twi .main-container,
   body.printing-payroll-summary .main-container,
+  body.printing-attendance-summary .main-container,
+  body.printing-attendance-individual .main-container,
   body.printing-payslip .tab-content,
   body.printing-salary-cert .tab-content,
   body.printing-50twi .tab-content,
-  body.printing-payroll-summary .tab-content {
+  body.printing-payroll-summary .tab-content,
+  body.printing-attendance-summary .tab-content,
+  body.printing-attendance-individual .tab-content {
     display: none !important;
   }
 
@@ -939,11 +945,49 @@ footer {
   }
 
 
+  /* ------------------------------------------------------------------------
+     A5. ATTENDANCE PERIOD SUMMARY & INDIVIDUAL PRINT
+     ------------------------------------------------------------------------ */
+  body.printing-attendance-summary {
+    page: landscapePage;
+  }
+  body.printing-attendance-summary > *:not(#attendancePrintContainer) {
+    display: none !important;
+  }
+  body.printing-attendance-summary #attendancePrintContainer {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    padding: 6mm !important;
+    margin: 0 !important;
+  }
+  body.printing-attendance-summary #attendancePrintContainer * {
+    visibility: visible !important;
+  }
+
+  body.printing-attendance-individual > *:not(#attendancePrintContainer) {
+    display: none !important;
+  }
+  body.printing-attendance-individual #attendancePrintContainer {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 760px !important;
+    margin: 0 auto !important;
+    background: #ffffff !important;
+    padding: 6mm !important;
+  }
+  body.printing-attendance-individual #attendancePrintContainer * {
+    visibility: visible !important;
+  }
+
+
   /* ========================================================================
      GROUP B: TAB PRINT DOCUMENTS (History Individual, Yearly Summary, Analytics)
      When printing tabs, all modal overlays are ALWAYS HIDDEN!
      ======================================================================== */
-  body:not(.printing-payslip):not(.printing-salary-cert):not(.printing-50twi):not(.printing-payroll-summary) .modal-overlay {
+  body:not(.printing-payslip):not(.printing-salary-cert):not(.printing-50twi):not(.printing-payroll-summary):not(.printing-attendance-summary):not(.printing-attendance-individual) .modal-overlay {
     display: none !important;
   }
 

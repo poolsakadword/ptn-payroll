@@ -2313,6 +2313,381 @@ async function handleAction(db, action, params) {
       };
     }
 
+    // 5.2.5 ATTENDANCE PERIOD SUMMARY & REPORTS (ALL EMPLOYEES & INDIVIDUAL)
+    case 'getAttendancePeriodSummary': {
+      const callerUser = params.username || 'Admin';
+      const isAllowed = await userHasPermission(db, callerUser, 'view_attendance');
+      if (!isAllowed) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าถึงรายงานสรุปเวลา' };
+      }
+
+      const nowUtc = new Date();
+      const bangkokTime = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+      const today = bangkokTime.toISOString().substring(0, 10);
+
+      const period = params.period ? String(params.period).trim() : today.substring(0, 7);
+      const branchId = String(params.branchId || params.branch_id || 'ALL').trim();
+      const empId = params.empId ? String(params.empId).trim() : null;
+
+      const cutoffInfo = await getCutoffDatesForPeriod(db, period);
+      const startDate = cutoffInfo.startDate;
+      const endDate = cutoffInfo.endDate;
+      const totalExpectedWorkDays = getActualWorkingDaysInCutoff(startDate, endDate) || 26;
+
+      // Build working dates list (Mon-Sat, non-Sunday)
+      const workingDates = [];
+      let dCur = new Date(startDate + 'T00:00:00Z');
+      const dEnd = new Date(endDate + 'T00:00:00Z');
+      while (dCur <= dEnd) {
+        if (dCur.getUTCDay() !== 0) {
+          workingDates.push(dCur.toISOString().substring(0, 10));
+        }
+        dCur.setUTCDate(dCur.getUTCDate() + 1);
+      }
+
+      // Load Branches
+      const branchQuery = await db.prepare("SELECT * FROM branches ORDER BY branch_id ASC").all().catch(() => ({ results: [] }));
+      const branches = branchQuery.results || [];
+      const branchMap = {};
+      for (const b of branches) branchMap[b.branch_id] = b;
+
+      // Load Employees
+      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status FROM employees WHERE (status IS NULL OR status = 'Active')";
+      const empBinds = [];
+      if (branchId && branchId !== 'ALL') {
+        empSql += " AND branch_id = ?";
+        empBinds.push(branchId);
+      }
+      if (empId) {
+        empSql += " AND emp_id = ?";
+        empBinds.push(empId);
+      }
+      empSql += " ORDER BY emp_id ASC";
+      const empQuery = await db.prepare(empSql).bind(...empBinds).all().catch(() => ({ results: [] }));
+      const employees = empQuery.results || [];
+
+      // Load Time Logs in Cutoff Window
+      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
+      const tlQuery = await db.prepare(tlSql).bind(startDate, endDate).all().catch(() => ({ results: [] }));
+      const allLogs = tlQuery.results || [];
+
+      // Load Approved Leaves
+      let lvSql = "SELECT id, emp_id, start_date, end_date, COALESCE(days_count, days, 1) as days_count, leave_type, reason, medical_cert_url FROM leave_requests WHERE status = 'APPROVED' AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?) OR (start_date <= ? AND end_date >= ?))";
+      const lvQuery = await db.prepare(lvSql).bind(startDate, endDate, startDate, endDate, startDate, endDate).all().catch(() => ({ results: [] }));
+      const allLeaves = lvQuery.results || [];
+
+      // Load Approved OTs
+      let otSql = "SELECT id, emp_id, date, COALESCE(actual_hours, planned_hours, 0) as hours FROM ot_requests WHERE status = 'APPROVED' AND (date BETWEEN ? AND ?)";
+      const otQuery = await db.prepare(otSql).bind(startDate, endDate).all().catch(() => ({ results: [] }));
+      const allOts = otQuery.results || [];
+
+      // Load Settings for Diligence Allowance
+      const setQuery = await db.prepare("SELECT key, value FROM settings WHERE key IN ('DiligenceAllowance', 'DiligenceLateGraceMins', 'DiligenceLateMaxCount', 'AutoDiligenceEnabled')").all().catch(() => ({ results: [] }));
+      const setMap = {};
+      for (const r of (setQuery.results || [])) setMap[r.key] = r.value;
+      const fallbackAllowance = !isNaN(Number(setMap['DiligenceAllowance'])) ? Number(setMap['DiligenceAllowance']) : 1000;
+      const graceMins = !isNaN(Number(setMap['DiligenceLateGraceMins'])) ? Number(setMap['DiligenceLateGraceMins']) : 2;
+      const maxLateCount = !isNaN(Number(setMap['DiligenceLateMaxCount'])) ? Number(setMap['DiligenceLateMaxCount']) : 1;
+      const autoDiligenceEnabled = setMap['AutoDiligenceEnabled'] !== 'false';
+
+      // Group logs, leaves, and ots by emp_id
+      const logsByEmp = {};
+      for (const l of allLogs) {
+        if (!logsByEmp[l.emp_id]) logsByEmp[l.emp_id] = {};
+        logsByEmp[l.emp_id][l.date] = l;
+      }
+
+      const leavesByEmp = {};
+      for (const lr of allLeaves) {
+        if (!leavesByEmp[lr.emp_id]) leavesByEmp[lr.emp_id] = [];
+        leavesByEmp[lr.emp_id].push(lr);
+      }
+
+      const otsByEmp = {};
+      for (const o of allOts) {
+        if (!otsByEmp[o.emp_id]) otsByEmp[o.emp_id] = [];
+        otsByEmp[o.emp_id].push(o);
+      }
+
+      const summaryList = [];
+      const grandTotals = {
+        totalEmployees: employees.length,
+        totalPresentDays: 0,
+        totalAbsentDays: 0,
+        totalAbsentTimes: 0,
+        totalSickWithCertDays: 0,
+        totalSickWithCertTimes: 0,
+        totalSickNoCertDays: 0,
+        totalSickNoCertTimes: 0,
+        totalBusinessDays: 0,
+        totalBusinessTimes: 0,
+        totalLateTimes: 0,
+        totalLateMinutes: 0,
+        totalOtHours: 0,
+        diligencePassedCount: 0,
+        diligenceFailedCount: 0
+      };
+
+      for (let i = 0; i < employees.length; i++) {
+        const emp = employees[i];
+        const empLogs = logsByEmp[emp.emp_id] || {};
+        const empLeaves = leavesByEmp[emp.emp_id] || [];
+        const empOts = otsByEmp[emp.emp_id] || [];
+        const branch = branchMap[emp.branch_id] || { branch_name: 'ทั่วไป' };
+
+        let presentDays = 0;
+        let lateTimes = 0;
+        let lateMinutes = 0;
+        let otHours = 0;
+
+        // Sum approved OT requests
+        const isOtEligible = !(emp.is_ot_eligible === 'false' || emp.is_ot_eligible === false);
+        if (isOtEligible) {
+          for (const o of empOts) otHours += Number(o.hours) || 0;
+        }
+
+        // Check each working date for attendance and late
+        const dailyRecords = [];
+        let absentDays = 0;
+        let absentTimes = 0;
+        let currentlyAbsentSequence = false;
+
+        for (const dateStr of workingDates) {
+          const log = empLogs[dateStr];
+          const isDateInPastOrToday = dateStr <= today;
+          let statusText = 'ปกติ';
+          let statusColor = '#16a34a';
+          let isPresent = false;
+          let isLeave = false;
+          let isAbsent = false;
+          let curLateMins = 0;
+          let curOtHrs = 0;
+
+          if (log && log.clock_in) {
+            isPresent = true;
+            presentDays++;
+            curLateMins = Number(log.late_minutes) || 0;
+            if (curLateMins > 0) {
+              lateTimes++;
+              lateMinutes += curLateMins;
+              statusText = `สาย ${curLateMins} น.`;
+              statusColor = '#ea580c';
+            }
+
+            if (isOtEligible && Number(log.ot_hours) > 0) {
+              curOtHrs = Number(log.ot_hours);
+              const alreadyInOtReq = empOts.some(o => o.date === dateStr);
+              if (!alreadyInOtReq) otHours += curOtHrs;
+            }
+
+            if (currentlyAbsentSequence) {
+              absentTimes++;
+              currentlyAbsentSequence = false;
+            }
+          } else {
+            // Check approved leaves
+            let matchingLeave = null;
+            for (const lr of empLeaves) {
+              if (dateStr >= lr.start_date && dateStr <= lr.end_date) {
+                matchingLeave = lr;
+                break;
+              }
+            }
+
+            if (matchingLeave) {
+              isLeave = true;
+              const lt = matchingLeave.leave_type;
+              if (lt === 'SICK_WITH_CERT' || (lt === 'SICK' && matchingLeave.medical_cert_url)) {
+                statusText = 'ลาป่วย (มีใบ)';
+                statusColor = '#0284c7';
+              } else if (lt === 'SICK_NO_CERT' || lt === 'SICK') {
+                statusText = 'ลาป่วย (ไม่มีใบ)';
+                statusColor = '#d97706';
+              } else if (lt === 'ANNUAL') {
+                statusText = 'ลาพักร้อน';
+                statusColor = '#6366f1';
+              } else {
+                statusText = 'ลากิจ';
+                statusColor = '#7c3aed';
+              }
+
+              if (currentlyAbsentSequence) {
+                absentTimes++;
+                currentlyAbsentSequence = false;
+              }
+            } else if (isDateInPastOrToday) {
+              isAbsent = true;
+              absentDays++;
+              statusText = 'ขาดงาน';
+              statusColor = '#dc2626';
+              currentlyAbsentSequence = true;
+            } else {
+              statusText = 'ยังไม่ถึงวัน';
+              statusColor = '#94a3b8';
+            }
+          }
+
+          dailyRecords.push({
+            date: dateStr,
+            dayOfWeek: new Date(dateStr + 'T00:00:00Z').toLocaleDateString('th-TH', { weekday: 'short' }),
+            clockIn: (log && log.clock_in) ? log.clock_in : '-',
+            clockOut: (log && log.clock_out) ? log.clock_out : '-',
+            lateMinutes: curLateMins,
+            otHours: curOtHrs,
+            statusText,
+            statusColor,
+            isPresent,
+            isLeave,
+            isAbsent,
+            remark: (log && log.remark) ? log.remark : ''
+          });
+        }
+
+        if (currentlyAbsentSequence) {
+          absentTimes++;
+          currentlyAbsentSequence = false;
+        }
+
+        // Calculate leave counts
+        let sickWithCertDays = 0, sickWithCertTimes = 0;
+        let sickNoCertDays = 0, sickNoCertTimes = 0;
+        let businessLeaveDays = 0, businessLeaveTimes = 0;
+
+        for (const lr of empLeaves) {
+          let dCurLv = new Date(lr.start_date + 'T00:00:00Z');
+          const dEndLv = new Date(lr.end_date + 'T00:00:00Z');
+          let daysInCutoff = 0;
+          while (dCurLv <= dEndLv) {
+            const dStr = dCurLv.toISOString().substring(0, 10);
+            if (dStr >= startDate && dStr <= endDate && dCurLv.getUTCDay() !== 0) {
+              daysInCutoff++;
+            }
+            dCurLv.setUTCDate(dCurLv.getUTCDate() + 1);
+          }
+
+          if (daysInCutoff > 0) {
+            const lt = lr.leave_type;
+            if (lt === 'SICK_WITH_CERT' || (lt === 'SICK' && lr.medical_cert_url)) {
+              sickWithCertDays += daysInCutoff;
+              sickWithCertTimes++;
+            } else if (lt === 'SICK_NO_CERT' || lt === 'SICK') {
+              sickNoCertDays += daysInCutoff;
+              sickNoCertTimes++;
+            } else if (lt === 'BUSINESS' || lt === 'WITHOUT_PAY') {
+              businessLeaveDays += daysInCutoff;
+              businessLeaveTimes++;
+            }
+          }
+        }
+
+        // Diligence allowance evaluation
+        const targetAllowance = (emp.diligence_allowance !== null && !isNaN(Number(emp.diligence_allowance)) && Number(emp.diligence_allowance) > 0)
+          ? Number(emp.diligence_allowance)
+          : fallbackAllowance;
+
+        let isDiligenceQualified = true;
+        const disqualifyReasons = [];
+
+        if (autoDiligenceEnabled) {
+          if (presentDays === 0) {
+            disqualifyReasons.push('ไม่มีประวัติการลงเวลาในงวดนี้');
+          }
+          if (absentDays > 0) {
+            disqualifyReasons.push(`ขาดงาน ${absentDays} วัน (${absentTimes} ครั้ง)`);
+          }
+          if (businessLeaveDays > 0) {
+            disqualifyReasons.push(`ลากิจ ${businessLeaveDays} วัน`);
+          }
+          if (sickNoCertDays > 0) {
+            disqualifyReasons.push(`ลาป่วยไม่มีใบรับรอง ${sickNoCertDays} วัน`);
+          }
+          if (sickWithCertDays > 0) {
+            disqualifyReasons.push(`ลาป่วยมีใบรับรอง ${sickWithCertDays} วัน`);
+          }
+          if (lateTimes > maxLateCount) {
+            disqualifyReasons.push(`มาสาย ${lateTimes} ครั้ง (เกินเกณฑ์ ${maxLateCount} ครั้ง)`);
+          }
+
+          for (const rec of dailyRecords) {
+            if (rec.lateMinutes > graceMins) {
+              disqualifyReasons.push(`สายเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.lateMinutes} นาที > ${graceMins} นาที)`);
+              break;
+            }
+          }
+
+          if (disqualifyReasons.length > 0) {
+            isDiligenceQualified = false;
+          }
+        }
+
+        const empRow = {
+          no: i + 1,
+          empId: emp.emp_id,
+          fullName: emp.full_name || emp.emp_id,
+          nickname: emp.nickname || '-',
+          branchId: emp.branch_id || '-',
+          branchName: branch.branch_name || '-',
+          position: emp.position || '-',
+          department: emp.department || '-',
+          baseSalary: Number(emp.base_salary) || 0,
+          expectedWorkDays: totalExpectedWorkDays,
+          presentDays,
+          absentDays,
+          absentTimes,
+          sickWithCertDays,
+          sickWithCertTimes,
+          sickNoCertDays,
+          sickNoCertTimes,
+          businessLeaveDays,
+          businessLeaveTimes,
+          lateTimes,
+          lateMinutes,
+          otHours: Math.round(otHours * 100) / 100,
+          isDiligenceQualified,
+          diligenceAmount: isDiligenceQualified ? targetAllowance : 0,
+          diligenceDisqualifyReason: disqualifyReasons.join(', '),
+          dailyRecords
+        };
+
+        summaryList.push(empRow);
+
+        grandTotals.totalPresentDays += presentDays;
+        grandTotals.totalAbsentDays += absentDays;
+        grandTotals.totalAbsentTimes += absentTimes;
+        grandTotals.totalSickWithCertDays += sickWithCertDays;
+        grandTotals.totalSickWithCertTimes += sickWithCertTimes;
+        grandTotals.totalSickNoCertDays += sickNoCertDays;
+        grandTotals.totalSickNoCertTimes += sickNoCertTimes;
+        grandTotals.totalBusinessDays += businessLeaveDays;
+        grandTotals.totalBusinessTimes += businessLeaveTimes;
+        grandTotals.totalLateTimes += lateTimes;
+        grandTotals.totalLateMinutes += lateMinutes;
+        grandTotals.totalOtHours += empRow.otHours;
+        if (isDiligenceQualified) {
+          grandTotals.diligencePassedCount++;
+        } else {
+          grandTotals.diligenceFailedCount++;
+        }
+      }
+
+      grandTotals.totalOtHours = Math.round(grandTotals.totalOtHours * 100) / 100;
+
+      return {
+        success: true,
+        period,
+        cutoffInfo: {
+          startDate,
+          endDate,
+          totalExpectedWorkDays,
+          cutoffDay: cutoffInfo.cutoffDay
+        },
+        branchId: branchId || 'ALL',
+        branches,
+        grandTotals,
+        summaryList
+      };
+    }
+
     // 5.3 HANDLE ATTENDANCE APPROVALS (LEAVE, OT, ADVANCE)
     case 'handleAttendanceApproval': {
       const approverId = params.username || 'Admin';

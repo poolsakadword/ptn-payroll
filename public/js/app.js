@@ -8360,7 +8360,7 @@ function loadTimeAttendanceDashboard() {
 
 var _activeAttendanceSubTab = 'logs';
 function switchAttendanceSubTab(tabName) {
-  var tabs = ['logs', 'approvals', 'settings', 'branches'];
+  var tabs = ['logs', 'summary', 'approvals', 'settings', 'branches'];
   if (tabs.indexOf(tabName) === -1) tabName = 'logs';
   _activeAttendanceSubTab = tabName;
 
@@ -8387,7 +8387,12 @@ function switchAttendanceSubTab(tabName) {
     }
   });
 
-  if (tabName === 'approvals') {
+  if (tabName === 'summary') {
+    initAttendanceSummaryPeriodOptions();
+    if (!State.attendancePeriodSummaryData) {
+      loadAttendancePeriodSummary();
+    }
+  } else if (tabName === 'approvals') {
     if (State.attendanceCurrentRequests) {
       renderTimeAttendanceApprovals(
         State.attendanceCurrentRequests.leave || [],
@@ -8397,6 +8402,658 @@ function switchAttendanceSubTab(tabName) {
     }
   } else if (tabName === 'branches') {
     renderBranchManagerTable();
+  }
+}
+
+/* ========================================================================
+   ATTENDANCE PERIOD SUMMARY & REPORTS (ALL EMPLOYEES & INDIVIDUAL)
+   ======================================================================== */
+State.attendancePeriodSummaryData = null;
+State.activeAttendanceSummaryView = 'ALL';
+State.activeAttendanceSummarySingleEmpId = null;
+
+function initAttendanceSummaryPeriodOptions() {
+  var selPeriod = document.getElementById('attSumPeriodSelect');
+  var selBranch = document.getElementById('attSumBranchSelect');
+  if (!selPeriod) return;
+
+  // 1. Populate period dropdown if empty
+  if (selPeriod.options.length <= 1) {
+    var thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    var nowUtc = new Date();
+    var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    var curY = bkk.getFullYear();
+    var curM = bkk.getMonth() + 1; // 1-12
+
+    selPeriod.innerHTML = '';
+    // Generate 8 recent periods
+    for (var i = 0; i < 8; i++) {
+      var y = curY;
+      var m = curM - i;
+      while (m < 1) {
+        m += 12;
+        y -= 1;
+      }
+      var ymStr = y + '-' + String(m).padStart(2, '0');
+      var prevM = m - 1;
+      var prevY = y;
+      if (prevM < 1) {
+        prevM = 12;
+        prevY -= 1;
+      }
+      var thYear = y + 543;
+      var prevThYear = prevY + 543;
+      var label = 'งวด ' + thaiMonths[m - 1] + ' ' + thYear + ' (26 ' + thaiMonths[prevM - 1] + ' ' + (prevThYear % 100) + ' - 25 ' + thaiMonths[m - 1] + ' ' + (thYear % 100) + ')';
+      
+      var opt = document.createElement('option');
+      opt.value = ymStr;
+      opt.textContent = label;
+      if (i === 0) opt.selected = true;
+      selPeriod.appendChild(opt);
+    }
+  }
+
+  // 2. Populate branches dropdown if empty or has only ALL
+  if (selBranch && selBranch.options.length <= 1) {
+    var bList = State.branches || (State.attendanceDashboardData ? State.attendanceDashboardData.branches : []);
+    if (bList && bList.length) {
+      selBranch.innerHTML = '<option value="ALL">🏢 ทุกสาขา (All)</option>';
+      bList.forEach(function(b) {
+        var opt = document.createElement('option');
+        opt.value = b.branch_id;
+        opt.textContent = b.branch_name + ' (' + b.branch_id + ')';
+        selBranch.appendChild(opt);
+      });
+    }
+  }
+}
+
+function onAttendanceSummaryPeriodChange() {
+  loadAttendancePeriodSummary();
+}
+
+function switchAttendanceSummaryView(viewMode) {
+  State.activeAttendanceSummaryView = viewMode;
+  var btnAll = document.getElementById('attSumViewBtn_all');
+  var btnSingle = document.getElementById('attSumViewBtn_single');
+  var boxAll = document.getElementById('attSumAllContainer');
+  var boxSingle = document.getElementById('attSumSingleContainer');
+  var singlePicker = document.getElementById('attSumSingleEmpPickerWrapper');
+  var printBtnText = document.getElementById('attSumPrintBtnText');
+
+  if (viewMode === 'ALL') {
+    if (btnAll) {
+      btnAll.style.background = '#2563eb';
+      btnAll.style.color = '#ffffff';
+      btnAll.style.fontWeight = '700';
+      btnAll.style.boxShadow = '0 1px 2px rgba(37,99,235,0.2)';
+    }
+    if (btnSingle) {
+      btnSingle.style.background = 'transparent';
+      btnSingle.style.color = '#475569';
+      btnSingle.style.fontWeight = '600';
+      btnSingle.style.boxShadow = 'none';
+    }
+    if (boxAll) boxAll.style.display = 'block';
+    if (boxSingle) boxSingle.style.display = 'none';
+    if (singlePicker) singlePicker.style.display = 'none';
+    if (printBtnText) printBtnText.textContent = 'พิมพ์สรุปรวม (A4)';
+  } else {
+    if (btnAll) {
+      btnAll.style.background = 'transparent';
+      btnAll.style.color = '#475569';
+      btnAll.style.fontWeight = '600';
+      btnAll.style.boxShadow = 'none';
+    }
+    if (btnSingle) {
+      btnSingle.style.background = '#2563eb';
+      btnSingle.style.color = '#ffffff';
+      btnSingle.style.fontWeight = '700';
+      btnSingle.style.boxShadow = '0 1px 2px rgba(37,99,235,0.2)';
+    }
+    if (boxAll) boxAll.style.display = 'none';
+    if (boxSingle) boxSingle.style.display = 'block';
+    if (singlePicker) singlePicker.style.display = 'inline-block';
+    if (printBtnText) printBtnText.textContent = 'พิมพ์รายบุคคล (A4)';
+
+    if (State.attendancePeriodSummaryData && State.attendancePeriodSummaryData.summaryList && State.attendancePeriodSummaryData.summaryList.length) {
+      if (!State.activeAttendanceSummarySingleEmpId) {
+        State.activeAttendanceSummarySingleEmpId = State.attendancePeriodSummaryData.summaryList[0].empId;
+      }
+      var empSel = document.getElementById('attSumSingleEmpSelect');
+      if (empSel) empSel.value = State.activeAttendanceSummarySingleEmpId;
+      renderIndividualAttendanceSheet(State.activeAttendanceSummarySingleEmpId);
+    }
+  }
+}
+
+function onAttendanceSummarySingleEmpChange() {
+  var empSel = document.getElementById('attSumSingleEmpSelect');
+  if (empSel && empSel.value) {
+    State.activeAttendanceSummarySingleEmpId = empSel.value;
+    renderIndividualAttendanceSheet(empSel.value);
+  }
+}
+
+function viewSingleEmpAttendance(empId) {
+  State.activeAttendanceSummarySingleEmpId = empId;
+  switchAttendanceSummaryView('SINGLE');
+}
+
+function loadAttendancePeriodSummary() {
+  var selPeriod = document.getElementById('attSumPeriodSelect');
+  var selBranch = document.getElementById('attSumBranchSelect');
+  var period = selPeriod ? selPeriod.value : '';
+  var branchId = selBranch ? selBranch.value : 'ALL';
+
+  var tbody = document.getElementById('attSumTableBody');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-spinner fa-spin" style="font-size:20px;display:block;margin-bottom:8px"></i> กำลังโหลดรายงานสรุปเวลาทำงาน...</td></tr>';
+  }
+
+  callApi('getAttendancePeriodSummary', {
+    period: period,
+    branchId: branchId,
+    username: (State.currentUser && State.currentUser.username) ? State.currentUser.username : 'Admin'
+  })
+  .then(function(res) {
+    if (!res.success) {
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="13" class="text-center text-red" style="padding:24px"><i class="fa-solid fa-triangle-exclamation"></i> ' + esc(res.message || 'โหลดข้อมูลไม่สำเร็จ') + '</td></tr>';
+      }
+      return;
+    }
+    State.attendancePeriodSummaryData = res;
+
+    // Populate branch select if empty
+    if (res.branches && res.branches.length && selBranch && selBranch.options.length <= 1) {
+      selBranch.innerHTML = '<option value="ALL">🏢 ทุกสาขา (All)</option>';
+      res.branches.forEach(function(b) {
+        var opt = document.createElement('option');
+        opt.value = b.branch_id;
+        opt.textContent = b.branch_name + ' (' + b.branch_id + ')';
+        selBranch.appendChild(opt);
+      });
+      selBranch.value = res.branchId || 'ALL';
+    }
+
+    // Populate single employee select
+    var empSel = document.getElementById('attSumSingleEmpSelect');
+    if (empSel && res.summaryList) {
+      empSel.innerHTML = '';
+      res.summaryList.forEach(function(e) {
+        var opt = document.createElement('option');
+        opt.value = e.empId;
+        opt.textContent = e.empId + ' - ' + e.fullName + (e.nickname && e.nickname !== '-' ? ' (' + e.nickname + ')' : '');
+        empSel.appendChild(opt);
+      });
+      if (!State.activeAttendanceSummarySingleEmpId && res.summaryList.length) {
+        State.activeAttendanceSummarySingleEmpId = res.summaryList[0].empId;
+      }
+      if (State.activeAttendanceSummarySingleEmpId) {
+        empSel.value = State.activeAttendanceSummarySingleEmpId;
+      }
+    }
+
+    renderAttendancePeriodSummary(res);
+  })
+  .catch(function(err) {
+    if (tbody) {
+      tbody.innerHTML = '<tr><td colspan="13" class="text-center text-red" style="padding:24px"><i class="fa-solid fa-triangle-exclamation"></i> ข้อผิดพลาด: ' + esc(err.message || err) + '</td></tr>';
+    }
+  });
+}
+
+function renderAttendancePeriodSummary(data) {
+  if (!data) return;
+  var cutoff = data.cutoffInfo || {};
+  var grand = data.grandTotals || {};
+  var list = data.summaryList || [];
+
+  // 1. Header info
+  var cutoffEl = document.getElementById('attSumCutoffText');
+  if (cutoffEl) {
+    cutoffEl.innerHTML = 'รอบงวด: <strong>' + esc(cutoff.startDate || '-') + ' ถึง ' + esc(cutoff.endDate || '-') + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)';
+  }
+  var printDateEl = document.getElementById('attSumPrintDate');
+  if (printDateEl) {
+    var nowUtc = new Date();
+    var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    printDateEl.textContent = bkk.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  // 2. Top KPI Cards
+  var kpiStaff = document.getElementById('attSumKpiStaff');
+  var kpiAbsent = document.getElementById('attSumKpiAbsent');
+  var kpiLate = document.getElementById('attSumKpiLate');
+  var kpiOt = document.getElementById('attSumKpiOt');
+
+  if (kpiStaff) kpiStaff.textContent = (grand.totalEmployees || list.length) + ' คน';
+  if (kpiAbsent) kpiAbsent.textContent = (grand.totalAbsentDays || 0) + ' วัน (' + (grand.totalAbsentTimes || 0) + ' ครั้ง)';
+  if (kpiLate) kpiLate.textContent = (grand.totalLateTimes || 0) + ' ครั้ง (' + (grand.totalLateMinutes || 0) + ' นาที)';
+  if (kpiOt) kpiOt.textContent = (grand.totalOtHours || 0) + ' ชม.';
+
+  // 3. Render Master Table
+  var tbody = document.getElementById('attSumTableBody');
+  var tfoot = document.getElementById('attSumTableFoot');
+
+  if (tbody) {
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted" style="padding:28px">ไม่พบข้อมูลพนักงานในสาขาหรือรอบงวดนี้</td></tr>';
+    } else {
+      var html = '';
+      list.forEach(function(r) {
+        var diligenceBadge = r.isDiligenceQualified
+          ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:12px;font-weight:700;font-size:11px;display:inline-block" title="ได้รับเบี้ยขยัน ฿' + (r.diligenceAmount || 1000).toLocaleString() + '"><i class="fa-solid fa-circle-check"></i> ได้รับ</span>'
+          : '<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:12px;font-weight:700;font-size:11px;display:inline-block" title="' + esc(r.diligenceDisqualifyReason || 'ไม่ผ่านเกณฑ์') + '"><i class="fa-solid fa-circle-xmark"></i> หลุดสิทธิ์</span>';
+
+        html += '<tr style="border-bottom:1px solid #e2e8f0;text-align:center;font-size:12px;height:38px">';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;color:#64748b">' + r.no + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;font-family:monospace;font-weight:700;color:#1e40af">' + esc(r.empId) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px 8px;text-align:left"><strong style="color:#0f172a;cursor:pointer" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')">' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' <span style="color:#64748b">(' + esc(r.nickname) + ')</span>' : '') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;text-align:left;color:#334155;white-space:nowrap">' + esc(r.branchName) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#eff6ff;color:#1e40af;font-weight:800">' + r.presentDays + ' / ' + r.expectedWorkDays + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fef2f2;color:' + (r.absentDays > 0 ? '#b91c1c;font-weight:700' : '#64748b') + '">' + (r.absentDays > 0 ? (r.absentDays + ' วัน (' + r.absentTimes + ' ครั้ง)') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#f0f9ff;color:' + (r.sickWithCertDays > 0 ? '#0369a1;font-weight:700' : '#64748b') + '">' + (r.sickWithCertDays > 0 ? (r.sickWithCertDays + ' วัน (' + r.sickWithCertTimes + ' ครั้ง)') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fffbeb;color:' + (r.sickNoCertDays > 0 ? '#b45309;font-weight:700' : '#64748b') + '">' + (r.sickNoCertDays > 0 ? (r.sickNoCertDays + ' วัน (' + r.sickNoCertTimes + ' ครั้ง)') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#faf5ff;color:' + (r.businessLeaveDays > 0 ? '#6d28d9;font-weight:700' : '#64748b') + '">' + (r.businessLeaveDays > 0 ? (r.businessLeaveDays + ' วัน (' + r.businessLeaveTimes + ' ครั้ง)') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fff7ed;color:' + (r.lateTimes > 0 ? '#c2410c;font-weight:800' : '#64748b') + '">' + (r.lateTimes > 0 ? (r.lateTimes + ' ครั้ง (' + r.lateMinutes + ' น.)') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#eef2ff;color:' + (r.otHours > 0 ? '#4338ca;font-weight:800' : '#64748b') + '">' + (r.otHours > 0 ? (r.otHours + ' ชม.') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px">' + diligenceBadge + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px" class="no-print"><button type="button" class="btn btn-slate btn-sm" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')" style="padding:2px 8px;font-size:11px"><i class="fa-solid fa-eye text-blue"></i></button></td>';
+        html += '</tr>';
+      });
+      tbody.innerHTML = html;
+    }
+  }
+
+  // 4. Render Table Footer (Grand Totals)
+  if (tfoot) {
+    var footHtml = '<tr style="border-top:2px solid #94a3b8;font-size:12px;height:42px">';
+    footHtml += '<td colspan="4" style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:800">รวมยอดทั้งสิ้น (' + list.length + ' คน):</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#eff6ff;color:#1e40af;font-weight:800">' + (grand.totalPresentDays || 0) + ' วัน</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#fef2f2;color:#991b1b;font-weight:800">' + (grand.totalAbsentDays || 0) + ' วัน (' + (grand.totalAbsentTimes || 0) + ' ครั้ง)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#f0f9ff;color:#075985;font-weight:800">' + (grand.totalSickWithCertDays || 0) + ' วัน (' + (grand.totalSickWithCertTimes || 0) + ' ครั้ง)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#fffbeb;color:#92400e;font-weight:800">' + (grand.totalSickNoCertDays || 0) + ' วัน (' + (grand.totalSickNoCertTimes || 0) + ' ครั้ง)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#faf5ff;color:#6b21a8;font-weight:800">' + (grand.totalBusinessDays || 0) + ' วัน (' + (grand.totalBusinessTimes || 0) + ' ครั้ง)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#fff7ed;color:#9a3412;font-weight:800">' + (grand.totalLateTimes || 0) + ' ครั้ง (' + (grand.totalLateMinutes || 0) + ' น.)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#eef2ff;color:#3730a3;font-weight:800">' + (grand.totalOtHours || 0) + ' ชม.</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;font-size:11px;font-weight:700">ผ่าน ' + (grand.diligencePassedCount || 0) + '<br><span style="color:#b91c1c">ตก ' + (grand.diligenceFailedCount || 0) + '</span></td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px" class="no-print">-</td>';
+    footHtml += '</tr>';
+    tfoot.innerHTML = footHtml;
+  }
+
+  // 5. Update Single View if currently active
+  if (State.activeAttendanceSummaryView === 'SINGLE') {
+    renderIndividualAttendanceSheet(State.activeAttendanceSummarySingleEmpId);
+  }
+}
+
+function renderIndividualAttendanceSheet(empId) {
+  if (!State.attendancePeriodSummaryData || !State.attendancePeriodSummaryData.summaryList) return;
+  var list = State.attendancePeriodSummaryData.summaryList;
+  var cutoff = State.attendancePeriodSummaryData.cutoffInfo || {};
+  var emp = list.find(function(e) { return e.empId === empId; });
+  if (!emp) {
+    if (list.length) emp = list[0];
+    else return;
+  }
+
+  // Header & Info
+  var cutEl = document.getElementById('attSingleCutoffText');
+  if (cutEl) cutEl.innerHTML = 'รอบงวด: <strong>' + esc(cutoff.startDate || '-') + ' ถึง ' + esc(cutoff.endDate || '-') + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)';
+  
+  var idEl = document.getElementById('attSingleEmpId');
+  var nameEl = document.getElementById('attSingleFullName');
+  var nickEl = document.getElementById('attSingleNickname');
+  var branchEl = document.getElementById('attSingleBranch');
+  var signEmpEl = document.getElementById('attSingleSignEmpName');
+
+  if (idEl) idEl.textContent = emp.empId;
+  if (nameEl) nameEl.textContent = emp.fullName;
+  if (nickEl) nickEl.textContent = emp.nickname || '-';
+  if (branchEl) branchEl.textContent = emp.branchName + ' (' + emp.branchId + ')';
+  if (signEmpEl) signEmpEl.textContent = emp.fullName;
+
+  // Stat Boxes
+  var presEl = document.getElementById('attSinglePresent');
+  var absEl = document.getElementById('attSingleAbsent');
+  var scEl = document.getElementById('attSingleSickCert');
+  var sncEl = document.getElementById('attSingleSickNoCert');
+  var busEl = document.getElementById('attSingleBusiness');
+  var lateEl = document.getElementById('attSingleLate');
+  var otEl = document.getElementById('attSingleOt');
+
+  if (presEl) presEl.textContent = emp.presentDays + ' / ' + emp.expectedWorkDays + ' วัน';
+  if (absEl) absEl.textContent = emp.absentDays + ' วัน (' + emp.absentTimes + ' ครั้ง)';
+  if (scEl) scEl.textContent = emp.sickWithCertDays + ' วัน (' + emp.sickWithCertTimes + ' ครั้ง)';
+  if (sncEl) sncEl.textContent = emp.sickNoCertDays + ' วัน (' + emp.sickNoCertTimes + ' ครั้ง)';
+  if (busEl) busEl.textContent = emp.businessLeaveDays + ' วัน (' + emp.businessLeaveTimes + ' ครั้ง)';
+  if (lateEl) lateEl.textContent = emp.lateTimes + ' ครั้ง (' + emp.lateMinutes + ' น.)';
+  if (otEl) otEl.textContent = emp.otHours + ' ชม.';
+
+  // Daily punch table
+  var tbody = document.getElementById('attSingleDailyLogsBody');
+  if (tbody) {
+    var recs = emp.dailyRecords || [];
+    if (!recs.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted" style="padding:16px">ไม่มีบันทึกเวลา</td></tr>';
+    } else {
+      var html = '';
+      recs.forEach(function(r) {
+        var dayColor = (r.dayOfWeek === 'อา.' || r.dayOfWeek === 'Sun') ? '#dc2626' : '#334155';
+        html += '<tr style="border-bottom:1px solid #f1f5f9;height:30px">';
+        html += '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:600">' + r.date.substring(5) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:4px;color:' + dayColor + ';font-weight:700">' + r.dayOfWeek + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace">' + esc(r.clockIn) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace">' + esc(r.clockOut) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:4px;color:' + (r.lateMinutes > 0 ? '#ea580c;font-weight:700' : '#64748b') + '">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:4px;color:' + (r.otHours > 0 ? '#4338ca;font-weight:700' : '#64748b') + '">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:4px;text-align:left;color:' + r.statusColor + ';font-weight:700">' + esc(r.statusText) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:4px;text-align:left;color:#64748b;font-size:11px">' + esc(r.remark || '-') + '</td>';
+        html += '</tr>';
+      });
+      tbody.innerHTML = html;
+    }
+  }
+}
+
+function exportAttendanceSummaryCsv() {
+  if (!State.attendancePeriodSummaryData || !State.attendancePeriodSummaryData.summaryList || !State.attendancePeriodSummaryData.summaryList.length) {
+    showToast('ไม่มีข้อมูลสำหรับส่งออก', 'warning');
+    return;
+  }
+  var data = State.attendancePeriodSummaryData;
+  var list = data.summaryList;
+  var cutoff = data.cutoffInfo || {};
+
+  var headers = [
+    'ลำดับ',
+    'รหัสพนักงาน',
+    'ชื่อ-นามสกุล',
+    'ชื่อเล่น',
+    'สาขา',
+    'แผนก',
+    'ตำแหน่ง',
+    'มาทำงาน (วัน)',
+    'วันทำงานตามเกณฑ์ (วัน)',
+    'ขาดงาน (วัน)',
+    'ขาดงาน (ครั้ง)',
+    'ลาป่วยมีใบรับรองแพทย์ (วัน)',
+    'ลาป่วยมีใบรับรองแพทย์ (ครั้ง)',
+    'ลาป่วยไม่มีใบรับรองแพทย์ (วัน)',
+    'ลาป่วยไม่มีใบรับรองแพทย์ (ครั้ง)',
+    'ลากิจ (วัน)',
+    'ลากิจ (ครั้ง)',
+    'มาสาย (ครั้ง)',
+    'มาสายรวม (นาที)',
+    'OT รวม (ชั่วโมง)',
+    'สถานะเบี้ยขยัน',
+    'จำนวนเงินเบี้ยขยัน (บาท)',
+    'เหตุผลหลุดสิทธิ์เบี้ยขยัน'
+  ];
+
+  var rows = [];
+  rows.push(headers.join(','));
+
+  list.forEach(function(r) {
+    var escapeCsv = function(val) {
+      if (val === null || val === undefined) return '""';
+      var s = String(val).replace(/"/g, '""');
+      return '"' + s + '"';
+    };
+
+    var row = [
+      r.no,
+      escapeCsv(r.empId),
+      escapeCsv(r.fullName),
+      escapeCsv(r.nickname),
+      escapeCsv(r.branchName),
+      escapeCsv(r.department),
+      escapeCsv(r.position),
+      r.presentDays,
+      r.expectedWorkDays,
+      r.absentDays,
+      r.absentTimes,
+      r.sickWithCertDays,
+      r.sickWithCertTimes,
+      r.sickNoCertDays,
+      r.sickNoCertTimes,
+      r.businessLeaveDays,
+      r.businessLeaveTimes,
+      r.lateTimes,
+      r.lateMinutes,
+      r.otHours,
+      escapeCsv(r.isDiligenceQualified ? 'ได้รับ' : 'หลุดสิทธิ์'),
+      r.diligenceAmount || 0,
+      escapeCsv(r.diligenceDisqualifyReason || '')
+    ];
+    rows.push(row.join(','));
+  });
+
+  var grand = data.grandTotals || {};
+  var summaryTotalRow = [
+    'รวมยอดทั้งสิ้น',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    grand.totalPresentDays || 0,
+    '',
+    (grand.totalAbsentDays || 0) + ' วัน (' + (grand.totalAbsentTimes || 0) + ' ครั้ง)',
+    '',
+    (grand.totalSickWithCertDays || 0) + ' วัน (' + (grand.totalSickWithCertTimes || 0) + ' ครั้ง)',
+    '',
+    (grand.totalSickNoCertDays || 0) + ' วัน (' + (grand.totalSickNoCertTimes || 0) + ' ครั้ง)',
+    '',
+    (grand.totalBusinessDays || 0) + ' วัน (' + (grand.totalBusinessTimes || 0) + ' ครั้ง)',
+    '',
+    (grand.totalLateTimes || 0) + ' ครั้ง',
+    (grand.totalLateMinutes || 0) + ' นาที',
+    (grand.totalOtHours || 0) + ' ชม.',
+    'ผ่าน ' + (grand.diligencePassedCount || 0) + ' / ตก ' + (grand.diligenceFailedCount || 0),
+    '',
+    ''
+  ];
+  rows.push(summaryTotalRow.join(','));
+
+  // Prepend UTF-8 BOM so Excel opens Thai characters flawlessly
+  var csvContent = '\uFEFF' + rows.join('\r\n');
+  var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var link = document.createElement('a');
+  link.setAttribute('href', url);
+  var periodStr = (data.period || 'current').replace(/[^0-9a-zA-Z_-]/g, '_');
+  link.setAttribute('download', 'PTN_Attendance_Summary_' + periodStr + '.csv');
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+
+  showToast('ดาวน์โหลดไฟล์ Excel (CSV) เรียบร้อยแล้ว', 'success');
+}
+
+function printAttendanceSummaryReport() {
+  if (!State.attendancePeriodSummaryData) {
+    showToast('กรุณารอโหลดข้อมูลให้เสร็จสิ้นก่อนสั่งพิมพ์', 'warning');
+    return;
+  }
+  var printContainer = document.getElementById('attendancePrintContainer');
+  if (!printContainer) return;
+
+  var viewMode = State.activeAttendanceSummaryView;
+  var data = State.attendancePeriodSummaryData;
+  var cutoff = data.cutoffInfo || {};
+  var list = data.summaryList || [];
+  var grand = data.grandTotals || {};
+
+  var nowUtc = new Date();
+  var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+  var dateStr = bkk.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' });
+
+  if (viewMode === 'ALL') {
+    // Print All Staff Summary Table (Landscape)
+    var html = '<div style="font-family:\'Sarabun\',sans-serif;color:#0f172a;padding:4mm">';
+    html += '<div style="border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:flex-start">';
+    html += '<div>';
+    html += '<h2 style="font-size:18px;font-weight:800;margin:0 0 3px 0">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>';
+    html += '<h3 style="font-size:14px;font-weight:700;color:#1e40af;margin:0 0 3px 0">รายงานสรุปวันทำงาน ขาด ลา มาสาย และ OT ของพนักงาน (ประจำงวด)</h3>';
+    html += '<div style="font-size:12px;color:#475569">รอบงวด: <strong>' + esc(cutoff.startDate) + ' ถึง ' + esc(cutoff.endDate) + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)</div>';
+    html += '</div>';
+    html += '<div style="text-align:right;font-size:11px;color:#475569">';
+    html += '<div>วันที่พิมพ์: ' + dateStr + '</div>';
+    html += '<div>พิมพ์โดย: ฝ่ายทรัพยากรบุคคล (HR)</div>';
+    html += '</div>';
+    html += '</div>';
+
+    // Master Table
+    html += '<table style="width:100%;border-collapse:collapse;font-size:11.5px;text-align:center;border:1.5px solid #0f172a">';
+    html += '<thead><tr style="background:#f1f5f9;font-weight:800;border-bottom:1.5px solid #0f172a">';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:35px">ลำดับ</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:60px">รหัส</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px 8px;text-align:left;min-width:140px">ชื่อ-นามสกุล (ชื่อเล่น)</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;text-align:left;width:95px">สาขา</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:65px">มาทำงาน<br>(วัน)</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:80px">ขาดงาน<br>(วัน/ครั้ง)</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:80px">ลาป่วยมีใบ<br>(วัน/ครั้ง)</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:80px">ลาป่วยไม่มีใบ<br>(วัน/ครั้ง)</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:80px">ลากิจ<br>(วัน/ครั้ง)</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:90px">มาสาย<br>(ครั้ง/นาที)</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:65px">OT รวม<br>(ชั่วโมง)</th>';
+    html += '<th style="border:1px solid #94a3b8;padding:6px;width:75px">เบี้ยขยัน</th>';
+    html += '</tr></thead><tbody>';
+
+    list.forEach(function(r) {
+      var dText = r.isDiligenceQualified ? 'ได้รับ' : 'หลุดสิทธิ์';
+      html += '<tr style="border-bottom:1px solid #cbd5e1;height:30px">';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + r.no + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:700">' + esc(r.empId) + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px 8px;text-align:left"><strong>' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' (' + esc(r.nickname) + ')' : '') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px;text-align:left">' + esc(r.branchName) + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px;font-weight:700">' + r.presentDays + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.absentDays > 0 ? (r.absentDays + ' (' + r.absentTimes + ')') : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.sickWithCertDays > 0 ? (r.sickWithCertDays + ' (' + r.sickWithCertTimes + ')') : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.sickNoCertDays > 0 ? (r.sickNoCertDays + ' (' + r.sickNoCertTimes + ')') : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.businessLeaveDays > 0 ? (r.businessLeaveDays + ' (' + r.businessLeaveTimes + ')') : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.lateTimes > 0 ? (r.lateTimes + ' (' + r.lateMinutes + ' น.)') : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px;font-weight:700">' + dText + '</td>';
+      html += '</tr>';
+    });
+
+    html += '</tbody><tfoot style="background:#f1f5f9;font-weight:800;border-top:1.5px solid #0f172a">';
+    html += '<tr style="height:36px">';
+    html += '<td colspan="4" style="border:1px solid #94a3b8;padding:6px;text-align:right">รวมยอดทั้งสิ้น (' + list.length + ' คน):</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalPresentDays || 0) + ' วัน</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalAbsentDays || 0) + ' (' + (grand.totalAbsentTimes || 0) + ')</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalSickWithCertDays || 0) + ' (' + (grand.totalSickWithCertTimes || 0) + ')</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalSickNoCertDays || 0) + ' (' + (grand.totalSickNoCertTimes || 0) + ')</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalBusinessDays || 0) + ' (' + (grand.totalBusinessTimes || 0) + ')</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalLateTimes || 0) + ' (' + (grand.totalLateMinutes || 0) + ' น.)</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalOtHours || 0) + ' ชม.</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px;font-size:11px">ผ่าน ' + (grand.diligencePassedCount || 0) + '<br>ตก ' + (grand.diligenceFailedCount || 0) + '</td>';
+    html += '</tr></tfoot></table>';
+
+    // Signatures
+    html += '<div style="margin-top:36px;display:grid;grid-template-columns:repeat(3, 1fr);gap:24px;text-align:center;font-size:12px">';
+    html += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................</p><p style="font-weight:700">( ................................................................ )</p><p style="font-size:11px;color:#64748b;margin-top:2px">เจ้าหน้าที่ผู้จัดทำรายงาน (HR)</p></div>';
+    html += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................</p><p style="font-weight:700">( ................................................................ )</p><p style="font-size:11px;color:#64748b;margin-top:2px">ผู้จัดการแผนก / หัวหน้าสาขา</p></div>';
+    html += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................</p><p style="font-weight:700">( ................................................................ )</p><p style="font-size:11px;color:#64748b;margin-top:2px">ผู้อนุมัติจ่ายเงินเดือน (ผู้บริหาร)</p></div>';
+    html += '</div></div>';
+
+    printContainer.innerHTML = html;
+    document.body.classList.add('printing-attendance-summary');
+    window.print();
+    setTimeout(function() {
+      document.body.classList.remove('printing-attendance-summary');
+      printContainer.innerHTML = '';
+    }, 600);
+
+  } else {
+    // Print Individual Timesheet Sheet (Portrait)
+    var emp = list.find(function(e) { return e.empId === State.activeAttendanceSummarySingleEmpId; });
+    if (!emp && list.length) emp = list[0];
+    if (!emp) return;
+
+    var sHtml = '<div style="font-family:\'Sarabun\',sans-serif;color:#0f172a;padding:4mm;max-width:760px;margin:0 auto">';
+    sHtml += '<div style="border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:12px;text-align:center">';
+    sHtml += '<h2 style="font-size:18px;font-weight:800;margin:0 0 3px 0">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>';
+    sHtml += '<h3 style="font-size:14px;font-weight:700;color:#1e40af;margin:0 0 3px 0">ใบสรุปเวลาทำงานและประวัติการขาด ลา มาสาย ประจำงวด (รายบุคคล)</h3>';
+    sHtml += '<div style="font-size:12px;color:#475569">รอบงวด: <strong>' + esc(cutoff.startDate) + ' ถึง ' + esc(cutoff.endDate) + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)</div>';
+    sHtml += '</div>';
+
+    // Emp Info Box
+    sHtml += '<div style="border:1px solid #cbd5e1;background:#f8fafc;padding:10px 14px;margin-bottom:12px;display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;font-size:12px">';
+    sHtml += '<div><span style="color:#64748b">รหัสพนักงาน:</span> <strong style="font-family:monospace;font-size:13px">' + esc(emp.empId) + '</strong></div>';
+    sHtml += '<div><span style="color:#64748b">ชื่อ-นามสกุล:</span> <strong>' + esc(emp.fullName) + '</strong></div>';
+    sHtml += '<div><span style="color:#64748b">ชื่อเล่น:</span> <strong>' + esc(emp.nickname) + '</strong></div>';
+    sHtml += '<div><span style="color:#64748b">สาขา:</span> <strong>' + esc(emp.branchName) + '</strong></div>';
+    sHtml += '</div>';
+
+    // Stat boxes
+    sHtml += '<table style="width:100%;border-collapse:collapse;text-align:center;font-size:11.5px;margin-bottom:12px;border:1px solid #94a3b8">';
+    sHtml += '<tr style="background:#f1f5f9;font-weight:700">';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">มาทำงาน</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ขาดงาน</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ป่วยมีใบ</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ป่วยไม่มีใบ</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ลากิจ</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">มาสาย</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">OT รวม</td>';
+    sHtml += '</tr>';
+    sHtml += '<tr style="font-weight:800;font-size:13px;height:34px">';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#1e40af">' + emp.presentDays + ' / ' + emp.expectedWorkDays + ' วัน</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#991b1b">' + emp.absentDays + ' วัน (' + emp.absentTimes + ' ครั้ง)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#0369a1">' + emp.sickWithCertDays + ' วัน (' + emp.sickWithCertTimes + ' ครั้ง)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#b45309">' + emp.sickNoCertDays + ' วัน (' + emp.sickNoCertTimes + ' ครั้ง)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#6d28d9">' + emp.businessLeaveDays + ' วัน (' + emp.businessLeaveTimes + ' ครั้ง)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#c2410c">' + emp.lateTimes + ' ครั้ง (' + emp.lateMinutes + ' น.)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#3730a3">' + emp.otHours + ' ชม.</td>';
+    sHtml += '</tr></table>';
+
+    // Daily Logs Table
+    sHtml += '<table style="width:100%;border-collapse:collapse;font-size:11px;text-align:center;border:1px solid #94a3b8;margin-bottom:20px">';
+    sHtml += '<thead><tr style="background:#f1f5f9;font-weight:700">';
+    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">วันที่</th>';
+    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:40px">วัน</th>';
+    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">เวลาเข้า</th>';
+    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">เวลาออก</th>';
+    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:65px">สาย (นาที)</th>';
+    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:60px">OT (ชม.)</th>';
+    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;text-align:left">สถานะการทำงาน / การลา</th>';
+    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;text-align:left">หมายเหตุ</th>';
+    sHtml += '</tr></thead><tbody>';
+
+    (emp.dailyRecords || []).forEach(function(r) {
+      sHtml += '<tr style="border-bottom:1px solid #e2e8f0;height:24px">';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace">' + r.date.substring(5) + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-weight:700">' + r.dayOfWeek + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace">' + esc(r.clockIn) + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace">' + esc(r.clockOut) + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-weight:600">' + esc(r.statusText) + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-size:10px;color:#64748b">' + esc(r.remark || '-') + '</td>';
+      sHtml += '</tr>';
+    });
+    sHtml += '</tbody></table>';
+
+    // Signatures
+    sHtml += '<div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center;font-size:12px">';
+    sHtml += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................ ผู้ขอรับรอง</p><p style="font-weight:700">( ' + esc(emp.fullName) + ' )</p><p style="font-size:11px;color:#64748b;margin-top:2px">พนักงานผู้ลงเวลา</p></div>';
+    sHtml += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................ ผู้ตรวจสอบ</p><p style="font-weight:700">( ................................................................ )</p><p style="font-size:11px;color:#64748b;margin-top:2px">เจ้าหน้าที่ฝ่ายบุคคล / หัวหน้างาน</p></div>';
+    sHtml += '</div></div>';
+
+    printContainer.innerHTML = sHtml;
+    document.body.classList.add('printing-attendance-individual');
+    window.print();
+    setTimeout(function() {
+      document.body.classList.remove('printing-attendance-individual');
+      printContainer.innerHTML = '';
+    }, 600);
   }
 }
 
