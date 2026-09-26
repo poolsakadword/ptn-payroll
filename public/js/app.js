@@ -8974,6 +8974,12 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + (item.start_date || '-') + '</b> ถึง <b>' + (item.end_date || '-') + '</b> (' + (item.days_count || 1) + ' วัน)</div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
+      (item.medical_cert_url ? 
+        '<div style="margin-bottom:8px">' +
+          '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(item.full_name || item.emp_id) + '\', \'วันที่ลา: ' + esc(item.start_date || '-') + ' ถึง ' + esc(item.end_date || '-') + ' (' + esc(item.leave_type || '') + ')\')" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">' +
+            '<i class="fa-solid fa-file-medical" style="color:#2563eb;font-size:13px"></i> ดูรูปใบรับรองแพทย์แนบ (คลิกเพื่อดูภาพขยาย)' +
+          '</button>' +
+        '</div>' : '') +
       '<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">' +
         getAttendanceActionButtons('leave', item) +
       '</div>' +
@@ -9336,6 +9342,7 @@ function renderAttendanceKpiModalList() {
           '</div>' +
           '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">' +
             badgeHtml +
+            (item.medicalCertUrl ? '<button type="button" class="btn btn-xs" onclick="previewAttendancePhoto(\'' + esc(item.medicalCertUrl) + '\', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'คำขอลา: ' + esc(item.leaveType || '') + '\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-weight:700;cursor:pointer"><i class="fa-solid fa-file-medical text-amber" style="margin-right:3px"></i> ดูใบรับรองแพทย์</button>' : '') +
             phoneBtn +
           '</div>' +
         '</div>';
@@ -9403,7 +9410,8 @@ function renderAttendanceKpiModalList() {
         title: 'ขอลาหยุด (' + (l.leave_type || 'ลา') + ')',
         sub: 'วันที่: ' + (l.start_date || '') + ' ถึง ' + (l.end_date || '') + ' (' + (l.days_count || 1) + ' วัน)',
         reason: l.reason || '-',
-        color: '#7c3aed'
+        color: '#7c3aed',
+        medicalCertUrl: l.medical_cert_url || l.cert_photo_url || null
       });
     });
     rawOts.forEach(function(o) {
@@ -9465,6 +9473,12 @@ function renderAttendanceKpiModalList() {
           '<div style="font-size:11.5px;color:#334155;background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0">' +
             '<strong>เหตุผล:</strong> ' + esc(item.reason) +
           '</div>' +
+          (item.medicalCertUrl ? 
+            '<div style="margin-top:2px">' +
+              '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medicalCertUrl) + '\', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'' + esc(item.title) + ' (' + esc(item.sub) + ')\')" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">' +
+                '<i class="fa-solid fa-file-medical" style="color:#2563eb;font-size:13px"></i> ดูรูปใบรับรองแพทย์แนบ (คลิกเพื่อดูภาพขยาย)' +
+              '</button>' +
+            '</div>' : '') +
           '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:4px">' +
             '<button type="button" class="btn btn-sm btn-success" onclick="approveAttendanceItem(\'' + item.type + '\', ' + item.id + ', \'APPROVE\')" style="font-size:11.5px;padding:4px 12px;font-weight:700">' +
               '<i class="fa-solid fa-check"></i> อนุมัติ' +

@@ -1799,6 +1799,7 @@ async function handleAction(db, action, params) {
       await db.prepare("ALTER TABLE time_logs ADD COLUMN break_in_lng REAL").run().catch(() => {});
       await db.prepare("ALTER TABLE time_logs ADD COLUMN break_minutes INTEGER DEFAULT 0").run().catch(() => {});
       await db.prepare("ALTER TABLE time_logs ADD COLUMN overbreak_minutes INTEGER DEFAULT 0").run().catch(() => {});
+      await db.prepare("ALTER TABLE leave_requests ADD COLUMN medical_cert_url TEXT").run().catch(() => {});
 
       const branchFilter = String(params.branchId || params.branch_id || '').trim();
       const empFilter = String(params.empId || params.emp_id || '').trim();
@@ -2242,6 +2243,7 @@ async function handleAction(db, action, params) {
             leaveType: lr ? (lr.leave_type || 'ลาหยุด') : null,
             leaveReason: lr ? (lr.reason || '') : null,
             leaveDays: lr ? (lr.days_count || 1) : 0,
+            medicalCertUrl: lr ? (lr.medical_cert_url || null) : null,
             type: lr ? 'LEAVE' : 'NO_EXCUSE'
           });
         }
