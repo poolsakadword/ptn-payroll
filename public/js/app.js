@@ -8890,6 +8890,31 @@ function saveAttendanceLogEditForm(e) {
     });
 }
 
+function formatThaiDateTime(dtStr) {
+  if (!dtStr) return '-';
+  var s = String(dtStr).trim();
+  // If ISO format with Z or offset (e.g. 2026-09-26T05:57:18.000Z)
+  if (s.indexOf('T') !== -1 && (s.indexOf('Z') !== -1 || s.indexOf('+') !== -1)) {
+    try {
+      var d = new Date(s);
+      if (!isNaN(d.getTime())) {
+        var bkk = new Date(d.getTime() + (7 * 3600 * 1000) + (d.getTimezoneOffset() * 60 * 1000));
+        var y = bkk.getFullYear();
+        var m = (bkk.getMonth() + 1 < 10 ? '0' : '') + (bkk.getMonth() + 1);
+        var day = (bkk.getDate() < 10 ? '0' : '') + bkk.getDate();
+        var hh = (bkk.getHours() < 10 ? '0' : '') + bkk.getHours();
+        var mm = (bkk.getMinutes() < 10 ? '0' : '') + bkk.getMinutes();
+        return y + '-' + m + '-' + day + ' ' + hh + ':' + mm + ' น.';
+      }
+    } catch(e) {}
+  }
+  // Standard format YYYY-MM-DD HH:mm:ss or YYYY-MM-DD HH:mm
+  if (s.length >= 16) {
+    return s.substring(0, 16) + ' น.';
+  }
+  return s;
+}
+
 function getAttendanceStatusBadge(status) {
   if (status === 'APPROVED') {
     return '<span style="font-size:11px;font-weight:700;color:#166534;background:#dcfce7;padding:2px 8px;border-radius:12px"><i class="fa-solid fa-circle-check"></i> อนุมัติแล้ว</span>';
@@ -8984,7 +9009,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
           '<span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#dbeafe;padding:2px 8px;border-radius:12px">' + typeLabel + '</span>' +
           getAttendanceStatusBadge(item.status) +
         '</div>' +
-        '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + (item.created_at ? String(item.created_at).substring(0, 16) : '') + '</span>' +
+        '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + (item.start_date || '-') + '</b> ถึง <b>' + (item.end_date || '-') + '</b> (' + (item.days_count || 1) + ' วัน)</div>' +
@@ -9009,7 +9034,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
           '<span style="font-size:11px;font-weight:700;color:#b45309;background:#fef3c7;padding:2px 8px;border-radius:12px">ขอทำ OT</span>' +
           getAttendanceStatusBadge(item.status) +
         '</div>' +
-        '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + (item.created_at ? String(item.created_at).substring(0, 16) : '') + '</span>' +
+        '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-orange"></i> วันที่ทำ OT: <b>' + (item.date || '-') + '</b> | จำนวน <b>' + (item.planned_hours || item.actual_hours || 0) + ' ชม.</b></div>' +
@@ -9028,7 +9053,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
           '<span style="font-size:11px;font-weight:700;color:#047857;background:#d1fae5;padding:2px 8px;border-radius:12px">ขอเบิกเงินล่วงหน้า</span>' +
           getAttendanceStatusBadge(item.status) +
         '</div>' +
-        '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + (item.created_at ? String(item.created_at).substring(0, 16) : '') + '</span>' +
+        '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:2px"><i class="fa-regular fa-calendar text-green"></i> วันที่ขอเบิก: <b>' + (item.request_date || '-') + '</b></div>' +
@@ -9581,7 +9606,8 @@ function renderAttendanceKpiModalList() {
         sub: 'วันที่: ' + (l.start_date || '') + ' ถึง ' + (l.end_date || '') + ' (' + (l.days_count || 1) + ' วัน)',
         reason: l.reason || '-',
         color: '#7c3aed',
-        medicalCertUrl: l.medical_cert_url || l.cert_photo_url || null
+        medicalCertUrl: l.medical_cert_url || l.cert_photo_url || null,
+        createdAt: l.created_at
       });
     });
     rawOts.forEach(function(o) {
@@ -9594,7 +9620,8 @@ function renderAttendanceKpiModalList() {
         title: 'ขอทำ OT (' + (o.hours || 0) + ' ชม.)',
         sub: 'วันที่: ' + (o.date || '') + ' เวลา ' + (o.start_time || '') + ' - ' + (o.end_time || ''),
         reason: o.reason || '-',
-        color: '#2563eb'
+        color: '#2563eb',
+        createdAt: o.created_at
       });
     });
     rawAdvances.forEach(function(a) {
@@ -9607,7 +9634,8 @@ function renderAttendanceKpiModalList() {
         title: 'ขอเบิกเงินฉุกเฉินล่วงหน้า (' + formatMoney(a.amount || 0) + ' บาท)',
         sub: 'วันที่ขอ: ' + (a.request_date || (a.created_at ? a.created_at.substring(0, 10) : '')),
         reason: a.reason || '-',
-        color: '#059669'
+        color: '#059669',
+        createdAt: a.created_at
       });
     });
 
@@ -9637,8 +9665,9 @@ function renderAttendanceKpiModalList() {
               esc(item.title) +
             '</span>' +
           '</div>' +
-          '<div style="font-size:11.5px;color:#475569">' +
-            '<i class="fa-regular fa-clock" style="margin-right:4px"></i> ' + esc(item.sub) +
+          '<div style="font-size:11.5px;color:#475569;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:4px">' +
+            '<span><i class="fa-regular fa-clock" style="margin-right:4px"></i> ' + esc(item.sub) + '</span>' +
+            (item.createdAt ? '<span style="font-size:10.5px;color:#64748b;font-weight:600"><i class="fa-solid fa-paper-plane" style="font-size:9px"></i> ยื่น: ' + formatThaiDateTime(item.createdAt) + '</span>' : '') +
           '</div>' +
           '<div style="font-size:11.5px;color:#334155;background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0">' +
             '<strong>เหตุผล:</strong> ' + esc(item.reason) +

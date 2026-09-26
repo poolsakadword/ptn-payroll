@@ -30,7 +30,8 @@ async function verifyUserPassword(inputPassword, storedPassword) {
 async function logSystemActivity(db, username, action, details) {
   try {
     await db.prepare('CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, username TEXT, action TEXT, details TEXT)').run().catch(() => {});
-    const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
+    const bkk = new Date(Date.now() + (7 * 3600 * 1000));
+    const now = bkk.toISOString().replace('T', ' ').substring(0, 19);
     await db.prepare('INSERT INTO activity_logs (timestamp, username, action, details) VALUES (?, ?, ?, ?)').bind(now, username || 'System', action, details || '').run();
   } catch(e) {
     console.error('Failed to log activity:', e);
@@ -1698,7 +1699,7 @@ async function handleAction(db, action, params) {
 
       // 1. Pending Leaves
       const leavesQ = await db.prepare(`
-        SELECT lr.id, lr.emp_id, lr.leave_type, lr.start_date, lr.days, lr.created_at, e.full_name
+        SELECT lr.id, lr.emp_id, lr.leave_type, lr.start_date, lr.days, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name
         FROM leave_requests lr
         LEFT JOIN employees e ON lr.emp_id = e.emp_id
         WHERE lr.status = 'PENDING'
@@ -1708,7 +1709,7 @@ async function handleAction(db, action, params) {
 
       // 2. Pending OTs
       const otsQ = await db.prepare(`
-        SELECT ot.id, ot.emp_id, ot.ot_date, ot.ot_hours, ot.created_at, e.full_name
+        SELECT ot.id, ot.emp_id, ot.ot_date, ot.ot_hours, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name
         FROM ot_requests ot
         LEFT JOIN employees e ON ot.emp_id = e.emp_id
         WHERE ot.status = 'PENDING'
@@ -1718,7 +1719,7 @@ async function handleAction(db, action, params) {
 
       // 3. Pending Advances
       const advQ = await db.prepare(`
-        SELECT ar.id, ar.emp_id, ar.amount, ar.request_date, ar.created_at, e.full_name
+        SELECT ar.id, ar.emp_id, ar.amount, ar.request_date, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name
         FROM advance_requests ar
         LEFT JOIN employees e ON ar.emp_id = e.emp_id
         WHERE ar.status = 'PENDING'
@@ -2028,22 +2029,22 @@ async function handleAction(db, action, params) {
         }
 
         if (reqDateMode === 'SINGLE' && reqDate) {
-          leaveConds.push("(substr(lr.created_at, 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
+          leaveConds.push("(substr(datetime(lr.created_at, '+7 hours'), 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
           leaveBinds.push(reqDate, reqDate);
         } else if (reqDateMode === 'MONTH' && reqMonth) {
-          leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ? OR substr(lr.created_at, 1, 7) = ?)");
+          leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ? OR substr(datetime(lr.created_at, '+7 hours'), 1, 7) = ?)");
           leaveBinds.push(reqMonth + '-%', reqMonth + '-%', reqMonth);
         } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-          leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(lr.created_at, 1, 10) BETWEEN ? AND ?))");
+          leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
           leaveBinds.push(reqCutoff.endDate, reqCutoff.startDate, reqCutoff.startDate, reqCutoff.endDate);
         } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-          leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(lr.created_at, 1, 10) BETWEEN ? AND ?))");
+          leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
           leaveBinds.push(reqEndDate, reqStartDate, reqStartDate, reqEndDate);
         }
 
         const leaveWhere = leaveConds.length > 0 ? "WHERE " + leaveConds.join(" AND ") : "";
         const leavesQuery = await db.prepare(`
-          SELECT lr.*, e.full_name, e.department
+          SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.department
           FROM leave_requests lr
           LEFT JOIN employees e ON lr.emp_id = e.emp_id
           ${leaveWhere}
@@ -2072,22 +2073,22 @@ async function handleAction(db, action, params) {
         }
 
         if (reqDateMode === 'SINGLE' && reqDate) {
-          otConds.push("(ot.date = ? OR substr(ot.created_at, 1, 10) = ?)");
+          otConds.push("(ot.date = ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 10) = ?)");
           otBinds.push(reqDate, reqDate);
         } else if (reqDateMode === 'MONTH' && reqMonth) {
-          otConds.push("(ot.date LIKE ? OR substr(ot.created_at, 1, 7) = ?)");
+          otConds.push("(ot.date LIKE ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 7) = ?)");
           otBinds.push(reqMonth + '-%', reqMonth);
         } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-          otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(ot.created_at, 1, 10) BETWEEN ? AND ?))");
+          otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
           otBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
         } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-          otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(ot.created_at, 1, 10) BETWEEN ? AND ?))");
+          otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
           otBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
         }
 
         const otWhere = otConds.length > 0 ? "WHERE " + otConds.join(" AND ") : "";
         const otsQuery = await db.prepare(`
-          SELECT ot.*, e.full_name, e.department
+          SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.department
           FROM ot_requests ot
           LEFT JOIN employees e ON ot.emp_id = e.emp_id
           ${otWhere}
@@ -2116,22 +2117,22 @@ async function handleAction(db, action, params) {
         }
 
         if (reqDateMode === 'SINGLE' && reqDate) {
-          advConds.push("(ar.request_date = ? OR substr(ar.created_at, 1, 10) = ?)");
+          advConds.push("(ar.request_date = ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 10) = ?)");
           advBinds.push(reqDate, reqDate);
         } else if (reqDateMode === 'MONTH' && reqMonth) {
-          advConds.push("(ar.request_date LIKE ? OR substr(ar.created_at, 1, 7) = ?)");
+          advConds.push("(ar.request_date LIKE ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 7) = ?)");
           advBinds.push(reqMonth + '-%', reqMonth);
         } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-          advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(ar.created_at, 1, 10) BETWEEN ? AND ?))");
+          advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
           advBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
         } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-          advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(ar.created_at, 1, 10) BETWEEN ? AND ?))");
+          advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
           advBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
         }
 
         const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
         const advQuery = await db.prepare(`
-          SELECT ar.*, e.full_name, e.department
+          SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department
           FROM advance_requests ar
           LEFT JOIN employees e ON ar.emp_id = e.emp_id
           ${advWhere}
@@ -2377,19 +2378,19 @@ async function handleAction(db, action, params) {
       if (type === 'leave') {
         await db.prepare(`
           UPDATE leave_requests 
-          SET status = ?, approver_id = ?, approved_at = CURRENT_TIMESTAMP, rejection_reason = ?
+          SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours'), rejection_reason = ?
           WHERE id = ?
         `).bind(status, approverId, status === 'REJECTED' ? (rejectionReason || '') : '', id).run();
       } else if (type === 'ot') {
         await db.prepare(`
           UPDATE ot_requests 
-          SET status = ?, approver_id = ?, approved_at = CURRENT_TIMESTAMP
+          SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours')
           WHERE id = ?
         `).bind(status, approverId, id).run();
       } else if (type === 'advance') {
         await db.prepare(`
           UPDATE advance_requests 
-          SET status = ?, approver_id = ?, approved_at = CURRENT_TIMESTAMP, rejection_reason = ?
+          SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours'), rejection_reason = ?
           WHERE id = ?
         `).bind(status, approverId, status === 'REJECTED' ? (rejectionReason || '') : '', id).run();
       }
