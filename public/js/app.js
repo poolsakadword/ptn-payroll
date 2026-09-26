@@ -8272,18 +8272,33 @@ function loadTimeAttendanceDashboard() {
         }
 
         var setEnableSelfieGreetings = document.getElementById('attSetEnableSelfieGreetings');
+        var setEnableClockIn = document.getElementById('attSetEnableClockInGreeting');
+        var setEnableBreak = document.getElementById('attSetEnableBreakGreeting');
+        var setEnableClockOut = document.getElementById('attSetEnableClockOutGreeting');
         var setEnableBirthday = document.getElementById('attSetEnableBirthdayGreeting');
         var setEnableFriday = document.getElementById('attSetEnableFridayTgif');
-        var setSelfieMessages = document.getElementById('attSetSelfieCustomMessages');
+        var setSelfieMessagesIn = document.getElementById('attSetSelfieCustomMessages');
+        var setSelfieMessagesBreak = document.getElementById('attSetSelfieCustomMessagesBreak');
+        var setSelfieMessagesOut = document.getElementById('attSetSelfieCustomMessagesOut');
 
         if (setEnableSelfieGreetings) {
           setEnableSelfieGreetings.checked = (r.settings.enable_selfie_greetings !== 'false');
           toggleSelfieGreetingsUI(setEnableSelfieGreetings.checked);
         }
+        if (setEnableClockIn) setEnableClockIn.checked = (r.settings.enable_selfie_clockin_greetings !== 'false');
+        if (setEnableBreak) setEnableBreak.checked = (r.settings.enable_selfie_break_greetings !== 'false');
+        if (setEnableClockOut) setEnableClockOut.checked = (r.settings.enable_selfie_clockout_greetings !== 'false');
         if (setEnableBirthday) setEnableBirthday.checked = (r.settings.enable_birthday_greeting !== 'false');
         if (setEnableFriday) setEnableFriday.checked = (r.settings.enable_friday_tgif !== 'false');
-        if (setSelfieMessages) {
-          setSelfieMessages.value = r.settings.selfie_custom_messages !== undefined ? r.settings.selfie_custom_messages : 'สวัสดีตอนเช้าค่ะ วันนี้ยิ้มสดใสมาก ขอให้เป็นวันที่ราบรื่นและมีความสุขนะคะ 🌸\nพร้อมลุยงานวันนี้! ยิ้มรับลูกค้าด้วยหัวใจบริการค่ะ ✨\nเริ่มต้นวันใหม่ด้วยพลังบวก ขอให้การทำงานวันนี้ราบรื่นสำเร็จทุกสิ่งนะคะ 💖';
+
+        if (setSelfieMessagesIn) {
+          setSelfieMessagesIn.value = r.settings.selfie_custom_messages !== undefined ? r.settings.selfie_custom_messages : 'สวัสดีตอนเช้าค่ะ วันนี้ยิ้มสดใสมาก ขอให้เป็นวันที่ราบรื่นและมีความสุขนะคะ 🌸\nพร้อมลุยงานวันนี้! ยิ้มรับลูกค้าด้วยหัวใจบริการค่ะ ✨\nเริ่มต้นวันใหม่ด้วยพลังบวก ขอให้การทำงานวันนี้ราบรื่นสำเร็จทุกสิ่งนะคะ 💖';
+        }
+        if (setSelfieMessagesBreak) {
+          setSelfieMessagesBreak.value = r.settings.selfie_custom_messages_break !== undefined ? r.settings.selfie_custom_messages_break : 'ทานอาหารกลางวันให้อร่อยนะคะ ชาร์จพลังให้เต็มที่ 🍜🍱\nพักสายตาและผ่อนคลายความเหนื่อยล้าสักครู่ค่ะ ☕🍰\nชาร์จพลังเต็มที่แล้ว พร้อมลุยงานช่วงบ่ายอย่างสดชื่นค่ะ 💪✨';
+        }
+        if (setSelfieMessagesOut) {
+          setSelfieMessagesOut.value = r.settings.selfie_custom_messages_out !== undefined ? r.settings.selfie_custom_messages_out : 'ขอบคุณสำหรับความทุ่มเทในวันนี้นะคะ ทำงานเหนื่อยมาทั้งวันแล้ว เก่งมากๆ ค่ะ 👏💖\nเดินทางกลับบ้านโดยสวัสดิภาพนะคะ พักผ่อนให้เต็มที่ พรุ่งนี้พบกันใหม่ค่ะ 🚗🏠\nทำงานสำเร็จไปอีกวันแล้ว วันนี้คุณทำได้ยอดเยี่ยมมากค่ะ 🌟';
         }
       }
 
@@ -9848,9 +9863,14 @@ function saveAttendanceSettingsFromPayroll(e) {
   var payslipReleaseMode = document.getElementById('attSetPayslipReleaseMode') ? document.getElementById('attSetPayslipReleaseMode').value : 'CLOSED_PERIODS_ONLY';
 
   var enableSelfieGreetings = document.getElementById('attSetEnableSelfieGreetings') ? (document.getElementById('attSetEnableSelfieGreetings').checked ? 'true' : 'false') : 'true';
+  var enableClockInGreeting = document.getElementById('attSetEnableClockInGreeting') ? (document.getElementById('attSetEnableClockInGreeting').checked ? 'true' : 'false') : 'true';
+  var enableBreakGreeting = document.getElementById('attSetEnableBreakGreeting') ? (document.getElementById('attSetEnableBreakGreeting').checked ? 'true' : 'false') : 'true';
+  var enableClockOutGreeting = document.getElementById('attSetEnableClockOutGreeting') ? (document.getElementById('attSetEnableClockOutGreeting').checked ? 'true' : 'false') : 'true';
   var enableBirthdayGreeting = document.getElementById('attSetEnableBirthdayGreeting') ? (document.getElementById('attSetEnableBirthdayGreeting').checked ? 'true' : 'false') : 'true';
   var enableFridayTgif = document.getElementById('attSetEnableFridayTgif') ? (document.getElementById('attSetEnableFridayTgif').checked ? 'true' : 'false') : 'true';
   var selfieCustomMessages = document.getElementById('attSetSelfieCustomMessages') ? document.getElementById('attSetSelfieCustomMessages').value.trim() : '';
+  var selfieCustomMessagesBreak = document.getElementById('attSetSelfieCustomMessagesBreak') ? document.getElementById('attSetSelfieCustomMessagesBreak').value.trim() : '';
+  var selfieCustomMessagesOut = document.getElementById('attSetSelfieCustomMessagesOut') ? document.getElementById('attSetSelfieCustomMessagesOut').value.trim() : '';
 
   var settings = {
     shift_start: sStart,
@@ -9902,9 +9922,14 @@ function saveAttendanceSettingsFromPayroll(e) {
     enable_payslip: enablePayslip,
     payslip_release_mode: payslipReleaseMode,
     enable_selfie_greetings: enableSelfieGreetings,
+    enable_selfie_clockin_greetings: enableClockInGreeting,
+    enable_selfie_break_greetings: enableBreakGreeting,
+    enable_selfie_clockout_greetings: enableClockOutGreeting,
     enable_birthday_greeting: enableBirthdayGreeting,
     enable_friday_tgif: enableFridayTgif,
-    selfie_custom_messages: selfieCustomMessages
+    selfie_custom_messages: selfieCustomMessages,
+    selfie_custom_messages_break: selfieCustomMessagesBreak,
+    selfie_custom_messages_out: selfieCustomMessagesOut
   };
 
   callApi('saveAttendanceSettings', {
@@ -9926,39 +9951,129 @@ function toggleSelfieGreetingsUI(isEnabled) {
   }
 }
 
-function resetDefaultSelfieGreetings() {
-  var area = document.getElementById('attSetSelfieCustomMessages');
-  if (area) {
-    area.value = 'สวัสดีตอนเช้าค่ะ วันนี้ยิ้มสดใสมาก ขอให้เป็นวันที่ราบรื่นและมีความสุขนะคะ 🌸\nพร้อมลุยงานวันนี้! ยิ้มรับลูกค้าด้วยหัวใจบริการค่ะ ✨\nเริ่มต้นวันใหม่ด้วยพลังบวก ขอให้การทำงานวันนี้ราบรื่นสำเร็จทุกสิ่งนะคะ 💖';
-    showToast('คืนค่าข้อความทักทายเริ่มต้นแล้ว', 'info');
+function switchGreetingMessageTab(tab) {
+  var tabs = ['in', 'break', 'out'];
+  tabs.forEach(function(t) {
+    var btn = document.getElementById('tabBtnGreeting' + (t.charAt(0).toUpperCase() + t.slice(1)));
+    var pane = document.getElementById('greetingMsgTab_' + t);
+    if (btn) btn.className = (t === tab ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
+    if (pane) pane.style.display = (t === tab ? 'block' : 'none');
+  });
+}
+
+function resetDefaultSelfieGreetings(which) {
+  if (which === 'break') {
+    var area = document.getElementById('attSetSelfieCustomMessagesBreak');
+    if (area) {
+      area.value = 'ทานอาหารกลางวันให้อร่อยนะคะ ชาร์จพลังให้เต็มที่ 🍜🍱\nพักสายตาและผ่อนคลายความเหนื่อยล้าสักครู่ค่ะ ☕🍰\nชาร์จพลังเต็มที่แล้ว พร้อมลุยงานช่วงบ่ายอย่างสดชื่นค่ะ 💪✨';
+      showToast('คืนค่าข้อความช่วงเวลาพักเริ่มต้นแล้ว', 'info');
+    }
+  } else if (which === 'out') {
+    var area = document.getElementById('attSetSelfieCustomMessagesOut');
+    if (area) {
+      area.value = 'ขอบคุณสำหรับความทุ่มเทในวันนี้นะคะ ทำงานเหนื่อยมาทั้งวันแล้ว เก่งมากๆ ค่ะ 👏💖\nเดินทางกลับบ้านโดยสวัสดิภาพนะคะ พักผ่อนให้เต็มที่ พรุ่งนี้พบกันใหม่ค่ะ 🚗🏠\nทำงานสำเร็จไปอีกวันแล้ว วันนี้คุณทำได้ยอดเยี่ยมมากค่ะ 🌟';
+      showToast('คืนค่าข้อความตอนเลิกงานเริ่มต้นแล้ว', 'info');
+    }
+  } else {
+    var area = document.getElementById('attSetSelfieCustomMessages');
+    if (area) {
+      area.value = 'สวัสดีตอนเช้าค่ะ วันนี้ยิ้มสดใสมาก ขอให้เป็นวันที่ราบรื่นและมีความสุขนะคะ 🌸\nพร้อมลุยงานวันนี้! ยิ้มรับลูกค้าด้วยหัวใจบริการค่ะ ✨\nเริ่มต้นวันใหม่ด้วยพลังบวก ขอให้การทำงานวันนี้ราบรื่นสำเร็จทุกสิ่งนะคะ 💖';
+      showToast('คืนค่าข้อความเข้างานเริ่มต้นแล้ว', 'info');
+    }
   }
 }
 
 function previewSelfieGreetingDemo() {
   openModal('modalSelfieGreetingDemo');
-  setSimGreetingMode('random');
+  setSimGreetingMode('in');
 }
 
 function setSimGreetingMode(mode) {
-  var btnRandom = document.getElementById('btnSimModeRandom');
+  var btnIn = document.getElementById('btnSimModeIn');
+  var btnBreak = document.getElementById('btnSimModeBreak');
+  var btnOut = document.getElementById('btnSimModeOut');
   var btnTgif = document.getElementById('btnSimModeTgif');
   var btnBday = document.getElementById('btnSimModeBday');
-  var badge = document.getElementById('simGreetingTopBadge');
+
+  var screenBg = document.getElementById('simGreetingScreenBg');
+  var centerIcon = document.getElementById('simGreetingCenterIcon');
+  var topEmoji = document.getElementById('simGreetingTopEmoji');
   var scoreText = document.getElementById('simGreetingScoreText');
   var msgText = document.getElementById('simGreetingMessageText');
+  var subText = document.getElementById('simGreetingSubtext');
 
-  if (btnRandom) btnRandom.className = (mode === 'random' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
+  if (btnIn) btnIn.className = (mode === 'in' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
+  if (btnBreak) btnBreak.className = (mode === 'break' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
+  if (btnOut) btnOut.className = (mode === 'out' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
   if (btnTgif) btnTgif.className = (mode === 'tgif' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
   if (btnBday) btnBday.className = (mode === 'bday' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
 
   if (mode === 'tgif') {
-    if (scoreText) scoreText.textContent = 'TGIF! สุขสันต์วันศุกร์สดใส 🎉';
+    if (screenBg) screenBg.style.background = 'linear-gradient(135deg, #c084fc 0%, #f472b6 50%, #fb923c 100%)';
+    if (centerIcon) {
+      centerIcon.className = 'fa-solid fa-champagne-glasses';
+      centerIcon.style.color = '#7e22ce';
+    }
+    if (topEmoji) topEmoji.textContent = '🎉';
+    if (scoreText) scoreText.textContent = 'TGIF! สุขสันต์วันศุกร์สดใส';
     if (msgText) msgText.textContent = '"สุขสันต์วันศุกร์ค่ะ! สู้ๆ กับวันสุดท้ายของสัปดาห์ แล้วเตรียมพักผ่อนสุดสัปดาห์ให้เต็มที่นะคะ 🎉🏖️"';
+    if (subText) subText.textContent = 'สแกนเข้า/ออกงาน • สาขาสำนักงานใหญ่';
+
   } else if (mode === 'bday') {
-    if (scoreText) scoreText.textContent = 'Happy Birthday! สุขสันต์วันเกิด 🎂';
+    if (screenBg) screenBg.style.background = 'linear-gradient(135deg, #f472b6 0%, #fb7185 50%, #fde047 100%)';
+    if (centerIcon) {
+      centerIcon.className = 'fa-solid fa-cake-candles';
+      centerIcon.style.color = '#be185d';
+    }
+    if (topEmoji) topEmoji.textContent = '🎂';
+    if (scoreText) scoreText.textContent = 'Happy Birthday! สุขสันต์วันเกิด';
     if (msgText) msgText.textContent = '"สุขสันต์วันคล้ายวันเกิดค่ะ! ขอให้มีความสุข สุขภาพแข็งแรง การงานรุ่งเรือง ประสบความสำเร็จตลอดปีนะคะ 🎁✨"';
+    if (subText) subText.textContent = 'สุขสันต์วันเกิดคุณพนักงาน • PTN Pharma';
+
+  } else if (mode === 'break') {
+    if (screenBg) screenBg.style.background = 'linear-gradient(135deg, #fef08a 0%, #a7f3d0 50%, #99f6e4 100%)';
+    if (centerIcon) {
+      centerIcon.className = 'fa-solid fa-mug-hot';
+      centerIcon.style.color = '#047857';
+    }
+    if (topEmoji) topEmoji.textContent = '🍱';
+    if (scoreText) scoreText.textContent = 'Rest & Recharge ชาร์จพลังเต็มที่!';
+    var txtArea = document.getElementById('attSetSelfieCustomMessagesBreak');
+    var raw = (txtArea && txtArea.value.trim()) ? txtArea.value.trim() : '';
+    var lines = raw.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+    if (lines.length === 0) {
+      lines = ['ทานอาหารกลางวันให้อร่อยนะคะ ชาร์จพลังให้เต็มที่ 🍜🍱'];
+    }
+    var randomMsg = lines[Math.floor(Math.random() * lines.length)];
+    if (msgText) msgText.textContent = '"' + randomMsg + '"';
+    if (subText) subText.textContent = 'บันทึกเวลาพัก • สาขาสำนักงานใหญ่';
+
+  } else if (mode === 'out') {
+    if (screenBg) screenBg.style.background = 'linear-gradient(135deg, #ddd6fe 0%, #bfdbfe 50%, #bae6fd 100%)';
+    if (centerIcon) {
+      centerIcon.className = 'fa-solid fa-moon';
+      centerIcon.style.color = '#4338ca';
+    }
+    if (topEmoji) topEmoji.textContent = '👏';
+    if (scoreText) scoreText.textContent = 'Good Job! วันนี้ทำได้ยอดเยี่ยมมาก';
+    var txtArea = document.getElementById('attSetSelfieCustomMessagesOut');
+    var raw = (txtArea && txtArea.value.trim()) ? txtArea.value.trim() : '';
+    var lines = raw.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+    if (lines.length === 0) {
+      lines = ['ขอบคุณสำหรับความทุ่มเทในวันนี้นะคะ ทำงานเหนื่อยมาทั้งวันแล้ว เก่งมากๆ ค่ะ 👏💖'];
+    }
+    var randomMsg = lines[Math.floor(Math.random() * lines.length)];
+    if (msgText) msgText.textContent = '"' + randomMsg + '"';
+    if (subText) subText.textContent = 'สแกนเลิกงาน • สาขาสำนักงานใหญ่';
+
   } else {
-    // Random from user custom messages
+    // mode === 'in' (Clock IN)
+    if (screenBg) screenBg.style.background = 'linear-gradient(135deg, #fbcfe8 0%, #fed7aa 50%, #fef08a 100%)';
+    if (centerIcon) {
+      centerIcon.className = 'fa-solid fa-face-smile-beam';
+      centerIcon.style.color = '#d97706';
+    }
+    if (topEmoji) topEmoji.textContent = '✨';
     var txtArea = document.getElementById('attSetSelfieCustomMessages');
     var raw = (txtArea && txtArea.value.trim()) ? txtArea.value.trim() : '';
     var lines = raw.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
@@ -9969,6 +10084,7 @@ function setSimGreetingMode(mode) {
     var randomScore = Math.floor(Math.random() * 8) + 92; // 92 - 99%
     if (scoreText) scoreText.textContent = 'Smile Score: ' + randomScore + '% สดใสมาก!';
     if (msgText) msgText.textContent = '"' + randomMsg + '"';
+    if (subText) subText.textContent = 'สแกนเข้างาน • สาขาสำนักงานใหญ่';
   }
 }
 
