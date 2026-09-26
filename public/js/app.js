@@ -8420,13 +8420,24 @@ function initAttendanceSummaryPeriodOptions() {
   // 1. Populate period dropdown if empty
   if (selPeriod.options.length <= 1) {
     var thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    var fullThaiMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
     var nowUtc = new Date();
     var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
     var curY = bkk.getFullYear();
     var curM = bkk.getMonth() + 1; // 1-12
+    var curD = bkk.getDate();
+
+    // If today is past the cutoff day (day > 25), the active period being clocked in right now is NEXT month!
+    if (curD > 25) {
+      curM += 1;
+      if (curM > 12) {
+        curM = 1;
+        curY += 1;
+      }
+    }
 
     selPeriod.innerHTML = '';
-    // Generate 8 recent periods
+    // Generate 8 recent periods starting from the current active clock-in period
     for (var i = 0; i < 8; i++) {
       var y = curY;
       var m = curM - i;
@@ -8443,12 +8454,19 @@ function initAttendanceSummaryPeriodOptions() {
       }
       var thYear = y + 543;
       var prevThYear = prevY + 543;
-      var label = 'งวด ' + thaiMonths[m - 1] + ' ' + thYear + ' (26 ' + thaiMonths[prevM - 1] + ' ' + (prevThYear % 100) + ' - 25 ' + thaiMonths[m - 1] + ' ' + (thYear % 100) + ')';
-      
+
+      var isCurrentActive = (i === 0);
+      var currentBadge = isCurrentActive ? ' ⭐ [งวดปัจจุบัน - กำลังลงเวลา]' : '';
+      var label = 'งวด ' + fullThaiMonths[m - 1] + ' ' + thYear + ' (26 ' + thaiMonths[prevM - 1] + ' - 25 ' + thaiMonths[m - 1] + ')' + currentBadge;
+
       var opt = document.createElement('option');
       opt.value = ymStr;
       opt.textContent = label;
-      if (i === 0) opt.selected = true;
+      if (isCurrentActive) {
+        opt.selected = true;
+        opt.style.fontWeight = '700';
+        opt.style.color = '#059669';
+      }
       selPeriod.appendChild(opt);
     }
   }
@@ -8613,7 +8631,10 @@ function renderAttendancePeriodSummary(data) {
   // 1. Header info
   var cutoffEl = document.getElementById('attSumCutoffText');
   if (cutoffEl) {
-    cutoffEl.innerHTML = 'รอบงวด: <strong>' + esc(cutoff.startDate || '-') + ' ถึง ' + esc(cutoff.endDate || '-') + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)';
+    var activeTag = cutoff.isCurrentActivePeriod
+      ? ' <span style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;margin-left:6px"><i class="fa-solid fa-circle-dot" style="color:#10b981;font-size:8px"></i> กำลังลงเวลางวดนี้อยู่</span>'
+      : '';
+    cutoffEl.innerHTML = 'รอบงวด: <strong>' + esc(cutoff.startDate || '-') + ' ถึง ' + esc(cutoff.endDate || '-') + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)' + activeTag;
   }
   var printDateEl = document.getElementById('attSumPrintDate');
   if (printDateEl) {
@@ -8702,7 +8723,12 @@ function renderIndividualAttendanceSheet(empId) {
 
   // Header & Info
   var cutEl = document.getElementById('attSingleCutoffText');
-  if (cutEl) cutEl.innerHTML = 'รอบงวด: <strong>' + esc(cutoff.startDate || '-') + ' ถึง ' + esc(cutoff.endDate || '-') + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)';
+  if (cutEl) {
+    var activeTag = cutoff.isCurrentActivePeriod
+      ? ' <span style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;margin-left:6px"><i class="fa-solid fa-circle-dot" style="color:#10b981;font-size:8px"></i> กำลังลงเวลางวดนี้อยู่</span>'
+      : '';
+    cutEl.innerHTML = 'รอบงวด: <strong>' + esc(cutoff.startDate || '-') + ' ถึง ' + esc(cutoff.endDate || '-') + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)' + activeTag;
+  }
   
   var idEl = document.getElementById('attSingleEmpId');
   var nameEl = document.getElementById('attSingleFullName');

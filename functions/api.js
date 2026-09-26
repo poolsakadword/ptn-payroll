@@ -2325,13 +2325,24 @@ async function handleAction(db, action, params) {
       const bangkokTime = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
       const today = bangkokTime.toISOString().substring(0, 10);
 
-      const period = params.period ? String(params.period).trim() : today.substring(0, 7);
+      let period = params.period ? String(params.period).trim() : '';
+      if (!period) {
+        let curY = bangkokTime.getFullYear();
+        let curM = bangkokTime.getMonth() + 1;
+        let curD = bangkokTime.getDate();
+        if (curD > 25) {
+          curM++;
+          if (curM > 12) { curM = 1; curY++; }
+        }
+        period = `${curY}-${String(curM).padStart(2, '0')}`;
+      }
       const branchId = String(params.branchId || params.branch_id || 'ALL').trim();
       const empId = params.empId ? String(params.empId).trim() : null;
 
       const cutoffInfo = await getCutoffDatesForPeriod(db, period);
       const startDate = cutoffInfo.startDate;
       const endDate = cutoffInfo.endDate;
+      const isCurrentActivePeriod = (today >= startDate && today <= endDate);
       const totalExpectedWorkDays = getActualWorkingDaysInCutoff(startDate, endDate) || 26;
 
       // Build working dates list (Mon-Sat, non-Sunday)
@@ -2679,7 +2690,8 @@ async function handleAction(db, action, params) {
           startDate,
           endDate,
           totalExpectedWorkDays,
-          cutoffDay: cutoffInfo.cutoffDay
+          cutoffDay: cutoffInfo.cutoffDay,
+          isCurrentActivePeriod
         },
         branchId: branchId || 'ALL',
         branches,
