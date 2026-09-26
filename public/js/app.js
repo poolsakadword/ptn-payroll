@@ -8123,6 +8123,16 @@ function loadTimeAttendanceDashboard() {
         if (elLate) elLate.innerHTML = (r.kpi.late || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
         if (elPend) elPend.innerHTML = (r.kpi.pendingApprovals || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">รายการ</span>';
         if (elTot) elTot.innerHTML = (r.kpi.totalEmployees || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
+        var subBadge = document.getElementById('attSubTabBadgeApprovals');
+        if (subBadge) {
+          var pCount = (r.kpi && r.kpi.pendingApprovals) || 0;
+          if (pCount > 0) {
+            subBadge.textContent = pCount;
+            subBadge.style.display = 'inline-block';
+          } else {
+            subBadge.style.display = 'none';
+          }
+        }
       }
 
       // Cache breakdown & pending datasets for clickable dashboard modal
@@ -8326,6 +8336,7 @@ function loadTimeAttendanceDashboard() {
       // 4. Render Tables & Approvals
       renderTimeAttendanceTodayLogs(_currentAttendanceLogs, _currentAttendanceIsIndividual);
       renderTimeAttendanceApprovals(r.pendingLeaves || [], r.pendingOts || [], r.pendingAdvances || []);
+      renderBranchManagerTable();
 
       var kpiModal = document.getElementById('modalAttendanceKpiDetails');
       if (kpiModal && kpiModal.classList.contains('active')) {
@@ -8343,6 +8354,48 @@ function loadTimeAttendanceDashboard() {
         logsBody.innerHTML = '<tr><td colspan="14" class="text-center text-red" style="padding:24px;background:#fef2f2"><i class="fa-solid fa-triangle-exclamation" style="font-size:22px;display:block;margin-bottom:6px"></i>โหลดข้อมูลไม่สำเร็จ: ' + (err.message || err) + '<div style="margin-top:10px"><button type="button" class="btn btn-sm btn-primary" onclick="loadTimeAttendanceDashboard()" style="padding:5px 14px;font-size:12px;font-weight:600;border-radius:6px"><i class="fa-solid fa-rotate-right"></i> กดเพื่อลองใหม่อีกครั้ง</button></div></td></tr>';
       }
     });
+}
+
+var _activeAttendanceSubTab = 'logs';
+function switchAttendanceSubTab(tabName) {
+  var tabs = ['logs', 'approvals', 'settings', 'branches'];
+  if (tabs.indexOf(tabName) === -1) tabName = 'logs';
+  _activeAttendanceSubTab = tabName;
+
+  tabs.forEach(function(t) {
+    var btn = document.getElementById('attSubTabBtn_' + t);
+    var pane = document.getElementById('attSubTabPane_' + t);
+    if (btn) {
+      if (t === tabName) {
+        btn.style.background = '#2563eb';
+        btn.style.color = '#ffffff';
+        btn.style.borderColor = '#1d4ed8';
+        btn.style.fontWeight = '700';
+        btn.style.boxShadow = '0 1px 3px rgba(37,99,235,0.25)';
+      } else {
+        btn.style.background = '#ffffff';
+        btn.style.color = '#475569';
+        btn.style.borderColor = '#cbd5e1';
+        btn.style.fontWeight = '600';
+        btn.style.boxShadow = 'none';
+      }
+    }
+    if (pane) {
+      pane.style.display = (t === tabName) ? 'block' : 'none';
+    }
+  });
+
+  if (tabName === 'approvals') {
+    if (State.attendanceCurrentRequests) {
+      renderTimeAttendanceApprovals(
+        State.attendanceCurrentRequests.leave || [],
+        State.attendanceCurrentRequests.ot || [],
+        State.attendanceCurrentRequests.advance || []
+      );
+    }
+  } else if (tabName === 'branches') {
+    renderBranchManagerTable();
+  }
 }
 
 function setAttendanceFilterToday() {
@@ -9015,6 +9068,24 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
 
   var total = (leaves ? leaves.length : 0) + (ots ? ots.length : 0) + (advances ? advances.length : 0);
   if (countEl) countEl.textContent = total;
+
+  var subBadge = document.getElementById('attSubTabBadgeApprovals');
+  if (subBadge) {
+    var pCount = 0;
+    if (_currentAttendanceRequestStatus === 'PENDING' || !_currentAttendanceRequestStatus) {
+      pCount = total;
+    } else if (State.attendancePendingData) {
+      pCount = (State.attendancePendingData.leaves || []).length +
+               (State.attendancePendingData.ots || []).length +
+               (State.attendancePendingData.advances || []).length;
+    }
+    if (pCount > 0) {
+      subBadge.textContent = pCount;
+      subBadge.style.display = 'inline-block';
+    } else {
+      subBadge.style.display = 'none';
+    }
+  }
 
   if (total === 0) {
     var statusLabels = {
@@ -10161,11 +10232,14 @@ function openBranchManagerModal() {
 
 function renderBranchManagerTable() {
   var tbody = document.getElementById('branchManagerTableBody');
-  if (!tbody) return;
+  var tbodyEmb = document.getElementById('branchManagerTableBodyEmbedded');
+  if (!tbody && !tbodyEmb) return;
 
   var bList = State.branches || [];
   if (!bList.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted" style="padding:24px">ไม่พบข้อมูลสาขา</td></tr>';
+    var emptyRow = '<tr><td colspan="10" class="text-center text-muted" style="padding:24px">ไม่พบข้อมูลสาขา</td></tr>';
+    if (tbody) tbody.innerHTML = emptyRow;
+    if (tbodyEmb) tbodyEmb.innerHTML = emptyRow;
     return;
   }
 
@@ -10216,7 +10290,8 @@ function renderBranchManagerTable() {
     '</tr>';
   });
 
-  tbody.innerHTML = html;
+  if (tbody) tbody.innerHTML = html;
+  if (tbodyEmb) tbodyEmb.innerHTML = html;
 }
 
 function renderBranchEarlyDismissalBar() {
