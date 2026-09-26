@@ -8276,7 +8276,7 @@ function loadTimeAttendanceDashboard() {
         var setEnableBreak = document.getElementById('attSetEnableBreakGreeting');
         var setEnableClockOut = document.getElementById('attSetEnableClockOutGreeting');
         var setEnableBirthday = document.getElementById('attSetEnableBirthdayGreeting');
-        var setEnableFriday = document.getElementById('attSetEnableFridayTgif');
+        var setEnableSaturday = document.getElementById('attSetEnableSaturdayGreeting') || document.getElementById('attSetEnableFridayTgif');
         var setSelfieMessagesIn = document.getElementById('attSetSelfieCustomMessages');
         var setSelfieMessagesBreak = document.getElementById('attSetSelfieCustomMessagesBreak');
         var setSelfieMessagesOut = document.getElementById('attSetSelfieCustomMessagesOut');
@@ -8289,7 +8289,7 @@ function loadTimeAttendanceDashboard() {
         if (setEnableBreak) setEnableBreak.checked = (r.settings.enable_selfie_break_greetings !== 'false');
         if (setEnableClockOut) setEnableClockOut.checked = (r.settings.enable_selfie_clockout_greetings !== 'false');
         if (setEnableBirthday) setEnableBirthday.checked = (r.settings.enable_birthday_greeting !== 'false');
-        if (setEnableFriday) setEnableFriday.checked = (r.settings.enable_friday_tgif !== 'false');
+        if (setEnableSaturday) setEnableSaturday.checked = (r.settings.enable_saturday_greeting !== undefined ? r.settings.enable_saturday_greeting !== 'false' : r.settings.enable_friday_tgif !== 'false');
 
         if (setSelfieMessagesIn) {
           setSelfieMessagesIn.value = r.settings.selfie_custom_messages !== undefined ? r.settings.selfie_custom_messages : 'สวัสดีตอนเช้าค่ะ วันนี้ยิ้มสดใสมาก ขอให้เป็นวันที่ราบรื่นและมีความสุขนะคะ 🌸\nพร้อมลุยงานวันนี้! ยิ้มรับลูกค้าด้วยหัวใจบริการค่ะ ✨\nเริ่มต้นวันใหม่ด้วยพลังบวก ขอให้การทำงานวันนี้ราบรื่นสำเร็จทุกสิ่งนะคะ 💖';
@@ -9867,7 +9867,7 @@ function saveAttendanceSettingsFromPayroll(e) {
   var enableBreakGreeting = document.getElementById('attSetEnableBreakGreeting') ? (document.getElementById('attSetEnableBreakGreeting').checked ? 'true' : 'false') : 'true';
   var enableClockOutGreeting = document.getElementById('attSetEnableClockOutGreeting') ? (document.getElementById('attSetEnableClockOutGreeting').checked ? 'true' : 'false') : 'true';
   var enableBirthdayGreeting = document.getElementById('attSetEnableBirthdayGreeting') ? (document.getElementById('attSetEnableBirthdayGreeting').checked ? 'true' : 'false') : 'true';
-  var enableFridayTgif = document.getElementById('attSetEnableFridayTgif') ? (document.getElementById('attSetEnableFridayTgif').checked ? 'true' : 'false') : 'true';
+  var enableSaturdayGreeting = (document.getElementById('attSetEnableSaturdayGreeting') || document.getElementById('attSetEnableFridayTgif')) ? ((document.getElementById('attSetEnableSaturdayGreeting') || document.getElementById('attSetEnableFridayTgif')).checked ? 'true' : 'false') : 'true';
   var selfieCustomMessages = document.getElementById('attSetSelfieCustomMessages') ? document.getElementById('attSetSelfieCustomMessages').value.trim() : '';
   var selfieCustomMessagesBreak = document.getElementById('attSetSelfieCustomMessagesBreak') ? document.getElementById('attSetSelfieCustomMessagesBreak').value.trim() : '';
   var selfieCustomMessagesOut = document.getElementById('attSetSelfieCustomMessagesOut') ? document.getElementById('attSetSelfieCustomMessagesOut').value.trim() : '';
@@ -9926,7 +9926,8 @@ function saveAttendanceSettingsFromPayroll(e) {
     enable_selfie_break_greetings: enableBreakGreeting,
     enable_selfie_clockout_greetings: enableClockOutGreeting,
     enable_birthday_greeting: enableBirthdayGreeting,
-    enable_friday_tgif: enableFridayTgif,
+    enable_saturday_greeting: enableSaturdayGreeting,
+    enable_friday_tgif: enableSaturdayGreeting,
     selfie_custom_messages: selfieCustomMessages,
     selfie_custom_messages_break: selfieCustomMessagesBreak,
     selfie_custom_messages_out: selfieCustomMessagesOut
@@ -9992,7 +9993,7 @@ function setSimGreetingMode(mode) {
   var btnIn = document.getElementById('btnSimModeIn');
   var btnBreak = document.getElementById('btnSimModeBreak');
   var btnOut = document.getElementById('btnSimModeOut');
-  var btnTgif = document.getElementById('btnSimModeTgif');
+  var btnSat = document.getElementById('btnSimModeSat') || document.getElementById('btnSimModeTgif');
   var btnBday = document.getElementById('btnSimModeBday');
 
   var screenBg = document.getElementById('simGreetingScreenBg');
@@ -10005,18 +10006,18 @@ function setSimGreetingMode(mode) {
   if (btnIn) btnIn.className = (mode === 'in' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
   if (btnBreak) btnBreak.className = (mode === 'break' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
   if (btnOut) btnOut.className = (mode === 'out' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
-  if (btnTgif) btnTgif.className = (mode === 'tgif' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
+  if (btnSat) btnSat.className = (mode === 'sat' || mode === 'tgif' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
   if (btnBday) btnBday.className = (mode === 'bday' ? 'btn btn-xs btn-primary' : 'btn btn-xs btn-slate');
 
-  if (mode === 'tgif') {
+  if (mode === 'sat' || mode === 'tgif') {
     if (screenBg) screenBg.style.background = 'linear-gradient(135deg, #c084fc 0%, #f472b6 50%, #fb923c 100%)';
     if (centerIcon) {
       centerIcon.className = 'fa-solid fa-champagne-glasses';
       centerIcon.style.color = '#7e22ce';
     }
     if (topEmoji) topEmoji.textContent = '🎉';
-    if (scoreText) scoreText.textContent = 'TGIF! สุขสันต์วันศุกร์สดใส';
-    if (msgText) msgText.textContent = '"สุขสันต์วันศุกร์ค่ะ! สู้ๆ กับวันสุดท้ายของสัปดาห์ แล้วเตรียมพักผ่อนสุดสัปดาห์ให้เต็มที่นะคะ 🎉🏖️"';
+    if (scoreText) scoreText.textContent = 'Happy Saturday! สุขสันต์วันเสาร์';
+    if (msgText) msgText.textContent = '"สุขสันต์วันเสาร์ค่ะ! สู้ๆ กับวันสุดท้ายของสัปดาห์ทำงาน พรุ่งนี้ได้หยุดพักผ่อนชาร์จพลังเต็มที่แล้วนะคะ 🎉🏖️"';
     if (subText) subText.textContent = 'สแกนเข้า/ออกงาน • สาขาสำนักงานใหญ่';
 
   } else if (mode === 'bday') {
