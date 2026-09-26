@@ -398,8 +398,62 @@ async function ensureGlobalSchemas(db) {
     await ensureBranchTables(db);
     await ensurePushTables(db);
     await ensureTimeAttendanceTables(db);
+
+    // Consolidated Core Migrations (Single run per cold start to eliminate D1 lock contention)
+    await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT "true"').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT "false"').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN diligence_allowance REAL').run().catch(() => {});
+    await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
+    await db.prepare('ALTER TABLE branches ADD COLUMN early_dismissal_full_pay INTEGER DEFAULT 0').run().catch(() => {});
+    await db.prepare('ALTER TABLE time_logs ADD COLUMN is_full_pay INTEGER DEFAULT 0').run().catch(() => {});
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS employee_devices (
+        emp_id TEXT PRIMARY KEY,
+        device_id TEXT NOT NULL,
+        device_name TEXT,
+        bound_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run().catch(() => {});
   } catch(e) {
     console.warn('ensureGlobalSchemas note:', e);
+  }
+}
+
+// ==============================================================================
+// SESSION TOKEN AUTHENTICATION (HMAC-SHA256 SIGNED TOKEN)
+// ==============================================================================
+const JWT_SESSION_SECRET = 'PTN_SECRET_KEY_PAYROLL_2026_ENTERPRISE_HMAC';
+
+async function generateSessionToken(username, role) {
+  const payload = JSON.stringify({
+    u: username,
+    r: role,
+    exp: Date.now() + (7 * 24 * 3600 * 1000) // 7 days expiration
+  });
+  const b64Payload = btoa(unescape(encodeURIComponent(payload)));
+  const sig = await sha256Hex(b64Payload + ':' + JWT_SESSION_SECRET);
+  return `${b64Payload}.${sig}`;
+}
+
+async function verifySessionToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [b64Payload, sig] = parts;
+  const expectedSig = await sha256Hex(b64Payload + ':' + JWT_SESSION_SECRET);
+  if (sig !== expectedSig) return null;
+  try {
+    const payload = JSON.parse(decodeURIComponent(escape(atob(b64Payload))));
+    if (payload.exp && Date.now() > payload.exp) return null;
+    return payload; // { u: username, r: role, exp: timestamp }
+  } catch(e) {
+    return null;
   }
 }
 
@@ -417,7 +471,7 @@ export async function onRequest(context) {
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   };
 
   if (request.method === 'OPTIONS') {
@@ -434,6 +488,9 @@ export async function onRequest(context) {
     });
   }
 
+  // Ensure schemas are initialized once per isolate
+  await ensureGlobalSchemas(db);
+
   try {
     let action = 'getAppInitialData';
     let params = {};
@@ -446,6 +503,22 @@ export async function onRequest(context) {
     } else {
       action = url.searchParams.get('action') || 'getAppInitialData';
       params = Object.fromEntries(url.searchParams.entries());
+    }
+
+    // Verify session token from Authorization Header or params
+    const authHeader = request.headers.get('Authorization') || '';
+    let token = '';
+    if (authHeader.startsWith('Bearer ')) {
+      token = authHeader.substring(7).trim();
+    } else if (params.token) {
+      token = params.token;
+    }
+    if (token) {
+      const session = await verifySessionToken(token);
+      if (session) {
+        params.verifiedUser = session.u;
+        params.verifiedRole = session.r;
+      }
     }
 
     const result = await handleAction(db, action, params);
@@ -549,6 +622,11 @@ function getActualWorkingDaysInCutoff(startDate, endDate) {
 }
 
 async function handleAction(db, action, params) {
+  if (params.verifiedUser) {
+    params.username = params.verifiedUser;
+    params.currentUsername = params.verifiedUser;
+  }
+
   let period = params.period;
   if (!period) {
     const latestRow = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
@@ -556,7 +634,7 @@ async function handleAction(db, action, params) {
   }
 
   switch (action) {
-    // 1. AUTH (STRICT D1 DATABASE AUTHENTICATION)
+    // 1. AUTH (STRICT D1 DATABASE AUTHENTICATION WITH SECURE SESSION TOKEN)
     case 'checkLogin': {
       const u = String(params.username || '').trim().toLowerCase();
       const p = String(params.password || '').trim();
@@ -567,9 +645,6 @@ async function handleAction(db, action, params) {
       if (!userCountRow || userCountRow.count === 0) {
         await db.prepare('INSERT OR REPLACE INTO users (username, password, role) VALUES (?, ?, ?)').bind('admin', '123456', 'Admin / HR').run();
       }
-
-      // Ensure permissions column exists
-      await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
 
       // Check strictly against D1 users database (Using Secure Password Verification)
       const userRow = await db.prepare('SELECT * FROM users WHERE LOWER(username) = ?').bind(u).first();
@@ -590,7 +665,8 @@ async function handleAction(db, action, params) {
         if (userRow.username === 'admin' || userRow.role === 'Admin / HR' || userRow.role === 'Admin') {
           perms = ['all'];
         }
-        return { success: true, username: userRow.username, role: userRow.role || 'User', permissions: perms };
+        const sessionToken = await generateSessionToken(userRow.username, userRow.role || 'User');
+        return { success: true, username: userRow.username, role: userRow.role || 'User', permissions: perms, token: sessionToken };
       }
       return { success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' };
     }
@@ -646,23 +722,7 @@ async function handleAction(db, action, params) {
         workingDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate);
       }
 
-      // Employees
-      await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
-      await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
-
-      // Device Locks (PTN Time Integration)
-      await db.prepare(`
-        CREATE TABLE IF NOT EXISTS employee_devices (
-          emp_id TEXT PRIMARY KEY,
-          device_id TEXT NOT NULL,
-          device_name TEXT,
-          bound_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run().catch(() => {});
+      // Load Device Locks and Employees (Schema is pre-ensured at cold start)
       const deviceRows = await db.prepare('SELECT emp_id, device_id, device_name, bound_at FROM employee_devices').all().catch(() => ({ results: [] }));
       const deviceMap = {};
       for (const d of deviceRows.results || []) {
@@ -951,15 +1011,6 @@ async function handleAction(db, action, params) {
       const ssoVal = (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750;
       const taxVal = Number(emp.defaultTax) || 0;
 
-      await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT "true"').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT "false"').run().catch(() => {});
-      await db.prepare('ALTER TABLE employees ADD COLUMN diligence_allowance REAL').run().catch(() => {});
-      await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
-
       let probEndDate = emp.probationEndDate || '';
       const probDays = Number(emp.probationDays) || 119;
       if (emp.status === 'Probation' && emp.joinDate && !probEndDate) {
@@ -1203,8 +1254,6 @@ async function handleAction(db, action, params) {
       const startDate = dates.startDate;
       const endDate = dates.endDate;
       const targetEmpId = params.empId ? String(params.empId).trim() : null;
-
-      await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
 
       // 0. Determine actual work days for this period (from settings or calculated Mon-Sat non-Sundays)
       const settingsRowsQuery = await db.prepare('SELECT key, value FROM settings').all().catch(() => ({ results: [] }));
@@ -4106,7 +4155,6 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
       const origUser = params.origUser;
       if (!u.username) return { success: false, message: 'กรุณากรอก Username' };
       if (!origUser && !u.password) return { success: false, message: 'กรุณากรอก Password' };
-      await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
       if (origUser && origUser !== u.username) {
         await db.prepare('DELETE FROM users WHERE username = ?').bind(origUser).run();
       }

@@ -347,14 +347,15 @@ function callApi(action, payload, retryCount) {
   payload = payload || {};
   payload.action = action;
   payload.period = payload.period || State.period;
-  if (State.currentUser && State.currentUser.username) {
-    if (!payload.currentUsername) payload.currentUsername = State.currentUser.username;
-    if (!payload.username) payload.username = State.currentUser.username;
+  var reqHeaders = { 'Content-Type': 'application/json' };
+  if (State.currentUser && State.currentUser.token) {
+    reqHeaders['Authorization'] = 'Bearer ' + State.currentUser.token;
+    payload.token = State.currentUser.token;
   }
 
   return fetch(APP_CONFIG.getApiUrl(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: reqHeaders,
     body: JSON.stringify(payload)
   })
   .then(function(res) {
@@ -450,7 +451,8 @@ function handleLogin(e) {
         State.currentUser = {
           username: r.username,
           role: r.role,
-          permissions: r.permissions || []
+          permissions: r.permissions || [],
+          token: r.token || ''
         };
         localStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
         sessionStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
