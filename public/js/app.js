@@ -359,8 +359,9 @@ function callApi(action, payload, retryCount) {
   })
   .then(function(res) {
     if (!res.ok) {
-      if ((res.status === 502 || res.status === 503 || res.status === 504) && retryCount < 2) {
-        return new Promise(function(resolve) { setTimeout(resolve, 800 * (retryCount + 1)); })
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && retryCount < 3) {
+        var waitMs = 1000 * (retryCount + 1);
+        return new Promise(function(resolve) { setTimeout(resolve, waitMs); })
           .then(function() {
             return callApi(action, payload, retryCount + 1);
           });
@@ -370,8 +371,9 @@ function callApi(action, payload, retryCount) {
     return res.json();
   })
   .catch(function(err) {
-    if (retryCount < 2 && err && err.message && (err.message.indexOf('Failed to fetch') !== -1 || err.message.indexOf('NetworkError') !== -1)) {
-      return new Promise(function(resolve) { setTimeout(resolve, 800 * (retryCount + 1)); })
+    if (retryCount < 3 && err && err.message && (err.message.indexOf('Failed to fetch') !== -1 || err.message.indexOf('NetworkError') !== -1 || err.message.indexOf('503') !== -1 || err.message.indexOf('502') !== -1)) {
+      var waitMs = 1000 * (retryCount + 1);
+      return new Promise(function(resolve) { setTimeout(resolve, waitMs); })
         .then(function() {
           return callApi(action, payload, retryCount + 1);
         });
