@@ -2304,7 +2304,11 @@ async function handleAction(db, action, params) {
         system_maintenance_mode: 'false',
         system_maintenance_message: 'ระบบลงเวลา PTN Time อยู่ระหว่างปิดปรับปรุงชั่วคราว เพื่อเพิ่มประสิทธิภาพการทำงาน ขออภัยในความไม่สะดวก',
         enable_payslip: 'true',
-        payslip_release_mode: 'CLOSED_PERIODS_ONLY'
+        payslip_release_mode: 'CLOSED_PERIODS_ONLY',
+        enable_selfie_greetings: 'true',
+        enable_birthday_greeting: 'true',
+        enable_friday_tgif: 'true',
+        selfie_custom_messages: 'สวัสดีตอนเช้าค่ะ วันนี้ยิ้มสดใสมาก ขอให้เป็นวันที่ราบรื่นและมีความสุขนะคะ 🌸\nพร้อมลุยงานวันนี้! ยิ้มรับลูกค้าด้วยหัวใจบริการค่ะ ✨\nเริ่มต้นวันใหม่ด้วยพลังบวก ขอให้การทำงานวันนี้ราบรื่นสำเร็จทุกสิ่งนะคะ 💖'
       };
       for (const r of setRows.results || []) attSettings[r.key] = r.value;
 

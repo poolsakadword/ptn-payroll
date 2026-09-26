@@ -1154,6 +1154,54 @@
 
                 <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
 
+                <!-- SECTION 2.3: SELFIE GREETINGS & SMILE METER (FUNCTION 2) -->
+                <div>
+                  <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+                    <span style="display:flex;align-items:center;gap:6px">
+                      <i class="fa-solid fa-face-smile text-amber-500"></i> ลูกเล่นหน้ากล้องเซลฟี่ &amp; คำทักทายพลังบวก (Smile Meter &amp; Greetings)
+                    </span>
+                    <button type="button" class="btn btn-xs btn-slate" onclick="previewSelfieGreetingDemo()" style="font-size:11px;padding:3px 10px;border-radius:6px;display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+                      <i class="fa-solid fa-eye text-blue"></i> ทดลองดูตัวอย่างหน้ากล้อง
+                    </button>
+                  </div>
+                  <div style="background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:12px">
+                    <label style="display:flex;align-items:center;gap:10px;font-size:12px;font-weight:700;color:#92400e;cursor:pointer">
+                      <input type="checkbox" id="attSetEnableSelfieGreetings" checked style="width:17px;height:17px;accent-color:#d97706;cursor:pointer" onchange="toggleSelfieGreetingsUI(this.checked)">
+                      <span>เปิดใช้งานมาตรวัดรอยยิ้มและข้อความทักทายหน้ากล้อง (Smile Meter &amp; Positive Greetings)</span>
+                    </label>
+
+                    <div id="attSetSelfieGreetingsDetailArea" style="display:flex;flex-direction:column;gap:10px;padding-left:26px">
+                      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:10px">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:600;color:#78350f;cursor:pointer">
+                          <input type="checkbox" id="attSetEnableBirthdayGreeting" checked style="width:15px;height:15px;accent-color:#d97706;cursor:pointer">
+                          <span>🎂 กรอบอวยพรวันเกิดพนักงานอัตโนมัติ</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:600;color:#78350f;cursor:pointer">
+                          <input type="checkbox" id="attSetEnableFridayTgif" checked style="width:15px;height:15px;accent-color:#d97706;cursor:pointer">
+                          <span>🎉 กรอบสุขสันต์วันศุกร์ (TGIF)</span>
+                        </label>
+                      </div>
+
+                      <div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                          <label style="font-size:11.5px;font-weight:700;color:#78350f">
+                            ข้อความทักทายที่ต้องการแสดง (สุ่มแสดง 1 ข้อความต่อวัน / แยกบรรทัดละ 1 ข้อความ):
+                          </label>
+                          <button type="button" class="btn btn-xs" onclick="resetDefaultSelfieGreetings()" style="font-size:10px;padding:1px 6px;background:#fef3c7;border:1px solid #fcd34d;color:#92400e;border-radius:4px;cursor:pointer">
+                            <i class="fa-solid fa-rotate-left"></i> คืนค่าเริ่มต้น
+                          </button>
+                        </div>
+                        <textarea id="attSetSelfieCustomMessages" rows="4" class="form-control" style="font-size:11.5px;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;resize:vertical;background:#fff;line-height:1.5" placeholder="พิมพ์ข้อความทักทาย..."></textarea>
+                        <div style="font-size:10.5px;color:#92400e;margin-top:3px;opacity:0.85">
+                          * แนะนำ: พิมพ์ 3-5 ข้อความ ระบบจะสุ่มเลือกแสดงในแต่ละวัน ทำให้พนักงานรู้สึกสดใหม่และมีพลังบวก
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <hr style="border:none;border-top:1px solid #e2e8f0;margin:0">
+
                 <!-- SECTION 3: ADVANCE & OT POLICIES -->
                 <div>
                   <div style="font-size:12px;font-weight:700;color:#0f172a;margin-bottom:8px;display:flex;align-items:center;gap:6px">
@@ -4647,7 +4695,68 @@
     </div>
   </div>
 
+  <!-- MODAL: SELFIE GREETINGS & SMILE METER PREVIEW DEMO -->
+  <div class="modal-overlay" id="modalSelfieGreetingDemo" style="z-index:1250">
+    <div class="modal-card" style="max-width:440px;width:95vw;border-radius:20px;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35)">
+      <div class="modal-header" style="background:#fffbeb;border-bottom:1.5px solid #fde68a;padding:14px 18px;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:18px">✨</span>
+          <div>
+            <div class="modal-title" style="color:#92400e;font-size:14.5px;font-weight:700">ตัวอย่างหน้ากล้องพนักงาน (Live Simulation)</div>
+            <div style="font-size:11px;color:#b45309">จำลองการแสดงผลบนสมาร์ตโฟนตอนสแกนเข้างาน</div>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalSelfieGreetingDemo')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div style="padding:16px;background:#f8fafc;display:flex;flex-direction:column;gap:12px">
+        <!-- Interactive Mode Switcher for Testing -->
+        <div style="display:flex;gap:6px;justify-content:center;background:#fff;padding:4px;border-radius:10px;border:1px solid #e2e8f0">
+          <button type="button" id="btnSimModeRandom" class="btn btn-xs btn-primary" onclick="setSimGreetingMode('random')" style="font-size:11px;padding:4px 10px;border-radius:6px">😊 สุ่มข้อความปกติ</button>
+          <button type="button" id="btnSimModeTgif" class="btn btn-xs btn-slate" onclick="setSimGreetingMode('tgif')" style="font-size:11px;padding:4px 10px;border-radius:6px">🎉 จำลองวันศุกร์ (TGIF)</button>
+          <button type="button" id="btnSimModeBday" class="btn btn-xs btn-slate" onclick="setSimGreetingMode('bday')" style="font-size:11px;padding:4px 10px;border-radius:6px">🎂 จำลองวันเกิด</button>
+        </div>
+
+        <!-- Smartphone Simulated Screen -->
+        <div style="width:260px;margin:0 auto;background:#0f172a;border-radius:28px;padding:10px;box-shadow:0 15px 25px rgba(0,0,0,0.25);border:3px solid #1e293b">
+          <div style="width:70px;height:12px;background:#1e293b;border-radius:0 0 10px 10px;margin:0 auto 8px"></div>
+          
+          <div style="position:relative;width:100%;height:330px;border-radius:20px;overflow:hidden;background:linear-gradient(135deg, #fbcfe8 0%, #fed7aa 50%, #fef08a 100%);display:flex;flex-direction:column;justify-content:space-between;padding:10px">
+            <!-- Simulated Face Silhouette -->
+            <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0.35">
+              <i class="fa-solid fa-face-smile-beam" style="font-size:110px;color:#d97706"></i>
+            </div>
+
+            <!-- Top Floating Badge -->
+            <div id="simGreetingTopBadge" style="position:relative;z-index:2;align-self:center;background:rgba(255,255,255,0.92);backdrop-filter:blur(6px);padding:4px 12px;border-radius:20px;border:1px solid #fde68a;box-shadow:0 4px 6px rgba(0,0,0,0.06);display:flex;align-items:center;gap:6px">
+              <span style="font-size:13px">✨</span>
+              <span style="font-size:11px;font-weight:700;color:#92400e" id="simGreetingScoreText">Smile Score: 95% สดใสมาก!</span>
+            </div>
+
+            <!-- Bottom Floating Greeting Box -->
+            <div style="position:relative;z-index:2;background:rgba(255,255,255,0.95);backdrop-filter:blur(8px);border-radius:14px;padding:10px 12px;box-shadow:0 6px 12px rgba(0,0,0,0.08);border:1px solid rgba(253,230,138,0.7)">
+              <div id="simGreetingMessageText" style="font-size:11px;font-weight:700;color:#1e293b;text-align:center;line-height:1.4">
+                "สวัสดีตอนเช้าค่ะ วันนี้ยิ้มสดใสมาก ขอให้เป็นวันที่ราบรื่นและมีความสุขนะคะ 🌸"
+              </div>
+              <div style="font-size:9.5px;color:#64748b;text-align:center;margin-top:4px">
+                สแกนเข้างาน • สาขาสำนักงานใหญ่
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align:center;font-size:11px;color:#64748b">
+          * พนักงานจะเห็นข้อความนี้ทันทีที่เปิดกล้องเซลฟี่เพื่อสแกนเข้างาน
+        </div>
+      </div>
+
+      <div style="padding:10px 16px;background:#fff;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end">
+        <button type="button" class="btn btn-slate btn-sm" onclick="closeModal('modalSelfieGreetingDemo')" style="padding:6px 16px;font-weight:600">ปิด</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.16"></script>
+  <script src="js/app.js?v=9.17"></script>
 </body>
 </html>
