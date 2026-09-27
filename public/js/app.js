@@ -595,22 +595,40 @@ function resetToActualWorkDays() {
 // COMPANY HOLIDAYS MANAGEMENT (ระบบจัดการวันหยุดบริษัท / วันหยุดนักขัตฤกษ์)
 // ==========================================
 function openCompanyHolidaysModal() {
-  var canManage = isSuperAdmin() || hasPermission('manage_company') || hasPermission('calc_payroll');
-  if (!canManage) {
-    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการวันหยุดบริษัท', 'warning');
-    return;
-  }
+  try {
+    var canManage = isSuperAdmin() || hasPermission('manage_company') || hasPermission('calc_payroll') || hasPermission('all') || hasPermission('edit_emp');
 
-  // Pre-fill today's date in form if empty
-  var dateInput = document.getElementById('inputHolidayDate');
-  if (dateInput && !dateInput.value) {
-    var nowUtc = new Date();
-    var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
-    dateInput.value = bkk.toISOString().substring(0, 10);
-  }
+    var formContainer = document.getElementById('formAddCompanyHoliday');
+    if (formContainer) {
+      formContainer.style.display = canManage ? 'grid' : 'none';
+      var addHeader = formContainer.previousElementSibling;
+      if (addHeader) addHeader.style.display = canManage ? 'flex' : 'none';
+    }
 
-  renderCompanyHolidaysList();
-  openModal('companyHolidaysModal');
+    // Pre-fill today's date in form if empty
+    var dateInput = document.getElementById('inputHolidayDate');
+    if (dateInput && !dateInput.value) {
+      var nowUtc = new Date();
+      var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+      dateInput.value = bkk.toISOString().substring(0, 10);
+    }
+
+    renderCompanyHolidaysList();
+    openModal('companyHolidaysModal');
+
+    // Always fetch fresh holidays from API in background to ensure up-to-date list
+    callApi('getCompanyHolidays').then(function(res) {
+      if (res && res.success && Array.isArray(res.holidays)) {
+        State.companyHolidays = res.holidays;
+        renderCompanyHolidaysList();
+      }
+    }).catch(function(e) {
+      console.warn('getCompanyHolidays background fetch note:', e);
+    });
+  } catch(err) {
+    console.error('openCompanyHolidaysModal error:', err);
+    showToast('เกิดข้อผิดพลาดในการเปิดหน้าต่างวันหยุด: ' + err.message, 'error');
+  }
 }
 
 function renderCompanyHolidaysList() {
@@ -669,10 +687,15 @@ function renderCompanyHolidaysList() {
     html += '<td style="padding:8px 12px;font-weight:700;color:#1e40af">' + esc(h.holiday_name) + '</td>';
     html += '<td style="padding:8px 12px">' + typeBadge + '</td>';
     html += '<td style="padding:8px 12px;color:#64748b;font-size:11.5px">' + esc(h.note || '-') + '</td>';
+    var canManage = isSuperAdmin() || hasPermission('manage_company') || hasPermission('calc_payroll') || hasPermission('all') || hasPermission('edit_emp');
     html += '<td style="padding:8px 12px;text-align:center">';
-    html += '<button type="button" class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px" onclick="deleteCompanyHoliday(' + (h.id || 'null') + ', \'' + esc(h.date) + '\', \'' + esc(h.holiday_name).replace(/'/g, "\\'") + '\')" title="ลบวันหยุดนี้">';
-    html += '<i class="fa-solid fa-trash-can"></i>';
-    html += '</button>';
+    if (canManage) {
+      html += '<button type="button" class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px" onclick="deleteCompanyHoliday(' + (h.id || 'null') + ', \'' + esc(h.date) + '\', \'' + esc(h.holiday_name).replace(/'/g, "\\'") + '\')" title="ลบวันหยุดนี้">';
+      html += '<i class="fa-solid fa-trash-can"></i>';
+      html += '</button>';
+    } else {
+      html += '<span style="color:#94a3b8;font-size:11px">-</span>';
+    }
     html += '</td>';
     html += '</tr>';
   });
@@ -681,6 +704,12 @@ function renderCompanyHolidaysList() {
 }
 
 function saveCompanyHolidayFromForm() {
+  var canManage = isSuperAdmin() || hasPermission('manage_company') || hasPermission('calc_payroll') || hasPermission('all') || hasPermission('edit_emp');
+  if (!canManage) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการวันหยุดบริษัท', 'warning');
+    return;
+  }
+
   var dateEl = document.getElementById('inputHolidayDate');
   var nameEl = document.getElementById('inputHolidayName');
   var typeEl = document.getElementById('inputHolidayType');
@@ -729,6 +758,12 @@ function saveCompanyHolidayFromForm() {
 }
 
 function deleteCompanyHoliday(id, date, name) {
+  var canManage = isSuperAdmin() || hasPermission('manage_company') || hasPermission('calc_payroll') || hasPermission('all') || hasPermission('edit_emp');
+  if (!canManage) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการวันหยุดบริษัท', 'warning');
+    return;
+  }
+
   var msg = 'คุณแน่ใจหรือไม่ที่จะลบวันหยุด "' + (name || date) + '" (' + date + ')?\\n\\nเมื่อลบแล้ว ระบบจะคำนวณวันทำงานของงวดใหม่อัตโนมัติ';
   if (!confirm(msg)) return;
 
