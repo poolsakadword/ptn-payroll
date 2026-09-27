@@ -4383,11 +4383,32 @@
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
               <label style="font-size:11px;font-weight:700;color:#15803d">เวลาเข้างาน (Clock In)</label>
-              <input type="text" id="editAttClockIn" placeholder="เช่น 09:30:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+              <input type="text" id="editAttClockIn" placeholder="เช่น 09:30:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace" oninput="onAttendanceTimeInputChange()">
             </div>
             <div>
-              <label style="font-size:11px;font-weight:700;color:#b91c1c">เวลาออกงาน (Clock Out)</label>
-              <input type="text" id="editAttClockOut" placeholder="เช่น 19:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+              <label style="font-size:11px;font-weight:700;color:#b91c1c;display:flex;justify-content:space-between;align-items:center">
+                <span>เวลาออกงาน (Clock Out) *</span>
+                <span style="font-size:10px;font-weight:700;color:#0284c7"><i class="fa-solid fa-wand-magic-sparkles"></i> คำนวณชั่วโมงอัตโนมัติ</span>
+              </label>
+              <input type="text" id="editAttClockOut" placeholder="เช่น 19:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace;font-weight:700;color:#991b1b" oninput="onAttendanceTimeInputChange()">
+              <!-- Quick fill preset buttons -->
+              <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:5px">
+                <button type="button" class="btn btn-xs" onclick="setAttendanceEditClockOut('19:00:00')" style="font-size:10.5px;padding:2px 8px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:4px;font-weight:700" title="ตั้งเวลาเลิกงานปกติ 19:00:00">
+                  <i class="fa-solid fa-clock"></i> 19:00 (ปกติ)
+                </button>
+                <button type="button" class="btn btn-xs" onclick="setAttendanceEditClockOut('18:30:00')" style="font-size:10.5px;padding:2px 6px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1;border-radius:4px;font-weight:600">
+                  18:30
+                </button>
+                <button type="button" class="btn btn-xs" onclick="setAttendanceEditClockOut('19:30:00')" style="font-size:10.5px;padding:2px 6px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1;border-radius:4px;font-weight:600">
+                  19:30
+                </button>
+                <button type="button" class="btn btn-xs" onclick="setAttendanceEditClockOut('20:00:00')" style="font-size:10.5px;padding:2px 6px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1;border-radius:4px;font-weight:600">
+                  20:00
+                </button>
+                <button type="button" class="btn btn-xs" onclick="setAttendanceEditClockOut('NOW')" style="font-size:10.5px;padding:2px 8px;background:#f1f5f9;color:#334155;border:1px solid #cbd5e1;border-radius:4px;font-weight:600" title="ใส่เวลาปัจจุบัน">
+                  <i class="fa-solid fa-bolt text-amber"></i> ปัจจุบัน
+                </button>
+              </div>
             </div>
           </div>
 
@@ -4395,15 +4416,15 @@
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;background:#f8fafc;padding:10px;border-radius:8px;border:1px solid #e2e8f0">
             <div>
               <label style="font-size:11px;font-weight:700;color:#b45309">ออกพัก (Break OUT)</label>
-              <input type="text" id="editAttBreakOut" placeholder="เช่น 13:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+              <input type="text" id="editAttBreakOut" placeholder="เช่น 13:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace" oninput="onAttendanceTimeInputChange()">
             </div>
             <div>
               <label style="font-size:11px;font-weight:700;color:#0f766e">เข้าหลังพัก (Break IN)</label>
-              <input type="text" id="editAttBreakIn" placeholder="เช่น 14:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace">
+              <input type="text" id="editAttBreakIn" placeholder="เช่น 14:00:00" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-family:monospace" oninput="onAttendanceTimeInputChange()">
             </div>
             <div>
               <label style="font-size:11px;font-weight:700;color:#334155">เวลาพักรวม (นาที)</label>
-              <input type="number" id="editAttBreakMinutes" min="0" value="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+              <input type="number" id="editAttBreakMinutes" min="0" value="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px" oninput="onAttendanceTimeInputChange()">
             </div>
           </div>
 
@@ -4413,14 +4434,22 @@
               <input type="number" id="editAttLateMinutes" min="0" value="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
             </div>
             <div>
-              <label style="font-size:11px;font-weight:700;color:#2563eb">ชั่วโมงทำงาน</label>
-              <input type="number" id="editAttWorkHours" step="0.1" min="0" value="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px">
+              <label style="font-size:11px;font-weight:700;color:#2563eb;display:flex;justify-content:space-between;align-items:center">
+                <span>ชั่วโมงทำงาน (ปกติ) *</span>
+                <span id="editAttOtBadge" style="font-size:10.5px;color:#7c3aed;font-weight:700;display:none;background:#ede9fe;padding:1px 6px;border-radius:4px;border:1px solid #ddd6fe">OT: <span id="editAttOtHoursText">0</span> ชม.</span>
+              </label>
+              <input type="number" id="editAttWorkHours" step="0.1" min="0" value="0" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;font-weight:700;color:#1e40af;background:#f0fdf4">
+              <input type="hidden" id="editAttOtHours" value="0">
             </div>
+          </div>
+
+          <!-- Dynamic calculation helper banner -->
+          <div id="editAttCalcHelper" style="display:none;font-size:11.5px;font-weight:600;padding:8px 12px;border-radius:8px;background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;line-height:1.5">
           </div>
 
           <div>
             <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#047857;background:#ecfdf5;padding:10px 14px;border:1px solid #a7f3d0;border-radius:8px;cursor:pointer">
-              <input type="checkbox" id="editAttIsFullPay" style="width:18px;height:18px;accent-color:#059669">
+              <input type="checkbox" id="editAttIsFullPay" style="width:18px;height:18px;accent-color:#059669" onchange="onAttendanceTimeInputChange()">
               <span>✨ อนุมัติเลิกงานก่อนกรณีพิเศษ (งานเสร็จ - จ่ายค่าแรงเต็มวัน ไม่หักเงิน)</span>
             </label>
           </div>

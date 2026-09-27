@@ -3469,32 +3469,121 @@ async function handleAction(db, action, params) {
       const allowed = (await userHasPermission(db, callerUser, 'approve_attendance')) || (await userHasPermission(db, callerUser, 'manage_attendance_settings'));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์แก้ไขข้อมูลลงเวลา' };
 
-      const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, status, remark, isFullPay } = params;
+      const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, otHours, status, remark, isFullPay } = params;
       if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการแก้ไข' };
 
       const isFullPayVal = (isFullPay === 1 || isFullPay === '1' || isFullPay === true || isFullPay === 'true') ? 1 : 0;
 
+      // Fetch existing log to verify or auto-calculate if workHours is 0
+      const existing = await db.prepare('SELECT * FROM time_logs WHERE id = ?').bind(id).first().catch(() => null);
+      if (!existing) return { success: false, message: 'ไม่พบรายการบันทึกเวลา' };
+
+      let finalWorkHours = Number(workHours) || 0;
+      let finalOtHours = Number(otHours) || (Number(existing.ot_hours) || 0);
+      let finalBreakMinutes = breakMinutes !== undefined && breakMinutes !== null ? Number(breakMinutes) : (Number(existing.break_minutes) || 0);
+      let finalLateMinutes = Number(lateMinutes) || (Number(existing.late_minutes) || 0);
+
+      // Backend fallback calculation: If clockIn and clockOut exist but workHours is 0
+      if (clockIn && clockOut && finalWorkHours <= 0) {
+        try {
+          const empRow = await db.prepare('SELECT emp_id, branch_id FROM employees WHERE emp_id = ?').bind(existing.emp_id).first().catch(() => null);
+          const branchId = existing.branch_id || (empRow && empRow.branch_id);
+          const branchRow = branchId ? await db.prepare('SELECT * FROM branches WHERE branch_id = ?').bind(branchId).first().catch(() => null) : null;
+
+          const toMin = (s) => {
+            if (!s) return null;
+            const p = String(s).trim().split(':');
+            return p.length >= 2 ? (parseInt(p[0], 10) * 60 + parseInt(p[1], 10)) : null;
+          };
+
+          const inMin = toMin(clockIn);
+          const outMin = toMin(clockOut);
+          const startMin = toMin(branchRow && branchRow.work_start_time) || (9 * 60 + 30);
+          const endMin = toMin(branchRow && branchRow.work_end_time) || (19 * 60);
+          const lunchStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
+          const lunchEnd = toMin(branchRow && branchRow.lunch_end_time) || (14 * 60);
+          const otStartMin = toMin(branchRow && (branchRow.ot_start_time || branchRow.work_end_time)) || (19 * 60);
+
+          if (inMin !== null && outMin !== null) {
+            const d = new Date((existing.date || '') + 'T00:00:00');
+            const isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
+
+            if (finalBreakMinutes === 0 && Math.max(inMin, startMin) <= lunchStart && outMin >= lunchEnd) {
+              finalBreakMinutes = 60;
+            }
+
+            if (isFullPayVal === 1) {
+              finalWorkHours = Math.max(0, Math.round(((endMin - startMin - finalBreakMinutes) / 60) * 10) / 10) || 8.5;
+            } else if (isSunday) {
+              const sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - finalBreakMinutes);
+              finalOtHours = Math.floor(sunMin / 30) * 0.5;
+              finalWorkHours = 0;
+            } else {
+              const effIn = Math.max(inMin, startMin);
+              const cappedOut = Math.min(outMin, endMin);
+              const normMin = Math.max(0, cappedOut - effIn - finalBreakMinutes);
+              finalWorkHours = Math.round((normMin / 60) * 10) / 10;
+
+              if (outMin > otStartMin) {
+                finalOtHours = Math.floor((outMin - otStartMin) / 30) * 0.5;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Backend auto-calc work hours error:', e);
+        }
+      }
+
       await db.prepare(`
         UPDATE time_logs
-        SET clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, overbreak_minutes = ?, late_minutes = ?, work_hours = ?, status = ?, remark = ?, is_full_pay = ?
+        SET clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, overbreak_minutes = ?, late_minutes = ?, work_hours = ?, ot_hours = ?, status = ?, remark = ?, is_full_pay = ?
         WHERE id = ?
       `).bind(
         clockIn || null,
         clockOut || null,
         breakOut || null,
         breakIn || null,
-        breakMinutes !== undefined && breakMinutes !== null ? Number(breakMinutes) : 0,
+        finalBreakMinutes,
         overbreakMinutes !== undefined && overbreakMinutes !== null ? Number(overbreakMinutes) : 0,
-        Number(lateMinutes) || 0,
-        Number(workHours) || 0,
+        finalLateMinutes,
+        finalWorkHours,
+        finalOtHours,
         status || 'NORMAL',
         remark || '',
         isFullPayVal,
         id
       ).run();
 
-      await logSystemActivity(db, callerUser, 'UPDATE_TIME_LOG', `แก้ไขข้อมูลการลงเวลา ID: ${id}`);
-      return { success: true, message: 'บันทึกการแก้ไขข้อมูลการลงเวลาเรียบร้อยแล้ว' };
+      // If OT occurred and employee is eligible, record or update in ot_requests automatically
+      if (finalOtHours > 0) {
+        try {
+          const empRow = await db.prepare('SELECT is_ot_eligible FROM employees WHERE emp_id = ?').bind(existing.emp_id).first().catch(() => null);
+          const isOtEligible = !(empRow && (empRow.is_ot_eligible === 'false' || empRow.is_ot_eligible === false));
+          if (isOtEligible) {
+            const d = new Date((existing.date || '') + 'T00:00:00');
+            const isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
+            const otRate = isSunday ? 1.0 : 1.5;
+            const existingOt = await db.prepare('SELECT id FROM ot_requests WHERE emp_id = ? AND date = ?').bind(existing.emp_id, existing.date).first().catch(() => null);
+            if (existingOt) {
+              await db.prepare(`
+                UPDATE ot_requests 
+                SET actual_hours = ?, ot_type = ?, status = 'APPROVED'
+                WHERE id = ?
+              `).bind(finalOtHours, otRate, existingOt.id).run();
+            } else {
+              await db.prepare(`
+                INSERT INTO ot_requests (emp_id, date, planned_hours, actual_hours, ot_type, reason, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'APPROVED')
+              `).bind(existing.emp_id, existing.date, finalOtHours, finalOtHours, otRate, isSunday ? 'ทำงานวันอาทิตย์' : 'OT งานเสร็จประจำวัน (Admin ปรับปรุงเวลา)').run();
+            }
+          }
+        } catch (e) {
+          console.warn('ot_requests sync error:', e);
+        }
+      }
+
+      await logSystemActivity(db, callerUser, 'UPDATE_TIME_LOG', `แก้ไขข้อมูลการลงเวลา ID: ${id} (เข้า: ${clockIn || '-'}, ออก: ${clockOut || '-'}, ชม.งาน: ${finalWorkHours}, OT: ${finalOtHours})`);
+      return { success: true, workHours: finalWorkHours, otHours: finalOtHours, message: `บันทึกการแก้ไขข้อมูลสำเร็จ (ชั่วโมงทำงาน: ${finalWorkHours} ชม.${finalOtHours > 0 ? ' + OT: ' + finalOtHours + ' ชม.' : ''})` };
     }
 
     // 5.7 DELETE TIME LOG

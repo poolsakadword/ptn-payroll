@@ -9887,12 +9887,196 @@ function viewAttendanceLogDetail(id) {
 }
 
 // ATTENDANCE EDIT MODAL CONTROLLER
+// ATTENDANCE EDIT MODAL CONTROLLER & AUTO-CALCULATOR
+var _activeAttendanceEditLog = null;
+
+function parseTimeToMin(timeStr) {
+  if (!timeStr) return null;
+  var s = String(timeStr).trim();
+  var p = s.split(':');
+  if (p.length < 2) {
+    if (/^\d{1,2}$/.test(s)) {
+      return parseInt(s, 10) * 60;
+    }
+    return null;
+  }
+  var h = parseInt(p[0], 10);
+  var m = parseInt(p[1], 10);
+  if (isNaN(h) || isNaN(m)) return null;
+  return (h * 60) + m;
+}
+
+function setAttendanceEditClockOut(val) {
+  var targetTime = val;
+  if (val === 'NOW') {
+    var now = new Date();
+    var hh = String(now.getHours()).padStart(2, '0');
+    var mm = String(now.getMinutes()).padStart(2, '0');
+    var ss = String(now.getSeconds()).padStart(2, '0');
+    targetTime = hh + ':' + mm + ':' + ss;
+  }
+  var el = document.getElementById('editAttClockOut');
+  if (el) {
+    el.value = targetTime;
+    autoCalculateAttendanceHours(true);
+  }
+}
+
+function onAttendanceTimeInputChange() {
+  autoCalculateAttendanceHours(true);
+}
+
+function autoCalculateAttendanceHours(isUserAction) {
+  var clockIn = (document.getElementById('editAttClockIn') ? document.getElementById('editAttClockIn').value : '').trim();
+  var clockOut = (document.getElementById('editAttClockOut') ? document.getElementById('editAttClockOut').value : '').trim();
+  var breakOut = (document.getElementById('editAttBreakOut') ? document.getElementById('editAttBreakOut').value : '').trim();
+  var breakIn = (document.getElementById('editAttBreakIn') ? document.getElementById('editAttBreakIn').value : '').trim();
+  var breakMinInput = Number(document.getElementById('editAttBreakMinutes') ? document.getElementById('editAttBreakMinutes').value : 0) || 0;
+  var isFullPay = !!(document.getElementById('editAttIsFullPay') && document.getElementById('editAttIsFullPay').checked);
+  var dateStr = (document.getElementById('editAttDate') ? document.getElementById('editAttDate').value : '').trim();
+
+  var helper = document.getElementById('editAttCalcHelper');
+  var otBadge = document.getElementById('editAttOtBadge');
+  var otText = document.getElementById('editAttOtHoursText');
+
+  if (!clockIn || !clockOut) {
+    if (helper) {
+      if (clockIn && !clockOut) {
+        helper.style.display = 'block';
+        helper.style.background = '#fffbeb';
+        helper.style.border = '1px solid #fde68a';
+        helper.style.color = '#b45309';
+        helper.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> กรุณากรอกหรือเลือก <b>เวลาออกงาน (Clock Out)</b> เพื่อให้ระบบคำนวณชั่วโมงทำงานอัตโนมัติ';
+      } else {
+        helper.style.display = 'none';
+      }
+    }
+    if (otBadge) otBadge.style.display = 'none';
+    return;
+  }
+
+  var inMin = parseTimeToMin(clockIn);
+  var outMin = parseTimeToMin(clockOut);
+  if (inMin === null || outMin === null) return;
+
+  // Retrieve branch schedule
+  var branch = null;
+  var bList = State.branches || [];
+  if (_activeAttendanceEditLog) {
+    var bId = _activeAttendanceEditLog.branch_id || _activeAttendanceEditLog.emp_branch_id;
+    branch = bList.find(function(b) { return b.branch_id === bId; });
+  }
+
+  var workStartStr = (branch && branch.work_start_time) || '09:30';
+  var workEndStr = (branch && branch.work_end_time) || '19:00';
+  var lunchStartStr = (branch && branch.lunch_start_time) || '13:00';
+  var lunchEndStr = (branch && branch.lunch_end_time) || '14:00';
+  var otStartStr = (branch && branch.ot_start_time) || workEndStr;
+  var graceMin = Number(branch && branch.grace_minutes) || 0;
+
+  var workStartMin = parseTimeToMin(workStartStr) || (9 * 60 + 30);
+  var workEndMin = parseTimeToMin(workEndStr) || (19 * 60);
+  var lunchStartMin = parseTimeToMin(lunchStartStr) || (13 * 60);
+  var lunchEndMin = parseTimeToMin(lunchEndStr) || (14 * 60);
+  var otStartMin = parseTimeToMin(otStartStr) || (19 * 60);
+
+  // Day of week
+  var isSunday = false;
+  if (dateStr) {
+    var dt = new Date(dateStr + 'T00:00:00');
+    if (!isNaN(dt.getTime()) && dt.getDay() === 0) isSunday = true;
+  }
+
+  // 1. Late minutes
+  var lateMin = 0;
+  if (inMin > (workStartMin + graceMin)) {
+    lateMin = inMin - workStartMin;
+  }
+
+  // 2. Break minutes
+  var bOutMin = parseTimeToMin(breakOut);
+  var bInMin = parseTimeToMin(breakIn);
+  var breakMin = 0;
+  if (bOutMin !== null && bInMin !== null && bInMin > bOutMin) {
+    breakMin = bInMin - bOutMin;
+  } else if (breakMinInput > 0) {
+    breakMin = breakMinInput;
+  } else if (Math.max(inMin, workStartMin) <= lunchStartMin && (isSunday ? outMin >= lunchEndMin : Math.min(outMin, workEndMin) >= lunchEndMin)) {
+    breakMin = 60; // Standard 1-hour lunch break
+  }
+
+  // 3. Work hours & OT hours
+  var effectiveInMin = Math.max(inMin, workStartMin);
+  var workHrs = 0;
+  var otHrs = 0;
+
+  if (isFullPay) {
+    // Approved full pay for completing work early
+    workHrs = Math.max(0, Math.round(((workEndMin - workStartMin - breakMin) / 60) * 10) / 10);
+    if (workHrs <= 0) workHrs = 8.5;
+  } else if (isSunday) {
+    // Sunday work: all counts as OT/Sunday work
+    var totalSunMin = Math.max(0, outMin - effectiveInMin - breakMin);
+    otHrs = Math.floor(totalSunMin / 30) * 0.5;
+    workHrs = 0;
+  } else {
+    // Normal workday
+    var cappedEndMin = Math.min(outMin, workEndMin);
+    var normalMin = Math.max(0, cappedEndMin - effectiveInMin - breakMin);
+    workHrs = Math.round((normalMin / 60) * 10) / 10;
+
+    // OT after otStartMin
+    if (outMin > otStartMin) {
+      var otMin = outMin - otStartMin;
+      otHrs = Math.floor(otMin / 30) * 0.5;
+    }
+  }
+
+  // Update input values
+  var workHrsInput = document.getElementById('editAttWorkHours');
+  if (workHrsInput) workHrsInput.value = workHrs;
+  var otHrsInput = document.getElementById('editAttOtHours');
+  if (otHrsInput) otHrsInput.value = otHrs;
+  var breakMinInputEl = document.getElementById('editAttBreakMinutes');
+  if (breakMinInputEl) breakMinInputEl.value = breakMin;
+  var lateMinInputEl = document.getElementById('editAttLateMinutes');
+  if (lateMinInputEl) lateMinInputEl.value = lateMin;
+
+  updateAttendanceCalcHelper(workHrs, otHrs, breakMin, lateMin, true);
+}
+
+function updateAttendanceCalcHelper(workHrs, otHrs, breakMin, lateMin, isCalculated) {
+  var helper = document.getElementById('editAttCalcHelper');
+  var otBadge = document.getElementById('editAttOtBadge');
+  var otText = document.getElementById('editAttOtHoursText');
+
+  if (otBadge && otText) {
+    if (otHrs > 0) {
+      otBadge.style.display = 'inline-block';
+      otText.textContent = otHrs;
+    } else {
+      otBadge.style.display = 'none';
+    }
+  }
+
+  if (helper) {
+    helper.style.display = 'block';
+    helper.style.background = '#eff6ff';
+    helper.style.border = '1px solid #bfdbfe';
+    helper.style.color = '#1e40af';
+    helper.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles text-blue"></i> <b>คำนวณอัตโนมัติ:</b> เวลาทำงานปกติ <b style="color:#059669;font-size:13px">' + workHrs + ' ชม.</b>' +
+      (otHrs > 0 ? ' + <b style="color:#7c3aed;font-size:13px">OT ' + otHrs + ' ชม.</b>' : '') +
+      ' <span style="color:#64748b;font-weight:500;margin-left:6px">(หักพัก ' + breakMin + ' นาที' + (lateMin > 0 ? ' | สาย ' + lateMin + ' นาที' : ' | ไม่สาย') + ')</span>';
+  }
+}
+
 function openEditAttendanceLogModal(id) {
   var log = (_currentAttendanceLogs || []).find(function(x) { return x.id === Number(id); });
   if (!log) {
     showToast('ไม่พบข้อมูลรายการลงเวลานี้', 'error');
     return;
   }
+  _activeAttendanceEditLog = log;
 
   var nameDisplay = (log.full_name || '-') + (log.nickname ? ' (' + log.nickname + ')' : '');
   document.getElementById('editAttId').value = log.id;
@@ -9906,11 +10090,35 @@ function openEditAttendanceLogModal(id) {
   document.getElementById('editAttBreakMinutes').value = log.break_minutes || 0;
   document.getElementById('editAttLateMinutes').value = log.late_minutes || 0;
   document.getElementById('editAttWorkHours').value = log.work_hours || 0;
+  if (document.getElementById('editAttOtHours')) document.getElementById('editAttOtHours').value = log.ot_hours || 0;
   document.getElementById('editAttRemark').value = log.remark || '';
 
   var isFullPay = (log.is_full_pay === 1 || log.is_full_pay === '1' || (log.remark && log.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน')));
   if (document.getElementById('editAttIsFullPay')) {
     document.getElementById('editAttIsFullPay').checked = !!isFullPay;
+  }
+
+  // If clock_in and clock_out are present, but work_hours is 0 or was not calculated, auto calculate immediately!
+  if (log.clock_in && log.clock_out && (Number(log.work_hours) === 0 || !log.work_hours)) {
+    autoCalculateAttendanceHours(false);
+  } else if (log.clock_in && log.clock_out) {
+    // Show helper with existing values
+    updateAttendanceCalcHelper(Number(log.work_hours) || 0, Number(log.ot_hours) || 0, Number(log.break_minutes) || 0, Number(log.late_minutes) || 0, false);
+  } else {
+    var helper = document.getElementById('editAttCalcHelper');
+    if (helper) {
+      if (log.clock_in && !log.clock_out) {
+        helper.style.display = 'block';
+        helper.style.background = '#fffbeb';
+        helper.style.border = '1px solid #fde68a';
+        helper.style.color = '#b45309';
+        helper.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> กรุณากรอกหรือเลือก <b>เวลาออกงาน (Clock Out)</b> เพื่อให้ระบบคำนวณชั่วโมงทำงานอัตโนมัติ';
+      } else {
+        helper.style.display = 'none';
+      }
+    }
+    var otBadge = document.getElementById('editAttOtBadge');
+    if (otBadge) otBadge.style.display = 'none';
   }
 
   openModal('modalAttendanceEdit');
@@ -9927,9 +10135,19 @@ function saveAttendanceLogEditForm(e) {
   var breakMinutes = Number(document.getElementById('editAttBreakMinutes').value) || 0;
   var lateMinutes = Number(document.getElementById('editAttLateMinutes').value) || 0;
   var workHours = Number(document.getElementById('editAttWorkHours').value) || 0;
+  var otHours = Number(document.getElementById('editAttOtHours') ? document.getElementById('editAttOtHours').value : 0) || 0;
   var status = document.getElementById('editAttStatus').value;
   var remark = document.getElementById('editAttRemark').value.trim();
   var isFullPay = (document.getElementById('editAttIsFullPay') && document.getElementById('editAttIsFullPay').checked) ? 1 : 0;
+
+  // Safeguard: If clockIn and clockOut are present, but workHours is 0, auto-recalculate before submitting!
+  if (clockIn && clockOut && workHours <= 0 && !isFullPay) {
+    autoCalculateAttendanceHours(true);
+    workHours = Number(document.getElementById('editAttWorkHours').value) || 0;
+    otHours = Number(document.getElementById('editAttOtHours') ? document.getElementById('editAttOtHours').value : 0) || 0;
+    breakMinutes = Number(document.getElementById('editAttBreakMinutes').value) || 0;
+    lateMinutes = Number(document.getElementById('editAttLateMinutes').value) || 0;
+  }
 
   callApi('updateAttendanceLog', {
     id: id,
@@ -9940,6 +10158,7 @@ function saveAttendanceLogEditForm(e) {
     breakMinutes: breakMinutes,
     lateMinutes: lateMinutes,
     workHours: workHours,
+    otHours: otHours,
     status: status,
     remark: remark,
     isFullPay: isFullPay,
