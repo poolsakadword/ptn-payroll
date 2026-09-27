@@ -12528,7 +12528,8 @@ function subscribeWebPush() {
         endpoint: endpoint,
         p256dh: p256dh,
         auth: auth,
-        userAgent: navigator.userAgent
+        userAgent: navigator.userAgent,
+        appType: 'PAYROLL'
       });
     })
     .then(function(saveRes) {

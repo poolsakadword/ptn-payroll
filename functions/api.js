@@ -341,12 +341,75 @@ async function ensurePushTables(db) {
         p256dh TEXT NOT NULL,
         auth TEXT NOT NULL,
         user_agent TEXT,
+        app_type TEXT DEFAULT 'PAYROLL',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `).run().catch(() => {});
+    await db.prepare("ALTER TABLE push_subscriptions ADD COLUMN app_type TEXT DEFAULT 'PAYROLL'").run().catch(() => {});
   } catch(e) {
     console.error('ensurePushTables note:', e);
+  }
+}
+
+async function sendPushToEmployee(db, empId, payload) {
+  if (!empId) return 0;
+  try {
+    const subs = (await db.prepare('SELECT * FROM push_subscriptions WHERE emp_id = ?').bind(empId).all().catch(() => ({ results: [] }))).results || [];
+    let count = 0;
+    for (const sub of subs) {
+      const res = await sendWebPush(sub, payload);
+      if (res.success) count++;
+      else if (res.expired) {
+        await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(sub.endpoint).run().catch(() => {});
+      }
+    }
+    return count;
+  } catch(e) {
+    console.error('sendPushToEmployee error:', e);
+    return 0;
+  }
+}
+
+async function sendPushToAdmins(db, payload) {
+  try {
+    const subs = (await db.prepare("SELECT * FROM push_subscriptions WHERE app_type = 'PAYROLL' OR emp_id = 'ADMIN' OR emp_id LIKE 'ADMIN%'").all().catch(() => ({ results: [] }))).results || [];
+    let count = 0;
+    for (const sub of subs) {
+      const res = await sendWebPush(sub, payload);
+      if (res.success) count++;
+      else if (res.expired) {
+        await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(sub.endpoint).run().catch(() => {});
+      }
+    }
+    return count;
+  } catch(e) {
+    console.error('sendPushToAdmins error:', e);
+    return 0;
+  }
+}
+
+async function broadcastPushNotification(db, payload, appTypeFilter = null) {
+  try {
+    let sql = 'SELECT * FROM push_subscriptions';
+    let binds = [];
+    if (appTypeFilter) {
+      sql += ' WHERE app_type = ? OR app_type = "ALL"';
+      binds.push(appTypeFilter);
+    }
+    const subs = (await db.prepare(sql).bind(...binds).all().catch(() => ({ results: [] }))).results || [];
+    let count = 0;
+    for (const sub of subs) {
+      const res = await sendWebPush(sub, payload);
+      if (res.success) count++;
+      else if (res.expired) {
+        await db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').bind(sub.endpoint).run().catch(() => {});
+      }
+    }
+    return count;
+  } catch(e) {
+    console.error('broadcastPushNotification error:', e);
+    return 0;
   }
 }
 
@@ -3012,6 +3075,20 @@ async function handleAction(db, action, params) {
         return { success: true, message: `ลบคำขอ ${type} ออกจากระบบเรียบร้อยแล้ว` };
       }
 
+      // Fetch request details before update to get target employee
+      let targetEmpId = null;
+      let reqDesc = '';
+      if (type === 'leave') {
+        const row = await db.prepare('SELECT emp_id, leave_type, days_count FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
+        if (row) { targetEmpId = row.emp_id; reqDesc = `ขอลางาน (${row.leave_type || ''}) ${row.days_count || 1} วัน`; }
+      } else if (type === 'ot') {
+        const row = await db.prepare('SELECT emp_id, planned_hours, date FROM ot_requests WHERE id = ?').bind(id).first().catch(() => null);
+        if (row) { targetEmpId = row.emp_id; reqDesc = `ขอทำ OT ${row.planned_hours || ''} ชม. (${row.date || ''})`; }
+      } else if (type === 'advance') {
+        const row = await db.prepare('SELECT emp_id, amount FROM advance_requests WHERE id = ?').bind(id).first().catch(() => null);
+        if (row) { targetEmpId = row.emp_id; reqDesc = `ขอเบิกเงินล่วงหน้า ${Number(row.amount || 0).toLocaleString()} บาท`; }
+      }
+
       if (type === 'leave') {
         await db.prepare(`
           UPDATE leave_requests 
@@ -3030,6 +3107,21 @@ async function handleAction(db, action, params) {
           SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours'), rejection_reason = ?
           WHERE id = ?
         `).bind(status, approverId, status === 'REJECTED' ? (rejectionReason || '') : '', id).run();
+      }
+
+      // Send Real Web Push to employee
+      if (targetEmpId && (status === 'APPROVED' || status === 'REJECTED')) {
+        const isApproved = status === 'APPROVED';
+        const notifTitle = isApproved ? '✅ คำขอได้รับการอนุมัติแล้ว' : '❌ คำขอไม่ได้รับการอนุมัติ';
+        const notifBody = isApproved
+          ? `คำขอ${reqDesc} ได้รับการอนุมัติแล้วโดย ${approverId || 'Admin'}`
+          : `คำขอ${reqDesc} ไม่ได้รับการอนุมัติ ${rejectionReason ? `(เหตุผล: ${rejectionReason})` : ''}`;
+        sendPushToEmployee(db, targetEmpId, {
+          title: notifTitle,
+          body: notifBody,
+          url: '/?tab=history',
+          tag: `approval-${type}-${id}`
+        }).catch(err => console.error('sendPushToEmployee error:', err));
       }
 
       await logSystemActivity(db, approverId, 'ATTENDANCE_APPROVAL', `${status} คำขอ ${type} (ID: ${id})`);
@@ -3077,6 +3169,17 @@ async function handleAction(db, action, params) {
           SET leave_type = ?, start_date = ?, end_date = ?, days_count = ?, reason = ?, status = ?
           WHERE id = ?
         `).bind(leaveType, startDate, endDate, Number(daysCount) || 1.0, reason || '', validStatus, id).run();
+        if (validStatus === 'APPROVED' || validStatus === 'REJECTED') {
+          const empRow = await db.prepare('SELECT emp_id FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
+          if (empRow && empRow.emp_id) {
+            sendPushToEmployee(db, empRow.emp_id, {
+              title: validStatus === 'APPROVED' ? '✅ คำขอลางานได้รับการอนุมัติแล้ว' : '❌ คำขอลางานไม่ได้รับการอนุมัติ',
+              body: `คำขอลางานของคุณได้รับการปรับปรุงสถานะเป็น ${validStatus === 'APPROVED' ? 'อนุมัติ' : 'ปฏิเสธ'} โดยผู้ดูแลระบบ`,
+              url: '/?tab=history',
+              tag: `approval-leave-${id}`
+            }).catch(() => {});
+          }
+        }
       } else if (type === 'ot') {
         const { date, startTime, endTime, hours, reason, status } = updates;
         const validStatus = status || 'PENDING';
@@ -3085,6 +3188,17 @@ async function handleAction(db, action, params) {
           SET date = ?, start_time = ?, end_time = ?, planned_hours = ?, actual_hours = ?, reason = ?, status = ?
           WHERE id = ?
         `).bind(date, startTime || '', endTime || '', Number(hours) || 0, Number(hours) || 0, reason || '', validStatus, id).run();
+        if (validStatus === 'APPROVED' || validStatus === 'REJECTED') {
+          const empRow = await db.prepare('SELECT emp_id FROM ot_requests WHERE id = ?').bind(id).first().catch(() => null);
+          if (empRow && empRow.emp_id) {
+            sendPushToEmployee(db, empRow.emp_id, {
+              title: validStatus === 'APPROVED' ? '✅ คำขอทำ OT ได้รับการอนุมัติแล้ว' : '❌ คำขอทำ OT ไม่ได้รับการอนุมัติ',
+              body: `คำขอทำ OT ของคุณได้รับการปรับปรุงสถานะเป็น ${validStatus === 'APPROVED' ? 'อนุมัติ' : 'ปฏิเสธ'} โดยผู้ดูแลระบบ`,
+              url: '/?tab=history',
+              tag: `approval-ot-${id}`
+            }).catch(() => {});
+          }
+        }
       } else if (type === 'advance') {
         const { requestDate, amount, reason, status } = updates;
         const validStatus = status || 'PENDING';
@@ -3093,6 +3207,17 @@ async function handleAction(db, action, params) {
           SET request_date = ?, amount = ?, reason = ?, status = ?
           WHERE id = ?
         `).bind(requestDate, Number(amount) || 0, reason || '', validStatus, id).run();
+        if (validStatus === 'APPROVED' || validStatus === 'REJECTED') {
+          const empRow = await db.prepare('SELECT emp_id FROM advance_requests WHERE id = ?').bind(id).first().catch(() => null);
+          if (empRow && empRow.emp_id) {
+            sendPushToEmployee(db, empRow.emp_id, {
+              title: validStatus === 'APPROVED' ? '✅ คำขอเบิกเงินล่วงหน้าได้รับการอนุมัติแล้ว' : '❌ คำขอเบิกเงินล่วงหน้าไม่ได้รับการอนุมัติ',
+              body: `คำขอเบิกเงินของคุณได้รับการปรับปรุงสถานะเป็น ${validStatus === 'APPROVED' ? 'อนุมัติ' : 'ปฏิเสธ'} โดยผู้ดูแลระบบ`,
+              url: '/?tab=history',
+              tag: `approval-advance-${id}`
+            }).catch(() => {});
+          }
+        }
       } else {
         return { success: false, message: 'ประเภทคำขอไม่ถูกต้อง' };
       }
@@ -3382,21 +3507,23 @@ async function handleAction(db, action, params) {
     }
 
     case 'savePushSubscription': {
-      const { empId, endpoint, p256dh, auth, userAgent } = params;
+      const { empId, endpoint, p256dh, auth, userAgent, appType } = params;
       if (!endpoint || !p256dh || !auth) {
         return { success: false, message: 'ข้อมูล Subscription ไม่ครบถ้วน' };
       }
 
+      const finalAppType = appType || 'PAYROLL';
       await db.prepare(`
-        INSERT INTO push_subscriptions (emp_id, endpoint, p256dh, auth, user_agent, updated_at)
-        VALUES (?, ?, ?, ?, ?, datetime('now'))
+        INSERT INTO push_subscriptions (emp_id, endpoint, p256dh, auth, user_agent, app_type, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
         ON CONFLICT(endpoint) DO UPDATE SET
           emp_id = COALESCE(excluded.emp_id, push_subscriptions.emp_id),
           p256dh = excluded.p256dh,
           auth = excluded.auth,
           user_agent = excluded.user_agent,
+          app_type = excluded.app_type,
           updated_at = datetime('now')
-      `).bind(empId || null, endpoint, p256dh, auth, userAgent || '').run();
+      `).bind(empId || null, endpoint, p256dh, auth, userAgent || '', finalAppType).run();
 
       return { success: true, message: 'บันทึกอุปกรณ์เพื่อรับการแจ้งเตือน Web Push สำเร็จ' };
     }
