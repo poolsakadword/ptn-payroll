@@ -420,6 +420,18 @@ async function ensureGlobalSchemas(db) {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
     `).run().catch(() => {});
+
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS company_holidays (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date TEXT NOT NULL UNIQUE,
+        holiday_name TEXT NOT NULL,
+        holiday_type TEXT DEFAULT 'COMPANY',
+        note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run().catch(() => {});
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_company_holidays_date ON company_holidays(date)').run().catch(() => {});
   } catch(e) {
     console.warn('ensureGlobalSchemas note:', e);
   }
@@ -607,18 +619,38 @@ async function getCutoffDatesForPeriod(db, periodStr) {
   return { startDate, endDate, month, yearCE, cutoffDay };
 }
 
-function getActualWorkingDaysInCutoff(startDate, endDate) {
+function getActualWorkingDaysInCutoff(startDate, endDate, holidayDatesSet = new Set()) {
   let count = 0;
   let cur = new Date(startDate + 'T00:00:00Z');
   const end = new Date(endDate + 'T00:00:00Z');
   while (cur <= end) {
     const day = cur.getUTCDay(); // 0 = Sunday
-    if (day !== 0) { // Monday to Saturday are working days
+    const dStr = cur.toISOString().substring(0, 10);
+    if (day !== 0 && !holidayDatesSet.has(dStr)) { // Monday to Saturday and not a company holiday
       count++;
     }
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return count > 0 ? count : 26;
+}
+
+async function getCompanyHolidayDatesSet(db, startDate, endDate) {
+  try {
+    let sql = 'SELECT date FROM company_holidays';
+    const binds = [];
+    if (startDate && endDate) {
+      sql += ' WHERE date BETWEEN ? AND ?';
+      binds.push(startDate, endDate);
+    }
+    const rows = await db.prepare(sql).bind(...binds).all().catch(() => ({ results: [] }));
+    const set = new Set();
+    for (const r of (rows.results || [])) {
+      if (r.date) set.add(r.date);
+    }
+    return set;
+  } catch(e) {
+    return new Set();
+  }
 }
 
 async function handleAction(db, action, params) {
@@ -715,11 +747,15 @@ async function handleAction(db, action, params) {
         }
       }
 
-      // If workingDays is not explicitly set for this period, calculate from actual working days in cutoff
+      // Load company holidays and calculate actual working days in cutoff (subtracting company holidays)
+      const dates = await getCutoffDatesForPeriod(db, period);
+      const holidaysRows = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
+      const companyHolidays = holidaysRows.results || [];
+      const holidayDatesSet = new Set(companyHolidays.map(h => h.date));
+
       const wdRowExplicit = (settingsRows.results || []).find(r => r.key === `Period_WorkDays_${period}`);
       if (!wdRowExplicit || !wdRowExplicit.value) {
-        const dates = await getCutoffDatesForPeriod(db, period);
-        workingDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate);
+        workingDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate, holidayDatesSet);
       }
 
       // Load Device Locks and Employees (Schema is pre-ensured at cold start)
@@ -905,8 +941,59 @@ async function handleAction(db, action, params) {
           totalNet: Math.round(totalNet * 100) / 100
         },
         users: users,
-        branches: branchRows.results || []
+        branches: branchRows.results || [],
+        companyHolidays: companyHolidays
       };
+    }
+
+    // 2.11 COMPANY HOLIDAYS MANAGEMENT
+    case 'getCompanyHolidays': {
+      const rows = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
+      return { success: true, holidays: rows.results || [] };
+    }
+
+    case 'saveCompanyHoliday': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการวันหยุดบริษัท' };
+
+      const h = params.holiday || {};
+      const date = String(h.date || '').trim();
+      const name = String(h.holidayName || h.holiday_name || '').trim();
+      const type = String(h.holidayType || h.holiday_type || 'COMPANY').trim();
+      const note = String(h.note || '').trim();
+      if (!date || !name) return { success: false, message: 'กรุณากรอกวันที่และชื่อวันหยุด' };
+
+      await db.prepare(`
+        INSERT INTO company_holidays (date, holiday_name, holiday_type, note)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(date) DO UPDATE SET holiday_name=excluded.holiday_name, holiday_type=excluded.holiday_type, note=excluded.note
+      `).bind(date, name, type, note).run();
+
+      await logSystemActivity(db, callerUser, 'SAVE_HOLIDAY', `บันทึกวันหยุดบริษัท: ${date} (${name})`);
+      await calculateAndSavePayroll(db, period);
+
+      const updated = (await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }))).results || [];
+      return { success: true, holidays: updated, message: `บันทึกวันหยุด "${name}" (${date}) เรียบร้อยแล้ว` };
+    }
+
+    case 'deleteCompanyHoliday': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการวันหยุดบริษัท' };
+
+      const id = params.id;
+      const date = params.date;
+      if (id) {
+        await db.prepare('DELETE FROM company_holidays WHERE id = ?').bind(id).run();
+      } else if (date) {
+        await db.prepare('DELETE FROM company_holidays WHERE date = ?').bind(date).run();
+      }
+      await logSystemActivity(db, callerUser, 'DELETE_HOLIDAY', `ลบวันหยุดบริษัท: ${id || date}`);
+      await calculateAndSavePayroll(db, period);
+
+      const updated = (await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }))).results || [];
+      return { success: true, holidays: updated, message: 'ลบวันหยุดเรียบร้อยแล้ว' };
     }
 
     // 2.1 SAVE PAYROLL DEFAULTS
@@ -949,8 +1036,9 @@ async function handleAction(db, action, params) {
 
     case 'getActualWorkDays': {
       const dates = await getCutoffDatesForPeriod(db, period);
-      const actualDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate);
-      return { success: true, period: period, startDate: dates.startDate, endDate: dates.endDate, actualDays: actualDays };
+      const holidayDatesSet = await getCompanyHolidayDatesSet(db, dates.startDate, dates.endDate);
+      const actualDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate, holidayDatesSet);
+      return { success: true, period: period, startDate: dates.startDate, endDate: dates.endDate, actualDays: actualDays, holidaysCount: holidayDatesSet.size };
     }
 
     // 4. EMPLOYEE MASTER CRUD
@@ -1255,13 +1343,14 @@ async function handleAction(db, action, params) {
       const endDate = dates.endDate;
       const targetEmpId = params.empId ? String(params.empId).trim() : null;
 
-      // 0. Determine actual work days for this period (from settings or calculated Mon-Sat non-Sundays)
+      // 0. Determine actual work days for this period (from settings or calculated Mon-Sat non-Sundays minus holidays)
       const settingsRowsQuery = await db.prepare('SELECT key, value FROM settings').all().catch(() => ({ results: [] }));
       const settingsList = settingsRowsQuery.results || [];
       const wdRowExplicit = settingsList.find(r => r.key === `Period_WorkDays_${period}`);
+      const holidayDatesSet = await getCompanyHolidayDatesSet(db, startDate, endDate);
       let periodWorkDays = (wdRowExplicit && wdRowExplicit.value && !isNaN(Number(wdRowExplicit.value)))
         ? Number(wdRowExplicit.value)
-        : getActualWorkingDaysInCutoff(startDate, endDate);
+        : getActualWorkingDaysInCutoff(startDate, endDate, holidayDatesSet);
       if (periodWorkDays <= 0) periodWorkDays = 26;
 
       // 0.1 Load branch configurations for standard shift hours calculation
@@ -1509,7 +1598,7 @@ async function handleAction(db, action, params) {
       // Calculate missing hours / early departures from timeLogsList
       for (const row of timeLogsList) {
         const logDate = new Date(row.date + 'T00:00:00Z');
-        if (logDate.getUTCDay() === 0) continue; // Sunday = 0
+        if (logDate.getUTCDay() === 0 || holidayDatesSet.has(row.date)) continue; // Sunday = 0 or Company Holiday
 
         const emp = employees.find(e => e.emp_id === row.emp_id);
         const baseSal = emp ? (Number(emp.base_salary) || 0) : 0;
@@ -1657,7 +1746,7 @@ async function handleAction(db, action, params) {
 
             for (const l of empLogs) {
               const logDate = new Date(l.date + 'T00:00:00Z');
-              if (logDate.getUTCDay() === 0) continue; // Skip Sunday
+              if (logDate.getUTCDay() === 0 || holidayDatesSet.has(l.date)) continue; // Skip Sunday and Company Holiday
 
               const lMins = Number(l.late_minutes) || 0;
               if (lMins > 0) {
@@ -2517,7 +2606,17 @@ async function handleAction(db, action, params) {
       const startDate = cutoffInfo.startDate;
       const endDate = cutoffInfo.endDate;
       const isCurrentActivePeriod = (today >= startDate && today <= endDate);
-      const totalExpectedWorkDays = getActualWorkingDaysInCutoff(startDate, endDate) || 26;
+
+      // Load Company Holidays
+      const holidaysRows = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
+      const companyHolidays = holidaysRows.results || [];
+      const holidayMap = {};
+      const holidayDatesSet = new Set();
+      for (const h of companyHolidays) {
+        holidayMap[h.date] = h;
+        holidayDatesSet.add(h.date);
+      }
+      const totalExpectedWorkDays = getActualWorkingDaysInCutoff(startDate, endDate, holidayDatesSet) || 26;
 
       // Build working dates list (Mon-Sat, non-Sunday)
       const workingDates = [];
@@ -2645,8 +2744,10 @@ async function handleAction(db, action, params) {
           let isPresent = false;
           let isLeave = false;
           let isAbsent = false;
+          let isHoliday = false;
           let curLateMins = 0;
           let curOtHrs = 0;
+          const holidayInfo = holidayMap[dateStr];
 
           if (log && log.clock_in) {
             isPresent = true;
@@ -2700,6 +2801,14 @@ async function handleAction(db, action, params) {
                 absentTimes++;
                 currentlyAbsentSequence = false;
               }
+            } else if (holidayInfo) {
+              isHoliday = true;
+              statusText = `วันหยุด: ${holidayInfo.holiday_name}`;
+              statusColor = '#0d9488';
+              if (currentlyAbsentSequence) {
+                absentTimes++;
+                currentlyAbsentSequence = false;
+              }
             } else if (isDateInPastOrToday) {
               isAbsent = true;
               absentDays++;
@@ -2724,6 +2833,8 @@ async function handleAction(db, action, params) {
             isPresent,
             isLeave,
             isAbsent,
+            isHoliday,
+            holidayName: holidayInfo ? holidayInfo.holiday_name : '',
             remark: (log && log.remark) ? log.remark : ''
           });
         }
@@ -2794,7 +2905,7 @@ async function handleAction(db, action, params) {
           }
 
           for (const rec of dailyRecords) {
-            if (rec.lateMinutes > graceMins) {
+            if (rec.lateMinutes > graceMins && !rec.isHoliday) {
               disqualifyReasons.push(`สายเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.lateMinutes} นาที > ${graceMins} นาที)`);
               break;
             }
@@ -2870,7 +2981,8 @@ async function handleAction(db, action, params) {
         branchId: branchId || 'ALL',
         branches,
         grandTotals,
-        summaryList
+        summaryList,
+        companyHolidays
       };
     }
 
@@ -4207,6 +4319,7 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
       const ot_requests = (await db.prepare('SELECT * FROM ot_requests').all().catch(() => ({ results: [] }))).results || [];
       const advance_requests = (await db.prepare('SELECT * FROM advance_requests').all().catch(() => ({ results: [] }))).results || [];
       const attendance_settings = (await db.prepare('SELECT * FROM attendance_settings').all().catch(() => ({ results: [] }))).results || [];
+      const company_holidays = (await db.prepare('SELECT * FROM company_holidays').all().catch(() => ({ results: [] }))).results || [];
 
       // Extract unique periods
       const periodsSet = new Set();
@@ -4231,7 +4344,8 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
           timeLogsCount: time_logs.length,
           leaveRequestsCount: leave_requests.length,
           otRequestsCount: ot_requests.length,
-          advanceRequestsCount: advance_requests.length
+          advanceRequestsCount: advance_requests.length,
+          holidaysCount: company_holidays.length
         },
         data: {
           settings,
@@ -4247,7 +4361,8 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
           leave_requests,
           ot_requests,
           advance_requests,
-          attendance_settings
+          attendance_settings,
+          company_holidays
         }
       };
 
@@ -4322,6 +4437,21 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
         }
         await executeBatch(stmts);
         restoredSummary.push(`การตั้งค่า ${stmts.length} ค่า`);
+      }
+
+      // 1.5 Company Holidays
+      if (Array.isArray(data.company_holidays) && data.company_holidays.length > 0) {
+        const stmts = [];
+        for (const h of data.company_holidays) {
+          if (h.date && (h.holiday_name || h.name)) {
+            stmts.push(db.prepare(`
+              INSERT OR REPLACE INTO company_holidays (id, date, holiday_name, holiday_type, note, created_at)
+              VALUES (?, ?, ?, ?, ?, ?)
+            `).bind(h.id || null, h.date, h.holiday_name || h.name, h.holiday_type || 'COMPANY', h.note || '', h.created_at || new Date().toISOString()));
+          }
+        }
+        await executeBatch(stmts);
+        restoredSummary.push(`วันหยุดบริษัท ${stmts.length} วัน`);
       }
 
       // 2. Users (Only if explicitly enabled)
@@ -4645,7 +4775,8 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
       workDays = Number(wdRow.value);
     } else {
       const dates = await getCutoffDatesForPeriod(db, period);
-      workDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate);
+      const holidayDatesSet = await getCompanyHolidayDatesSet(db, dates.startDate, dates.endDate);
+      workDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate, holidayDatesSet);
     }
   }
   if (!workDays || workDays <= 0) workDays = 26;

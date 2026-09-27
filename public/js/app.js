@@ -310,7 +310,8 @@ var State = {
     diligenceLateMaxCount: 1,
     autoDiligenceEnabled: true
   },
-  annualSickMap: {}
+  annualSickMap: {},
+  companyHolidays: []
 };
 
 // UTILITIES
@@ -573,7 +574,7 @@ function resetToActualWorkDays() {
       var inputEl = document.getElementById('periodWorkingDaysInput');
       if (inputEl) inputEl.value = r.actualDays;
       State.workingDays = r.actualDays;
-      showToast('คำนวณวันทำงานจริงงวด ' + r.period + ' (จ.-ส.): ' + r.actualDays + ' วัน กำลังบันทึก...');
+      showToast('คำนวณวันทำงานจริงงวด ' + r.period + ' (จ.-ส. หักวันหยุด ' + (r.holidaysCount || 0) + ' วัน): ' + r.actualDays + ' วัน กำลังบันทึก...');
       return callApi('savePeriodWorkDays', {
         workingDays: r.actualDays,
         period: State.period,
@@ -588,6 +589,173 @@ function resetToActualWorkDays() {
       }
     })
     .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+// ==========================================
+// COMPANY HOLIDAYS MANAGEMENT (ระบบจัดการวันหยุดบริษัท / วันหยุดนักขัตฤกษ์)
+// ==========================================
+function openCompanyHolidaysModal() {
+  var canManage = isSuperAdmin() || hasPermission('manage_company') || hasPermission('calc_payroll');
+  if (!canManage) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการวันหยุดบริษัท', 'warning');
+    return;
+  }
+
+  // Pre-fill today's date in form if empty
+  var dateInput = document.getElementById('inputHolidayDate');
+  if (dateInput && !dateInput.value) {
+    var nowUtc = new Date();
+    var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    dateInput.value = bkk.toISOString().substring(0, 10);
+  }
+
+  renderCompanyHolidaysList();
+  openModal('companyHolidaysModal');
+}
+
+function renderCompanyHolidaysList() {
+  var tbody = document.getElementById('companyHolidaysTableBody');
+  var countEl = document.getElementById('countHolidaysTotal');
+  var periodSummaryEl = document.getElementById('holidayInPeriodSummary');
+  if (!tbody) return;
+
+  var holidays = State.companyHolidays || [];
+  if (countEl) countEl.textContent = holidays.length;
+
+  // Determine current period cutoff window
+  var cutoff = getAttendanceCutoffDatesClient(State.period);
+  var startStr = cutoff ? cutoff.startDate : '';
+  var endStr = cutoff ? cutoff.endDate : '';
+
+  var inPeriodCount = 0;
+  holidays.forEach(function(h) {
+    if (h.date >= startStr && h.date <= endStr) inPeriodCount++;
+  });
+
+  if (periodSummaryEl) {
+    periodSummaryEl.innerHTML = '<i class="fa-solid fa-calendar-check"></i> ในงวด <strong>' + esc(State.period) + '</strong> (' + esc(startStr) + ' ถึง ' + esc(endStr) + ') มีวันหยุดบริษัท <strong>' + inPeriodCount + '</strong> วัน';
+  }
+
+  if (holidays.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-calendar-xmark" style="font-size:24px;display:block;margin-bottom:8px;color:#94a3b8"></i> ยังไม่มีการบันทึกวันหยุดบริษัท</td></tr>';
+    return;
+  }
+
+  var dayNamesTh = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
+  var html = '';
+
+  holidays.forEach(function(h) {
+    var dObj = new Date(h.date + 'T00:00:00Z');
+    var dayOfWeek = dayNamesTh[dObj.getUTCDay()] || '-';
+    var isSunday = (dObj.getUTCDay() === 0);
+    var isInCurrentPeriod = (h.date >= startStr && h.date <= endStr);
+
+    var rowBg = isInCurrentPeriod ? '#f0fdfa' : '#fff';
+    var typeBadge = h.holiday_type === 'SPECIAL'
+      ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">วันหยุดพิเศษ</span>'
+      : '<span style="background:#ccfbf1;color:#0f766e;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700">วันหยุดประเพณี</span>';
+
+    var inPeriodTag = isInCurrentPeriod
+      ? ' <span style="background:#0d9488;color:#fff;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700">งวดนี้</span>'
+      : '';
+
+    var sundayNotice = isSunday
+      ? ' <span style="color:#ef4444;font-size:10.5px" title="วันหยุดตรงกับวันอาทิตย์ (ปกติเป็นวันหยุดประจำสัปดาห์อยู่แล้ว)">(ตรงวันอาทิตย์)</span>'
+      : '';
+
+    html += '<tr style="background:' + rowBg + ';border-bottom:1px solid #e2e8f0;transition:background 0.15s">';
+    html += '<td style="padding:8px 12px;font-family:monospace;font-weight:700;color:#0f172a">' + esc(h.date) + inPeriodTag + '</td>';
+    html += '<td style="padding:8px 12px;font-weight:700;color:' + (isSunday ? '#dc2626' : '#334155') + '">' + dayOfWeek + sundayNotice + '</td>';
+    html += '<td style="padding:8px 12px;font-weight:700;color:#1e40af">' + esc(h.holiday_name) + '</td>';
+    html += '<td style="padding:8px 12px">' + typeBadge + '</td>';
+    html += '<td style="padding:8px 12px;color:#64748b;font-size:11.5px">' + esc(h.note || '-') + '</td>';
+    html += '<td style="padding:8px 12px;text-align:center">';
+    html += '<button type="button" class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px" onclick="deleteCompanyHoliday(' + (h.id || 'null') + ', \'' + esc(h.date) + '\', \'' + esc(h.holiday_name).replace(/'/g, "\\'") + '\')" title="ลบวันหยุดนี้">';
+    html += '<i class="fa-solid fa-trash-can"></i>';
+    html += '</button>';
+    html += '</td>';
+    html += '</tr>';
+  });
+
+  tbody.innerHTML = html;
+}
+
+function saveCompanyHolidayFromForm() {
+  var dateEl = document.getElementById('inputHolidayDate');
+  var nameEl = document.getElementById('inputHolidayName');
+  var typeEl = document.getElementById('inputHolidayType');
+  var noteEl = document.getElementById('inputHolidayNote');
+
+  var date = dateEl ? dateEl.value.trim() : '';
+  var name = nameEl ? nameEl.value.trim() : '';
+  var type = typeEl ? typeEl.value.trim() : 'COMPANY';
+  var note = noteEl ? noteEl.value.trim() : '';
+
+  if (!date || !name) {
+    showToast('กรุณากรอกวันที่และชื่อวันหยุดให้ครบถ้วน', 'warning');
+    return;
+  }
+
+  showToast('กำลังบันทึกวันหยุดบริษัท...');
+
+  callApi('saveCompanyHoliday', {
+    holiday: {
+      date: date,
+      holiday_name: name,
+      holiday_type: type,
+      note: note
+    },
+    period: State.period,
+    forcePeriod: true,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+  .then(function(r) {
+    if (!r.success) {
+      showToast(r.message || 'บันทึกวันหยุดไม่สำเร็จ', 'error');
+      return;
+    }
+    showToast(r.message || 'บันทึกวันหยุดเรียบร้อยแล้ว');
+    if (r.holidays) {
+      State.companyHolidays = r.holidays;
+    }
+    if (nameEl) nameEl.value = '';
+    if (noteEl) noteEl.value = '';
+    renderCompanyHolidaysList();
+    loadAppData(true);
+  })
+  .catch(function(e) {
+    showToast(e.message || 'เกิดข้อผิดพลาดในการบันทึก', 'error');
+  });
+}
+
+function deleteCompanyHoliday(id, date, name) {
+  var msg = 'คุณแน่ใจหรือไม่ที่จะลบวันหยุด "' + (name || date) + '" (' + date + ')?\\n\\nเมื่อลบแล้ว ระบบจะคำนวณวันทำงานของงวดใหม่อัตโนมัติ';
+  if (!confirm(msg)) return;
+
+  showToast('กำลังลบวันหยุด...');
+
+  callApi('deleteCompanyHoliday', {
+    id: id,
+    date: date,
+    period: State.period,
+    forcePeriod: true,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+  .then(function(r) {
+    if (!r.success) {
+      showToast(r.message || 'ลบวันหยุดไม่สำเร็จ', 'error');
+      return;
+    }
+    showToast(r.message || 'ลบวันหยุดเรียบร้อยแล้ว');
+    if (r.holidays) {
+      State.companyHolidays = r.holidays;
+    }
+    renderCompanyHolidaysList();
+    loadAppData(true);
+  })
+  .catch(function(e) {
+    showToast(e.message || 'เกิดข้อผิดพลาดในการลบ', 'error');
+  });
 }
 
 // DATA LOADER & STATE SYNC
@@ -620,6 +788,7 @@ function loadAppData(isExplicitPeriodChange) {
       State.stats = r.stats || { totalEmployees: 0, totalGross: 0, totalDeductions: 0, totalNet: 0 };
       State.users = r.users || [];
       State.branches = r.branches || [];
+      State.companyHolidays = r.companyHolidays || [];
       populateBranchSelects();
 
       renderAllViews();

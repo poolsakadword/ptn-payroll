@@ -87,3 +87,13 @@ CREATE TABLE IF NOT EXISTS payroll_calcs (
   net_pay REAL DEFAULT 0,
   PRIMARY KEY (period, emp_id)
 );
+
+CREATE TABLE IF NOT EXISTS company_holidays (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  date TEXT NOT NULL UNIQUE,
+  holiday_name TEXT NOT NULL,
+  holiday_type TEXT DEFAULT 'COMPANY',
+  note TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_company_holidays_date ON company_holidays(date);
