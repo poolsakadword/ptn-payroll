@@ -532,6 +532,51 @@ async function verifySessionToken(token) {
   }
 }
 
+function categorizeLeaveType(leaveType, medicalCertUrl) {
+  const raw = String(leaveType || '').trim();
+  const rawUpper = raw.toUpperCase();
+  const rawLower = raw.toLowerCase();
+
+  // 1. Sick with Medical Certificate
+  if (
+    rawUpper === 'SICK_WITH_CERT' ||
+    rawLower.includes('มีใบ') ||
+    rawLower.includes('with_cert') ||
+    ((rawUpper === 'SICK' || rawLower === 'ลาป่วย') && medicalCertUrl)
+  ) {
+    return 'SICK_WITH_CERT';
+  }
+
+  // 2. Sick without Medical Certificate
+  if (
+    rawUpper === 'SICK_NO_CERT' ||
+    rawLower.includes('ไม่มีใบ') ||
+    rawLower.includes('no_cert') ||
+    rawUpper === 'SICK' ||
+    rawLower === 'ลาป่วย'
+  ) {
+    return 'SICK_NO_CERT';
+  }
+
+  // 3. Annual Leave
+  if (rawUpper === 'ANNUAL' || rawLower.includes('พักร้อน')) {
+    return 'ANNUAL';
+  }
+
+  // 4. Business Leave / Unpaid / Others
+  if (
+    rawUpper === 'BUSINESS' ||
+    rawUpper === 'WITHOUT_PAY' ||
+    rawLower.includes('กิจ') ||
+    rawLower.includes('ไม่รับค่าจ้าง') ||
+    rawLower.includes('without_pay')
+  ) {
+    return 'BUSINESS';
+  }
+
+  return rawUpper || 'OTHER';
+}
+
 /**
  * ==============================================================================
  * PTN Payroll System V4.0 - Clean Enterprise Cloudflare D1 Backend
@@ -1557,32 +1602,37 @@ async function handleAction(db, action, params) {
 
       try {
         let detSql = `
-          SELECT id, emp_id, start_date, end_date, days_count, leave_type, reason
+          SELECT id, emp_id, start_date, end_date, COALESCE(days_count, days, 1) as days_count, leave_type, reason, medical_cert_url
           FROM leave_requests
-          WHERE status = 'APPROVED'
-            AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?) OR (start_date <= ? AND end_date >= ?))
+          WHERE UPPER(TRIM(status)) = 'APPROVED'
+            AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))
         `;
         let detBinds = [startDate, endDate, startDate, endDate, startDate, endDate];
         if (targetEmpId) {
-          detSql += ` AND emp_id = ?`;
+          detSql += ` AND TRIM(emp_id) = TRIM(?)`;
           detBinds.push(targetEmpId);
         }
         const detQuery = await db.prepare(detSql).bind(...detBinds).all();
         detailedLeaves = detQuery.results || [];
 
         for (const lr of detailedLeaves) {
-          const emp = employees.find(e => e.emp_id === lr.emp_id);
+          const lrEmpId = String(lr.emp_id || '').trim();
+          const emp = employees.find(e => String(e.emp_id).trim() === lrEmpId);
           const origDays = Number(lr.days_count) || 1.0;
           let daysDeductedDueToWork = 0;
 
           // Check each date covered by this leave within cutoff window
-          let dCur = new Date(lr.start_date + 'T00:00:00Z');
-          const dEnd = new Date(lr.end_date + 'T00:00:00Z');
+          const sDate = String(lr.start_date || '').trim().substring(0, 10);
+          const eDate = String(lr.end_date || '').trim().substring(0, 10);
+          if (!sDate || !eDate) continue;
+
+          let dCur = new Date(sDate + 'T00:00:00Z');
+          const dEnd = new Date(eDate + 'T00:00:00Z');
 
           while (dCur <= dEnd) {
             const dStr = dCur.toISOString().substring(0, 10);
             if (dStr >= startDate && dStr <= endDate) {
-              const tl = logsByEmpDate[`${lr.emp_id}_${dStr}`];
+              const tl = logsByEmpDate[`${lrEmpId}_${dStr}`] || logsByEmpDate[`${lr.emp_id}_${dStr}`];
               if (tl && tl.clock_in) {
                 const branch = branchMap[tl.branch_id] || (emp ? branchMap[emp.branch_id] : null);
                 const shiftHours = getShiftHoursForBranch(branch);
@@ -1591,6 +1641,7 @@ async function handleAction(db, action, params) {
                 // FULL WORK DAY: clocked out with sufficient hours, or work_hours >= (shiftHours - 1.0), or work_hours >= 6
                 if ((tl.clock_out && wHours >= Math.max(6.0, shiftHours - 1.0)) || (tl.clock_out && wHours >= shiftHours * 0.75)) {
                   daysDeductedDueToWork += 1.0;
+                  overriddenDatesByEmp[`${lrEmpId}_${dStr}`] = 'FULL';
                   overriddenDatesByEmp[`${lr.emp_id}_${dStr}`] = 'FULL';
                   autoAdjustedLeaves.push({
                     empId: lr.emp_id,
@@ -1607,6 +1658,7 @@ async function handleAction(db, action, params) {
                 } else if (wHours >= 3.5) {
                   // HALF WORK DAY: worked at least half day (3.5+ hrs)
                   daysDeductedDueToWork += 0.5;
+                  overriddenDatesByEmp[`${lrEmpId}_${dStr}`] = 'HALF';
                   overriddenDatesByEmp[`${lr.emp_id}_${dStr}`] = 'HALF';
                   autoAdjustedLeaves.push({
                     empId: lr.emp_id,
@@ -1628,16 +1680,20 @@ async function handleAction(db, action, params) {
 
           const effectiveDays = Math.max(0, origDays - daysDeductedDueToWork);
           if (effectiveDays > 0) {
-            if (!leaveMap[lr.emp_id]) {
-              leaveMap[lr.emp_id] = { sickCert: 0, sickNoCert: 0, business: 0 };
+            if (!leaveMap[lrEmpId]) {
+              leaveMap[lrEmpId] = { sickCert: 0, sickNoCert: 0, business: 0 };
+            }
+            if (lrEmpId !== lr.emp_id && !leaveMap[lr.emp_id]) {
+              leaveMap[lr.emp_id] = leaveMap[lrEmpId];
             }
             totalLeaveCount += effectiveDays;
-            if (lr.leave_type === 'SICK_WITH_CERT') {
-              leaveMap[lr.emp_id].sickCert += effectiveDays;
-            } else if (lr.leave_type === 'SICK_NO_CERT') {
-              leaveMap[lr.emp_id].sickNoCert += effectiveDays;
-            } else if (lr.leave_type === 'BUSINESS' || lr.leave_type === 'WITHOUT_PAY') {
-              leaveMap[lr.emp_id].business += effectiveDays;
+            const cat = categorizeLeaveType(lr.leave_type, lr.medical_cert_url);
+            if (cat === 'SICK_WITH_CERT') {
+              leaveMap[lrEmpId].sickCert += effectiveDays;
+            } else if (cat === 'SICK_NO_CERT') {
+              leaveMap[lrEmpId].sickNoCert += effectiveDays;
+            } else if (cat === 'BUSINESS') {
+              leaveMap[lrEmpId].business += effectiveDays;
             }
           }
         }
@@ -1646,12 +1702,16 @@ async function handleAction(db, action, params) {
       }
 
       function getLeaveDaysOnDate(empId, dateStr) {
-        const override = overriddenDatesByEmp[`${empId}_${dateStr}`];
+        const normEmpId = String(empId || '').trim();
+        const override = overriddenDatesByEmp[`${normEmpId}_${dateStr}`] || overriddenDatesByEmp[`${empId}_${dateStr}`];
         if (override === 'FULL') return 0; // Full day worked, zero leave coverage needed
         if (override === 'HALF') return 0.5; // Half day leave coverage
         let d = 0;
         for (const lr of detailedLeaves) {
-          if (lr.emp_id === empId && dateStr >= lr.start_date && dateStr <= lr.end_date) {
+          const lrEmp = String(lr.emp_id || '').trim();
+          const sDate = String(lr.start_date || '').trim().substring(0, 10);
+          const eDate = String(lr.end_date || '').trim().substring(0, 10);
+          if ((lrEmp === normEmpId || lr.emp_id === empId) && dateStr >= sDate && dateStr <= eDate) {
             d += Number(lr.days_count) || 1.0;
           }
         }
@@ -1760,7 +1820,8 @@ async function handleAction(db, action, params) {
         const otHours = isEmpOtEligible ? (otMap[emp.emp_id] !== undefined ? otMap[emp.emp_id] : (Number(exist.ot_hours) || 0)) : 0;
         const advDed = advMap[emp.emp_id] !== undefined ? advMap[emp.emp_id] : (Number(exist.advance_deduct) || 0);
         
-        const empLeave = leaveMap[emp.emp_id] || {};
+        const empKey = String(emp.emp_id || '').trim();
+        const empLeave = leaveMap[empKey] || leaveMap[emp.emp_id] || {};
         const sickLeaveDays = empLeave.sickCert !== undefined ? empLeave.sickCert : (Number(exist.sick_leave_days) || 0);
         const unpaidSickLeaveDays = empLeave.sickNoCert !== undefined ? empLeave.sickNoCert : (Number(exist.unpaid_sick_leave_days) || 0);
         const leaveDays = empLeave.business !== undefined ? empLeave.business : (Number(exist.leave_days) || 0);
@@ -2422,7 +2483,7 @@ async function handleAction(db, action, params) {
       const advQuery = (reqType === 'ALL' || reqType === 'ADVANCE')
         ? await db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 100`).bind(...advBinds).all().catch(() => ({ results: [] }))
         : { results: [] };
-      const approvedLeavesOnDate = await db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE lr.status = 'APPROVED' AND ? >= lr.start_date AND ? <= lr.end_date`).bind(targetDate, targetDate).all().catch(() => ({ results: [] }));
+      const approvedLeavesOnDate = await db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) = 'APPROVED' AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] }));
       const pendingCountRow = await db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 }));
       const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
 
@@ -2435,6 +2496,8 @@ async function handleAction(db, action, params) {
       // 4. Map approved leaves on targetDate and check conflicts
       const leaveOnTargetDateMap = {};
       for (const lr of (approvedLeavesOnDate.results || [])) {
+        const k = String(lr.emp_id || '').trim();
+        if (k) leaveOnTargetDateMap[k] = lr;
         leaveOnTargetDateMap[lr.emp_id] = lr;
       }
       for (const l of logsToday) {
@@ -2719,7 +2782,7 @@ async function handleAction(db, action, params) {
       const allLogs = tlQuery.results || [];
 
       // Load Approved Leaves
-      let lvSql = "SELECT id, emp_id, start_date, end_date, COALESCE(days_count, days, 1) as days_count, leave_type, reason, medical_cert_url FROM leave_requests WHERE status = 'APPROVED' AND ((start_date BETWEEN ? AND ?) OR (end_date BETWEEN ? AND ?) OR (start_date <= ? AND end_date >= ?))";
+      let lvSql = "SELECT id, emp_id, start_date, end_date, COALESCE(days_count, days, 1) as days_count, leave_type, reason, medical_cert_url FROM leave_requests WHERE UPPER(TRIM(status)) = 'APPROVED' AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))";
       const lvQuery = await db.prepare(lvSql).bind(startDate, endDate, startDate, endDate, startDate, endDate).all().catch(() => ({ results: [] }));
       const allLeaves = lvQuery.results || [];
 
@@ -2740,20 +2803,29 @@ async function handleAction(db, action, params) {
       // Group logs, leaves, and ots by emp_id
       const logsByEmp = {};
       for (const l of allLogs) {
-        if (!logsByEmp[l.emp_id]) logsByEmp[l.emp_id] = {};
-        logsByEmp[l.emp_id][l.date] = l;
+        const k = String(l.emp_id || '').trim();
+        if (k) {
+          if (!logsByEmp[k]) logsByEmp[k] = {};
+          logsByEmp[k][l.date] = l;
+        }
       }
 
       const leavesByEmp = {};
       for (const lr of allLeaves) {
-        if (!leavesByEmp[lr.emp_id]) leavesByEmp[lr.emp_id] = [];
-        leavesByEmp[lr.emp_id].push(lr);
+        const k = String(lr.emp_id || '').trim();
+        if (k) {
+          if (!leavesByEmp[k]) leavesByEmp[k] = [];
+          leavesByEmp[k].push(lr);
+        }
       }
 
       const otsByEmp = {};
       for (const o of allOts) {
-        if (!otsByEmp[o.emp_id]) otsByEmp[o.emp_id] = [];
-        otsByEmp[o.emp_id].push(o);
+        const k = String(o.emp_id || '').trim();
+        if (k) {
+          if (!otsByEmp[k]) otsByEmp[k] = [];
+          otsByEmp[k].push(o);
+        }
       }
 
       const summaryList = [];
@@ -2777,9 +2849,10 @@ async function handleAction(db, action, params) {
 
       for (let i = 0; i < employees.length; i++) {
         const emp = employees[i];
-        const empLogs = logsByEmp[emp.emp_id] || {};
-        const empLeaves = leavesByEmp[emp.emp_id] || [];
-        const empOts = otsByEmp[emp.emp_id] || [];
+        const empKey = String(emp.emp_id || '').trim();
+        const empLogs = logsByEmp[empKey] || logsByEmp[emp.emp_id] || {};
+        const empLeaves = leavesByEmp[empKey] || leavesByEmp[emp.emp_id] || [];
+        const empOts = otsByEmp[empKey] || otsByEmp[emp.emp_id] || [];
         const branch = branchMap[emp.branch_id] || { branch_name: 'ทั่วไป' };
 
         let presentDays = 0;
@@ -2837,7 +2910,9 @@ async function handleAction(db, action, params) {
             // Check approved leaves
             let matchingLeave = null;
             for (const lr of empLeaves) {
-              if (dateStr >= lr.start_date && dateStr <= lr.end_date) {
+              const sDate = String(lr.start_date || '').trim().substring(0, 10);
+              const eDate = String(lr.end_date || '').trim().substring(0, 10);
+              if (sDate && eDate && dateStr >= sDate && dateStr <= eDate) {
                 matchingLeave = lr;
                 break;
               }
@@ -2845,14 +2920,14 @@ async function handleAction(db, action, params) {
 
             if (matchingLeave) {
               isLeave = true;
-              const lt = matchingLeave.leave_type;
-              if (lt === 'SICK_WITH_CERT' || (lt === 'SICK' && matchingLeave.medical_cert_url)) {
+              const cat = categorizeLeaveType(matchingLeave.leave_type, matchingLeave.medical_cert_url);
+              if (cat === 'SICK_WITH_CERT') {
                 statusText = 'ลาป่วย (มีใบ)';
                 statusColor = '#0284c7';
-              } else if (lt === 'SICK_NO_CERT' || lt === 'SICK') {
+              } else if (cat === 'SICK_NO_CERT') {
                 statusText = 'ลาป่วย (ไม่มีใบ)';
                 statusColor = '#d97706';
-              } else if (lt === 'ANNUAL') {
+              } else if (cat === 'ANNUAL') {
                 statusText = 'ลาพักร้อน';
                 statusColor = '#6366f1';
               } else {
@@ -2913,26 +2988,34 @@ async function handleAction(db, action, params) {
         let businessLeaveDays = 0, businessLeaveTimes = 0;
 
         for (const lr of empLeaves) {
-          let dCurLv = new Date(lr.start_date + 'T00:00:00Z');
-          const dEndLv = new Date(lr.end_date + 'T00:00:00Z');
+          const sDate = String(lr.start_date || '').trim().substring(0, 10);
+          const eDate = String(lr.end_date || '').trim().substring(0, 10);
           let daysInCutoff = 0;
-          while (dCurLv <= dEndLv) {
-            const dStr = dCurLv.toISOString().substring(0, 10);
-            if (dStr >= startDate && dStr <= endDate && dCurLv.getUTCDay() !== 0) {
-              daysInCutoff++;
+          if (sDate && eDate) {
+            let dCurLv = new Date(sDate + 'T00:00:00Z');
+            const dEndLv = new Date(eDate + 'T00:00:00Z');
+            while (dCurLv <= dEndLv) {
+              const dStr = dCurLv.toISOString().substring(0, 10);
+              if (dStr >= startDate && dStr <= endDate && dCurLv.getUTCDay() !== 0) {
+                daysInCutoff++;
+              }
+              dCurLv.setUTCDate(dCurLv.getUTCDate() + 1);
             }
-            dCurLv.setUTCDate(dCurLv.getUTCDate() + 1);
+          }
+
+          if (sDate === eDate && Number(lr.days_count) > 0 && Number(lr.days_count) < daysInCutoff) {
+            daysInCutoff = Number(lr.days_count);
           }
 
           if (daysInCutoff > 0) {
-            const lt = lr.leave_type;
-            if (lt === 'SICK_WITH_CERT' || (lt === 'SICK' && lr.medical_cert_url)) {
+            const cat = categorizeLeaveType(lr.leave_type, lr.medical_cert_url);
+            if (cat === 'SICK_WITH_CERT') {
               sickWithCertDays += daysInCutoff;
               sickWithCertTimes++;
-            } else if (lt === 'SICK_NO_CERT' || lt === 'SICK') {
+            } else if (cat === 'SICK_NO_CERT') {
               sickNoCertDays += daysInCutoff;
               sickNoCertTimes++;
-            } else if (lt === 'BUSINESS' || lt === 'WITHOUT_PAY') {
+            } else if (cat === 'BUSINESS') {
               businessLeaveDays += daysInCutoff;
               businessLeaveTimes++;
             }
