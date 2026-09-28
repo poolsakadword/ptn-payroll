@@ -448,6 +448,7 @@ async function ensureTimeAttendanceTables(db) {
     await db.prepare("ALTER TABLE time_logs ADD COLUMN break_minutes INTEGER DEFAULT 0").run().catch(() => {});
     await db.prepare("ALTER TABLE time_logs ADD COLUMN overbreak_minutes INTEGER DEFAULT 0").run().catch(() => {});
     await db.prepare("ALTER TABLE leave_requests ADD COLUMN medical_cert_url TEXT").run().catch(() => {});
+    await db.prepare("ALTER TABLE leave_requests ADD COLUMN days_count REAL DEFAULT 1.0").run().catch(() => {});
   } catch(e) {
     console.error('ensureTimeAttendanceTables note:', e);
   }
@@ -1602,7 +1603,7 @@ async function handleAction(db, action, params) {
 
       try {
         let detSql = `
-          SELECT id, emp_id, start_date, end_date, COALESCE(days_count, days, 1) as days_count, leave_type, reason, medical_cert_url
+          SELECT id, emp_id, start_date, end_date, COALESCE(days_count, 1) as days_count, leave_type, reason, medical_cert_url
           FROM leave_requests
           WHERE UPPER(TRIM(status)) = 'APPROVED'
             AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))
@@ -2011,7 +2012,7 @@ async function handleAction(db, action, params) {
 
       // 1. Pending Leaves
       const leavesQ = await db.prepare(`
-        SELECT lr.id, lr.emp_id, lr.leave_type, lr.start_date, lr.days, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name
+        SELECT lr.id, lr.emp_id, lr.leave_type, lr.start_date, COALESCE(lr.days_count, 1) as days_count, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name
         FROM leave_requests lr
         LEFT JOIN employees e ON lr.emp_id = e.emp_id
         WHERE lr.status = 'PENDING'
@@ -2351,7 +2352,7 @@ async function handleAction(db, action, params) {
         }
 
         const appLeavesQ = await db.prepare(`
-          SELECT SUM(days) as sum_days FROM leave_requests WHERE ${sumLeaveClause}
+          SELECT SUM(COALESCE(days_count, 1)) as sum_days FROM leave_requests WHERE ${sumLeaveClause}
         `).bind(...sumBindsLeave).first().catch(() => null);
         const appAdvQ = await db.prepare(`
           SELECT SUM(amount) as sum_amount FROM advance_requests WHERE ${sumAdvClause}
@@ -2782,8 +2783,8 @@ async function handleAction(db, action, params) {
       const allLogs = tlQuery.results || [];
 
       // Load Approved Leaves
-      let lvSql = "SELECT id, emp_id, start_date, end_date, COALESCE(days_count, days, 1) as days_count, leave_type, reason, medical_cert_url FROM leave_requests WHERE UPPER(TRIM(status)) = 'APPROVED' AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))";
-      const lvQuery = await db.prepare(lvSql).bind(startDate, endDate, startDate, endDate, startDate, endDate).all().catch(() => ({ results: [] }));
+      let lvSql = "SELECT id, emp_id, start_date, end_date, COALESCE(days_count, 1) as days_count, leave_type, reason, medical_cert_url FROM leave_requests WHERE UPPER(TRIM(status)) = 'APPROVED' AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))";
+      const lvQuery = await db.prepare(lvSql).bind(startDate, endDate, startDate, endDate, startDate, endDate).all().catch(e => { console.error('lvQuery error in getAttendancePeriodSummary:', e); return { results: [] }; });
       const allLeaves = lvQuery.results || [];
 
       // Load Approved OTs
