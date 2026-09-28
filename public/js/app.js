@@ -16,6 +16,18 @@ function clearAllPrintClasses() {
   ALL_PRINT_CLASSES.forEach(function(cls) {
     document.body.classList.remove(cls);
   });
+  var payrollSumContainer = document.getElementById('payrollSummaryPrintContainer');
+  if (payrollSumContainer) {
+    payrollSumContainer.innerHTML = '';
+  }
+}
+
+function preparePayrollSummaryPrintContainer() {
+  var srcArea = document.getElementById('payrollSignoffPrintArea');
+  var targetContainer = document.getElementById('payrollSummaryPrintContainer');
+  if (srcArea && targetContainer) {
+    targetContainer.innerHTML = '<div class="payroll-summary-print-wrapper" style="font-family:\'Sarabun\',sans-serif;color:#0f172a;background:#ffffff;">' + srcArea.innerHTML + '</div>';
+  }
 }
 
 // Clean up print classes automatically when print dialog closes
@@ -39,6 +51,7 @@ window.addEventListener('beforeprint', function() {
     document.body.classList.add('printing-50twi');
   } else if (payrollSignoffModal && payrollSignoffModal.classList.contains('active')) {
     clearAllPrintClasses();
+    preparePayrollSummaryPrintContainer();
     document.body.classList.add('printing-payroll-summary');
   }
 });
@@ -4914,6 +4927,7 @@ function openMonthlyPayrollSummaryModal() {
 
 function printMonthlyPayrollSummaryDocument() {
   clearAllPrintClasses();
+  preparePayrollSummaryPrintContainer();
   document.body.classList.add('printing-payroll-summary');
 
   setTimeout(function() {

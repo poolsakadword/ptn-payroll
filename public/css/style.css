@@ -917,18 +917,15 @@ footer {
   }
 
   /* ------------------------------------------------------------------------
-     A4. MONTHLY PAYROLL SUMMARY SIGN-OFF SHEET MODAL PRINT (A4 LANDSCAPE)
+     A4. MONTHLY PAYROLL SUMMARY SIGN-OFF SHEET (A4 LANDSCAPE MULTI-PAGE)
      ------------------------------------------------------------------------ */
   body.printing-payroll-summary {
     page: landscapePage;
   }
-  body.printing-payroll-summary > *:not(#payrollSignoffModal) {
+  body.printing-payroll-summary > *:not(#payrollSummaryPrintContainer) {
     display: none !important;
   }
-  body.printing-payroll-summary .modal-overlay:not(#payrollSignoffModal) {
-    display: none !important;
-  }
-  body.printing-payroll-summary #payrollSignoffModal {
+  body.printing-payroll-summary #payrollSummaryPrintContainer {
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -936,47 +933,89 @@ footer {
     padding: 0 !important;
     margin: 0 !important;
     overflow: visible !important;
-    border: none !important;
-    box-shadow: none !important;
   }
-  body.printing-payroll-summary #payrollSignoffModal .modal-card {
-    display: block !important;
-    position: static !important;
+  body.printing-payroll-summary #payrollSummaryPrintContainer * {
+    visibility: visible !important;
+  }
+  body.printing-payroll-summary .payroll-summary-print-wrapper {
     width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    border: none !important;
-    box-shadow: none !important;
     background: #ffffff !important;
-    border-radius: 0 !important;
-  }
-  body.printing-payroll-summary #payrollSignoffModal .modal-card > *:not(.modal-body) {
-    display: none !important;
-  }
-  body.printing-payroll-summary #payrollSignoffModal .modal-body {
-    display: block !important;
-    background: #ffffff !important;
-    padding: 0 !important;
-    margin: 0 !important;
     overflow: visible !important;
+  }
+  body.printing-payroll-summary .signoff-table-wrapper {
+    overflow: visible !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    height: auto !important;
     max-height: none !important;
-    border: none !important;
-    box-shadow: none !important;
+    margin-bottom: 14px !important;
   }
-  body.printing-payroll-summary #payrollSignoffModal .modal-body > *:not(#payrollSignoffPrintArea) {
-    display: none !important;
-  }
-  body.printing-payroll-summary #payrollSignoffPrintArea {
-    display: block !important;
+  body.printing-payroll-summary #signoffTable,
+  body.printing-payroll-summary table {
     width: 100% !important;
-    border: 1.5px solid #0f172a !important;
-    box-shadow: none !important;
+    border-collapse: collapse !important;
+    font-size: 10px !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+  body.printing-payroll-summary thead {
+    display: table-header-group !important;
+  }
+  body.printing-payroll-summary thead tr {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
   }
-  body.printing-payroll-summary #payrollSignoffPrintArea * {
-    visibility: visible !important;
+  body.printing-payroll-summary thead th {
+    background: #f1f5f9 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    border-top: 1.5px solid #0f172a !important;
+    border-bottom: 1.5px solid #0f172a !important;
+    padding: 5px 3px !important;
+  }
+  body.printing-payroll-summary tbody tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-payroll-summary tbody td {
+    padding: 4px 3px !important;
+  }
+  body.printing-payroll-summary tfoot {
+    display: table-row-group !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-payroll-summary tfoot tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    background: #f1f5f9 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    border-top: 2px solid #0f172a !important;
+    border-bottom: 2px solid #0f172a !important;
+  }
+  body.printing-payroll-summary tfoot td {
+    padding: 6px 3px !important;
+  }
+  body.printing-payroll-summary #signoffSignatureSection,
+  body.printing-payroll-summary .signoff-signatures {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr 1fr !important;
+    gap: 20px !important;
+    text-align: center !important;
+    margin-top: 24px !important;
+    font-size: 11px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+  body.printing-payroll-summary #signoffSignatureSection > div,
+  body.printing-payroll-summary .signoff-signatures > div {
+    background: #f8fafc !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 6px !important;
+    padding: 12px 10px !important;
   }
 
 
