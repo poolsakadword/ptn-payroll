@@ -3474,7 +3474,7 @@ function onRoleTemplateChanged() {
     'perm_view_emp', 'perm_view_salary', 'perm_edit_emp', 'perm_del_emp',
     'perm_view_inputs', 'perm_edit_inputs', 'perm_populate_inputs',
     'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip', 'perm_close_period',
-    'perm_view_attendance', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time', 'perm_manage_attendance_settings',
+    'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time', 'perm_manage_attendance_settings',
     'perm_view_documents', 'perm_issue_salary_cert', 'perm_export_bank_files', 'perm_export_tax_sso',
     'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv', 'perm_view_analytics',
     'perm_manage_users', 'perm_company_settings', 'perm_backup_restore'
@@ -3486,7 +3486,7 @@ function onRoleTemplateChanged() {
       if (el) el.checked = true;
     });
   } else if (role === 'Supervisor') {
-    var supPerms = ['perm_view_emp', 'perm_view_attendance', 'perm_approve_attendance', 'perm_unlock_device'];
+    var supPerms = ['perm_view_emp', 'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device'];
     allPerms.forEach(function(p) {
       var el = document.getElementById(p);
       if (el) el.checked = (supPerms.indexOf(p) >= 0);
@@ -3496,7 +3496,7 @@ function onRoleTemplateChanged() {
       'perm_view_emp', 'perm_view_salary', 'perm_edit_emp',
       'perm_view_inputs', 'perm_edit_inputs', 'perm_populate_inputs',
       'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip',
-      'perm_view_attendance', 'perm_sync_ptn_time',
+      'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_sync_ptn_time',
       'perm_view_documents', 'perm_issue_salary_cert', 'perm_export_bank_files', 'perm_export_tax_sso',
       'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv', 'perm_view_analytics'
     ];
@@ -3507,7 +3507,7 @@ function onRoleTemplateChanged() {
   } else if (role === 'HR Time Attendance') {
     var attPerms = [
       'perm_view_emp', 'perm_view_inputs', 'perm_edit_inputs', 'perm_populate_inputs',
-      'perm_view_attendance', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time',
+      'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time',
       'perm_view_history', 'perm_print_history'
     ];
     allPerms.forEach(function(p) {
@@ -3598,6 +3598,8 @@ function openEditUserModal(username) {
     'perm_view_payslip': ['view_payslip'],
     'perm_close_period': ['close_period'],
     'perm_view_attendance': ['view_attendance'],
+    'perm_manage_time_logs': ['manage_time_logs'],
+    'perm_create_attendance_requests': ['create_attendance_requests'],
     'perm_approve_attendance': ['approve_attendance'],
     'perm_unlock_device': ['unlock_device'],
     'perm_sync_ptn_time': ['sync_ptn_time'],
@@ -3656,6 +3658,8 @@ function saveUserForm(e) {
       { id: 'perm_view_payslip', key: 'view_payslip' },
       { id: 'perm_close_period', key: 'close_period' },
       { id: 'perm_view_attendance', key: 'view_attendance' },
+      { id: 'perm_manage_time_logs', key: 'manage_time_logs' },
+      { id: 'perm_create_attendance_requests', key: 'create_attendance_requests' },
       { id: 'perm_approve_attendance', key: 'approve_attendance' },
       { id: 'perm_unlock_device', key: 'unlock_device' },
       { id: 'perm_sync_ptn_time', key: 'sync_ptn_time' },
@@ -10569,6 +10573,423 @@ function saveEditAttendanceRequestForm(event) {
     })
     .catch(function(err) {
       showToast(err.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+    });
+}
+
+// ==============================================================================
+// HR / ADMIN MANUAL ATTENDANCE LOG ENTRY & REQUEST CREATION
+// ==============================================================================
+
+function openAddAttendanceLogModal() {
+  if (!hasPermission('manage_time_logs') && !hasPermission('approve_attendance') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เพิ่มข้อมูลลงเวลา', 'warning');
+    return;
+  }
+
+  // Populate employee select
+  var empSel = document.getElementById('addAttEmpId');
+  if (empSel) {
+    empSel.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
+    var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active'; });
+    list.sort(function(a, b) { return (a.emp_id || '').localeCompare(b.emp_id || ''); });
+    list.forEach(function(e) {
+      var opt = document.createElement('option');
+      opt.value = e.emp_id;
+      opt.textContent = '[' + e.emp_id + '] ' + (e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '') + (e.department ? ' - ' + e.department : '');
+      empSel.appendChild(opt);
+    });
+
+    // If an employee is currently filtered in attendance dashboard, select them by default
+    var curFilterEmp = document.getElementById('attFilterEmp') ? document.getElementById('attFilterEmp').value : 'ALL';
+    if (curFilterEmp && curFilterEmp !== 'ALL') {
+      empSel.value = curFilterEmp;
+    }
+  }
+
+  // Populate branch select
+  var brSel = document.getElementById('addAttBranchId');
+  if (brSel) {
+    brSel.innerHTML = '';
+    var branches = State.branches || [];
+    branches.forEach(function(b) {
+      var opt = document.createElement('option');
+      opt.value = b.branch_id;
+      opt.textContent = (b.branch_name || b.branch_id) + ' (' + (b.work_start_time || '09:30') + ' - ' + (b.work_end_time || '19:00') + ')';
+      brSel.appendChild(opt);
+    });
+  }
+
+  // Set default date
+  var dateEl = document.getElementById('addAttDate');
+  if (dateEl) {
+    var curDate = document.getElementById('attFilterDate') ? document.getElementById('attFilterDate').value : '';
+    dateEl.value = curDate || new Date().toISOString().substring(0, 10);
+  }
+
+  // Default times
+  if (document.getElementById('addAttClockIn')) document.getElementById('addAttClockIn').value = '09:30';
+  if (document.getElementById('addAttClockOut')) document.getElementById('addAttClockOut').value = '19:00';
+  if (document.getElementById('addAttBreakOut')) document.getElementById('addAttBreakOut').value = '';
+  if (document.getElementById('addAttBreakIn')) document.getElementById('addAttBreakIn').value = '';
+  if (document.getElementById('addAttStatus')) document.getElementById('addAttStatus').value = 'NORMAL';
+  if (document.getElementById('addAttRemark')) document.getElementById('addAttRemark').value = '';
+  if (document.getElementById('addAttIsFullPay')) document.getElementById('addAttIsFullPay').checked = false;
+  if (document.getElementById('addAttOverwrite')) document.getElementById('addAttOverwrite').checked = true;
+
+  onAddAttendanceEmpChanged();
+  onAddAttendanceTimeChanged();
+  openModal('modalAddAttendanceLog');
+}
+
+function onAddAttendanceEmpChanged() {
+  var empId = document.getElementById('addAttEmpId') ? document.getElementById('addAttEmpId').value : '';
+  if (!empId) return;
+  var emp = (State.employees || []).find(function(e) { return e.emp_id === empId; });
+  if (emp && emp.branch_id && document.getElementById('addAttBranchId')) {
+    document.getElementById('addAttBranchId').value = emp.branch_id;
+  }
+  onAddAttendanceTimeChanged();
+}
+
+function setAddAttTime(type, timeStr) {
+  if (type === 'in' && document.getElementById('addAttClockIn')) {
+    document.getElementById('addAttClockIn').value = timeStr;
+  } else if (type === 'out' && document.getElementById('addAttClockOut')) {
+    document.getElementById('addAttClockOut').value = timeStr;
+  }
+  onAddAttendanceTimeChanged();
+}
+
+function onAddAttendanceTimeChanged() {
+  var clockIn = document.getElementById('addAttClockIn') ? document.getElementById('addAttClockIn').value.trim() : '';
+  var clockOut = document.getElementById('addAttClockOut') ? document.getElementById('addAttClockOut').value.trim() : '';
+  var dateStr = document.getElementById('addAttDate') ? document.getElementById('addAttDate').value : '';
+  var branchId = document.getElementById('addAttBranchId') ? document.getElementById('addAttBranchId').value : '';
+  var isFullPay = document.getElementById('addAttIsFullPay') ? document.getElementById('addAttIsFullPay').checked : false;
+
+  var branch = (State.branches || []).find(function(b) { return b.branch_id === branchId; }) || {};
+  var toMin = function(s) {
+    if (!s) return null;
+    var p = String(s).trim().split(':');
+    return p.length >= 2 ? (parseInt(p[0], 10) * 60 + parseInt(p[1], 10)) : null;
+  };
+
+  var inMin = toMin(clockIn);
+  var outMin = toMin(clockOut);
+  var startMin = toMin(branch.work_start_time) || (9 * 60 + 30);
+  var endMin = toMin(branch.work_end_time) || (19 * 60);
+  var lunchStart = toMin(branch.lunch_start_time) || (13 * 60);
+  var lunchEnd = toMin(branch.lunch_end_time) || (14 * 60);
+  var otStartMin = toMin(branch.ot_start_time || branch.work_end_time) || (19 * 60);
+
+  var workHrs = 0;
+  var otHrs = 0;
+  var lateMin = 0;
+
+  if (inMin !== null && outMin !== null) {
+    var d = new Date(dateStr + 'T00:00:00');
+    var isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
+
+    if (inMin > startMin) {
+      lateMin = inMin - startMin;
+    }
+
+    var breakMin = 0;
+    var bOut = toMin(document.getElementById('addAttBreakOut') ? document.getElementById('addAttBreakOut').value : '');
+    var bIn = toMin(document.getElementById('addAttBreakIn') ? document.getElementById('addAttBreakIn').value : '');
+    if (bOut !== null && bIn !== null && bIn > bOut) {
+      breakMin = bIn - bOut;
+    } else if (Math.max(inMin, startMin) <= lunchStart && outMin >= lunchEnd) {
+      breakMin = 60;
+    }
+
+    if (isFullPay) {
+      workHrs = Math.max(0, Math.round(((endMin - startMin - breakMin) / 60) * 10) / 10) || 8.5;
+    } else if (isSunday) {
+      var sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - breakMin);
+      otHrs = Math.floor(sunMin / 30) * 0.5;
+      workHrs = 0;
+    } else {
+      var effIn = Math.max(inMin, startMin);
+      var cappedOut = Math.min(outMin, endMin);
+      var normMin = Math.max(0, cappedOut - effIn - breakMin);
+      workHrs = Math.round((normMin / 60) * 10) / 10;
+
+      if (outMin > otStartMin) {
+        otHrs = Math.floor((outMin - otStartMin) / 30) * 0.5;
+      }
+    }
+  }
+
+  var previewEl = document.getElementById('addAttCalcPreviewText');
+  if (previewEl) {
+    previewEl.innerHTML = '<span style="color:#15803d">ชั่วโมงทำงาน: <b>' + workHrs + '</b> ชม.</span> | ' +
+                          '<span style="color:' + (lateMin > 0 ? '#b91c1c' : '#475569') + '">สาย: <b>' + lateMin + '</b> นาที</span> | ' +
+                          '<span style="color:' + (otHrs > 0 ? '#ea580c' : '#475569') + '">OT: <b>' + otHrs + '</b> ชม.</span>';
+  }
+
+  var statusSel = document.getElementById('addAttStatus');
+  if (statusSel) {
+    if (isSunday) {
+      statusSel.value = 'SUNDAY_WORK';
+    } else if (lateMin > 0 && statusSel.value === 'NORMAL') {
+      statusSel.value = 'LATE';
+    } else if (lateMin === 0 && statusSel.value === 'LATE') {
+      statusSel.value = 'NORMAL';
+    }
+  }
+}
+
+function submitAddAttendanceLogForm(e) {
+  if (e) e.preventDefault();
+
+  var empId = document.getElementById('addAttEmpId').value;
+  var date = document.getElementById('addAttDate').value;
+  var branchId = document.getElementById('addAttBranchId').value;
+  var clockIn = document.getElementById('addAttClockIn').value.trim();
+  var clockOut = document.getElementById('addAttClockOut').value.trim();
+  var breakOut = document.getElementById('addAttBreakOut').value.trim();
+  var breakIn = document.getElementById('addAttBreakIn').value.trim();
+  var status = document.getElementById('addAttStatus').value;
+  var remark = document.getElementById('addAttRemark').value.trim();
+  var isFullPay = document.getElementById('addAttIsFullPay').checked ? 1 : 0;
+  var overwrite = document.getElementById('addAttOverwrite').checked;
+
+  if (!empId) { showToast('กรุณาเลือกพนักงาน', 'error'); return; }
+  if (!date) { showToast('กรุณาระบุวันที่', 'error'); return; }
+  if (!clockIn || !clockOut) { showToast('กรุณาระบุเวลาเข้าและเวลาออกงาน', 'error'); return; }
+
+  var btn = document.getElementById('btnSubmitAddAttLog');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...'; }
+
+  callApi('addAttendanceLog', {
+    empId: empId,
+    date: date,
+    branchId: branchId,
+    clockIn: clockIn + (clockIn.length === 5 ? ':00' : ''),
+    clockOut: clockOut + (clockOut.length === 5 ? ':00' : ''),
+    breakOut: breakOut ? (breakOut + (breakOut.length === 5 ? ':00' : '')) : '',
+    breakIn: breakIn ? (breakIn + (breakIn.length === 5 ? ':00' : '')) : '',
+    status: status,
+    remark: remark,
+    isFullPay: isFullPay,
+    overwrite: overwrite,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> บันทึกการลงเวลา'; }
+      if (r.success) {
+        closeModal('modalAddAttendanceLog');
+        showToast(r.message || 'บันทึกการลงเวลาสำเร็จแล้ว', 'success');
+        loadTimeAttendanceDashboard();
+      } else if (r.hasExisting) {
+        if (confirm(r.message)) {
+          document.getElementById('addAttOverwrite').checked = true;
+          submitAddAttendanceLogForm(e);
+        }
+      } else {
+        alert(r.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+        showToast(r.message, 'error');
+      }
+    })
+    .catch(function(err) {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> บันทึกการลงเวลา'; }
+      showToast(err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
+    });
+}
+
+// ------------------------------------------------------------------------------
+// CREATE ATTENDANCE REQUEST ON BEHALF OF EMPLOYEE
+// ------------------------------------------------------------------------------
+
+function openCreateAdminRequestModal() {
+  if (!hasPermission('create_attendance_requests') && !hasPermission('approve_attendance') && !isSuperAdmin()) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์สร้างคำขอแทนพนักงาน', 'warning');
+    return;
+  }
+
+  // Populate employee dropdown
+  var empSel = document.getElementById('createAdminReqEmpId');
+  if (empSel) {
+    empSel.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
+    var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active'; });
+    list.sort(function(a, b) { return (a.emp_id || '').localeCompare(b.emp_id || ''); });
+    list.forEach(function(e) {
+      var opt = document.createElement('option');
+      opt.value = e.emp_id;
+      opt.textContent = '[' + e.emp_id + '] ' + (e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '') + (e.department ? ' - ' + e.department : '');
+      empSel.appendChild(opt);
+    });
+  }
+
+  var todayStr = new Date().toISOString().substring(0, 10);
+  if (document.getElementById('createAdminReqLeaveStartDate')) document.getElementById('createAdminReqLeaveStartDate').value = todayStr;
+  if (document.getElementById('createAdminReqLeaveEndDate')) document.getElementById('createAdminReqLeaveEndDate').value = todayStr;
+  if (document.getElementById('createAdminReqLeaveDays')) document.getElementById('createAdminReqLeaveDays').value = '1.0';
+  if (document.getElementById('createAdminReqOtDate')) document.getElementById('createAdminReqOtDate').value = todayStr;
+  if (document.getElementById('createAdminReqAdvanceDate')) document.getElementById('createAdminReqAdvanceDate').value = todayStr;
+  if (document.getElementById('createAdminReqAdvanceAmount')) document.getElementById('createAdminReqAdvanceAmount').value = '';
+  if (document.getElementById('createAdminReqReason')) document.getElementById('createAdminReqReason').value = '';
+
+  switchCreateAdminReqType('LEAVE');
+  openModal('modalCreateAdminRequest');
+}
+
+function switchCreateAdminReqType(type) {
+  if (document.getElementById('createAdminReqType')) document.getElementById('createAdminReqType').value = type;
+
+  var types = ['LEAVE', 'OT', 'ADVANCE'];
+  types.forEach(function(t) {
+    var btn = document.getElementById('tabBtnCreateReq_' + t);
+    var sec = document.getElementById('createAdminReqSection_' + t);
+    if (btn) {
+      if (t === type) {
+        btn.style.background = '#2563eb';
+        btn.style.color = '#fff';
+        btn.style.border = '1.5px solid #1d4ed8';
+        btn.style.fontWeight = '700';
+      } else {
+        btn.style.background = '#f8fafc';
+        btn.style.color = '#475569';
+        btn.style.border = '1px solid #cbd5e1';
+        btn.style.fontWeight = '600';
+      }
+    }
+    if (sec) {
+      sec.style.display = (t === type) ? 'flex' : 'none';
+    }
+  });
+}
+
+function onAdminLeaveDatesChanged() {
+  var sStr = document.getElementById('createAdminReqLeaveStartDate') ? document.getElementById('createAdminReqLeaveStartDate').value : '';
+  var eStr = document.getElementById('createAdminReqLeaveEndDate') ? document.getElementById('createAdminReqLeaveEndDate').value : '';
+  if (!sStr || !eStr) return;
+
+  var s = new Date(sStr + 'T00:00:00');
+  var e = new Date(eStr + 'T00:00:00');
+  if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return;
+
+  var days = 0;
+  var cur = new Date(s);
+  while (cur <= e) {
+    if (cur.getDay() !== 0) days++; // Skip Sunday
+    cur.setDate(cur.getDate() + 1);
+  }
+  if (days <= 0) days = 1;
+
+  if (document.getElementById('createAdminReqLeaveDays')) {
+    document.getElementById('createAdminReqLeaveDays').value = days.toFixed(1);
+  }
+}
+
+function onAdminOtTimesChanged() {
+  var s = document.getElementById('createAdminReqOtStartTime') ? document.getElementById('createAdminReqOtStartTime').value : '';
+  var e = document.getElementById('createAdminReqOtEndTime') ? document.getElementById('createAdminReqOtEndTime').value : '';
+  if (!s || !e) return;
+
+  var sp = s.split(':').map(Number);
+  var ep = e.split(':').map(Number);
+  var sMins = sp[0] * 60 + sp[1];
+  var eMins = ep[0] * 60 + ep[1];
+  if (eMins > sMins) {
+    var diff = (eMins - sMins) / 60;
+    var hrs = Math.floor(diff * 2) / 2; // Round to nearest 0.5
+    if (hrs <= 0) hrs = 0.5;
+    if (document.getElementById('createAdminReqOtHours')) {
+      document.getElementById('createAdminReqOtHours').value = hrs.toFixed(1);
+    }
+  }
+}
+
+function submitCreateAdminRequestForm(e) {
+  if (e) e.preventDefault();
+
+  var reqType = document.getElementById('createAdminReqType').value;
+  var empId = document.getElementById('createAdminReqEmpId').value;
+  var reason = document.getElementById('createAdminReqReason').value.trim();
+  var statusRadio = document.querySelector('input[name="createAdminReqStatus"]:checked');
+  var status = statusRadio ? statusRadio.value : 'APPROVED';
+
+  if (!empId) { showToast('กรุณาเลือกพนักงาน', 'error'); return; }
+  if (!reason) { showToast('กรุณาระบุเหตุผลหรือรายละเอียดคำขอ', 'error'); return; }
+
+  var payload = {
+    requestType: reqType,
+    empId: empId,
+    reason: reason,
+    status: status,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  };
+
+  if (reqType === 'LEAVE') {
+    var leaveType = document.getElementById('createAdminReqLeaveType').value;
+    var startDate = document.getElementById('createAdminReqLeaveStartDate').value;
+    var endDate = document.getElementById('createAdminReqLeaveEndDate').value;
+    var daysCount = parseFloat(document.getElementById('createAdminReqLeaveDays').value) || 1.0;
+    if (!startDate || !endDate) { showToast('กรุณาระบุช่วงวันที่ลา', 'error'); return; }
+
+    payload.leaveType = leaveType;
+    payload.startDate = startDate;
+    payload.endDate = endDate;
+    payload.daysCount = daysCount;
+
+    var fileInput = document.getElementById('createAdminReqMedicalCertFile');
+    if (fileInput && fileInput.files && fileInput.files[0]) {
+      var reader = new FileReader();
+      reader.onload = function(evt) {
+        payload.medicalCertUrl = evt.target.result;
+        doSubmitCreateAdminRequest(payload);
+      };
+      reader.readAsDataURL(fileInput.files[0]);
+      return;
+    }
+  } else if (reqType === 'OT') {
+    var otDate = document.getElementById('createAdminReqOtDate').value;
+    var startTime = document.getElementById('createAdminReqOtStartTime').value;
+    var endTime = document.getElementById('createAdminReqOtEndTime').value;
+    var hours = parseFloat(document.getElementById('createAdminReqOtHours').value) || 0;
+    if (!otDate) { showToast('กรุณาระบุวันที่ทำ OT', 'error'); return; }
+    if (hours <= 0) { showToast('กรุณาระบุจำนวนชั่วโมง OT', 'error'); return; }
+
+    payload.date = otDate;
+    payload.startTime = startTime;
+    payload.endTime = endTime;
+    payload.hours = hours;
+  } else if (reqType === 'ADVANCE') {
+    var amount = parseFloat(document.getElementById('createAdminReqAdvanceAmount').value) || 0;
+    var advanceDate = document.getElementById('createAdminReqAdvanceDate').value;
+    if (amount <= 0) { showToast('กรุณาระบุยอดเงินที่ต้องการเบิก', 'error'); return; }
+    if (!advanceDate) { showToast('กรุณาระบุวันที่เบิก', 'error'); return; }
+
+    payload.amount = amount;
+    payload.requestDate = advanceDate;
+    payload.period = State.period || getDefaultPeriod();
+  }
+
+  doSubmitCreateAdminRequest(payload);
+}
+
+function doSubmitCreateAdminRequest(payload) {
+  var btn = document.getElementById('btnSubmitCreateAdminReq');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังส่งคำขอ...'; }
+
+  callApi('createAttendanceRequest', payload)
+    .then(function(r) {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> บันทึกสร้างคำขอ'; }
+      if (r.success) {
+        closeModal('modalCreateAdminRequest');
+        showToast(r.message || 'สร้างคำขอแทนพนักงานสำเร็จแล้ว', 'success');
+        loadAttendanceRequests();
+        loadTimeAttendanceDashboard();
+      } else {
+        alert(r.message || 'เกิดข้อผิดพลาดในการสร้างคำขอ');
+        showToast(r.message, 'error');
+      }
+    })
+    .catch(function(err) {
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> บันทึกสร้างคำขอ'; }
+      showToast(err.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์', 'error');
     });
 }
 

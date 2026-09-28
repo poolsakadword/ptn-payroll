@@ -52,7 +52,8 @@ function getDefaultRolePermissions(role) {
     return ['all'];
   } else if (r.includes('supervisor')) {
     return [
-      'view_emp', 'view_attendance', 'approve_attendance', 'unlock_device'
+      'view_emp', 'view_attendance', 'approve_attendance', 'unlock_device',
+      'manage_time_logs', 'create_attendance_requests'
     ];
   } else if (r.includes('payroll') || r === 'hr') {
     return [
@@ -61,13 +62,15 @@ function getDefaultRolePermissions(role) {
       'view_payroll', 'calc_payroll', 'view_payslip',
       'view_history', 'print_history', 'export_csv',
       'view_analytics', 'view_documents', 'issue_salary_cert',
-      'export_bank_files', 'export_tax_sso', 'view_attendance', 'sync_ptn_time'
+      'export_bank_files', 'export_tax_sso', 'view_attendance', 'sync_ptn_time',
+      'manage_time_logs', 'create_attendance_requests'
     ];
   } else if (r.includes('attendance')) {
     return [
       'view_emp', 'view_inputs', 'edit_inputs', 'populate_inputs',
       'view_attendance', 'approve_attendance', 'unlock_device',
-      'sync_ptn_time', 'view_history', 'print_history'
+      'sync_ptn_time', 'view_history', 'print_history',
+      'manage_time_logs', 'create_attendance_requests'
     ];
   } else if (r.includes('accounting') || r.includes('finance')) {
     return [
@@ -3371,6 +3374,90 @@ async function handleAction(db, action, params) {
       return { success: true, message: `บันทึกการแก้ไขคำขอ ${type} เรียบร้อยแล้ว` };
     }
 
+    // 5.3.5 CREATE ATTENDANCE REQUEST (LEAVE, OT, ADVANCE ON BEHALF OF EMPLOYEE)
+    case 'createAttendanceRequest': {
+      const callerUser = params.username || 'Admin';
+      const allowed = (await userHasPermission(db, callerUser, 'create_attendance_requests')) ||
+                      (await userHasPermission(db, callerUser, 'approve_attendance')) ||
+                      (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์สร้างคำขอแทนพนักงาน' };
+
+      const { requestType, empId, status: rawStatus } = params;
+      if (!requestType) return { success: false, message: 'กรุณาระบุประเภทคำขอ (LEAVE, OT, ADVANCE)' };
+      if (!empId) return { success: false, message: 'กรุณาระบุพนักงาน' };
+
+      const empRow = await db.prepare('SELECT emp_id, full_name FROM employees WHERE emp_id = ?').bind(empId).first().catch(() => null);
+      if (!empRow) return { success: false, message: `ไม่พบข้อมูลพนักงานรหัส ${empId}` };
+
+      const targetStatus = (rawStatus === 'PENDING' || rawStatus === 'pending') ? 'PENDING' : 'APPROVED';
+      const nowStr = new Date(Date.now() + 7 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+      const auditNote = `[สร้างแทนโดย HR: ${callerUser} เมื่อ ${nowStr}]`;
+      const approvedBy = targetStatus === 'APPROVED' ? callerUser : null;
+      const approvedAt = targetStatus === 'APPROVED' ? nowStr : null;
+
+      let resultMsg = '';
+
+      if (requestType === 'LEAVE') {
+        const { leaveType, startDate, endDate, daysCount, reason, medicalCertUrl } = params;
+        if (!leaveType) return { success: false, message: 'กรุณาระบุประเภทการลา' };
+        if (!startDate || !endDate) return { success: false, message: 'กรุณาระบุช่วงวันที่ลา' };
+
+        const finalDays = Number(daysCount) > 0 ? Number(daysCount) : 1.0;
+        const finalReason = reason ? `${reason} ${auditNote}` : auditNote;
+
+        await db.prepare(`
+          INSERT INTO leave_requests (emp_id, leave_type, start_date, end_date, days_count, reason, medical_cert_url, status, approved_by, approved_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          empId, leaveType, startDate, endDate, finalDays, finalReason, medicalCertUrl || null, targetStatus, approvedBy, approvedAt
+        ).run();
+
+        resultMsg = `สร้างคำขอลางาน (${leaveType} ${finalDays} วัน) ให้ ${empRow.full_name} สำเร็จ (${targetStatus === 'APPROVED' ? 'อนุมัติทันที' : 'รออนุมัติ'})`;
+      } else if (requestType === 'OT') {
+        const { date, startTime, endTime, hours, plannedHours, actualHours, reason } = params;
+        if (!date) return { success: false, message: 'กรุณาระบุวันที่ทำ OT' };
+
+        const otHoursVal = Number(hours) || Number(actualHours) || Number(plannedHours) || 0;
+        if (otHoursVal <= 0) return { success: false, message: 'กรุณาระบุจำนวนชั่วโมง OT' };
+
+        const d = new Date(date + 'T00:00:00');
+        const isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
+        const otType = isSunday ? 1.0 : 1.5;
+        const finalReason = reason ? `${reason} ${auditNote}` : auditNote;
+
+        await db.prepare(`
+          INSERT INTO ot_requests (emp_id, date, start_time, end_time, planned_hours, actual_hours, ot_type, reason, status, approved_by, approved_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          empId, date, startTime || null, endTime || null, otHoursVal, otHoursVal, otType, finalReason, targetStatus, approvedBy, approvedAt
+        ).run();
+
+        resultMsg = `สร้างคำขอ OT (${otHoursVal} ชม. วันที่ ${date}) ให้ ${empRow.full_name} สำเร็จ (${targetStatus === 'APPROVED' ? 'อนุมัติทันที' : 'รออนุมัติ'})`;
+      } else if (requestType === 'ADVANCE') {
+        const { amount, requestDate, period, reason } = params;
+        const amtVal = Number(amount) || 0;
+        if (amtVal <= 0) return { success: false, message: 'กรุณาระบุยอดเงินที่ต้องการเบิก' };
+
+        const rDate = requestDate || new Date().toISOString().substring(0, 10);
+        const targetPeriod = period || getDefaultPeriod();
+        const finalReason = reason ? `${reason} ${auditNote}` : auditNote;
+
+        await db.prepare(`
+          INSERT INTO advance_requests (emp_id, amount, request_date, period, reason, status, approved_by, approved_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          empId, amtVal, rDate, targetPeriod, finalReason, targetStatus, approvedBy, approvedAt
+        ).run();
+
+        resultMsg = `สร้างคำขอเบิกเงินล่วงหน้า (฿${amtVal.toLocaleString()}) ให้ ${empRow.full_name} สำเร็จ (${targetStatus === 'APPROVED' ? 'อนุมัติทันที' : 'รออนุมัติ'})`;
+      } else {
+        return { success: false, message: `ไม่รองรับประเภทคำขอ: ${requestType}` };
+      }
+
+      await logSystemActivity(db, callerUser, 'CREATE_ATTENDANCE_REQUEST', `สร้างคำขอ ${requestType} ให้ [${empId}] ${empRow.full_name} (${targetStatus})`);
+      return { success: true, message: resultMsg };
+    }
+
     // 5.4 GET MASTER UNLOCK QR TOKEN
     case 'getMasterUnlockQr': {
       const token = await getMasterUnlockToken(0);
@@ -3735,10 +3822,158 @@ async function handleAction(db, action, params) {
       };
     }
 
+    // 5.5.9 ADD TIME LOG (MANUAL ENTRY BY ADMIN / HR)
+    case 'addAttendanceLog': {
+      const callerUser = params.username || 'Admin';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_time_logs')) ||
+                      (await userHasPermission(db, callerUser, 'approve_attendance')) ||
+                      (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เพิ่มข้อมูลลงเวลา' };
+
+      const { empId, date, branchId, clockIn, clockOut, breakOut, breakIn, breakMinutes, lateMinutes, workHours, otHours, status, remark, isFullPay, overwrite } = params;
+      if (!empId) return { success: false, message: 'กรุณาระบุพนักงาน' };
+      if (!date) return { success: false, message: 'กรุณาระบุวันที่' };
+
+      const empRow = await db.prepare('SELECT emp_id, full_name, branch_id, is_ot_eligible FROM employees WHERE emp_id = ?').bind(empId).first().catch(() => null);
+      if (!empRow) return { success: false, message: `ไม่พบข้อมูลพนักงานรหัส ${empId}` };
+
+      // Check existing log on this date
+      const existing = await db.prepare('SELECT id FROM time_logs WHERE emp_id = ? AND date = ?').bind(empId, date).first().catch(() => null);
+      if (existing && !overwrite) {
+        return {
+          success: false,
+          hasExisting: true,
+          existingId: existing.id,
+          message: `พนักงานรหัส ${empId} มีข้อมูลการลงเวลาของวันที่ ${date} อยู่แล้วในระบบ (ID: ${existing.id}) คุณต้องการบันทึกทับหรือไม่?`
+        };
+      }
+
+      const finalBranchId = branchId || empRow.branch_id || 'B01';
+      const isFullPayVal = (isFullPay === 1 || isFullPay === '1' || isFullPay === true || isFullPay === 'true') ? 1 : 0;
+
+      // Auto-calc hours if not explicitly provided
+      let finalWorkHours = Number(workHours) || 0;
+      let finalOtHours = Number(otHours) || 0;
+      let finalLateMinutes = Number(lateMinutes) || 0;
+      let finalBreakMinutes = breakMinutes !== undefined && breakMinutes !== null ? Number(breakMinutes) : 0;
+
+      if (clockIn && clockOut && finalWorkHours <= 0) {
+        try {
+          const branchRow = await db.prepare('SELECT * FROM branches WHERE branch_id = ?').bind(finalBranchId).first().catch(() => null);
+          const toMin = (s) => {
+            if (!s) return null;
+            const p = String(s).trim().split(':');
+            return p.length >= 2 ? (parseInt(p[0], 10) * 60 + parseInt(p[1], 10)) : null;
+          };
+          const inMin = toMin(clockIn);
+          const outMin = toMin(clockOut);
+          const startMin = toMin(branchRow && branchRow.work_start_time) || (9 * 60 + 30);
+          const endMin = toMin(branchRow && branchRow.work_end_time) || (19 * 60);
+          const lunchStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
+          const lunchEnd = toMin(branchRow && branchRow.lunch_end_time) || (14 * 60);
+          const otStartMin = toMin(branchRow && (branchRow.ot_start_time || branchRow.work_end_time)) || (19 * 60);
+
+          if (inMin !== null && outMin !== null) {
+            const d = new Date(date + 'T00:00:00');
+            const isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
+
+            if (inMin > startMin) {
+              finalLateMinutes = inMin - startMin;
+            }
+
+            if (finalBreakMinutes === 0 && Math.max(inMin, startMin) <= lunchStart && outMin >= lunchEnd) {
+              finalBreakMinutes = 60;
+            }
+
+            if (isFullPayVal === 1) {
+              finalWorkHours = Math.max(0, Math.round(((endMin - startMin - finalBreakMinutes) / 60) * 10) / 10) || 8.5;
+            } else if (isSunday) {
+              const sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - finalBreakMinutes);
+              finalOtHours = Math.floor(sunMin / 30) * 0.5;
+              finalWorkHours = 0;
+            } else {
+              const effIn = Math.max(inMin, startMin);
+              const cappedOut = Math.min(outMin, endMin);
+              const normMin = Math.max(0, cappedOut - effIn - finalBreakMinutes);
+              finalWorkHours = Math.round((normMin / 60) * 10) / 10;
+
+              if (outMin > otStartMin) {
+                finalOtHours = Math.floor((outMin - otStartMin) / 30) * 0.5;
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('addAttendanceLog auto-calc error:', e);
+        }
+      }
+
+      const nowStr = new Date(Date.now() + 7 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
+      const auditTag = `[เพิ่มโดย HR: ${callerUser} เมื่อ ${nowStr}]`;
+      const finalRemark = remark ? `${remark} ${auditTag}` : auditTag;
+      const finalStatus = status || (finalLateMinutes > 0 ? 'LATE' : 'NORMAL');
+
+      let savedId;
+      if (existing) {
+        await db.prepare(`
+          UPDATE time_logs
+          SET branch_id = ?, clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, late_minutes = ?, work_hours = ?, ot_hours = ?, status = ?, remark = ?, is_full_pay = ?
+          WHERE id = ?
+        `).bind(
+          finalBranchId, clockIn || null, clockOut || null, breakOut || null, breakIn || null,
+          finalBreakMinutes, finalLateMinutes, finalWorkHours, finalOtHours, finalStatus, finalRemark, isFullPayVal, existing.id
+        ).run();
+        savedId = existing.id;
+      } else {
+        const res = await db.prepare(`
+          INSERT INTO time_logs (emp_id, branch_id, date, clock_in, clock_out, break_out, break_in, break_minutes, late_minutes, work_hours, ot_hours, status, remark, is_full_pay)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          empId, finalBranchId, date, clockIn || null, clockOut || null, breakOut || null, breakIn || null,
+          finalBreakMinutes, finalLateMinutes, finalWorkHours, finalOtHours, finalStatus, finalRemark, isFullPayVal
+        ).run();
+        savedId = res.meta ? res.meta.last_row_id : null;
+      }
+
+      // If OT occurred and employee is eligible, sync to ot_requests
+      if (finalOtHours > 0) {
+        try {
+          const isOtEligible = !(empRow.is_ot_eligible === 'false' || empRow.is_ot_eligible === false);
+          if (isOtEligible) {
+            const d = new Date(date + 'T00:00:00');
+            const isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
+            const otRate = isSunday ? 1.0 : 1.5;
+            const existingOt = await db.prepare('SELECT id FROM ot_requests WHERE emp_id = ? AND date = ?').bind(empId, date).first().catch(() => null);
+            if (existingOt) {
+              await db.prepare(`UPDATE ot_requests SET actual_hours = ?, ot_type = ?, status = 'APPROVED' WHERE id = ?`).bind(finalOtHours, otRate, existingOt.id).run();
+            } else {
+              await db.prepare(`
+                INSERT INTO ot_requests (emp_id, date, planned_hours, actual_hours, ot_type, reason, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'APPROVED')
+              `).bind(empId, date, finalOtHours, finalOtHours, otRate, isSunday ? 'ทำงานวันอาทิตย์ (HR ลงเวลาแทน)' : 'OT งานเสร็จประจำวัน (HR ลงเวลาแทน)').run();
+            }
+          }
+        } catch (e) {
+          console.warn('ot_requests sync error in addAttendanceLog:', e);
+        }
+      }
+
+      await logSystemActivity(db, callerUser, 'ADD_TIME_LOG', `เพิ่มการลงเวลาให้ [${empId}] ${empRow.full_name} วันที่ ${date} (เข้า: ${clockIn || '-'}, ออก: ${clockOut || '-'}, ชม.งาน: ${finalWorkHours}, OT: ${finalOtHours})`);
+      return {
+        success: true,
+        id: savedId,
+        workHours: finalWorkHours,
+        otHours: finalOtHours,
+        message: `เพิ่มการลงเวลาให้ ${empRow.full_name} วันที่ ${date} สำเร็จ (ชั่วโมงทำงาน: ${finalWorkHours} ชม.${finalOtHours > 0 ? ' + OT: ' + finalOtHours + ' ชม.' : ''})`
+      };
+    }
+
     // 5.6 UPDATE TIME LOG
     case 'updateAttendanceLog': {
       const callerUser = params.username || 'Admin';
-      const allowed = (await userHasPermission(db, callerUser, 'approve_attendance')) || (await userHasPermission(db, callerUser, 'manage_attendance_settings'));
+      const allowed = (await userHasPermission(db, callerUser, 'manage_time_logs')) ||
+                      (await userHasPermission(db, callerUser, 'approve_attendance')) ||
+                      (await userHasPermission(db, callerUser, 'manage_attendance_settings')) ||
+                      (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์แก้ไขข้อมูลลงเวลา' };
 
       const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, otHours, status, remark, isFullPay } = params;

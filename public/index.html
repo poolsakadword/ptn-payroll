@@ -682,6 +682,9 @@
                 <button type="button" class="btn btn-primary btn-sm" onclick="openExportAttendanceModal()" title="ส่งออกข้อมูลลงเวลาตามช่วงวันที่หรือรอบตัดวิก (Excel/CSV)" style="font-weight:700;background:#0284c7;border-color:#0284c7">
                   <i class="fa-solid fa-file-excel"></i> Export รอบตัดวิก
                 </button>
+                <button type="button" id="btnAddAttendanceLog" class="btn btn-primary btn-sm" onclick="openAddAttendanceLogModal()" title="เพิ่มข้อมูลลงเวลาเข้า-ออกให้พนักงาน" style="font-weight:700;background:#16a34a;border-color:#15803d;box-shadow:0 1px 3px rgba(22,163,74,0.3)">
+                  <i class="fa-solid fa-clock-rotate-left"></i> + เพิ่มการลงเวลา
+                </button>
               </div>
             </div>
 
@@ -1026,12 +1029,17 @@
                   <div class="card-title"><i class="fa-solid fa-bell text-orange"></i> คำขอและการอนุมัติ (<span id="attPendingCountDisplay">0</span>)</div>
                   <div class="card-sub">คำขอลางาน, OT และเบิกเงินจากพนักงาน</div>
                 </div>
-                <!-- Status Filter Pills -->
-                <div style="display:inline-flex;background:#f1f5f9;padding:2px;border-radius:8px;border:1px solid #e2e8f0;font-size:11px;font-weight:700">
-                  <button type="button" onclick="setAttendanceRequestFilter('PENDING')" id="btnAttReqFilter_PENDING" class="btn btn-sm" style="background:#fff;color:#0f172a;padding:3px 8px;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">รออนุมัติ</button>
-                  <button type="button" onclick="setAttendanceRequestFilter('APPROVED')" id="btnAttReqFilter_APPROVED" class="btn btn-sm" style="background:transparent;color:#64748b;padding:3px 8px;border-radius:6px">อนุมัติแล้ว</button>
-                  <button type="button" onclick="setAttendanceRequestFilter('REJECTED')" id="btnAttReqFilter_REJECTED" class="btn btn-sm" style="background:transparent;color:#64748b;padding:3px 8px;border-radius:6px">ปฏิเสธแล้ว</button>
-                  <button type="button" onclick="setAttendanceRequestFilter('ALL')" id="btnAttReqFilter_ALL" class="btn btn-sm" style="background:transparent;color:#64748b;padding:3px 8px;border-radius:6px">ทั้งหมด</button>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <button type="button" id="btnCreateAdminRequest" class="btn btn-primary btn-sm" onclick="openCreateAdminRequestModal()" style="font-weight:700;background:#2563eb;border-color:#1d4ed8;box-shadow:0 1px 3px rgba(37,99,235,0.3)" title="สร้างคำขอลางาน, OT หรือเบิกเงินแทนพนักงาน">
+                    <i class="fa-solid fa-file-circle-plus"></i> + สร้างคำขอแทนพนักงาน
+                  </button>
+                  <!-- Status Filter Pills -->
+                  <div style="display:inline-flex;background:#f1f5f9;padding:2px;border-radius:8px;border:1px solid #e2e8f0;font-size:11px;font-weight:700">
+                    <button type="button" onclick="setAttendanceRequestFilter('PENDING')" id="btnAttReqFilter_PENDING" class="btn btn-sm" style="background:#fff;color:#0f172a;padding:3px 8px;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">รออนุมัติ</button>
+                    <button type="button" onclick="setAttendanceRequestFilter('APPROVED')" id="btnAttReqFilter_APPROVED" class="btn btn-sm" style="background:transparent;color:#64748b;padding:3px 8px;border-radius:6px">อนุมัติแล้ว</button>
+                    <button type="button" onclick="setAttendanceRequestFilter('REJECTED')" id="btnAttReqFilter_REJECTED" class="btn btn-sm" style="background:transparent;color:#64748b;padding:3px 8px;border-radius:6px">ปฏิเสธแล้ว</button>
+                    <button type="button" onclick="setAttendanceRequestFilter('ALL')" id="btnAttReqFilter_ALL" class="btn btn-sm" style="background:transparent;color:#64748b;padding:3px 8px;border-radius:6px">ทั้งหมด</button>
+                  </div>
                 </div>
               </div>
 
@@ -3718,6 +3726,8 @@
               <div style="font-size:11.5px;font-weight:700;color:#0ea5e9;margin-bottom:6px"><i class="fa-solid fa-camera"></i> 4. ระบบลงเวลา &amp; PTN Time (Time Attendance)</div>
               <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:6px;font-size:11.5px">
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_view_attendance" checked> ดูหน้าลงเวลา &amp; รูปเซลฟี่</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#16a34a;font-weight:600"><input type="checkbox" id="perm_manage_time_logs" checked> เพิ่ม / แก้ไข บันทึกเวลาแทนพนักงาน</label>
+                <label style="display:flex;align-items:center;gap:6px;color:#2563eb;font-weight:600"><input type="checkbox" id="perm_create_attendance_requests" checked> สร้างคำขอแทนพนักงาน (ลา/OT/เบิกเงิน)</label>
                 <label style="display:flex;align-items:center;gap:6px;color:#0284c7;font-weight:600"><input type="checkbox" id="perm_approve_attendance" checked> อนุมัติ / ปฏิเสธ คำขอลา, OT, เบิกเงิน</label>
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_unlock_device" checked> สร้าง Master QR ปลดล็อกเครื่อง</label>
                 <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="perm_sync_ptn_time" checked> ซิงค์เวลาจาก PTN Time เข้างวดเงินเดือน</label>
@@ -5255,10 +5265,274 @@
     </div>
   </div>
 
+  <!-- MODAL: ADD ATTENDANCE LOG (HR / ADMIN MANUAL ENTRY) -->
+  <div class="modal-overlay" id="modalAddAttendanceLog" style="z-index:1150">
+    <div class="modal-card" style="max-width:560px;width:95vw;border-radius:16px;overflow:hidden;box-shadow:0 20px 25px -5px rgba(0,0,0,0.25)">
+      <div class="modal-header" style="background:#f0fdf4;border-bottom:1px solid #bbf7d0;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:38px;height:38px;border-radius:10px;background:#16a34a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+          </div>
+          <div>
+            <div class="modal-title" style="color:#15803d;font-size:15px;font-weight:700">เพิ่มข้อมูลการลงเวลาทำงาน (Add Attendance Log)</div>
+            <div style="font-size:11.5px;color:#16a34a">บันทึกเวลาเข้า-ออก กะการทำงาน และ OT แทนพนักงาน</div>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalAddAttendanceLog')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <form onsubmit="submitAddAttendanceLogForm(event)" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px;background:#fff">
+        <!-- Employee Select -->
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px"><i class="fa-solid fa-user text-blue"></i> เลือกพนักงาน *</label>
+          <select id="addAttEmpId" class="form-control" required style="font-size:12.5px;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:600" onchange="onAddAttendanceEmpChanged()">
+            <option value="">-- กรุณาเลือกพนักงาน --</option>
+          </select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px"><i class="fa-regular fa-calendar-days text-blue"></i> วันที่ลงเวลา *</label>
+            <input type="date" id="addAttDate" required class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%" onchange="onAddAttendanceTimeChanged()">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px"><i class="fa-solid fa-store text-blue"></i> สาขา / กะการทำงาน *</label>
+            <select id="addAttBranchId" class="form-control" required style="font-size:12.5px;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%" onchange="onAddAttendanceTimeChanged()">
+            </select>
+          </div>
+        </div>
+
+        <!-- Clock In & Out -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#15803d;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span><i class="fa-solid fa-right-to-bracket"></i> เวลาเข้างาน *</span>
+            </label>
+            <input type="time" id="addAttClockIn" required class="form-control" style="font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-family:monospace;font-weight:700;color:#15803d" oninput="onAddAttendanceTimeChanged()">
+            <div style="display:flex;gap:4px;margin-top:4px">
+              <button type="button" class="btn btn-xs" onclick="setAddAttTime('in', '09:30')" style="font-size:10px;padding:2px 6px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">09:30 (ปกติ)</button>
+              <button type="button" class="btn btn-xs" onclick="setAddAttTime('in', '09:00')" style="font-size:10px;padding:2px 6px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1">09:00</button>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#b91c1c;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span><i class="fa-solid fa-right-from-bracket"></i> เวลาออกงาน *</span>
+            </label>
+            <input type="time" id="addAttClockOut" required class="form-control" style="font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-family:monospace;font-weight:700;color:#b91c1c" oninput="onAddAttendanceTimeChanged()">
+            <div style="display:flex;gap:4px;margin-top:4px">
+              <button type="button" class="btn btn-xs" onclick="setAddAttTime('out', '19:00')" style="font-size:10px;padding:2px 6px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">19:00 (ปกติ)</button>
+              <button type="button" class="btn btn-xs" onclick="setAddAttTime('out', '18:30')" style="font-size:10px;padding:2px 6px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1">18:30</button>
+              <button type="button" class="btn btn-xs" onclick="setAddAttTime('out', '19:30')" style="font-size:10px;padding:2px 6px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1">19:30</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Break Times (Optional) -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;background:#f8fafc;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0">
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#b45309">เวลาออกพัก (Break OUT)</label>
+            <input type="time" id="addAttBreakOut" class="form-control" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid #cbd5e1;width:100%" oninput="onAddAttendanceTimeChanged()">
+          </div>
+          <div>
+            <label style="font-size:11px;font-weight:700;color:#b45309">เวลากลับเข้าพัก (Break IN)</label>
+            <input type="time" id="addAttBreakIn" class="form-control" style="font-size:12px;padding:5px 8px;border-radius:6px;border:1px solid #cbd5e1;width:100%" oninput="onAddAttendanceTimeChanged()">
+          </div>
+        </div>
+
+        <!-- Auto Calculation Preview -->
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:#0284c7"><i class="fa-solid fa-calculator"></i> ผลการคำนวณอัตโนมัติ:</div>
+            <div style="font-size:12.5px;font-weight:700;color:#0f172a;margin-top:2px" id="addAttCalcPreviewText">ชั่วโมงทำงาน: 8.5 ชม. | สาย: 0 นาที | OT: 0 ชม.</div>
+          </div>
+          <label style="font-size:11.5px;color:#0369a1;display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer">
+            <input type="checkbox" id="addAttIsFullPay" onchange="onAddAttendanceTimeChanged()"> ปล่อยกลับก่อน (จ่ายเต็มวัน)
+          </label>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">สถานะ *</label>
+            <select id="addAttStatus" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
+              <option value="NORMAL">ปกติ (NORMAL)</option>
+              <option value="LATE">มาสาย (LATE)</option>
+              <option value="GEOFENCE_FAIL">นอกพิกัดสาขา (GEOFENCE_FAIL)</option>
+              <option value="SUNDAY_WORK">ทำงานวันอาทิตย์ (SUNDAY_WORK)</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">หมายเหตุ / เหตุผล</label>
+            <input type="text" id="addAttRemark" placeholder="เช่น ลืมมือถือ, สแกนไม่ติด" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569">
+          <input type="checkbox" id="addAttOverwrite" checked>
+          <label for="addAttOverwrite" style="cursor:pointer">หากมีบันทึกเวลาของพนักงานในวันนี้อยู่แล้ว ให้บันทึกทับข้อมูลเดิม</label>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:6px;border-top:1px solid #e2e8f0;padding-top:12px">
+          <button type="button" class="btn btn-slate btn-sm" onclick="closeModal('modalAddAttendanceLog')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary btn-sm" id="btnSubmitAddAttLog" style="background:#16a34a;border-color:#15803d;font-weight:700;padding:6px 20px">
+            <i class="fa-solid fa-floppy-disk"></i> บันทึกการลงเวลา
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE ATTENDANCE REQUEST ON BEHALF OF EMPLOYEE -->
+  <div class="modal-overlay" id="modalCreateAdminRequest" style="z-index:1150">
+    <div class="modal-card" style="max-width:560px;width:95vw;border-radius:16px;overflow:hidden;box-shadow:0 20px 25px -5px rgba(0,0,0,0.25)">
+      <div class="modal-header" style="background:#eff6ff;border-bottom:1px solid #bfdbfe;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:38px;height:38px;border-radius:10px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px">
+            <i class="fa-solid fa-file-circle-plus"></i>
+          </div>
+          <div>
+            <div class="modal-title" style="color:#1d4ed8;font-size:15px;font-weight:700">สร้างคำขอแทนพนักงาน (Create Request)</div>
+            <div style="font-size:11.5px;color:#2563eb">ยื่นคำขอลางาน, ขอทำ OT หรือขอเบิกเงินล่วงหน้าแทนพนักงาน</div>
+          </div>
+        </div>
+        <button type="button" class="modal-close-btn" onclick="closeModal('modalCreateAdminRequest')"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <form onsubmit="submitCreateAdminRequestForm(event)" style="padding:18px 20px;display:flex;flex-direction:column;gap:14px;background:#fff">
+        <!-- Request Type Selector Tabs -->
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:6px">เลือกประเภทคำขอ *</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
+            <button type="button" id="tabBtnCreateReq_LEAVE" onclick="switchCreateAdminReqType('LEAVE')" class="btn btn-sm" style="font-weight:700;font-size:12px;padding:8px 6px;border-radius:8px;background:#2563eb;color:#fff;border:1.5px solid #1d4ed8">
+              <i class="fa-solid fa-umbrella-beach"></i> 1. ขอลางาน
+            </button>
+            <button type="button" id="tabBtnCreateReq_OT" onclick="switchCreateAdminReqType('OT')" class="btn btn-sm" style="font-weight:600;font-size:12px;padding:8px 6px;border-radius:8px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1">
+              <i class="fa-solid fa-clock text-orange"></i> 2. ขอทำ OT
+            </button>
+            <button type="button" id="tabBtnCreateReq_ADVANCE" onclick="switchCreateAdminReqType('ADVANCE')" class="btn btn-sm" style="font-weight:600;font-size:12px;padding:8px 6px;border-radius:8px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1">
+              <i class="fa-solid fa-hand-holding-dollar text-green"></i> 3. เบิกเงินล่วงหน้า
+            </button>
+          </div>
+          <input type="hidden" id="createAdminReqType" value="LEAVE">
+        </div>
+
+        <!-- Employee Select -->
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px"><i class="fa-solid fa-user text-blue"></i> เลือกพนักงาน *</label>
+          <select id="createAdminReqEmpId" class="form-control" required style="font-size:12.5px;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:600">
+            <option value="">-- กรุณาเลือกพนักงาน --</option>
+          </select>
+        </div>
+
+        <!-- 1. LEAVE SECTION -->
+        <div id="createAdminReqSection_LEAVE" style="display:flex;flex-direction:column;gap:12px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">ประเภทการลา *</label>
+            <select id="createAdminReqLeaveType" class="form-control" style="font-size:12.5px;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:600">
+              <option value="SICK_WITH_CERT">🩺 ลาป่วย (มีใบรับรองแพทย์ - มีสิทธิ์ค่าจ้าง 10 วัน/ปี)</option>
+              <option value="SICK_NO_CERT">🤒 ลาป่วย (ไม่มีใบรับรองแพทย์ - หักเงิน 1.0x)</option>
+              <option value="BUSINESS">💼 ลากิจส่วนตัว / ลาจำเป็น</option>
+              <option value="ANNUAL">🏖️ ลาพักร้อน / พักผ่อนประจำปี</option>
+              <option value="WITHOUT_PAY">⛔ ลาไม่รับค่าจ้าง (Leave Without Pay)</option>
+            </select>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">ตั้งแต่วันที่ *</label>
+              <input type="date" id="createAdminReqLeaveStartDate" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%" onchange="onAdminLeaveDatesChanged()">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">ถึงวันที่ *</label>
+              <input type="date" id="createAdminReqLeaveEndDate" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%" onchange="onAdminLeaveDatesChanged()">
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">จำนวนวันลา *</label>
+              <input type="number" step="0.5" min="0.5" id="createAdminReqLeaveDays" value="1.0" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:700">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">แนบรูปใบรับรองแพทย์ (ถ้ามี)</label>
+              <input type="file" id="createAdminReqMedicalCertFile" accept="image/*" class="form-control" style="font-size:11px;padding:5px 8px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. OT SECTION -->
+        <div id="createAdminReqSection_OT" style="display:none;flex-direction:column;gap:12px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">วันที่ทำ OT *</label>
+            <input type="date" id="createAdminReqOtDate" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#334155;display:block;margin-bottom:4px">เวลาเริ่ม</label>
+              <input type="time" id="createAdminReqOtStartTime" value="19:00" class="form-control" style="font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid #cbd5e1;width:100%" oninput="onAdminOtTimesChanged()">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#334155;display:block;margin-bottom:4px">เวลาสิ้นสุด</label>
+              <input type="time" id="createAdminReqOtEndTime" value="21:00" class="form-control" style="font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid #cbd5e1;width:100%" oninput="onAdminOtTimesChanged()">
+            </div>
+            <div>
+              <label style="font-size:11px;font-weight:700;color:#ea580c;display:block;margin-bottom:4px">จำนวน ชม. OT *</label>
+              <input type="number" step="0.5" min="0.5" id="createAdminReqOtHours" value="2.0" class="form-control" style="font-size:12.5px;padding:6px 8px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:700;color:#ea580c">
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. ADVANCE SECTION -->
+        <div id="createAdminReqSection_ADVANCE" style="display:none;flex-direction:column;gap:12px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#15803d;display:block;margin-bottom:4px">ยอดเงินที่ขอเบิก (บาท) *</label>
+              <input type="number" step="100" min="100" id="createAdminReqAdvanceAmount" placeholder="เช่น 1000" class="form-control" style="font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:700;color:#15803d">
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">วันที่ขอเบิก *</label>
+              <input type="date" id="createAdminReqAdvanceDate" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
+            </div>
+          </div>
+        </div>
+
+        <!-- Common: Reason -->
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">เหตุผล / รายละเอียดคำขอ *</label>
+          <input type="text" id="createAdminReqReason" required placeholder="เช่น แจ้งลาป่วยฉุกเฉินผ่านโทรศัพท์, สั่งทำ OT เร่งด่วน" class="form-control" style="font-size:12.5px;padding:8px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
+        </div>
+
+        <!-- Approval Status Setting -->
+        <div style="background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:10px 14px">
+          <label style="font-size:12px;font-weight:700;color:#0f172a;display:block;margin-bottom:6px">สถานะคำขอนี้:</label>
+          <div style="display:flex;gap:14px;font-size:12.5px">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:700;color:#15803d;cursor:pointer">
+              <input type="radio" name="createAdminReqStatus" value="APPROVED" checked>
+              <i class="fa-solid fa-circle-check"></i> อนุมัติทันที (APPROVED)
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:600;color:#ea580c;cursor:pointer">
+              <input type="radio" name="createAdminReqStatus" value="PENDING">
+              <i class="fa-solid fa-clock"></i> รอการอนุมัติ (PENDING)
+            </label>
+          </div>
+          <div style="font-size:10.5px;color:#64748b;margin-top:4px">
+            * หากเลือก "อนุมัติทันที" ข้อมูลจะถูกดึงเข้าคำนวณเงินเดือนในงวดปัจจุบันได้ทันที
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px;border-top:1px solid #e2e8f0;padding-top:12px">
+          <button type="button" class="btn btn-slate btn-sm" onclick="closeModal('modalCreateAdminRequest')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary btn-sm" id="btnSubmitCreateAdminReq" style="background:#2563eb;border-color:#1d4ed8;font-weight:700;padding:6px 20px">
+            <i class="fa-solid fa-paper-plane"></i> บันทึกสร้างคำขอ
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Hidden Attendance Print Container -->
   <div id="attendancePrintContainer" style="display:none"></div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.28"></script>
+  <script src="js/app.js?v=9.29"></script>
 </body>
 </html>
