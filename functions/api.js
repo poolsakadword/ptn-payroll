@@ -664,16 +664,7 @@ function getDefaultPeriod() {
   return months[d.getMonth()] + ' ' + (d.getFullYear() + 543);
 }
 
-async function getCutoffDatesForPeriod(db, periodStr) {
-  let cutoffDay = 25;
-  if (db) {
-    const row = await db.prepare("SELECT value FROM attendance_settings WHERE key = 'cutoff_day'").first().catch(() => null);
-    if (row && row.value) {
-      const parsed = parseInt(row.value, 10);
-      if (parsed >= 1 && parsed <= 31) cutoffDay = parsed;
-    }
-  }
-
+function parsePeriodYearMonth(periodStr) {
   const thaiMonths = [
     'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
     'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
@@ -704,6 +695,20 @@ async function getCutoffDatesForPeriod(db, periodStr) {
       }
     }
   }
+  return { yearCE, yearBE: yearCE + 543, month };
+}
+
+async function getCutoffDatesForPeriod(db, periodStr) {
+  let cutoffDay = 25;
+  if (db) {
+    const row = await db.prepare("SELECT value FROM attendance_settings WHERE key = 'cutoff_day'").first().catch(() => null);
+    if (row && row.value) {
+      const parsed = parseInt(row.value, 10);
+      if (parsed >= 1 && parsed <= 31) cutoffDay = parsed;
+    }
+  }
+
+  const { yearCE, month } = parsePeriodYearMonth(periodStr);
 
   let prevMonth = month - 1;
   let prevYear = yearCE;
@@ -1799,7 +1804,24 @@ async function handleAction(db, action, params) {
         }
       }
 
+      // Working dates in cutoff window (Mon-Sat, excluding Sundays)
+      const periodWorkingDates = [];
+      let dCurDate = new Date(startDate + 'T00:00:00Z');
+      const dEndDate = new Date(endDate + 'T00:00:00Z');
+      while (dCurDate <= dEndDate) {
+        if (dCurDate.getUTCDay() !== 0) {
+          periodWorkingDates.push(dCurDate.toISOString().substring(0, 10));
+        }
+        dCurDate.setUTCDate(dCurDate.getUTCDate() + 1);
+      }
+      const todayStr = new Date().toISOString().substring(0, 10);
+      let totalAbsentCount = 0;
+
       for (const emp of employees) {
+        if (emp.status === 'Resigned' && !existingMap[emp.emp_id]) {
+          continue;
+        }
+
         if (!targetEmpId) {
           nextNo++;
         }
@@ -1811,7 +1833,6 @@ async function handleAction(db, action, params) {
         const tax = Number(emp.default_tax) || 0;
 
         const exist = existingMap[emp.emp_id] || {};
-        const absentDays = Number(exist.absent_days) || 0;
         const bonus = Number(exist.bonus) || 0;
         const othDed = Number(exist.other_deduct) || 0;
         const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : fallbackOtRate;
@@ -1826,6 +1847,44 @@ async function handleAction(db, action, params) {
         const sickLeaveDays = empLeave.sickCert !== undefined ? empLeave.sickCert : (Number(exist.sick_leave_days) || 0);
         const unpaidSickLeaveDays = empLeave.sickNoCert !== undefined ? empLeave.sickNoCert : (Number(exist.unpaid_sick_leave_days) || 0);
         const leaveDays = empLeave.business !== undefined ? empLeave.business : (Number(exist.leave_days) || 0);
+
+        // Auto-calculate absent days from PTN Time:
+        // Any past/present working day (excluding Sundays & company holidays) with no clock-in and no approved leave
+        let autoAbsentDays = 0;
+        if (emp.status !== 'Resigned') {
+          const joinDateStr = emp.join_date ? String(emp.join_date).trim().substring(0, 10) : null;
+          for (const dStr of periodWorkingDates) {
+            if (dStr > todayStr) continue; // Skip future dates in active/current period
+            if (holidayDatesSet.has(dStr)) continue; // Skip company holidays
+            if (joinDateStr && dStr < joinDateStr) continue; // Skip days before hire date
+
+            const tl = logsByEmpDate[`${emp.emp_id}_${dStr}`] || logsByEmpDate[`${empKey}_${dStr}`];
+            if (tl && tl.clock_in) {
+              continue; // Clocked in
+            }
+
+            // Check if covered by approved leave
+            let isCoveredByLeave = false;
+            for (const lr of detailedLeaves) {
+              const lrEmp = String(lr.emp_id || '').trim();
+              if (lrEmp === empKey || lr.emp_id === emp.emp_id) {
+                const sDate = String(lr.start_date || '').trim().substring(0, 10);
+                const eDate = String(lr.end_date || '').trim().substring(0, 10);
+                if (sDate && eDate && dStr >= sDate && dStr <= eDate) {
+                  isCoveredByLeave = true;
+                  break;
+                }
+              }
+            }
+
+            if (!isCoveredByLeave) {
+              autoAbsentDays++;
+            }
+          }
+        }
+
+        const absentDays = autoAbsentDays;
+        totalAbsentCount += absentDays;
 
         // Deduct missing hours / early departure based on actual workdays
         const calcEarlyDeduct = earlyDeductMap[emp.emp_id] !== undefined
@@ -1944,13 +2003,14 @@ async function handleAction(db, action, params) {
           ? (diligenceEarned ? `, ได้รับเบี้ยขยัน ฿${targetEmpDiligenceResult.allowance.toLocaleString()}` : `, เบี้ยขยัน ฿0 (${targetEmpDiligenceResult ? targetEmpDiligenceResult.reason : 'ตัดสิทธิ์'})`)
           : '';
 
-        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time พนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${empDiligenceMsg})`);
+        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time พนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (วันทำงานจริง ${periodWorkDays} วัน, ขาดงาน ${totalAbsentCount} วัน, เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${empDiligenceMsg})`);
 
         return {
           success: true,
           period: period,
           empId: targetEmpId,
           empName: empName,
+          absentDays: totalAbsentCount,
           advAmount: empAdv,
           otHours: empOt,
           leaveTotal: empLeaveTotal,
@@ -1961,7 +2021,7 @@ async function handleAction(db, action, params) {
           diligenceReason: targetEmpDiligenceResult ? targetEmpDiligenceResult.reason : '',
           workingDays: periodWorkDays,
           autoAdjustedLeaves: autoAdjustedLeaves.filter(a => a.empId === targetEmpId),
-          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลาสุทธิ ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${empDiligenceMsg}${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length > 0 ? `, ตรวจพบมาทำงานในวันลา ${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length} วัน (ยกเว้นการหักวันลาอัตโนมัติ)` : ''})`
+          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, ขาดงาน ${totalAbsentCount} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลาสุทธิ ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${empDiligenceMsg}${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length > 0 ? `, ตรวจพบมาทำงานในวันลา ${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length} วัน (ยกเว้นการหักวันลาอัตโนมัติ)` : ''})`
         };
       }
 
@@ -1981,7 +2041,7 @@ async function handleAction(db, action, params) {
         diligenceSummary = `, เบี้ยขยัน: ได้รับ ${diligenceQualifiedList.length} คน, ตัดสิทธิ์ ${diligenceDisqualifiedList.length} คน`;
       }
 
-      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ลาสุทธิ ${totalLeaveCount} วัน, ขาด/ออกก่อน ${totalMissingHours} ชม. หัก ฿${totalEarlyDeduct.toLocaleString()}${diligenceSummary}${adjustSummary})`);
+      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, ขาดงานรวม ${totalAbsentCount} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ลาสุทธิ ${totalLeaveCount} วัน, ขาด/ออกก่อน ${totalMissingHours} ชม. หัก ฿${totalEarlyDeduct.toLocaleString()}${diligenceSummary}${adjustSummary})`);
 
       return {
         success: true,
@@ -1989,6 +2049,7 @@ async function handleAction(db, action, params) {
         startDate: startDate,
         endDate: endDate,
         syncedCount: syncedCount,
+        totalAbsentCount: totalAbsentCount,
         totalAdvAmount: totalAdvAmount,
         totalOtHours: totalOtHours,
         totalLeaveCount: totalLeaveCount,
@@ -2000,7 +2061,7 @@ async function handleAction(db, action, params) {
         diligenceDisqualifiedCount: diligenceDisqualifiedList.length,
         diligenceQualified: diligenceQualifiedList,
         diligenceDisqualified: diligenceDisqualifiedList,
-        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, ลาสุทธิ ${totalLeaveCount} วัน${totalMissingHours > 0 ? `, ขาด/ออกก่อนรวม ${totalMissingHours} ชม. หักรวม ฿${totalEarlyDeduct.toLocaleString()}` : ''}${diligenceSummary}${adjustSummary})`
+        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, ขาดงานรวม ${totalAbsentCount} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, ลาสุทธิ ${totalLeaveCount} วัน${totalMissingHours > 0 ? `, ขาด/ออกก่อนรวม ${totalMissingHours} ชม. หักรวม ฿${totalEarlyDeduct.toLocaleString()}` : ''}${diligenceSummary}${adjustSummary})`
       };
     }
 
@@ -5085,19 +5146,28 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   const empMap = {};
   for (const emp of empQuery.results || []) empMap[emp.emp_id] = emp;
 
-  // Calendar year prefix (e.g. "2026") for sick leave annual quota tracking
-  const yearPrefix = (period || '').split('-')[0] || (new Date().getFullYear() + 543).toString();
+  // Calendar year & month parsing for sick leave annual quota tracking (resets every January)
+  const parsedPeriod = parsePeriodYearMonth(period);
+  const targetYearBE = parsedPeriod.yearBE;
+  const targetMonth = parsedPeriod.month;
 
-  // Query sick leave days used in prior periods of the same year before current period
-  const priorSickQuery = await db.prepare(`
-    SELECT emp_id, COALESCE(SUM(sick_leave_days), 0) as used_sick
-    FROM monthly_inputs
-    WHERE period LIKE ? AND period < ?
-    GROUP BY emp_id
-  `).bind(`${yearPrefix}-%`, period).all().catch(() => ({ results: [] }));
   const priorSickMap = {};
-  for (const row of (priorSickQuery.results || [])) {
-    priorSickMap[row.emp_id] = Number(row.used_sick) || 0;
+  if (targetMonth > 1) {
+    // Only query prior periods of the same year (January is month 1, resets quota completely)
+    const priorInputsQuery = await db.prepare(`
+      SELECT period, emp_id, COALESCE(sick_leave_days, 0) as sick_days
+      FROM monthly_inputs
+      WHERE sick_leave_days > 0
+    `).all().catch(() => ({ results: [] }));
+
+    for (const row of (priorInputsQuery.results || [])) {
+      if (!row.period || row.period === period) continue;
+      const rowParsed = parsePeriodYearMonth(row.period);
+      if (rowParsed.yearBE === targetYearBE && rowParsed.month < targetMonth) {
+        const rowEmpId = String(row.emp_id || '').trim();
+        priorSickMap[rowEmpId] = (priorSickMap[rowEmpId] || 0) + (Number(row.sick_days) || 0);
+      }
+    }
   }
 
   await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
