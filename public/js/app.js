@@ -8663,9 +8663,7 @@ function switchAttendanceSubTab(tabName) {
 
   if (tabName === 'summary') {
     initAttendanceSummaryPeriodOptions();
-    if (!State.attendancePeriodSummaryData) {
-      loadAttendancePeriodSummary();
-    }
+    loadAttendancePeriodSummary();
   } else if (tabName === 'approvals') {
     if (State.attendanceCurrentRequests) {
       renderTimeAttendanceApprovals(
@@ -8847,7 +8845,8 @@ function loadAttendancePeriodSummary() {
   callApi('getAttendancePeriodSummary', {
     period: period,
     branchId: branchId,
-    username: (State.currentUser && State.currentUser.username) ? State.currentUser.username : 'Admin'
+    username: (State.currentUser && State.currentUser.username) ? State.currentUser.username : 'Admin',
+    _nocache: Date.now()
   })
   .then(function(res) {
     if (!res.success) {
