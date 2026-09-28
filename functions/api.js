@@ -84,6 +84,12 @@ function getDefaultRolePermissions(role) {
   }
 }
 
+function timeStringToMinutes(t) {
+  if (!t) return null;
+  const p = String(t).trim().split(':');
+  return p.length >= 2 ? (parseInt(p[0], 10) * 60 + parseInt(p[1], 10)) : null;
+}
+
 async function isUserSuperAdmin(db, username) {
   if (!username) return false;
   const u = String(username).trim().toLowerCase();
@@ -1574,7 +1580,7 @@ async function handleAction(db, action, params) {
       let timeLogsList = [];
       try {
         let tlSql = `
-          SELECT id, emp_id, date, clock_in, clock_out, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark
+          SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark
           FROM time_logs
           WHERE date BETWEEN ? AND ?
         `;
@@ -1750,6 +1756,29 @@ async function handleAction(db, action, params) {
 
         const isUndertimeExempt = (emp && (emp.is_undertime_exempt === 'true' || emp.is_undertime_exempt === true || emp.is_undertime_exempt === 1 || emp.is_undertime_exempt === '1'));
 
+        const lunchStart = timeStringToMinutes(branch && branch.lunch_start_time) || (13 * 60);
+        const lunchEnd = timeStringToMinutes(branch && branch.lunch_end_time) || (14 * 60);
+        const inMin = timeStringToMinutes(row.clock_in);
+        const outMin = timeStringToMinutes(row.clock_out);
+        const bOutMin = timeStringToMinutes(row.break_out);
+        const bInMin = timeStringToMinutes(row.break_in);
+
+        // Check if morning or afternoon absence is active (penalized as 0.5 absent day at 1.5x)
+        let isMorningAbsence = false;
+        let isAfternoonAbsence = false;
+        if (approvedLeaveDays < 0.5) {
+          if (inMin !== null && inMin >= lunchStart) {
+            isMorningAbsence = true;
+          } else if (inMin !== null && inMin < lunchStart) {
+            const isAfternoonMissing = (outMin !== null && outMin <= lunchEnd) ||
+                                       (bOutMin !== null && bInMin === null && outMin === null) ||
+                                       (outMin === null && bInMin === null && workHours <= 0);
+            if (isAfternoonMissing) {
+              isAfternoonAbsence = true;
+            }
+          }
+        }
+
         if (row.clock_in && row.clock_out && workHours > 0) {
           const isBranchEarlyDismissal = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) && !isUndertimeExempt;
           if (isBranchEarlyDismissal) {
@@ -1758,8 +1787,8 @@ async function handleAction(db, action, params) {
           }
 
           if (isUndertimeExempt) {
-            // Option A: Early departure is NOT deducted, BUT late arrival IS deducted normally!
-            if (lateMins > 0) {
+            // Option A: Early departure is NOT deducted, BUT late arrival IS deducted normally (unless morning absence)!
+            if (lateMins > 0 && !isMorningAbsence) {
               const lateHours = Math.round((lateMins / 60) * 100) / 100;
               missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
               earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
@@ -1767,15 +1796,21 @@ async function handleAction(db, action, params) {
             continue;
           }
 
-          if (workHours < targetHours) {
-            const missing = Math.round((targetHours - workHours) * 100) / 100;
-            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + missing;
-            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (missing * hourlyRate);
+          // If neither morning nor afternoon absence was penalized as 0.5 absent day, deduct ordinary missing hours
+          if (!isMorningAbsence && !isAfternoonAbsence) {
+            if (workHours < targetHours) {
+              const missing = Math.round((targetHours - workHours) * 100) / 100;
+              missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + missing;
+              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (missing * hourlyRate);
+            }
           }
         } else if (row.clock_in && !row.clock_out && lateMins > 0) {
-          const lateHours = Math.round((lateMins / 60) * 100) / 100;
-          missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
-          earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
+          // If not penalized as morning absence, deduct late arrival at normal 1.0x
+          if (!isMorningAbsence && !isAfternoonAbsence) {
+            const lateHours = Math.round((lateMins / 60) * 100) / 100;
+            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
+            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
+          }
         }
       }
 
@@ -1862,26 +1897,41 @@ async function handleAction(db, action, params) {
             if (joinDateStr && dStr < joinDateStr) continue; // Skip days before hire date
 
             const tl = logsByEmpDate[`${emp.emp_id}_${dStr}`] || logsByEmpDate[`${empKey}_${dStr}`];
-            if (tl && tl.clock_in) {
-              continue; // Clocked in
+            const approvedLeaveDays = getLeaveDaysOnDate(emp.emp_id, dStr);
+
+            if (!tl || !tl.clock_in) {
+              // Full-day absence check (accounting for approved leaves)
+              if (approvedLeaveDays < 1.0) {
+                const uncov = Math.max(0, 1.0 - approvedLeaveDays);
+                autoAbsentDays += uncov;
+              }
+              continue;
             }
 
-            // Check if covered by approved leave
-            let isCoveredByLeave = false;
-            for (const lr of detailedLeaves) {
-              const lrEmp = String(lr.emp_id || '').trim();
-              if (lrEmp === empKey || lr.emp_id === emp.emp_id) {
-                const sDate = String(lr.start_date || '').trim().substring(0, 10);
-                const eDate = String(lr.end_date || '').trim().substring(0, 10);
-                if (sDate && eDate && dStr >= sDate && dStr <= eDate) {
-                  isCoveredByLeave = true;
-                  break;
+            // Has clock_in -> check half-day absence (Option A: 0.5 day absent at 1.5x)
+            if (approvedLeaveDays < 0.5) {
+              const branch = branchMap[tl.branch_id] || (emp ? branchMap[emp.branch_id] : null);
+              const lunchStart = timeStringToMinutes(branch && branch.lunch_start_time) || (13 * 60);
+              const lunchEnd = timeStringToMinutes(branch && branch.lunch_end_time) || (14 * 60);
+              const inMin = timeStringToMinutes(tl.clock_in);
+              const outMin = timeStringToMinutes(tl.clock_out);
+              const bOutMin = timeStringToMinutes(tl.break_out);
+              const bInMin = timeStringToMinutes(tl.break_in);
+              const wHours = Number(tl.work_hours) || 0;
+
+              // 1. Morning absence: clocked in at or after lunch start (Option A)
+              if (inMin !== null && inMin >= lunchStart) {
+                autoAbsentDays += 0.5;
+              }
+              // 2. Afternoon absence: clocked in morning, but missed afternoon without leave
+              else if (inMin !== null && inMin < lunchStart) {
+                const isAfternoonMissing = (outMin !== null && outMin <= lunchEnd) ||
+                                           (bOutMin !== null && bInMin === null && outMin === null) ||
+                                           (outMin === null && bInMin === null && wHours <= 0);
+                if (isAfternoonMissing) {
+                  autoAbsentDays += 0.5;
                 }
               }
-            }
-
-            if (!isCoveredByLeave) {
-              autoAbsentDays++;
             }
           }
         }
@@ -2842,7 +2892,7 @@ async function handleAction(db, action, params) {
       const employees = empQuery.results || [];
 
       // Load Time Logs in Cutoff Window
-      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
+      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
       const tlQuery = await db.prepare(tlSql).bind(startDate, endDate).all().catch(() => ({ results: [] }));
       const allLogs = tlQuery.results || [];
 
@@ -2950,39 +3000,92 @@ async function handleAction(db, action, params) {
           let curOtHrs = 0;
           const holidayInfo = holidayMap[dateStr];
 
+          // Check approved leaves first
+          let matchingLeave = null;
+          for (const lr of empLeaves) {
+            const sDate = String(lr.start_date || '').trim().substring(0, 10);
+            const eDate = String(lr.end_date || '').trim().substring(0, 10);
+            if (sDate && eDate && dateStr >= sDate && dateStr <= eDate) {
+              matchingLeave = lr;
+              break;
+            }
+          }
+
           if (log && log.clock_in) {
-            isPresent = true;
-            presentDays++;
-            curLateMins = Number(log.late_minutes) || 0;
-            if (curLateMins > 0) {
-              lateTimes++;
-              lateMinutes += curLateMins;
-              statusText = `สาย ${curLateMins} น.`;
-              statusColor = '#ea580c';
-            }
+            const empBranch = branchMap[log.branch_id] || (emp ? branchMap[emp.branch_id] : null);
+            const lunchStart = timeStringToMinutes(empBranch && empBranch.lunch_start_time) || (13 * 60);
+            const lunchEnd = timeStringToMinutes(empBranch && empBranch.lunch_end_time) || (14 * 60);
+            const inMin = timeStringToMinutes(log.clock_in);
+            const outMin = timeStringToMinutes(log.clock_out);
+            const bOutMin = timeStringToMinutes(log.break_out);
+            const bInMin = timeStringToMinutes(log.break_in);
+            const wHours = Number(log.work_hours) || 0;
+            const isApprovedHalfLeave = matchingLeave && (Number(matchingLeave.days_count) || 1) >= 0.5;
 
-            if (isOtEligible && Number(log.ot_hours) > 0) {
-              curOtHrs = Number(log.ot_hours);
-              const alreadyInOtReq = empOts.some(o => o.date === dateStr);
-              if (!alreadyInOtReq) otHours += curOtHrs;
-            }
+            let isHalfAbsent = false;
+            let halfAbsentLabel = '';
 
-            if (currentlyAbsentSequence) {
-              absentTimes++;
-              currentlyAbsentSequence = false;
-            }
-          } else {
-            // Check approved leaves
-            let matchingLeave = null;
-            for (const lr of empLeaves) {
-              const sDate = String(lr.start_date || '').trim().substring(0, 10);
-              const eDate = String(lr.end_date || '').trim().substring(0, 10);
-              if (sDate && eDate && dateStr >= sDate && dateStr <= eDate) {
-                matchingLeave = lr;
-                break;
+            if (!isApprovedHalfLeave) {
+              // 1. Morning absence: clocked in at or after lunch start (Option A)
+              if (inMin !== null && inMin >= lunchStart) {
+                isHalfAbsent = true;
+                halfAbsentLabel = 'ขาดงาน (ครึ่งเช้า)';
+              }
+              // 2. Afternoon absence: clocked in morning, but missed afternoon without leave
+              else if (inMin !== null && inMin < lunchStart) {
+                const isAfternoonMissing = (outMin !== null && outMin <= lunchEnd) ||
+                                           (bOutMin !== null && bInMin === null && outMin === null) ||
+                                           (outMin === null && bInMin === null && wHours <= 0);
+                if (isAfternoonMissing) {
+                  isHalfAbsent = true;
+                  halfAbsentLabel = 'ขาดงาน (ครึ่งบ่าย)';
+                }
               }
             }
 
+            if (isHalfAbsent) {
+              isAbsent = true;
+              isPresent = true;
+              presentDays += 0.5;
+              absentDays += 0.5;
+              absentTimes++;
+              statusText = halfAbsentLabel;
+              statusColor = '#dc2626';
+              if (currentlyAbsentSequence) {
+                currentlyAbsentSequence = false;
+              }
+            } else {
+              isPresent = true;
+              presentDays++;
+              curLateMins = Number(log.late_minutes) || 0;
+              if (curLateMins > 0) {
+                lateTimes++;
+                lateMinutes += curLateMins;
+                statusText = `สาย ${curLateMins} น.`;
+                statusColor = '#ea580c';
+              } else if (matchingLeave) {
+                isLeave = true;
+                const cat = categorizeLeaveType(matchingLeave.leave_type, matchingLeave.medical_cert_url);
+                statusText = cat === 'SICK_WITH_CERT' ? 'ลาป่วย (มีใบ 0.5)' : (cat === 'SICK_NO_CERT' ? 'ลาป่วย (ไม่มีใบ 0.5)' : (cat === 'ANNUAL' ? 'พักร้อน (0.5)' : 'ลากิจ (0.5)'));
+                statusColor = '#7c3aed';
+              } else {
+                statusText = 'ปกติ';
+                statusColor = '#16a34a';
+              }
+
+              if (isOtEligible && Number(log.ot_hours) > 0) {
+                curOtHrs = Number(log.ot_hours);
+                const alreadyInOtReq = empOts.some(o => o.date === dateStr);
+                if (!alreadyInOtReq) otHours += curOtHrs;
+              }
+
+              if (currentlyAbsentSequence) {
+                absentTimes++;
+                currentlyAbsentSequence = false;
+              }
+            }
+          } else {
+            // Check approved leaves
             if (matchingLeave) {
               isLeave = true;
               const cat = categorizeLeaveType(matchingLeave.leave_type, matchingLeave.medical_cert_url);

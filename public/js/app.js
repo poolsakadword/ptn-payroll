@@ -9440,10 +9440,13 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
       '</td>';
     }
 
-    // Missing clock out anomaly check
+    // Missing clock out anomaly check & half-day absence check
     var missingOutAnomaly = '';
-    if (l.clock_in && (!l.clock_out || l.clock_out.trim() === '') && l.date < bangkokToday) {
-      missingOutAnomaly = '<div style="font-size:10px;color:#dc2626;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px"><i class="fa-solid fa-triangle-exclamation"></i> <span>ยังไม่สแกนออก</span></div>';
+    var inTimeStr = l.clock_in ? l.clock_in.substring(0, 5) : '';
+    if (inTimeStr && inTimeStr >= '13:00') {
+      missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="เข้างานหลังเวลาพักเที่ยง ถือเป็นขาดงานครึ่งเช้า 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>เข้างานบ่าย (ขาดงานครึ่งเช้า 0.5 วัน)</span></div>';
+    } else if (l.clock_in && (!l.clock_out || l.clock_out.trim() === '') && (l.date < bangkokToday || (l.break_out && !l.break_in))) {
+      missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="ไม่ลงเวลาออกงาน/ค้างเวลาพัก ถือเป็นขาดงานครึ่งบ่าย 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>ไม่สแกนออก (ขาดงานครึ่งบ่าย 0.5 วัน)</span></div>';
     }
 
     html += '<tr id="attLogRow_' + l.id + '">' +
