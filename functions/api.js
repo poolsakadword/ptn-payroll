@@ -1733,6 +1733,10 @@ async function handleAction(db, action, params) {
         return d;
       }
 
+      const nowUtcSync = new Date();
+      const bangkokTimeSync = new Date(nowUtcSync.getTime() + (7 * 3600 * 1000));
+      const todayStr = bangkokTimeSync.toISOString().substring(0, 10);
+
       // Calculate missing hours / early departures from timeLogsList
       for (const row of timeLogsList) {
         const logDate = new Date(row.date + 'T00:00:00Z');
@@ -1771,8 +1775,10 @@ async function handleAction(db, action, params) {
             isMorningAbsence = true;
           } else if (inMin !== null && inMin < lunchStart) {
             const isAfternoonMissing = (outMin !== null && outMin <= lunchEnd) ||
-                                       (bOutMin !== null && bInMin === null && outMin === null) ||
-                                       (outMin === null && bInMin === null && workHours <= 0);
+                                       (row.date < todayStr && (
+                                         (bOutMin !== null && bInMin === null && outMin === null) ||
+                                         (outMin === null && bInMin === null && workHours <= 0)
+                                       ));
             if (isAfternoonMissing) {
               isAfternoonAbsence = true;
             }
@@ -1852,7 +1858,6 @@ async function handleAction(db, action, params) {
         }
         dCurDate.setUTCDate(dCurDate.getUTCDate() + 1);
       }
-      const todayStr = new Date().toISOString().substring(0, 10);
       let totalAbsentCount = 0;
 
       for (const emp of employees) {
@@ -1901,7 +1906,8 @@ async function handleAction(db, action, params) {
 
             if (!tl || !tl.clock_in) {
               // Full-day absence check (accounting for approved leaves)
-              if (approvedLeaveDays < 1.0) {
+              // Only count past days as absent; today is still in progress
+              if (dStr < todayStr && approvedLeaveDays < 1.0) {
                 const uncov = Math.max(0, 1.0 - approvedLeaveDays);
                 autoAbsentDays += uncov;
               }
@@ -1926,8 +1932,10 @@ async function handleAction(db, action, params) {
               // 2. Afternoon absence: clocked in morning, but missed afternoon without leave
               else if (inMin !== null && inMin < lunchStart) {
                 const isAfternoonMissing = (outMin !== null && outMin <= lunchEnd) ||
-                                           (bOutMin !== null && bInMin === null && outMin === null) ||
-                                           (outMin === null && bInMin === null && wHours <= 0);
+                                           (dStr < todayStr && (
+                                             (bOutMin !== null && bInMin === null && outMin === null) ||
+                                             (outMin === null && bInMin === null && wHours <= 0)
+                                           ));
                 if (isAfternoonMissing) {
                   autoAbsentDays += 0.5;
                 }
@@ -2989,7 +2997,6 @@ async function handleAction(db, action, params) {
 
         for (const dateStr of workingDates) {
           const log = empLogs[dateStr];
-          const isDateInPastOrToday = dateStr <= today;
           let statusText = 'ปกติ';
           let statusColor = '#16a34a';
           let isPresent = false;
@@ -3034,8 +3041,10 @@ async function handleAction(db, action, params) {
               // 2. Afternoon absence: clocked in morning, but missed afternoon without leave
               else if (inMin !== null && inMin < lunchStart) {
                 const isAfternoonMissing = (outMin !== null && outMin <= lunchEnd) ||
-                                           (bOutMin !== null && bInMin === null && outMin === null) ||
-                                           (outMin === null && bInMin === null && wHours <= 0);
+                                           (dateStr < today && (
+                                             (bOutMin !== null && bInMin === null && outMin === null) ||
+                                             (outMin === null && bInMin === null && wHours <= 0)
+                                           ));
                 if (isAfternoonMissing) {
                   isHalfAbsent = true;
                   halfAbsentLabel = 'ขาดงาน (ครึ่งบ่าย)';
@@ -3115,12 +3124,19 @@ async function handleAction(db, action, params) {
                 absentTimes++;
                 currentlyAbsentSequence = false;
               }
-            } else if (isDateInPastOrToday) {
+            } else if (dateStr < today) {
               isAbsent = true;
               absentDays++;
               statusText = 'ขาดงาน';
               statusColor = '#dc2626';
               currentlyAbsentSequence = true;
+            } else if (dateStr === today) {
+              statusText = 'ยังไม่ลงเวลา';
+              statusColor = '#94a3b8';
+              if (currentlyAbsentSequence) {
+                absentTimes++;
+                currentlyAbsentSequence = false;
+              }
             } else {
               statusText = 'ยังไม่ถึงวัน';
               statusColor = '#94a3b8';
