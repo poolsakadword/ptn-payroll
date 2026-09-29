@@ -2032,7 +2032,7 @@ async function handleAction(db, action, params) {
           }
         }
 
-        const absentDays = autoAbsentDays;
+        const absentDays = Math.round(autoAbsentDays * 1000) / 1000;
         totalAbsentCount += absentDays;
 
         // Deduct missing hours / early departure based on actual workdays
@@ -2180,6 +2180,7 @@ async function handleAction(db, action, params) {
       for (const k in earlyDeductMap) totalEarlyDeduct += earlyDeductMap[k];
       totalMissingHours = Math.round(totalMissingHours * 100) / 100;
       totalEarlyDeduct = Math.round(totalEarlyDeduct * 100) / 100;
+      totalAbsentCount = Math.round(totalAbsentCount * 1000) / 1000;
 
       let adjustSummary = '';
       if (autoAdjustedLeaves.length > 0) {
@@ -3413,8 +3414,8 @@ async function handleAction(db, action, params) {
           department: emp.department || '-',
           baseSalary: Number(emp.base_salary) || 0,
           expectedWorkDays: totalExpectedWorkDays,
-          presentDays,
-          absentDays,
+          presentDays: Math.round(presentDays * 1000) / 1000,
+          absentDays: Math.round(absentDays * 1000) / 1000,
           absentTimes,
           sickWithCertDays,
           sickWithCertTimes,
@@ -3452,6 +3453,8 @@ async function handleAction(db, action, params) {
         }
       }
 
+      grandTotals.totalPresentDays = Math.round(grandTotals.totalPresentDays * 1000) / 1000;
+      grandTotals.totalAbsentDays = Math.round(grandTotals.totalAbsentDays * 1000) / 1000;
       grandTotals.totalOtHours = Math.round(grandTotals.totalOtHours * 100) / 100;
 
       return {
