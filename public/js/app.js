@@ -2911,6 +2911,23 @@ function populateBranchSelects() {
   }
 }
 
+function getNextEmployeeId() {
+  var emps = State.employees || [];
+  var maxNum = 0;
+  emps.forEach(function(e) {
+    var id = String(e.empId || e.emp_id || '').trim();
+    var match = id.match(/^EMP(\d+)$/i);
+    if (match) {
+      var num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  });
+  var nextNum = maxNum + 1;
+  return 'EMP' + (nextNum < 1000 ? String(nextNum).padStart(3, '0') : String(nextNum));
+}
+
 function openAddEmployeeModal() {
   var isGeneralUser = (State.currentUser && String(State.currentUser.role).trim().toLowerCase() === 'user');
   var finSection = document.getElementById('empModalFinancialSection');
@@ -2930,10 +2947,21 @@ function openAddEmployeeModal() {
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มพนักงานใหม่';
   document.getElementById('empOrigId').value = '';
-  ['mEmpId','mFullName','mNickname','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate','mRemark'].forEach(function(id) {
+  ['mFullName','mNickname','mBirthDate','mAge','mCitizenId','mPhone','mAddress','mDepartment','mPosition','mBankAccount','mJoinDate','mRemark'].forEach(function(id) {
     var el = document.getElementById(id);
     if (el) el.value = '';
   });
+
+  // Auto-suggest next employee ID
+  var autoId = getNextEmployeeId();
+  var empIdInput = document.getElementById('mEmpId');
+  if (empIdInput) {
+    empIdInput.value = autoId;
+    empIdInput.disabled = false;
+    empIdInput.readOnly = false;
+  }
+  var autoBadge = document.getElementById('mEmpIdAutoBadge');
+  if (autoBadge) autoBadge.style.display = 'inline-block';
   updateEmployeePhotoPreview('');
   document.getElementById('mBankName').value = 'กสิกรไทย (KBANK)';
   document.getElementById('mBaseSalary').value = '';
@@ -2980,6 +3008,8 @@ function openEditEmployeeModal(empId) {
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
   document.getElementById('empOrigId').value = e.empId;
   document.getElementById('mEmpId').value = e.empId;
+  var autoBadge = document.getElementById('mEmpIdAutoBadge');
+  if (autoBadge) autoBadge.style.display = 'none';
   document.getElementById('mFullName').value = e.fullName;
   document.getElementById('mNickname').value = e.nickname || '';
   document.getElementById('mBirthDate').value = e.birthDate || '';
