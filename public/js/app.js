@@ -12496,6 +12496,40 @@ function formatLocalYmd(d) {
   return y + '-' + m + '-' + day;
 }
 
+// Universal employee getter helpers for PTN Payroll & Attendance
+function getEmpId(e) {
+  return String((e && (e.empId || e.emp_id || e.id)) || '').trim();
+}
+
+function getEmpFullName(e) {
+  return String((e && (e.fullName || e.full_name || e.name)) || '').trim();
+}
+
+function getEmpNickname(e) {
+  return String((e && e.nickname) || '').trim();
+}
+
+function getEmpBranchId(e) {
+  return String((e && (e.branchId || e.branch_id || '')) || '').trim();
+}
+
+function getEmpBranchName(e) {
+  var bId = getEmpBranchId(e);
+  if (e && e.branch_name) return e.branch_name;
+  if (e && e.branchName) return e.branchName;
+  var bList = State.branches || [];
+  var found = bList.find(function(b) { return b.branch_id === bId || b.id === bId; });
+  return found ? (found.branch_name || found.name || bId) : (bId || 'สำนักงานใหญ่');
+}
+
+function getEmpPosition(e) {
+  return String((e && e.position) || '-').trim();
+}
+
+function getEmpDepartment(e) {
+  return String((e && e.department) || '-').trim();
+}
+
 function openTimeCardExportModal() {
   openExportAttendanceModal();
 }
@@ -12509,15 +12543,21 @@ function openExportAttendanceModal() {
     var activeFilterEmp = _currentAttendanceEmpId || (document.getElementById('attFilterEmp') ? document.getElementById('attFilterEmp').value : 'ALL');
 
     var sortedEmps = employees.slice().sort(function(a, b) {
-      return String(a.emp_id || a.id || '').localeCompare(String(b.emp_id || b.id || ''));
+      return getEmpId(a).localeCompare(getEmpId(b));
     });
 
     sortedEmps.forEach(function(e) {
-      if (e.status === 'RESIGNED' || e.is_active === 0) return;
+      var st = String(e.status || 'Active').toUpperCase();
+      if (st === 'RESIGNED' || e.is_active === 0) return;
+      var id = getEmpId(e);
+      if (!id) return;
+      var fullName = getEmpFullName(e);
+      var nick = getEmpNickname(e);
+      var nickStr = nick ? (' (' + nick + ')') : '';
+
       var opt = document.createElement('option');
-      var id = e.emp_id || e.id;
       opt.value = id;
-      opt.textContent = id + ' - ' + (e.name || e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '');
+      opt.textContent = id + ' - ' + (fullName || id) + nickStr;
       if (activeFilterEmp && activeFilterEmp !== 'ALL' && (id === activeFilterEmp)) {
         opt.selected = true;
       }
@@ -12750,10 +12790,10 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
 
   var compName = (State.company && State.company.companyName) || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
   var compTax = (State.company && State.company.taxId) || '0105559876543';
-  var empCode = emp.emp_id || emp.id || '-';
-  var empFullName = (emp.name || emp.full_name || '') + (emp.nickname ? ' (' + emp.nickname + ')' : '');
-  var empPos = (emp.position || '-') + ' / ' + (emp.department || '-');
-  var empBranch = emp.branch_name || emp.branch_id || 'สำนักงานใหญ่';
+  var empCode = getEmpId(emp);
+  var empFullName = getEmpFullName(emp) + (getEmpNickname(emp) ? ' (' + getEmpNickname(emp) + ')' : '');
+  var empPos = getEmpPosition(emp) + ' / ' + getEmpDepartment(emp);
+  var empBranch = getEmpBranchName(emp);
 
   var now = new Date();
   var thaiMonthList = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -12829,7 +12869,7 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
       '<div>' +
         '<div style="border-bottom: 1px dotted #92400e; width: 80%; margin: 25px auto 4px;"></div>' +
         '<div style="font-weight: 700;">ลายมือชื่อพนักงาน</div>' +
-        '<div style="font-size: 10px; color: #78350f;">( ' + (emp.name || emp.full_name || '..............................') + ' )</div>' +
+        '<div style="font-size: 10px; color: #78350f;">( ' + (getEmpFullName(emp) || '..............................') + ' )</div>' +
         '<div style="font-size: 9.5px; color: #92400e;">วันที่ ...../...../..........</div>' +
       '</div>' +
       '<div>' +
@@ -12902,35 +12942,39 @@ function submitPrintTimeCards() {
       // Group logs by emp_id
       var empLogsMap = {};
       logs.forEach(function(l) {
-        if (!empLogsMap[l.emp_id]) empLogsMap[l.emp_id] = {};
-        empLogsMap[l.emp_id][l.date] = l;
+        var key = String(l.emp_id || '').trim();
+        if (!empLogsMap[key]) empLogsMap[key] = {};
+        empLogsMap[key][l.date] = l;
       });
 
       // Filter employees to print
       var employeesToPrint = [];
       var allEmps = State.employees || [];
-      if (empId !== 'ALL') {
-        var found = allEmps.find(function(e) { return (e.emp_id || e.id) === empId; });
+      if (empId && empId !== 'ALL') {
+        var found = allEmps.find(function(e) { return getEmpId(e) === empId; });
         if (found) {
           employeesToPrint.push(found);
         } else if (logs.length > 0) {
+          var matchedLog = logs.find(function(l) { return String(l.emp_id || '').trim() === empId; }) || logs[0];
           employeesToPrint.push({
-            emp_id: empId,
-            name: logs[0].full_name || empId,
-            nickname: logs[0].nickname || '',
-            department: logs[0].department || '',
-            position: logs[0].position || '',
-            branch_id: branchId
+            empId: empId,
+            fullName: matchedLog.full_name || empId,
+            nickname: matchedLog.nickname || '',
+            department: matchedLog.department || '',
+            position: matchedLog.position || '',
+            branchId: matchedLog.emp_branch_id || matchedLog.branch_id || branchId
           });
         }
       } else {
-        if (branchId !== 'ALL') {
+        if (branchId && branchId !== 'ALL') {
           employeesToPrint = allEmps.filter(function(e) {
-            return (e.branch_id === branchId) && e.status !== 'RESIGNED' && e.is_active !== 0;
+            var st = String(e.status || 'Active').toUpperCase();
+            return (getEmpBranchId(e) === branchId) && st !== 'RESIGNED' && e.is_active !== 0;
           });
         } else {
           employeesToPrint = allEmps.filter(function(e) {
-            return e.status !== 'RESIGNED' && e.is_active !== 0;
+            var st = String(e.status || 'Active').toUpperCase();
+            return st !== 'RESIGNED' && e.is_active !== 0;
           });
         }
       }
@@ -12941,12 +12985,12 @@ function submitPrintTimeCards() {
         uniqueEmpIds.forEach(function(eId) {
           var sampleLog = Object.values(empLogsMap[eId])[0] || {};
           employeesToPrint.push({
-            emp_id: eId,
-            name: sampleLog.full_name || eId,
+            empId: eId,
+            fullName: sampleLog.full_name || eId,
             nickname: sampleLog.nickname || '',
             department: sampleLog.department || '',
             position: sampleLog.position || '',
-            branch_id: sampleLog.branch_id || ''
+            branchId: sampleLog.emp_branch_id || sampleLog.branch_id || ''
           });
         });
       }
@@ -12959,14 +13003,14 @@ function submitPrintTimeCards() {
       var periodText = startDate + ' ถึง ' + endDate;
       var sheetsHtml = '';
       employeesToPrint.forEach(function(emp, i) {
-        var eId = emp.emp_id || emp.id;
+        var eId = getEmpId(emp);
         var eMap = empLogsMap[eId] || {};
         sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, eMap, periodText, i + 1, employeesToPrint.length);
       });
 
       var printDocHtml = '<!DOCTYPE html>' +
         '<html lang="th"><head><meta charset="utf-8">' +
-        '<title>บัตรตอกลงเวลา (Time Card) - ' + (employeesToPrint.length === 1 ? (employeesToPrint[0].name || employeesToPrint[0].emp_id) : (employeesToPrint.length + ' คน')) + '</title>' +
+        '<title>บัตรตอกลงเวลา (Time Card) - ' + (employeesToPrint.length === 1 ? (getEmpFullName(employeesToPrint[0]) || getEmpId(employeesToPrint[0])) : (employeesToPrint.length + ' คน')) + '</title>' +
         '<style>' +
           '@import url("https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&family=Chivo+Mono:wght@500;700&display=swap");' +
           '@page { size: A4 portrait; margin: 8mm 10mm; }' +
@@ -13056,37 +13100,53 @@ function submitExportTimeCardExcel() {
 
       var empLogsMap = {};
       logs.forEach(function(l) {
-        if (!empLogsMap[l.emp_id]) empLogsMap[l.emp_id] = {};
-        empLogsMap[l.emp_id][l.date] = l;
+        var key = String(l.emp_id || '').trim();
+        if (!empLogsMap[key]) empLogsMap[key] = {};
+        empLogsMap[key][l.date] = l;
       });
 
       var employeesToPrint = [];
       var allEmps = State.employees || [];
-      if (empId !== 'ALL') {
-        var found = allEmps.find(function(e) { return (e.emp_id || e.id) === empId; });
-        if (found) employeesToPrint.push(found);
+      if (empId && empId !== 'ALL') {
+        var found = allEmps.find(function(e) { return getEmpId(e) === empId; });
+        if (found) {
+          employeesToPrint.push(found);
+        } else if (logs.length > 0) {
+          var matchedLog = logs.find(function(l) { return String(l.emp_id || '').trim() === empId; }) || logs[0];
+          employeesToPrint.push({
+            empId: empId,
+            fullName: matchedLog.full_name || empId,
+            nickname: matchedLog.nickname || '',
+            department: matchedLog.department || '',
+            position: matchedLog.position || '',
+            branchId: matchedLog.emp_branch_id || matchedLog.branch_id || branchId
+          });
+        }
       } else {
-        if (branchId !== 'ALL') {
+        if (branchId && branchId !== 'ALL') {
           employeesToPrint = allEmps.filter(function(e) {
-            return (e.branch_id === branchId) && e.status !== 'RESIGNED' && e.is_active !== 0;
+            var st = String(e.status || 'Active').toUpperCase();
+            return (getEmpBranchId(e) === branchId) && st !== 'RESIGNED' && e.is_active !== 0;
           });
         } else {
           employeesToPrint = allEmps.filter(function(e) {
-            return e.status !== 'RESIGNED' && e.is_active !== 0;
+            var st = String(e.status || 'Active').toUpperCase();
+            return st !== 'RESIGNED' && e.is_active !== 0;
           });
         }
       }
 
       if (employeesToPrint.length === 0) {
-        Object.keys(empLogsMap).forEach(function(eId) {
+        var uniqueEmpIds = Object.keys(empLogsMap);
+        uniqueEmpIds.forEach(function(eId) {
           var sampleLog = Object.values(empLogsMap[eId])[0] || {};
           employeesToPrint.push({
-            emp_id: eId,
-            name: sampleLog.full_name || eId,
+            empId: eId,
+            fullName: sampleLog.full_name || eId,
             nickname: sampleLog.nickname || '',
             department: sampleLog.department || '',
             position: sampleLog.position || '',
-            branch_id: sampleLog.branch_id || ''
+            branchId: sampleLog.emp_branch_id || sampleLog.branch_id || ''
           });
         });
       }
@@ -13099,7 +13159,8 @@ function submitExportTimeCardExcel() {
       var periodText = startDate + ' ถึง ' + endDate;
       var sheetsHtml = '';
       employeesToPrint.forEach(function(emp, i) {
-        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, empLogsMap[emp.emp_id || emp.id] || {}, periodText, i + 1, employeesToPrint.length);
+        var eId = getEmpId(emp);
+        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, empLogsMap[eId] || {}, periodText, i + 1, employeesToPrint.length);
         sheetsHtml += '<br><br>';
       });
 
