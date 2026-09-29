@@ -3900,26 +3900,29 @@ async function handleAction(db, action, params) {
       }
 
       const branchFilter = String(params.branchId || params.branch_id || '').trim();
+      const empFilter = String(params.empId || params.emp_id || '').trim();
 
-      let query;
+      let sql = `
+        SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
+        FROM time_logs l
+        LEFT JOIN employees e ON l.emp_id = e.emp_id
+        WHERE l.date >= ? AND l.date <= ?
+      `;
+      const binds = [startDate, endDate];
+
       if (branchFilter && branchFilter !== 'ALL') {
-        query = await db.prepare(`
-          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
-          FROM time_logs l
-          LEFT JOIN employees e ON l.emp_id = e.emp_id
-          WHERE l.date >= ? AND l.date <= ?
-            AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))
-          ORDER BY l.date DESC, l.clock_in ASC, l.emp_id ASC
-        `).bind(startDate, endDate, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
-      } else {
-        query = await db.prepare(`
-          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
-          FROM time_logs l
-          LEFT JOIN employees e ON l.emp_id = e.emp_id
-          WHERE l.date >= ? AND l.date <= ?
-          ORDER BY l.date DESC, l.clock_in ASC, l.emp_id ASC
-        `).bind(startDate, endDate).all().catch(() => ({ results: [] }));
+        sql += ` AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))`;
+        binds.push(branchFilter, branchFilter);
       }
+
+      if (empFilter && empFilter !== 'ALL') {
+        sql += ` AND l.emp_id = ?`;
+        binds.push(empFilter);
+      }
+
+      sql += ` ORDER BY l.emp_id ASC, l.date ASC, l.clock_in ASC`;
+
+      const query = await db.prepare(sql).bind(...binds).all().catch(() => ({ results: [] }));
 
       return {
         success: true,

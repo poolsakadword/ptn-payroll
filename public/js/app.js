@@ -12496,14 +12496,41 @@ function formatLocalYmd(d) {
   return y + '-' + m + '-' + day;
 }
 
+function openTimeCardExportModal() {
+  openExportAttendanceModal();
+}
+
 function openExportAttendanceModal() {
+  // Populate employee select
+  var empSel = document.getElementById('expAttEmployee');
+  if (empSel) {
+    empSel.innerHTML = '<option value="ALL">👥 พนักงานทุกคน (All Employees - คนละ 1 แผ่น A4)</option>';
+    var employees = State.employees || [];
+    var activeFilterEmp = _currentAttendanceEmpId || (document.getElementById('attFilterEmp') ? document.getElementById('attFilterEmp').value : 'ALL');
+
+    var sortedEmps = employees.slice().sort(function(a, b) {
+      return String(a.emp_id || a.id || '').localeCompare(String(b.emp_id || b.id || ''));
+    });
+
+    sortedEmps.forEach(function(e) {
+      if (e.status === 'RESIGNED' || e.is_active === 0) return;
+      var opt = document.createElement('option');
+      var id = e.emp_id || e.id;
+      opt.value = id;
+      opt.textContent = id + ' - ' + (e.name || e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '');
+      if (activeFilterEmp && activeFilterEmp !== 'ALL' && (id === activeFilterEmp)) {
+        opt.selected = true;
+      }
+      empSel.appendChild(opt);
+    });
+  }
+
   // Populate branch select
   var bSel = document.getElementById('expAttBranch');
   if (bSel) {
     bSel.innerHTML = '<option value="ALL">🏢 ทุกสาขา (All Branches)</option>';
     var branches = State.branches || [];
     if (branches.length === 0) {
-      // Fallback from filter select if available
       var mainBSel = document.getElementById('attFilterBranch');
       if (mainBSel && mainBSel.options) {
         for (var i = 0; i < mainBSel.options.length; i++) {
@@ -12525,22 +12552,6 @@ function openExportAttendanceModal() {
         bSel.appendChild(opt);
       });
     }
-  }
-
-  // Populate department select
-  var dSel = document.getElementById('expAttDept');
-  if (dSel) {
-    dSel.innerHTML = '<option value="ALL">👥 ทุกแผนก (All Departments)</option>';
-    var depts = {};
-    (State.employees || []).forEach(function(e) {
-      if (e.department) depts[e.department] = true;
-    });
-    Object.keys(depts).sort().forEach(function(dept) {
-      var opt = document.createElement('option');
-      opt.value = dept;
-      opt.textContent = dept;
-      dSel.appendChild(opt);
-    });
   }
 
   // Default to cutoff preset
@@ -12632,12 +12643,224 @@ function setExportAttendancePreset(preset) {
   }
 }
 
-function submitExportAttendanceRangeCsv() {
+// Generate array of YYYY-MM-DD dates between start and end inclusive
+function generateDateRangeArray(startDate, endDate) {
+  var dates = [];
+  var cur = new Date(startDate + 'T00:00:00');
+  var end = new Date(endDate + 'T00:00:00');
+  while (cur <= end) {
+    dates.push(formatLocalYmd(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dates;
+}
+
+// Build Classic Time Card HTML for a single employee sheet
+function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pageNum, totalPages) {
+  var thaiDays = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+  var daysWorked = 0;
+  var totalWorkHours = 0;
+  var totalOtHours = 0;
+  var lateCount = 0;
+  var totalLateMinutes = 0;
+  var leaveCount = 0;
+  var absentCount = 0;
+
+  var rowsHtml = '';
+  dateList.forEach(function(dStr, idx) {
+    var dObj = new Date(dStr + 'T00:00:00');
+    var dayIdx = dObj.getDay();
+    var dayName = isNaN(dayIdx) ? '' : thaiDays[dayIdx];
+    var isSunday = dayIdx === 0;
+
+    var parts = dStr.split('-');
+    var beYear = parseInt(parts[0], 10) + 543;
+    var dateDisplay = parts[2] + '/' + parts[1] + '/' + beYear;
+
+    var l = logsMap[dStr];
+    if (l) {
+      if (l.clock_in) daysWorked++;
+      var wH = Number(l.work_hours) || 0;
+      totalWorkHours += wH;
+      var otH = Number(l.ot_hours) || 0;
+      totalOtHours += otH;
+      var lateM = Number(l.late_minutes) || 0;
+      if (lateM > 0) {
+        lateCount++;
+        totalLateMinutes += lateM;
+      }
+
+      var in1 = l.clock_in ? l.clock_in.substring(0, 5) : '-';
+      var out1 = l.break_out ? l.break_out.substring(0, 5) : '-';
+      var in2 = l.break_in ? l.break_in.substring(0, 5) : '-';
+      var out2 = l.clock_out ? l.clock_out.substring(0, 5) : '-';
+
+      var otStart = (otH > 0 && l.ot_start) ? l.ot_start.substring(0, 5) : (otH > 0 ? 'OT' : '-');
+      var otEnd = (otH > 0 && l.ot_end) ? l.ot_end.substring(0, 5) : (otH > 0 ? (otH + ' ชม.') : '-');
+
+      var notes = [];
+      if (otH > 0) notes.push('OT ' + otH + ' ชม.');
+      if (lateM > 0) notes.push('สาย ' + lateM + ' น.');
+      if (l.is_full_pay === 1 || l.is_full_pay === '1') notes.push('จ่ายเต็มวัน');
+      if (l.status === 'GEOFENCE_FAIL') notes.push('นอกพิกัด');
+      if (l.remark) notes.push(l.remark);
+
+      var lateCellStyle = lateM > 0 ? 'color:#b91c1c;font-weight:700;background:#fee2e2;' : 'color:#64748b;';
+      var in1Color = lateM > 0 ? '#dc2626' : '#1d4ed8';
+
+      rowsHtml += '<tr style="height:20px;' + (isSunday ? 'background:#fff1f2;' : (idx % 2 === 1 ? 'background:#faf5ea;' : '')) + '">' +
+        '<td>' + (idx + 1) + '</td>' +
+        '<td class="font-digital">' + dateDisplay + '</td>' +
+        '<td style="' + (isSunday ? 'color:#b91c1c;font-weight:700;' : '') + '">' + dayName + '</td>' +
+        '<td class="font-digital" style="font-weight:700;color:' + in1Color + '">' + in1 + '</td>' +
+        '<td class="font-digital" style="color:#475569">' + out1 + '</td>' +
+        '<td class="font-digital" style="color:#475569">' + in2 + '</td>' +
+        '<td class="font-digital" style="font-weight:700;color:#991b1b">' + out2 + '</td>' +
+        '<td class="font-digital" style="color:#78350f">' + otStart + '</td>' +
+        '<td class="font-digital" style="color:#78350f">' + otEnd + '</td>' +
+        '<td style="font-weight:700">' + (wH > 0 ? wH.toFixed(1) : '-') + '</td>' +
+        '<td style="' + lateCellStyle + '">' + (lateM > 0 ? lateM : '-') + '</td>' +
+        '<td style="text-align:left;padding-left:6px;font-size:9.5px;color:#78350f">' + (notes.join(', ') || 'ปกติ') + '</td>' +
+      '</tr>';
+    } else {
+      // Empty day row
+      if (isSunday) {
+        rowsHtml += '<tr style="height:20px;background:#fee2e2;">' +
+          '<td>' + (idx + 1) + '</td>' +
+          '<td class="font-digital">' + dateDisplay + '</td>' +
+          '<td style="color:#b91c1c;font-weight:700;">' + dayName + '</td>' +
+          '<td colspan="6" style="color:#991b1b;font-weight:700;letter-spacing:1px;font-size:9.5px">-- วันหยุดประจำสัปดาห์ (WEEKLY OFF) --</td>' +
+          '<td>-</td>' +
+          '<td>-</td>' +
+          '<td style="text-align:left;padding-left:6px;color:#991b1b;font-size:9.5px">วันหยุด</td>' +
+        '</tr>';
+      } else {
+        rowsHtml += '<tr style="height:20px;' + (idx % 2 === 1 ? 'background:#faf5ea;' : '') + '">' +
+          '<td>' + (idx + 1) + '</td>' +
+          '<td class="font-digital">' + dateDisplay + '</td>' +
+          '<td>' + dayName + '</td>' +
+          '<td colspan="6" style="color:#94a3b8;font-size:9.5px">-</td>' +
+          '<td>-</td>' +
+          '<td>-</td>' +
+          '<td style="text-align:left;padding-left:6px;color:#94a3b8;font-size:9.5px">-</td>' +
+        '</tr>';
+      }
+    }
+  });
+
+  var compName = (State.company && State.company.companyName) || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var compTax = (State.company && State.company.taxId) || '0105559876543';
+  var empCode = emp.emp_id || emp.id || '-';
+  var empFullName = (emp.name || emp.full_name || '') + (emp.nickname ? ' (' + emp.nickname + ')' : '');
+  var empPos = (emp.position || '-') + ' / ' + (emp.department || '-');
+  var empBranch = emp.branch_name || emp.branch_id || 'สำนักงานใหญ่';
+
+  var now = new Date();
+  var thaiMonthList = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var printTimeStr = now.getDate() + ' ' + thaiMonthList[now.getMonth()] + ' ' + (now.getFullYear() + 543) + ' ' +
+    String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ' น.';
+
+  return '<div class="timecard-sheet">' +
+    '<!-- Header -->' +
+    '<div style="border-bottom: 2px solid #78350f; padding-bottom: 6px; margin-bottom: 8px;">' +
+      '<div style="display: flex; justify-content: space-between; align-items: flex-start;">' +
+        '<div style="display: flex; align-items: center; gap: 10px;">' +
+          '<div style="width: 44px; height: 44px; border-radius: 8px; background: #78350f; color: #fef08a; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; border: 1.5px solid #92400e;">PTN</div>' +
+          '<div>' +
+            '<div style="font-size: 14.5px; font-weight: 800; color: #451a03; text-transform: uppercase;">' + compName + '</div>' +
+            '<div style="font-size: 10px; color: #78350f;">PTN PHARMA CENTER CO., LTD. &bull; เลขประจำตัวผู้เสียภาษี: ' + compTax + '</div>' +
+            '<div style="font-size: 12px; font-weight: 700; color: #78350f; margin-top: 1px;">บัตรบันทึกเวลาทำงาน (TIME CARD) &bull; ประจำงวดตัดวิก</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align: right; border: 1px solid #92400e; background: #fefce8; border-radius: 6px; padding: 4px 10px; font-size: 11px; color: #451a03;">' +
+          '<div style="font-weight: 800; color: #78350f; font-size: 12px;">รอบงวด: ' + periodText + '</div>' +
+          '<div style="font-size: 9.5px; color: #92400e; margin-top: 2px;">พนักงานคนที่ ' + pageNum + ' จากทั้งหมด ' + totalPages + ' คน</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<!-- Employee Info Banner -->' +
+    '<div style="display: grid; grid-template-columns: 1.2fr 2fr 2fr 1.8fr; gap: 6px; margin-bottom: 8px; background: #fef3c7; border: 1px solid #d97706; padding: 5px 8px; border-radius: 4px; font-size: 11px; color: #451a03;">' +
+      '<div><span style="font-size: 9.5px; color: #92400e; display: block; font-weight: 600;">รหัสพนักงาน:</span><span class="font-digital" style="font-weight: 800; font-size: 12.5px;">' + empCode + '</span></div>' +
+      '<div><span style="font-size: 9.5px; color: #92400e; display: block; font-weight: 600;">ชื่อ - นามสกุล:</span><span style="font-weight: 800; font-size: 12px;">' + empFullName + '</span></div>' +
+      '<div><span style="font-size: 9.5px; color: #92400e; display: block; font-weight: 600;">ตำแหน่ง / แผนก:</span><span style="font-weight: 700; font-size: 11px;">' + empPos + '</span></div>' +
+      '<div><span style="font-size: 9.5px; color: #92400e; display: block; font-weight: 600;">สาขาประจำ:</span><span style="font-weight: 700; font-size: 11px;">' + empBranch + '</span></div>' +
+    '</div>' +
+
+    '<!-- Table -->' +
+    '<table>' +
+      '<thead>' +
+        '<tr>' +
+          '<th rowspan="2" style="width: 26px;">ลำดับ</th>' +
+          '<th rowspan="2" style="width: 68px;">วันที่</th>' +
+          '<th rowspan="2" style="width: 44px;">วัน</th>' +
+          '<th colspan="2" style="background: #fef3c7;">กะเช้า (MORNING)</th>' +
+          '<th colspan="2" style="background: #fef3c7;">กะบ่าย (AFTERNOON)</th>' +
+          '<th colspan="2" style="background: #fef3c7;">ล่วงเวลา (OT)</th>' +
+          '<th rowspan="2" style="width: 44px;">รวม ชม.</th>' +
+          '<th rowspan="2" style="width: 40px;">สาย (น.)</th>' +
+          '<th rowspan="2">หมายเหตุ / ตราประทับ</th>' +
+        '</tr>' +
+        '<tr>' +
+          '<th style="width: 42px; color: #1e3a8a;">เข้า 1</th>' +
+          '<th style="width: 42px; color: #475569;">ออก 1</th>' +
+          '<th style="width: 42px; color: #475569;">เข้า 2</th>' +
+          '<th style="width: 42px; color: #991b1b;">ออก 2</th>' +
+          '<th style="width: 42px; color: #78350f;">เริ่ม</th>' +
+          '<th style="width: 42px; color: #78350f;">สิ้นสุด</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+        rowsHtml +
+      '</tbody>' +
+    '</table>' +
+
+    '<!-- Summary 5 Box -->' +
+    '<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 6px; border: 1.5px solid #92400e; background: #fefce8; padding: 5px; text-align: center; font-size: 11px;">' +
+      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">วันทำงานจริง</div><div style="font-size: 13px; font-weight: 800; color: #166534;">' + daysWorked + ' วัน</div></div>' +
+      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">ชม. งานปกติ</div><div style="font-size: 13px; font-weight: 800; color: #1e40af;">' + totalWorkHours.toFixed(1) + ' ชม.</div></div>' +
+      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">รวมล่วงเวลา (OT)</div><div style="font-size: 13px; font-weight: 800; color: #78350f;">' + totalOtHours.toFixed(1) + ' ชม.</div></div>' +
+      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">มาสายรวม</div><div style="font-size: 13px; font-weight: 800; color: #b91c1c;">' + lateCount + ' ครั้ง (' + totalLateMinutes + ' น.)</div></div>' +
+      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">วันลา / ขาดงาน</div><div style="font-size: 13px; font-weight: 800; color: #1e40af;">ลา ' + leaveCount + ' / ขาด ' + absentCount + '</div></div>' +
+    '</div>' +
+
+    '<!-- Signatures -->' +
+    '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 14px; text-align: center; font-size: 11px; color: #451a03;">' +
+      '<div>' +
+        '<div style="border-bottom: 1px dotted #92400e; width: 80%; margin: 25px auto 4px;"></div>' +
+        '<div style="font-weight: 700;">ลายมือชื่อพนักงาน</div>' +
+        '<div style="font-size: 10px; color: #78350f;">( ' + (emp.name || emp.full_name || '..............................') + ' )</div>' +
+        '<div style="font-size: 9.5px; color: #92400e;">วันที่ ...../...../..........</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="border-bottom: 1px dotted #92400e; width: 80%; margin: 25px auto 4px;"></div>' +
+        '<div style="font-weight: 700;">ผู้ตรวจสอบ (หัวหน้างาน)</div>' +
+        '<div style="font-size: 10px; color: #78350f;">( .................................................... )</div>' +
+        '<div style="font-size: 9.5px; color: #92400e;">วันที่ ...../...../..........</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="border-bottom: 1px dotted #92400e; width: 80%; margin: 25px auto 4px;"></div>' +
+        '<div style="font-weight: 700;">ผู้อนุมัติ (ผู้จัดการ / HR)</div>' +
+        '<div style="font-size: 10px; color: #78350f;">( .................................................... )</div>' +
+        '<div style="font-size: 9.5px; color: #92400e;">วันที่ ...../...../..........</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<!-- Footer Micro Text -->' +
+    '<div style="margin-top: 14px; display: flex; justify-content: space-between; font-size: 9px; color: #92400e; border-top: 1px solid #d97706; padding-top: 3px;">' +
+      '<span>PTN Payroll System &bull; Electronic Time Card Sheet (A4 Portrait)</span>' +
+      '<span>พิมพ์เมื่อ: ' + printTimeStr + ' &bull; หน้า ' + pageNum + ' / ' + totalPages + '</span>' +
+    '</div>' +
+  '</div>';
+}
+
+// 1. Submit Print Time Cards (A4 Portrait, 1 Sheet per Employee)
+function submitPrintTimeCards() {
   var startDate = document.getElementById('expAttStartDate').value;
   var endDate = document.getElementById('expAttEndDate').value;
   var branchId = document.getElementById('expAttBranch').value;
-  var dept = document.getElementById('expAttDept').value;
-  var btn = document.getElementById('btnSubmitExportAttRange');
+  var empId = document.getElementById('expAttEmployee').value;
+  var btn = document.getElementById('btnSubmitPrintTimeCards');
 
   if (!startDate || !endDate) {
     showToast('กรุณาระบุวันที่เริ่มต้นและวันที่สิ้นสุด', 'warning');
@@ -12650,21 +12873,22 @@ function submitExportAttendanceRangeCsv() {
 
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังดึงข้อมูล...';
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังเตรียมข้อมูล...';
   }
 
-  showToast('กำลังดึงข้อมูลลงเวลาระหว่าง ' + startDate + ' ถึง ' + endDate + '...', 'info');
+  showToast('กำลังดึงข้อมูลและสร้างบัตรตอกลงเวลา A4...', 'info');
 
   callApi('getAttendanceLogsRange', {
     startDate: startDate,
     endDate: endDate,
     branchId: branchId,
+    empId: empId,
     username: (State.currentUser && State.currentUser.username) || 'Admin'
   })
     .then(function(r) {
       if (btn) {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-file-arrow-down"></i> ดาวน์โหลด Excel (CSV)';
+        btn.innerHTML = '<i class="fa-solid fa-print text-amber-300"></i> พิมพ์บัตรตอก / บันทึก PDF (A4)';
       }
 
       if (!r || !r.success) {
@@ -12673,19 +12897,275 @@ function submitExportAttendanceRangeCsv() {
       }
 
       var logs = r.logs || [];
-      if (dept && dept !== 'ALL') {
-        logs = logs.filter(function(l) { return l.department === dept; });
+      var dateList = generateDateRangeArray(startDate, endDate);
+
+      // Group logs by emp_id
+      var empLogsMap = {};
+      logs.forEach(function(l) {
+        if (!empLogsMap[l.emp_id]) empLogsMap[l.emp_id] = {};
+        empLogsMap[l.emp_id][l.date] = l;
+      });
+
+      // Filter employees to print
+      var employeesToPrint = [];
+      var allEmps = State.employees || [];
+      if (empId !== 'ALL') {
+        var found = allEmps.find(function(e) { return (e.emp_id || e.id) === empId; });
+        if (found) {
+          employeesToPrint.push(found);
+        } else if (logs.length > 0) {
+          employeesToPrint.push({
+            emp_id: empId,
+            name: logs[0].full_name || empId,
+            nickname: logs[0].nickname || '',
+            department: logs[0].department || '',
+            position: logs[0].position || '',
+            branch_id: branchId
+          });
+        }
+      } else {
+        if (branchId !== 'ALL') {
+          employeesToPrint = allEmps.filter(function(e) {
+            return (e.branch_id === branchId) && e.status !== 'RESIGNED' && e.is_active !== 0;
+          });
+        } else {
+          employeesToPrint = allEmps.filter(function(e) {
+            return e.status !== 'RESIGNED' && e.is_active !== 0;
+          });
+        }
       }
 
+      if (employeesToPrint.length === 0) {
+        // Fallback to employee IDs found in logs
+        var uniqueEmpIds = Object.keys(empLogsMap);
+        uniqueEmpIds.forEach(function(eId) {
+          var sampleLog = Object.values(empLogsMap[eId])[0] || {};
+          employeesToPrint.push({
+            emp_id: eId,
+            name: sampleLog.full_name || eId,
+            nickname: sampleLog.nickname || '',
+            department: sampleLog.department || '',
+            position: sampleLog.position || '',
+            branch_id: sampleLog.branch_id || ''
+          });
+        });
+      }
+
+      if (employeesToPrint.length === 0) {
+        showToast('ไม่พบข้อมูลพนักงานสำหรับพิมพ์บัตรตอก', 'warning');
+        return;
+      }
+
+      var periodText = startDate + ' ถึง ' + endDate;
+      var sheetsHtml = '';
+      employeesToPrint.forEach(function(emp, i) {
+        var eId = emp.emp_id || emp.id;
+        var eMap = empLogsMap[eId] || {};
+        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, eMap, periodText, i + 1, employeesToPrint.length);
+      });
+
+      var printDocHtml = '<!DOCTYPE html>' +
+        '<html lang="th"><head><meta charset="utf-8">' +
+        '<title>บัตรตอกลงเวลา (Time Card) - ' + (employeesToPrint.length === 1 ? (employeesToPrint[0].name || employeesToPrint[0].emp_id) : (employeesToPrint.length + ' คน')) + '</title>' +
+        '<style>' +
+          '@import url("https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&family=Chivo+Mono:wght@500;700&display=swap");' +
+          '@page { size: A4 portrait; margin: 8mm 10mm; }' +
+          '* { box-sizing: border-box; }' +
+          'body { font-family: "Sarabun", "Segoe UI", Arial, sans-serif; margin: 0; padding: 0; background: #e2e8f0; color: #0f172a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }' +
+          '.no-print { position: sticky; top: 0; z-index: 9999; background: #1e293b; color: #fff; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2); }' +
+          '.print-btn { background: #d97706; color: #fff; font-weight: 800; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; display: inline-flex; align-items: center; gap: 6px; }' +
+          '.close-btn { background: #475569; color: #fff; font-weight: 600; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; }' +
+          '.timecard-sheet { width: 210mm; min-height: 282mm; margin: 15px auto; padding: 8mm 10mm; background: #faf8f0; border: 2.5px solid #78350f; box-shadow: 0 10px 25px rgba(0,0,0,0.15); position: relative; box-sizing: border-box; }' +
+          '.font-digital { font-family: "Chivo Mono", monospace; }' +
+          'table { width: 100%; border-collapse: collapse; text-align: center; font-size: 10.5px; border: 1.5px solid #92400e; }' +
+          'th, td { border: 1px solid #d97706; padding: 2.5px 2px; }' +
+          'th { background: #f5eedb; color: #78350f; font-weight: 700; }' +
+          '@media print {' +
+            'body { background: #fff; }' +
+            '.no-print { display: none !important; }' +
+            '.timecard-sheet { margin: 0; border: 2px solid #78350f; box-shadow: none; width: 100%; min-height: 100vh; page-break-after: always; }' +
+            '.timecard-sheet:last-child { page-break-after: auto; }' +
+          '}' +
+        '</style>' +
+        '</head><body>' +
+        '<div class="no-print">' +
+          '<div style="font-size: 13px; font-weight: 700;">' +
+            '📇 บัตรตอกลงเวลา (Time Card A4) &bull; ' + employeesToPrint.length + ' คน (' + employeesToPrint.length + ' แผ่น A4)' +
+          '</div>' +
+          '<div style="display: flex; gap: 8px; align-items: center;">' +
+            '<button type="button" class="print-btn" onclick="window.print()">🖨️ สั่งพิมพ์เอกสาร / บันทึก PDF</button>' +
+            '<button type="button" class="close-btn" onclick="window.close()">❌ ปิดหน้าต่าง</button>' +
+          '</div>' +
+        '</div>' +
+        sheetsHtml +
+        '<script>' +
+          'window.onload = function() { setTimeout(function() { window.print(); }, 500); };' +
+        '<\/script>' +
+        '</body></html>';
+
+      var printWin = window.open('', '_blank');
+      if (!printWin) {
+        showToast('โปรดอนุญาตให้เปิดหน้าต่าง Pop-up เพื่อพิมพ์เอกสาร', 'warning');
+        return;
+      }
+      printWin.document.open();
+      printWin.document.write(printDocHtml);
+      printWin.document.close();
+
+      closeModal('modalExportAttendanceRange');
+      showToast('เปิดหน้าพิมพ์บัตรตอกสำเร็จ (' + employeesToPrint.length + ' คน)', 'success');
+    })
+    .catch(function(e) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-print text-amber-300"></i> พิมพ์บัตรตอก / บันทึก PDF (A4)';
+      }
+      showToast('เกิดข้อผิดพลาด: ' + e.message, 'error');
+    });
+}
+
+// 2. Submit Export Time Card Excel (.xls)
+function submitExportTimeCardExcel() {
+  var startDate = document.getElementById('expAttStartDate').value;
+  var endDate = document.getElementById('expAttEndDate').value;
+  var branchId = document.getElementById('expAttBranch').value;
+  var empId = document.getElementById('expAttEmployee').value;
+
+  if (!startDate || !endDate) {
+    showToast('กรุณาระบุวันที่เริ่มต้นและวันที่สิ้นสุด', 'warning');
+    return;
+  }
+
+  showToast('กำลังสร้างไฟล์ Excel บัตรตอกลงเวลา...', 'info');
+
+  callApi('getAttendanceLogsRange', {
+    startDate: startDate,
+    endDate: endDate,
+    branchId: branchId,
+    empId: empId,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (!r || !r.success) {
+        showToast(r && r.message ? r.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล', 'error');
+        return;
+      }
+
+      var logs = r.logs || [];
+      var dateList = generateDateRangeArray(startDate, endDate);
+
+      var empLogsMap = {};
+      logs.forEach(function(l) {
+        if (!empLogsMap[l.emp_id]) empLogsMap[l.emp_id] = {};
+        empLogsMap[l.emp_id][l.date] = l;
+      });
+
+      var employeesToPrint = [];
+      var allEmps = State.employees || [];
+      if (empId !== 'ALL') {
+        var found = allEmps.find(function(e) { return (e.emp_id || e.id) === empId; });
+        if (found) employeesToPrint.push(found);
+      } else {
+        if (branchId !== 'ALL') {
+          employeesToPrint = allEmps.filter(function(e) {
+            return (e.branch_id === branchId) && e.status !== 'RESIGNED' && e.is_active !== 0;
+          });
+        } else {
+          employeesToPrint = allEmps.filter(function(e) {
+            return e.status !== 'RESIGNED' && e.is_active !== 0;
+          });
+        }
+      }
+
+      if (employeesToPrint.length === 0) {
+        Object.keys(empLogsMap).forEach(function(eId) {
+          var sampleLog = Object.values(empLogsMap[eId])[0] || {};
+          employeesToPrint.push({
+            emp_id: eId,
+            name: sampleLog.full_name || eId,
+            nickname: sampleLog.nickname || '',
+            department: sampleLog.department || '',
+            position: sampleLog.position || '',
+            branch_id: sampleLog.branch_id || ''
+          });
+        });
+      }
+
+      if (employeesToPrint.length === 0) {
+        showToast('ไม่พบข้อมูลพนักงานสำหรับส่งออก Excel', 'warning');
+        return;
+      }
+
+      var periodText = startDate + ' ถึง ' + endDate;
+      var sheetsHtml = '';
+      employeesToPrint.forEach(function(emp, i) {
+        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, empLogsMap[emp.emp_id || emp.id] || {}, periodText, i + 1, employeesToPrint.length);
+        sheetsHtml += '<br><br>';
+      });
+
+      var excelDoc = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' +
+        '<head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">' +
+        '<style>' +
+          'body { font-family: "Sarabun", Arial, sans-serif; font-size: 11px; }' +
+          'table { border-collapse: collapse; width: 100%; }' +
+          'th, td { border: 1px solid #d97706; padding: 4px; text-align: center; }' +
+          'th { background-color: #f5eedb; color: #78350f; font-weight: bold; }' +
+        '</style>' +
+        '</head><body>' +
+        sheetsHtml +
+        '</body></html>';
+
+      var blob = new Blob(['\uFEFF' + excelDoc], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      var link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'PTN_TimeCards_' + startDate + '_to_' + endDate + '.xls';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      closeModal('modalExportAttendanceRange');
+      showToast('ดาวน์โหลด Excel บัตรตอกลงเวลาสำเร็จ (' + employeesToPrint.length + ' คน)', 'success');
+    })
+    .catch(function(e) {
+      showToast('เกิดข้อผิดพลาด: ' + e.message, 'error');
+    });
+}
+
+// 3. Submit Raw CSV Export
+function submitExportAttendanceRangeCsv() {
+  var startDate = document.getElementById('expAttStartDate').value;
+  var endDate = document.getElementById('expAttEndDate').value;
+  var branchId = document.getElementById('expAttBranch').value;
+  var empId = document.getElementById('expAttEmployee').value;
+
+  if (!startDate || !endDate) {
+    showToast('กรุณาระบุวันที่เริ่มต้นและวันที่สิ้นสุด', 'warning');
+    return;
+  }
+
+  showToast('กำลังดึงข้อมูลลงเวลา...', 'info');
+
+  callApi('getAttendanceLogsRange', {
+    startDate: startDate,
+    endDate: endDate,
+    branchId: branchId,
+    empId: empId,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (!r || !r.success) {
+        showToast(r && r.message ? r.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล', 'error');
+        return;
+      }
+
+      var logs = r.logs || [];
       if (logs.length === 0) {
         showToast('ไม่พบข้อมูลลงเวลาในช่วงวันที่ ' + startDate + ' ถึง ' + endDate, 'warning');
         return;
       }
 
       var csv = generateAttendanceCsvString(logs);
-      var branchSuffix = branchId !== 'ALL' ? ('_' + branchId) : '';
-      var deptSuffix = dept !== 'ALL' ? ('_' + dept) : '';
-      var filename = 'PTN_Attendance_' + startDate + '_to_' + endDate + branchSuffix + deptSuffix + '.csv';
+      var filename = 'PTN_Attendance_' + startDate + '_to_' + endDate + '.csv';
 
       var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       var link = document.createElement('a');
@@ -12699,10 +13179,6 @@ function submitExportAttendanceRangeCsv() {
       showToast('ดาวน์โหลดข้อมูลลงเวลาสำเร็จ (' + logs.length + ' รายการ)', 'success');
     })
     .catch(function(e) {
-      if (btn) {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-file-arrow-down"></i> ดาวน์โหลด Excel (CSV)';
-      }
       showToast('เกิดข้อผิดพลาด: ' + e.message, 'error');
     });
 }
