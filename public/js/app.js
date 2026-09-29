@@ -6629,43 +6629,69 @@ function renderCertModalPaper() {
   var regularAllow = 0;
   var totalMonthly = baseSal + regularAllow;
 
-  // Tenure calculation
+  // Tenure and Start Date calculation (supports joinDate / join_date / startDate in YYYY-MM-DD or DD/MM/YYYY)
+  var startRaw = String(emp.joinDate || emp.startDate || emp.join_date || '').trim();
   var tenureText = '';
   var tenureTextEn = '';
-  if (emp.startDate) {
-    try {
-      var sDate = new Date(emp.startDate);
-      var now = new Date();
-      var diffYears = now.getFullYear() - sDate.getFullYear();
-      var diffMonths = now.getMonth() - sDate.getMonth();
-      if (diffMonths < 0) { diffYears--; diffMonths += 12; }
-      if (diffYears > 0 && diffMonths > 0) {
-        tenureText = diffYears + ' ปี ' + diffMonths + ' เดือน';
-        tenureTextEn = diffYears + ' year(s) ' + diffMonths + ' month(s)';
-      } else if (diffYears > 0) {
-        tenureText = diffYears + ' ปี';
-        tenureTextEn = diffYears + ' year(s)';
-      } else {
-        tenureText = (diffMonths || 1) + ' เดือน';
-        tenureTextEn = (diffMonths || 1) + ' month(s)';
-      }
-    } catch(ex) {
-      tenureText = '-';
-      tenureTextEn = '-';
-    }
-  }
+  var startDateDisplay = '-';
+  var startDateDisplayEn = '-';
 
-  // Format start date nicely
-  var startDateDisplay = emp.startDate || '-';
-  var startDateDisplayEn = emp.startDate || '-';
-  if (emp.startDate && emp.startDate.indexOf('-') > 0) {
-    var parts = emp.startDate.split('-');
-    if (parts.length === 3) {
+  if (startRaw && startRaw !== '-') {
+    var sYear = null, sMonth = null, sDay = null;
+    if (startRaw.indexOf('-') > 0) {
+      var p = startRaw.substring(0, 10).split('-');
+      if (p.length === 3) {
+        sYear = parseInt(p[0], 10);
+        sMonth = parseInt(p[1], 10);
+        sDay = parseInt(p[2], 10);
+      }
+    } else if (startRaw.indexOf('/') > 0) {
+      var p = startRaw.split('/');
+      if (p.length === 3) {
+        sDay = parseInt(p[0], 10);
+        sMonth = parseInt(p[1], 10);
+        sYear = parseInt(p[2], 10);
+      }
+    }
+
+    if (sYear && sMonth && sDay && !isNaN(sYear) && !isNaN(sMonth) && !isNaN(sDay)) {
+      var ceYear = sYear > 2400 ? (sYear - 543) : sYear;
+      var beYear = sYear < 2400 ? (sYear + 543) : sYear;
+
       var thaiMonthsFull = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
       var enMonths = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-      var mIdx = parseInt(parts[1], 10) - 1;
-      startDateDisplay = parseInt(parts[2], 10) + ' ' + (thaiMonthsFull[mIdx] || '') + ' ' + (parseInt(parts[0], 10) + 543);
-      startDateDisplayEn = (enMonths[mIdx] || '') + ' ' + parseInt(parts[2], 10) + ', ' + parts[0];
+      var mIdx = Math.max(0, Math.min(11, sMonth - 1));
+
+      startDateDisplay = sDay + ' ' + (thaiMonthsFull[mIdx] || '') + ' พ.ศ. ' + beYear;
+      startDateDisplayEn = (enMonths[mIdx] || '') + ' ' + sDay + ', ' + ceYear;
+
+      try {
+        var sDate = new Date(ceYear, sMonth - 1, sDay);
+        var now = new Date();
+        var diffYears = now.getFullYear() - sDate.getFullYear();
+        var diffMonths = now.getMonth() - sDate.getMonth();
+        if (now.getDate() < sDate.getDate()) {
+          diffMonths--;
+        }
+        if (diffMonths < 0) { diffYears--; diffMonths += 12; }
+        if (diffYears > 0 && diffMonths > 0) {
+          tenureText = diffYears + ' ปี ' + diffMonths + ' เดือน';
+          tenureTextEn = diffYears + ' year(s) ' + diffMonths + ' month(s)';
+        } else if (diffYears > 0) {
+          tenureText = diffYears + ' ปี';
+          tenureTextEn = diffYears + ' year(s)';
+        } else {
+          var mOnly = Math.max(1, diffMonths);
+          tenureText = mOnly + ' เดือน';
+          tenureTextEn = mOnly + ' month(s)';
+        }
+      } catch(ex) {
+        tenureText = '';
+        tenureTextEn = '';
+      }
+    } else {
+      startDateDisplay = startRaw;
+      startDateDisplayEn = startRaw;
     }
   }
 
