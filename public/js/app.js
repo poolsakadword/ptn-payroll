@@ -12696,7 +12696,7 @@ function generateDateRangeArray(startDate, endDate) {
 }
 
 // Build Classic Time Card HTML for a single employee sheet
-function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pageNum, totalPages) {
+function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pageNum, totalPages, holidayMap) {
   var thaiDays = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
   var daysWorked = 0;
   var totalWorkHours = 0;
@@ -12705,6 +12705,16 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
   var totalLateMinutes = 0;
   var leaveCount = 0;
   var absentCount = 0;
+  var holidayCount = 0;
+
+  holidayMap = holidayMap || {};
+  if (Object.keys(holidayMap).length === 0 && Array.isArray(State.companyHolidays)) {
+    State.companyHolidays.forEach(function(h) {
+      if (h && h.date) {
+        holidayMap[h.date] = h;
+      }
+    });
+  }
 
   var rowsHtml = '';
   dateList.forEach(function(dStr, idx) {
@@ -12716,6 +12726,14 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
     var parts = dStr.split('-');
     var beYear = parseInt(parts[0], 10) + 543;
     var dateDisplay = parts[2] + '/' + parts[1] + '/' + beYear;
+
+    var hInfo = holidayMap[dStr];
+    var isHoliday = !!hInfo;
+    var holidayName = isHoliday ? (hInfo.holiday_name || hInfo.name || 'วันหยุดบริษัท') : '';
+    var holidayTypeLabel = isHoliday ? (hInfo.holiday_type === 'SPECIAL' ? 'วันหยุดพิเศษ' : 'วันหยุดประเพณี') : '';
+    if (isHoliday) {
+      holidayCount++;
+    }
 
     var l = logsMap[dStr];
     if (l) {
@@ -12739,6 +12757,9 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
       var otEnd = (otH > 0 && l.ot_end) ? l.ot_end.substring(0, 5) : (otH > 0 ? (otH + ' ชม.') : '-');
 
       var notes = [];
+      if (isHoliday) {
+        notes.push('⭐ ทำงานวันหยุด (' + holidayName + ')');
+      }
       if (otH > 0) notes.push('OT ' + otH + ' ชม.');
       if (lateM > 0) notes.push('สาย ' + lateM + ' น.');
       if (l.is_full_pay === 1 || l.is_full_pay === '1') notes.push('จ่ายเต็มวัน');
@@ -12747,11 +12768,12 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
 
       var lateCellStyle = lateM > 0 ? 'color:#b91c1c;font-weight:700;background:#fee2e2;' : 'color:#64748b;';
       var in1Color = lateM > 0 ? '#dc2626' : '#1d4ed8';
+      var rowBg = isHoliday ? 'background:#fef3c7;' : (isSunday ? 'background:#fff1f2;' : (idx % 2 === 1 ? 'background:#faf5ea;' : ''));
 
-      rowsHtml += '<tr style="height:20px;' + (isSunday ? 'background:#fff1f2;' : (idx % 2 === 1 ? 'background:#faf5ea;' : '')) + '">' +
+      rowsHtml += '<tr style="height:20px;' + rowBg + '">' +
         '<td>' + (idx + 1) + '</td>' +
         '<td class="font-digital">' + dateDisplay + '</td>' +
-        '<td style="' + (isSunday ? 'color:#b91c1c;font-weight:700;' : '') + '">' + dayName + '</td>' +
+        '<td style="' + (isSunday ? 'color:#b91c1c;font-weight:700;' : (isHoliday ? 'color:#b45309;font-weight:700;' : '')) + '">' + dayName + '</td>' +
         '<td class="font-digital" style="font-weight:700;color:' + in1Color + '">' + in1 + '</td>' +
         '<td class="font-digital" style="color:#475569">' + out1 + '</td>' +
         '<td class="font-digital" style="color:#475569">' + in2 + '</td>' +
@@ -12760,11 +12782,24 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
         '<td class="font-digital" style="color:#78350f">' + otEnd + '</td>' +
         '<td style="font-weight:700">' + (wH > 0 ? wH.toFixed(1) : '-') + '</td>' +
         '<td style="' + lateCellStyle + '">' + (lateM > 0 ? lateM : '-') + '</td>' +
-        '<td style="text-align:left;padding-left:6px;font-size:9.5px;color:#78350f">' + (notes.join(', ') || 'ปกติ') + '</td>' +
+        '<td style="text-align:left;padding-left:6px;font-size:9.5px;color:' + (isHoliday ? '#b45309;font-weight:700;' : '#78350f;') + '">' + (notes.join(', ') || 'ปกติ') + '</td>' +
       '</tr>';
     } else {
       // Empty day row
-      if (isSunday) {
+      if (isHoliday) {
+        // Special / Company Holiday Row
+        rowsHtml += '<tr style="height:20px;background:#fef3c7;border-left:3px solid #f59e0b;">' +
+          '<td>' + (idx + 1) + '</td>' +
+          '<td class="font-digital" style="font-weight:700;color:#92400e;">' + dateDisplay + '</td>' +
+          '<td style="color:#b45309;font-weight:700;">' + dayName + '</td>' +
+          '<td colspan="6" style="color:#b45309;font-weight:700;letter-spacing:0.5px;font-size:9.5px;text-align:center;">' +
+            '⭐ วันหยุด: ' + holidayName + (holidayTypeLabel ? ' (' + holidayTypeLabel + ')' : '') +
+          '</td>' +
+          '<td>-</td>' +
+          '<td>-</td>' +
+          '<td style="text-align:left;padding-left:6px;color:#b45309;font-weight:700;font-size:9.5px;">' + (holidayTypeLabel || 'วันหยุดบริษัท') + '</td>' +
+        '</tr>';
+      } else if (isSunday) {
         rowsHtml += '<tr style="height:20px;background:#fee2e2;">' +
           '<td>' + (idx + 1) + '</td>' +
           '<td class="font-digital">' + dateDisplay + '</td>' +
@@ -12861,7 +12896,7 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
       '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">ชม. งานปกติ</div><div style="font-size: 13px; font-weight: 800; color: #1e40af;">' + totalWorkHours.toFixed(1) + ' ชม.</div></div>' +
       '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">รวมล่วงเวลา (OT)</div><div style="font-size: 13px; font-weight: 800; color: #78350f;">' + totalOtHours.toFixed(1) + ' ชม.</div></div>' +
       '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">มาสายรวม</div><div style="font-size: 13px; font-weight: 800; color: #b91c1c;">' + lateCount + ' ครั้ง (' + totalLateMinutes + ' น.)</div></div>' +
-      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">วันลา / ขาดงาน</div><div style="font-size: 13px; font-weight: 800; color: #1e40af;">ลา ' + leaveCount + ' / ขาด ' + absentCount + '</div></div>' +
+      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">วันหยุดบริษัท / พิเศษ</div><div style="font-size: 13px; font-weight: 800; color: #b45309;">' + holidayCount + ' วัน</div></div>' +
     '</div>' +
 
     '<!-- Signatures -->' +
@@ -12937,6 +12972,15 @@ function submitPrintTimeCards() {
       }
 
       var logs = r.logs || [];
+      var holidays = (r.holidays && Array.isArray(r.holidays) && r.holidays.length > 0) ? r.holidays : (State.companyHolidays || []);
+      if (r.holidays && Array.isArray(r.holidays)) {
+        State.companyHolidays = r.holidays;
+      }
+      var holidayMap = {};
+      holidays.forEach(function(h) {
+        if (h && h.date) holidayMap[h.date] = h;
+      });
+
       var dateList = generateDateRangeArray(startDate, endDate);
 
       // Group logs by emp_id
@@ -13005,7 +13049,7 @@ function submitPrintTimeCards() {
       employeesToPrint.forEach(function(emp, i) {
         var eId = getEmpId(emp);
         var eMap = empLogsMap[eId] || {};
-        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, eMap, periodText, i + 1, employeesToPrint.length);
+        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, eMap, periodText, i + 1, employeesToPrint.length, holidayMap);
       });
 
       var printDocHtml = '<!DOCTYPE html>' +
@@ -13096,6 +13140,15 @@ function submitExportTimeCardExcel() {
       }
 
       var logs = r.logs || [];
+      var holidays = (r.holidays && Array.isArray(r.holidays) && r.holidays.length > 0) ? r.holidays : (State.companyHolidays || []);
+      if (r.holidays && Array.isArray(r.holidays)) {
+        State.companyHolidays = r.holidays;
+      }
+      var holidayMap = {};
+      holidays.forEach(function(h) {
+        if (h && h.date) holidayMap[h.date] = h;
+      });
+
       var dateList = generateDateRangeArray(startDate, endDate);
 
       var empLogsMap = {};
@@ -13160,7 +13213,7 @@ function submitExportTimeCardExcel() {
       var sheetsHtml = '';
       employeesToPrint.forEach(function(emp, i) {
         var eId = getEmpId(emp);
-        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, empLogsMap[eId] || {}, periodText, i + 1, employeesToPrint.length);
+        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, empLogsMap[eId] || {}, periodText, i + 1, employeesToPrint.length, holidayMap);
         sheetsHtml += '<br><br>';
       });
 
