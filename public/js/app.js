@@ -10334,7 +10334,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
         '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
-      '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + (item.start_date || '-') + '</b> ถึง <b>' + (item.end_date || '-') + '</b> (' + (item.days_count || 1) + ' วัน)</div>' +
+      '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + (item.start_date || '-') + '</b> ถึง <b>' + (item.end_date || '-') + '</b> (' + (item.days_count || 1) + ' วัน' + (item.time_slot === 'MORNING' ? ' <span style="font-size:10.5px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:700">🌅 ครึ่งวันเช้า</span>' : (item.time_slot === 'AFTERNOON' ? ' <span style="font-size:10.5px;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;font-weight:700">🌆 ครึ่งวันบ่าย</span>' : '')) + ')</div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
       (item.medical_cert_url ? 
         '<div style="margin-bottom:8px">' +
@@ -10487,11 +10487,15 @@ function openEditAttendanceRequestModal(type, id) {
     var startDateEl = document.getElementById('editAttReqLeaveStartDate');
     var endDateEl = document.getElementById('editAttReqLeaveEndDate');
     var daysEl = document.getElementById('editAttReqLeaveDaysCount');
+    var timeSlotEl = document.getElementById('editAttReqLeaveTimeSlot');
 
     if (leaveTypeEl) leaveTypeEl.value = item.leave_type || 'SICK_WITH_CERT';
     if (startDateEl) startDateEl.value = item.start_date || '';
     if (endDateEl) endDateEl.value = item.end_date || '';
     if (daysEl) daysEl.value = item.days_count || 1;
+    if (timeSlotEl) {
+      timeSlotEl.value = item.time_slot || (Number(item.days_count) === 0.5 ? 'MORNING' : 'FULL');
+    }
   } else if (type === 'ot') {
     if (badgeEl) {
       badgeEl.textContent = 'คำขอทำ OT';
@@ -10536,6 +10540,19 @@ function openEditAttendanceRequestModal(type, id) {
   openModal('modalEditAttendanceRequest');
 }
 
+function onEditLeaveTimeSlotChanged() {
+  var slotEl = document.getElementById('editAttReqLeaveTimeSlot');
+  var daysEl = document.getElementById('editAttReqLeaveDaysCount');
+  if (!slotEl || !daysEl) return;
+  if (slotEl.value === 'MORNING' || slotEl.value === 'AFTERNOON') {
+    daysEl.value = '0.5';
+  } else if (slotEl.value === 'FULL') {
+    if (parseFloat(daysEl.value) === 0.5) {
+      daysEl.value = '1.0';
+    }
+  }
+}
+
 function saveEditAttendanceRequestForm(event) {
   if (event) event.preventDefault();
   var type = document.getElementById('editAttReqType').value;
@@ -10549,6 +10566,7 @@ function saveEditAttendanceRequestForm(event) {
       startDate: document.getElementById('editAttReqLeaveStartDate').value,
       endDate: document.getElementById('editAttReqLeaveEndDate').value,
       daysCount: parseFloat(document.getElementById('editAttReqLeaveDaysCount').value) || 1,
+      timeSlot: document.getElementById('editAttReqLeaveTimeSlot') ? document.getElementById('editAttReqLeaveTimeSlot').value : 'FULL',
       reason: document.getElementById('editAttReqReason').value.trim(),
       status: document.getElementById('editAttReqStatus').value
     };
@@ -10842,6 +10860,7 @@ function openCreateAdminRequestModal() {
   var todayStr = new Date().toISOString().substring(0, 10);
   if (document.getElementById('createAdminReqLeaveStartDate')) document.getElementById('createAdminReqLeaveStartDate').value = todayStr;
   if (document.getElementById('createAdminReqLeaveEndDate')) document.getElementById('createAdminReqLeaveEndDate').value = todayStr;
+  if (document.getElementById('createAdminReqLeaveTimeSlot')) document.getElementById('createAdminReqLeaveTimeSlot').value = 'FULL';
   if (document.getElementById('createAdminReqLeaveDays')) document.getElementById('createAdminReqLeaveDays').value = '1.0';
   if (document.getElementById('createAdminReqOtDate')) document.getElementById('createAdminReqOtDate').value = todayStr;
   if (document.getElementById('createAdminReqAdvanceDate')) document.getElementById('createAdminReqAdvanceDate').value = todayStr;
@@ -10878,7 +10897,43 @@ function switchCreateAdminReqType(type) {
   });
 }
 
+function onAdminLeaveTimeSlotChanged() {
+  var slotEl = document.getElementById('createAdminReqLeaveTimeSlot');
+  var daysEl = document.getElementById('createAdminReqLeaveDays');
+  if (!slotEl || !daysEl) return;
+  if (slotEl.value === 'MORNING' || slotEl.value === 'AFTERNOON') {
+    daysEl.value = '0.5';
+    var sEl = document.getElementById('createAdminReqLeaveStartDate');
+    var eEl = document.getElementById('createAdminReqLeaveEndDate');
+    if (sEl && eEl && sEl.value) {
+      eEl.value = sEl.value;
+    }
+  } else if (slotEl.value === 'FULL') {
+    onAdminLeaveDatesChanged();
+  }
+}
+
+function onAdminLeaveDaysManualChanged() {
+  var daysEl = document.getElementById('createAdminReqLeaveDays');
+  var slotEl = document.getElementById('createAdminReqLeaveTimeSlot');
+  if (!daysEl || !slotEl) return;
+  var d = parseFloat(daysEl.value);
+  if (d === 0.5 && slotEl.value === 'FULL') {
+    slotEl.value = 'MORNING';
+  } else if (d > 0.5 && slotEl.value !== 'FULL') {
+    slotEl.value = 'FULL';
+  }
+}
+
 function onAdminLeaveDatesChanged() {
+  var slotEl = document.getElementById('createAdminReqLeaveTimeSlot');
+  if (slotEl && (slotEl.value === 'MORNING' || slotEl.value === 'AFTERNOON')) {
+    if (document.getElementById('createAdminReqLeaveDays')) {
+      document.getElementById('createAdminReqLeaveDays').value = '0.5';
+    }
+    return;
+  }
+
   var sStr = document.getElementById('createAdminReqLeaveStartDate') ? document.getElementById('createAdminReqLeaveStartDate').value : '';
   var eStr = document.getElementById('createAdminReqLeaveEndDate') ? document.getElementById('createAdminReqLeaveEndDate').value : '';
   if (!sStr || !eStr) return;
@@ -10950,6 +11005,7 @@ function submitCreateAdminRequestForm(e) {
     payload.startDate = startDate;
     payload.endDate = endDate;
     payload.daysCount = daysCount;
+    payload.timeSlot = document.getElementById('createAdminReqLeaveTimeSlot') ? document.getElementById('createAdminReqLeaveTimeSlot').value : 'FULL';
 
     var fileInput = document.getElementById('createAdminReqMedicalCertFile');
     if (fileInput && fileInput.files && fileInput.files[0]) {

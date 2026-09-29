@@ -5134,9 +5134,19 @@
               <input type="date" id="editAttReqLeaveEndDate" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
             </div>
           </div>
-          <div>
-            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">จำนวนวันลา (วัน):</label>
-            <input type="number" step="0.5" min="0.5" id="editAttReqLeaveDaysCount" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">ช่วงเวลาที่ลา:</label>
+              <select id="editAttReqLeaveTimeSlot" class="form-control" onchange="onEditLeaveTimeSlotChanged()" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:600">
+                <option value="FULL">เต็มวัน (1.0 วัน)</option>
+                <option value="MORNING">ครึ่งวันเช้า (0.5 วัน)</option>
+                <option value="AFTERNOON">ครึ่งวันบ่าย (0.5 วัน)</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">จำนวนวันลา (วัน):</label>
+              <input type="number" step="0.5" min="0.5" id="editAttReqLeaveDaysCount" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:700">
+            </div>
           </div>
         </div>
 
@@ -5449,13 +5459,21 @@
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
-              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">จำนวนวันลา *</label>
-              <input type="number" step="0.5" min="0.5" id="createAdminReqLeaveDays" value="1.0" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:700">
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">ช่วงเวลาที่ลา *</label>
+              <select id="createAdminReqLeaveTimeSlot" class="form-control" onchange="onAdminLeaveTimeSlotChanged()" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:600">
+                <option value="FULL">🌕 เต็มวัน (1.0 วัน)</option>
+                <option value="MORNING">🌅 ครึ่งวันเช้า (0.5 วัน - ก่อนพักเที่ยง)</option>
+                <option value="AFTERNOON">🌆 ครึ่งวันบ่าย (0.5 วัน - หลังพักเที่ยง)</option>
+              </select>
             </div>
             <div>
-              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">แนบรูปใบรับรองแพทย์ (ถ้ามี)</label>
-              <input type="file" id="createAdminReqMedicalCertFile" accept="image/*" class="form-control" style="font-size:11px;padding:5px 8px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
+              <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">จำนวนวันลา *</label>
+              <input type="number" step="0.5" min="0.5" id="createAdminReqLeaveDays" value="1.0" class="form-control" style="font-size:12.5px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-weight:700" onchange="onAdminLeaveDaysManualChanged()">
             </div>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:4px">แนบรูปใบรับรองแพทย์ (ถ้ามี)</label>
+            <input type="file" id="createAdminReqMedicalCertFile" accept="image/*" class="form-control" style="font-size:11px;padding:5px 8px;border-radius:8px;border:1px solid #cbd5e1;width:100%">
           </div>
         </div>
 
@@ -5535,6 +5553,6 @@
   <div id="payrollSummaryPrintContainer" style="display:none"></div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.31"></script>
+  <script src="js/app.js?v=9.32"></script>
 </body>
 </html>
