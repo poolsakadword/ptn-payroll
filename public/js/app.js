@@ -273,6 +273,22 @@ function applyRolePermissions() {
   var cardAttSettings = document.getElementById('cardAttendanceSettings');
   if (cardAttSettings) cardAttSettings.style.display = canManageAttendanceSettings ? 'block' : 'none';
 
+  // Sub-tabs in Attendance Navigation (Settings & Branches)
+  var tabBtnBranches = document.getElementById('attSubTabBtn_branches');
+  if (tabBtnBranches) tabBtnBranches.style.display = canManageAttendanceSettings ? 'inline-flex' : 'none';
+  var tabBtnSettings = document.getElementById('attSubTabBtn_settings');
+  if (tabBtnSettings) tabBtnSettings.style.display = canManageAttendanceSettings ? 'inline-flex' : 'none';
+
+  // Fallback if currently viewing a restricted sub-tab
+  if (!canManageAttendanceSettings && (typeof _activeAttendanceSubTab !== 'undefined') && (_activeAttendanceSubTab === 'branches' || _activeAttendanceSubTab === 'settings')) {
+    switchAttendanceSubTab('logs');
+  }
+
+  // Attendance Add Log Button
+  var btnAddLog = document.getElementById('btnAddAttendanceLog');
+  var canManageLogs = hasPermission('manage_time_logs') || hasPermission('approve_attendance') || isSuperAdmin();
+  if (btnAddLog) btnAddLog.style.display = canManageLogs ? 'inline-flex' : 'none';
+
   // 11. Document Center Categories
   var btnDocCert = document.getElementById('btnDocCatCert');
   if (btnDocCert) btnDocCert.style.display = canIssueSalaryCert ? 'inline-flex' : 'none';
@@ -3553,6 +3569,18 @@ function onRoleTemplateChanged() {
   }
 }
 
+function attachPermissionCheckboxListeners() {
+  var permInputs = document.querySelectorAll('#userModal input[id^="perm_"]');
+  permInputs.forEach(function(input) {
+    input.onchange = function() {
+      var roleSel = document.getElementById('mRole');
+      if (roleSel && roleSel.value !== 'Custom') {
+        roleSel.value = 'Custom';
+      }
+    };
+  });
+}
+
 function openAddUserModal() {
   document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน';
   document.getElementById('userOrigUsername').value = '';
@@ -3566,6 +3594,7 @@ function openAddUserModal() {
   }
   document.getElementById('mRole').value = 'HR Payroll';
   onRoleTemplateChanged();
+  attachPermissionCheckboxListeners();
   openModal('userModal');
 }
 
@@ -3647,6 +3676,7 @@ function openEditUserModal(username) {
     }
   });
 
+  attachPermissionCheckboxListeners();
   openModal('userModal');
 }
 
@@ -8667,6 +8697,16 @@ var _activeAttendanceSubTab = 'logs';
 function switchAttendanceSubTab(tabName) {
   var tabs = ['logs', 'summary', 'approvals', 'settings', 'branches'];
   if (tabs.indexOf(tabName) === -1) tabName = 'logs';
+
+  // Permission guard for sensitive attendance management sub-tabs
+  if (tabName === 'branches' || tabName === 'settings') {
+    var canManageAttendanceSettings = hasPermission('manage_attendance_settings') || isSuperAdmin();
+    if (!canManageAttendanceSettings) {
+      showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการสาขาหรือตั้งค่าระบบ', 'warning');
+      return;
+    }
+  }
+
   _activeAttendanceSubTab = tabName;
 
   tabs.forEach(function(t) {
@@ -12119,6 +12159,11 @@ function toggleBranchEarlyDismissal(branchId, enabled) {
 }
 
 function openEditBranchModal(branchId) {
+  if (!isSuperAdmin() && !hasPermission('manage_attendance_settings')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการสาขาหรือกะงาน', 'warning');
+    return;
+  }
+
   var b = null;
   if (branchId && State.branches) {
     b = State.branches.find(function(x) { return x.branch_id === branchId; });
