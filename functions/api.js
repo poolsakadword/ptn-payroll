@@ -585,6 +585,20 @@ function getBranchShiftSessions(branch) {
   };
 }
 
+function normalizeDateToIso(str) {
+  if (!str) return '';
+  const s = String(str).trim();
+  const match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) {
+    const d = match[1].padStart(2, '0');
+    const m = match[2].padStart(2, '0');
+    let y = parseInt(match[3], 10);
+    if (y > 2400) y -= 543; // Convert B.E. to C.E.
+    return `${y}-${m}-${d}`;
+  }
+  return s.substring(0, 10);
+}
+
 function categorizeLeaveType(leaveType, medicalCertUrl) {
   const raw = String(leaveType || '').trim();
   const rawUpper = raw.toUpperCase();
@@ -1236,7 +1250,7 @@ async function handleAction(db, action, params) {
           String(emp.department || '').trim(), String(emp.position || '').trim(),
           Number(emp.baseSalary) || 0,
           String(emp.bankName || 'กสิกรไทย (KBANK)').trim(), String(emp.bankAccount || '').trim(),
-          String(emp.birthDate || '').trim(), Number(emp.age) || 0, String(emp.joinDate || '').trim(),
+          normalizeDateToIso(emp.birthDate || ''), Number(emp.age) || 0, normalizeDateToIso(emp.joinDate || ''),
           pfRate, (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750,
           Number(emp.defaultTax) || 0, String(emp.remark || '').trim()
         ).run();
@@ -1265,11 +1279,13 @@ async function handleAction(db, action, params) {
       const ssoVal = (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750;
       const taxVal = Number(emp.defaultTax) || 0;
 
-      let probEndDate = emp.probationEndDate || '';
+      const cleanBirthDate = normalizeDateToIso(emp.birthDate || '');
+      const cleanJoinDate = normalizeDateToIso(emp.joinDate || '');
+      let probEndDate = normalizeDateToIso(emp.probationEndDate || '');
       const probDays = Number(emp.probationDays) || 119;
-      if (emp.status === 'Probation' && emp.joinDate && !probEndDate) {
+      if (emp.status === 'Probation' && cleanJoinDate && !probEndDate) {
         try {
-          const jd = new Date(emp.joinDate);
+          const jd = new Date(cleanJoinDate);
           jd.setDate(jd.getDate() + probDays);
           probEndDate = jd.toISOString().substring(0, 10);
         } catch(err) {}
@@ -1299,8 +1315,8 @@ async function handleAction(db, action, params) {
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
-        emp.bankName || '', emp.bankAccount || '', emp.birthDate || '', Number(emp.age) || 0,
-        emp.joinDate || '',
+        emp.bankName || '', emp.bankAccount || '', cleanBirthDate, Number(emp.age) || 0,
+        cleanJoinDate,
         pfRateVal, ssoVal,
         taxVal, emp.remark || '',
         statusVal, probDays, probEndDate,
@@ -3595,7 +3611,7 @@ async function handleAction(db, action, params) {
           UPDATE leave_requests
           SET leave_type = ?, start_date = ?, end_date = ?, days_count = ?, time_slot = ?, reason = ?, status = ?
           WHERE id = ?
-        `).bind(leaveType, startDate, endDate, Number(daysCount) || 1.0, finalSlot, reason || '', validStatus, id).run();
+        `).bind(leaveType, normalizeDateToIso(startDate), normalizeDateToIso(endDate), Number(daysCount) || 1.0, finalSlot, reason || '', validStatus, id).run();
         if (validStatus === 'APPROVED' || validStatus === 'REJECTED') {
           const empRow = await db.prepare('SELECT emp_id FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
           if (empRow && empRow.emp_id) {
@@ -3614,7 +3630,7 @@ async function handleAction(db, action, params) {
           UPDATE ot_requests
           SET date = ?, start_time = ?, end_time = ?, planned_hours = ?, actual_hours = ?, reason = ?, status = ?
           WHERE id = ?
-        `).bind(date, startTime || '', endTime || '', Number(hours) || 0, Number(hours) || 0, reason || '', validStatus, id).run();
+        `).bind(normalizeDateToIso(date), startTime || '', endTime || '', Number(hours) || 0, Number(hours) || 0, reason || '', validStatus, id).run();
         if (validStatus === 'APPROVED' || validStatus === 'REJECTED') {
           const empRow = await db.prepare('SELECT emp_id FROM ot_requests WHERE id = ?').bind(id).first().catch(() => null);
           if (empRow && empRow.emp_id) {
@@ -3633,7 +3649,7 @@ async function handleAction(db, action, params) {
           UPDATE advance_requests
           SET request_date = ?, amount = ?, reason = ?, status = ?
           WHERE id = ?
-        `).bind(requestDate, Number(amount) || 0, reason || '', validStatus, id).run();
+        `).bind(normalizeDateToIso(requestDate), Number(amount) || 0, reason || '', validStatus, id).run();
         if (validStatus === 'APPROVED' || validStatus === 'REJECTED') {
           const empRow = await db.prepare('SELECT emp_id FROM advance_requests WHERE id = ?').bind(id).first().catch(() => null);
           if (empRow && empRow.emp_id) {
@@ -3689,7 +3705,7 @@ async function handleAction(db, action, params) {
           INSERT INTO leave_requests (emp_id, leave_type, start_date, end_date, days_count, time_slot, reason, medical_cert_url, status, approved_by, approved_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          empId, leaveType, startDate, endDate, finalDays, finalSlot, finalReason, medicalCertUrl || null, targetStatus, approvedBy, approvedAt
+          empId, leaveType, normalizeDateToIso(startDate), normalizeDateToIso(endDate), finalDays, finalSlot, finalReason, medicalCertUrl || null, targetStatus, approvedBy, approvedAt
         ).run();
 
         const slotLabel = finalSlot === 'MORNING' ? ' (ครึ่งเช้า)' : (finalSlot === 'AFTERNOON' ? ' (ครึ่งบ่าย)' : ' (เต็มวัน)');
@@ -3701,7 +3717,8 @@ async function handleAction(db, action, params) {
         const otHoursVal = Number(hours) || Number(actualHours) || Number(plannedHours) || 0;
         if (otHoursVal <= 0) return { success: false, message: 'กรุณาระบุจำนวนชั่วโมง OT' };
 
-        const d = new Date(date + 'T00:00:00');
+        const cleanDate = normalizeDateToIso(date);
+        const d = new Date(cleanDate + 'T00:00:00');
         const isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
         const otType = isSunday ? 1.0 : 1.5;
         const finalReason = reason ? `${reason} ${auditNote}` : auditNote;
@@ -3710,16 +3727,16 @@ async function handleAction(db, action, params) {
           INSERT INTO ot_requests (emp_id, date, start_time, end_time, planned_hours, actual_hours, ot_type, reason, status, approved_by, approved_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          empId, date, startTime || null, endTime || null, otHoursVal, otHoursVal, otType, finalReason, targetStatus, approvedBy, approvedAt
+          empId, cleanDate, startTime || null, endTime || null, otHoursVal, otHoursVal, otType, finalReason, targetStatus, approvedBy, approvedAt
         ).run();
 
-        resultMsg = `สร้างคำขอ OT (${otHoursVal} ชม. วันที่ ${date}) ให้ ${empRow.full_name} สำเร็จ (${targetStatus === 'APPROVED' ? 'อนุมัติทันที' : 'รออนุมัติ'})`;
+        resultMsg = `สร้างคำขอ OT (${otHoursVal} ชม. วันที่ ${cleanDate}) ให้ ${empRow.full_name} สำเร็จ (${targetStatus === 'APPROVED' ? 'อนุมัติทันที' : 'รออนุมัติ'})`;
       } else if (requestType === 'ADVANCE') {
         const { amount, requestDate, period, reason } = params;
         const amtVal = Number(amount) || 0;
         if (amtVal <= 0) return { success: false, message: 'กรุณาระบุยอดเงินที่ต้องการเบิก' };
 
-        const rDate = requestDate || new Date().toISOString().substring(0, 10);
+        const rDate = normalizeDateToIso(requestDate || new Date().toISOString().substring(0, 10));
         const targetPeriod = period || getDefaultPeriod();
         const finalReason = reason ? `${reason} ${auditNote}` : auditNote;
 

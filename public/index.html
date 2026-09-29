@@ -3375,7 +3375,8 @@
             <div class="form-row-2">
               <div class="form-group">
                 <label><i class="fa-solid fa-cake-candles" style="color:#d97706"></i> วันเกิด</label>
-                <input type="date" id="mBirthDate" onchange="onBirthDateChanged()">
+                <input type="date" id="mBirthDate" onchange="onBirthDateChanged()" oninput="updateBirthDateThaiHint()">
+                <div id="mBirthDateThaiHint" style="font-size:11px;color:#d97706;font-weight:600;margin-top:3px"></div>
               </div>
               <div class="form-group">
                 <label><i class="fa-solid fa-user-clock" style="color:#d97706"></i> อายุ (ปี)</label>
@@ -3471,6 +3472,7 @@
                 <div class="form-group">
                   <label>วันครบกำหนดทดลองงาน</label>
                   <input type="date" id="mProbationEndDate" readonly style="background:#fef3c7;color:#9a3412;font-weight:700">
+                  <div id="mProbationEndDateThaiHint" style="font-size:11px;color:#c2410c;font-weight:600;margin-top:3px"></div>
                 </div>
                 <div class="form-group">
                   <label>สถานะเวลาที่เหลือ</label>
@@ -3535,7 +3537,8 @@
             <div class="form-row-2">
               <div class="form-group">
                 <label>วันเริ่มงาน</label>
-                <input type="date" id="mJoinDate" onchange="calculateProbationEndDate()">
+                <input type="date" id="mJoinDate" onchange="calculateProbationEndDate()" oninput="calculateProbationEndDate()">
+                <div id="mJoinDateThaiHint" style="font-size:11px;color:#0284c7;font-weight:600;margin-top:3px"></div>
               </div>
               <div class="form-group">
                 <label><i class="fa-solid fa-comment-dots" style="color:#64748b"></i> หมายเหตุ</label>
@@ -5553,6 +5556,6 @@
   <div id="payrollSummaryPrintContainer" style="display:none"></div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.33"></script>
+  <script src="js/app.js?v=9.34"></script>
 </body>
 </html>

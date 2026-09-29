@@ -1308,7 +1308,7 @@ function renderEmployeesTable() {
   var hCards = '';
 
   list.forEach(function(e) {
-    var birthText = e.birthDate ? (e.birthDate + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
+    var birthText = e.birthDate ? (formatDateThaiBE(e.birthDate) + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
     var initials = (e.fullName || '').substring(0, 2);
 
     // Status Badge
@@ -1371,7 +1371,7 @@ function renderEmployeesTable() {
         '<td>' + esc(birthText) + '</td>' +
         '<td class="font-mono">' + esc(e.phone || '-') + '</td>' +
         '<td>' + bankPill + '<div class="font-mono" style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.bankAccount || '-') + '</div></td>' +
-        '<td>' + esc(e.joinDate || '-') + '</td>' +
+        '<td>' + esc(formatDateThaiBE(e.joinDate)) + '</td>' +
         '<td class="text-center nowrap">' +
           devUnlockBtn +
           (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
@@ -1395,7 +1395,7 @@ function renderEmployeesTable() {
         '<td class="text-right font-mono">' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '<span class="text-muted" style="font-size:11px">0%</span>') + '</td>' +
         '<td class="text-right font-mono text-red font-bold">' + (Number(e.defaultSso) > 0 ? fmt(e.defaultSso) : '<span class="text-muted" style="font-size:11px">฿0</span>') + '</td>' +
         '<td>' + bankPill + '<div class="font-mono font-bold text-blue" style="font-size:11px;margin-top:2px">' + esc(e.bankAccount || '-') + '</div></td>' +
-        '<td>' + esc(e.joinDate || '-') + '</td>' +
+        '<td>' + esc(formatDateThaiBE(e.joinDate)) + '</td>' +
         '<td class="text-center nowrap">' +
           devUnlockBtn +
           (st === 'Probation' ? '<button type="button" class="btn-icon edit" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-weight:700" onclick="passProbation(\'' + esc(e.empId) + '\')" title="อนุมัติผ่านโปร"><i class="fa-solid fa-check"></i> ผ่านโปร</button> ' : '') +
@@ -1440,7 +1440,7 @@ function renderEmployeesTable() {
       '<div style="font-size:11px;color:#64748b;padding-top:4px;border-top:1px dashed #e2e8f0;display:flex;flex-direction:column;gap:4px">' +
         '<div style="display:flex;justify-content:space-between">' +
           '<span><i class="fa-solid fa-phone" style="color:#94a3b8;margin-right:4px"></i> ' + esc(e.phone || '-') + '</span>' +
-          '<span><i class="fa-solid fa-calendar-check" style="color:#94a3b8;margin-right:4px"></i> เริ่มงาน: ' + esc(e.joinDate || '-') + '</span>' +
+          '<span><i class="fa-solid fa-calendar-check" style="color:#94a3b8;margin-right:4px"></i> เริ่มงาน: ' + esc(formatDateThaiBE(e.joinDate)) + '</span>' +
         '</div>' +
         '<div style="display:flex;justify-content:space-between;align-items:center">' +
           '<span><i class="fa-solid fa-building-columns" style="color:#94a3b8;margin-right:4px"></i> ' + esc(e.bankName || '-') + '</span>' +
@@ -1774,7 +1774,7 @@ function onHistoryEmpChanged(silent) {
 
       if (document.getElementById('histEmpCardName')) document.getElementById('histEmpCardName').textContent = emp.fullName + (emp.nickname ? ' (' + emp.nickname + ')' : '') + ' [' + (emp.empId || '') + ']';
       if (document.getElementById('histEmpCardDept')) document.getElementById('histEmpCardDept').innerHTML = '<i class="fa-solid fa-briefcase" style="color:#94a3b8;margin-right:4px"></i> ' + esc(emp.department || '-') + ' / ' + esc(emp.position || '-');
-      if (document.getElementById('histEmpTenureText')) document.getElementById('histEmpTenureText').innerHTML = '<i class="fa-solid fa-calendar-check" style="color:#94a3b8;margin-right:4px"></i> เริ่มงาน: ' + esc(emp.joinDate || '-');
+      if (document.getElementById('histEmpTenureText')) document.getElementById('histEmpTenureText').innerHTML = '<i class="fa-solid fa-calendar-check" style="color:#94a3b8;margin-right:4px"></i> เริ่มงาน: ' + esc(formatDateThaiBE(emp.joinDate));
       if (document.getElementById('histEmpCardCitizen')) document.getElementById('histEmpCardCitizen').textContent = emp.citizenId || '-';
       if (document.getElementById('histEmpCardPhone')) document.getElementById('histEmpCardPhone').textContent = emp.phone || '-';
       if (document.getElementById('histEmpCardBank')) document.getElementById('histEmpCardBank').textContent = emp.bankName || '-';
@@ -2935,6 +2935,9 @@ function openAddEmployeeModal() {
   if (ssoLbl) { ssoLbl.textContent = '(750฿)'; ssoLbl.style.color = '#dc2626'; }
   document.getElementById('mDefaultTax').value = '0';
   if (document.getElementById('mDiligenceAllowance')) document.getElementById('mDiligenceAllowance').value = '';
+  updateBirthDateThaiHint();
+  updateJoinDateThaiHint();
+  updateProbEndDateThaiHint();
   openModal('empModal');
 }
 
@@ -2980,6 +2983,9 @@ function openEditEmployeeModal(empId) {
   if (document.getElementById('mProbationDays')) document.getElementById('mProbationDays').value = e.probationDays || 119;
   if (document.getElementById('mProbationEndDate')) document.getElementById('mProbationEndDate').value = e.probationEndDate || '';
   onEmployeeStatusChanged();
+  updateBirthDateThaiHint();
+  updateJoinDateThaiHint();
+  updateProbEndDateThaiHint();
   var hasPf = (e.pfRate !== undefined && e.pfRate !== null && Number(e.pfRate) > 0);
   var hasPfCheck = document.getElementById('mHasPf');
   if (hasPfCheck) hasPfCheck.checked = hasPf;
@@ -3308,6 +3314,7 @@ function exportToCSV(type) {
   document.body.removeChild(link);
 }
 function onBirthDateChanged() {
+  updateBirthDateThaiHint();
   var bVal = document.getElementById('mBirthDate').value;
   if (!bVal) return;
   var bDate = new Date(bVal);
@@ -4187,9 +4194,9 @@ function printAllEmployeesBatch() {
         html += '<div><span style="color:#64748b">ชื่อ-นามสกุล:</span> <strong>' + esc(emp.fullName) + (emp.nickname ? ' (' + esc(emp.nickname) + ')' : '') + '</strong></div>';
         html += '<div><span style="color:#64748b">แผนก/ตำแหน่ง:</span> <strong>' + esc(emp.department || '-') + ' / ' + esc(emp.position || '-') + '</strong></div>';
         html += '<div><span style="color:#64748b">เงินเดือนฐาน:</span> <strong>' + fmt(emp.baseSalary) + '</strong></div>';
-        html += '<div><span style="color:#64748b">วันเกิด/อายุ:</span> <strong>' + esc(emp.birthDate || '-') + ' (' + (emp.age || 0) + ' ปี)</strong></div>';
+        html += '<div><span style="color:#64748b">วันเกิด/อายุ:</span> <strong>' + esc(formatDateThaiBE(emp.birthDate)) + ' (' + (emp.age || 0) + ' ปี)</strong></div>';
         html += '<div><span style="color:#64748b">ธนาคาร:</span> <strong>' + esc(emp.bankName || '-') + ' ' + esc(emp.bankAccount || '-') + '</strong></div>';
-        html += '<div><span style="color:#64748b">วันเริ่มงาน:</span> <strong>' + esc(emp.joinDate || '-') + '</strong></div>';
+        html += '<div><span style="color:#64748b">วันเริ่มงาน:</span> <strong>' + esc(formatDateThaiBE(emp.joinDate)) + '</strong></div>';
         html += '<div><span style="color:#64748b">กองทุน PF:</span> <strong>' + pfText + '</strong></div>';
         html += '</div>';
 
@@ -5147,6 +5154,7 @@ function onEmployeeStatusChanged() {
 }
 
 function calculateProbationEndDate() {
+  updateJoinDateThaiHint();
   var joinDateVal = document.getElementById('mJoinDate') ? document.getElementById('mJoinDate').value : '';
   var daysVal = document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119;
   var endInp = document.getElementById('mProbationEndDate');
@@ -5154,16 +5162,21 @@ function calculateProbationEndDate() {
 
   if (!joinDateVal) {
     if (endInp) endInp.value = '';
+    updateProbEndDateThaiHint();
     if (txt) txt.textContent = 'กรุณาระบุวันเริ่มงาน';
     return;
   }
 
   var jd = new Date(joinDateVal);
-  if (isNaN(jd.getTime())) return;
+  if (isNaN(jd.getTime())) {
+    updateProbEndDateThaiHint();
+    return;
+  }
 
   jd.setDate(jd.getDate() + daysVal);
   var endIso = jd.toISOString().substring(0, 10);
   if (endInp) endInp.value = endIso;
+  updateProbEndDateThaiHint();
 
   var today = new Date();
   today.setHours(0,0,0,0);
@@ -5233,7 +5246,7 @@ function updateProbationDashboardAlerts() {
     h += '<div style="background:#ffffff;border:1.5px solid ' + (isUrgent ? '#fca5a5' : '#fed7aa') + ';border-radius:var(--radius-md);padding:10px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">' +
       '<div>' +
         '<div style="font-weight:700;font-size:12.5px;color:#0f172a">' + esc(e.fullName) + ' [' + esc(e.empId) + ']</div>' +
-        '<div style="font-size:11px;color:#64748b">' + esc(e.department || '-') + ' / ' + esc(e.position || '-') + ' | เริ่มงาน: ' + esc(e.joinDate || '-') + '</div>' +
+        '<div style="font-size:11px;color:#64748b">' + esc(e.department || '-') + ' / ' + esc(e.position || '-') + ' | เริ่มงาน: ' + esc(formatDateThaiBE(e.joinDate)) + '</div>' +
       '</div>' +
       '<div style="display:flex;align-items:center;gap:8px">' +
         '<span class="period-pill" style="background:' + (isUrgent ? '#fee2e2' : '#ffedd5') + ';color:' + (isUrgent ? '#b91c1c' : '#c2410c') + ';font-weight:700;font-size:11px">' + statusText + '</span>' +
@@ -10194,6 +10207,73 @@ function saveAttendanceLogEditForm(e) {
     });
 }
 
+function formatDateThaiBE(dateStr) {
+  if (!dateStr || dateStr === '-') return '-';
+  var s = String(dateStr).trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+  var parts = s.substring(0, 10).split('-');
+  if (parts.length === 3) {
+    var y = parseInt(parts[0], 10);
+    var m = parts[1];
+    var d = parts[2];
+    if (!isNaN(y) && y > 0) {
+      var beYear = y < 2400 ? (y + 543) : y;
+      return d + '/' + m + '/' + beYear;
+    }
+  }
+  return dateStr;
+}
+
+function parseInputDateToIso(str) {
+  if (!str) return '';
+  var s = String(str).trim();
+  var match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (match) {
+    var d = (match[1].length < 2 ? '0' : '') + match[1];
+    var m = (match[2].length < 2 ? '0' : '') + match[2];
+    var y = parseInt(match[3], 10);
+    if (y > 2400) y -= 543;
+    return y + '-' + m + '-' + d;
+  }
+  return s.substring(0, 10);
+}
+
+function updateJoinDateThaiHint() {
+  var el = document.getElementById('mJoinDate');
+  var hint = document.getElementById('mJoinDateThaiHint');
+  if (el && hint) {
+    if (el.value) {
+      hint.textContent = '📅 วันที่ (พ.ศ.): ' + formatDateThaiBE(el.value);
+    } else {
+      hint.textContent = '';
+    }
+  }
+}
+
+function updateBirthDateThaiHint() {
+  var el = document.getElementById('mBirthDate');
+  var hint = document.getElementById('mBirthDateThaiHint');
+  if (el && hint) {
+    if (el.value) {
+      hint.textContent = '📅 วันเกิด (พ.ศ.): ' + formatDateThaiBE(el.value);
+    } else {
+      hint.textContent = '';
+    }
+  }
+}
+
+function updateProbEndDateThaiHint() {
+  var el = document.getElementById('mProbationEndDate');
+  var hint = document.getElementById('mProbationEndDateThaiHint');
+  if (el && hint) {
+    if (el.value) {
+      hint.textContent = '📅 ครบโปร (พ.ศ.): ' + formatDateThaiBE(el.value);
+    } else {
+      hint.textContent = '';
+    }
+  }
+}
+
 function formatThaiDateTime(dtStr) {
   if (!dtStr) return '-';
   var s = String(dtStr).trim();
@@ -10203,20 +10283,22 @@ function formatThaiDateTime(dtStr) {
       var d = new Date(s);
       if (!isNaN(d.getTime())) {
         var bkk = new Date(d.getTime() + (7 * 3600 * 1000) + (d.getTimezoneOffset() * 60 * 1000));
-        var y = bkk.getFullYear();
+        var y = bkk.getFullYear() + 543;
         var m = (bkk.getMonth() + 1 < 10 ? '0' : '') + (bkk.getMonth() + 1);
         var day = (bkk.getDate() < 10 ? '0' : '') + bkk.getDate();
         var hh = (bkk.getHours() < 10 ? '0' : '') + bkk.getHours();
         var mm = (bkk.getMinutes() < 10 ? '0' : '') + bkk.getMinutes();
-        return y + '-' + m + '-' + day + ' ' + hh + ':' + mm + ' น.';
+        return day + '/' + m + '/' + y + ' ' + hh + ':' + mm + ' น.';
       }
     } catch(e) {}
   }
   // Standard format YYYY-MM-DD HH:mm:ss or YYYY-MM-DD HH:mm
   if (s.length >= 16) {
-    return s.substring(0, 16) + ' น.';
+    var datePart = s.substring(0, 10);
+    var timePart = s.substring(11, 16);
+    return formatDateThaiBE(datePart) + ' ' + timePart + ' น.';
   }
-  return s;
+  return formatDateThaiBE(s);
 }
 
 function getAttendanceStatusBadge(status) {
@@ -10334,11 +10416,11 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
         '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
-      '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + (item.start_date || '-') + '</b> ถึง <b>' + (item.end_date || '-') + '</b> (' + (item.days_count || 1) + ' วัน' + (item.time_slot === 'MORNING' ? ' <span style="font-size:10.5px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:700">🌅 ครึ่งวันเช้า</span>' : (item.time_slot === 'AFTERNOON' ? ' <span style="font-size:10.5px;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;font-weight:700">🌆 ครึ่งวันบ่าย</span>' : '')) + ')</div>' +
+      '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + formatDateThaiBE(item.start_date) + '</b> ถึง <b>' + formatDateThaiBE(item.end_date) + '</b> (' + (item.days_count || 1) + ' วัน' + (item.time_slot === 'MORNING' ? ' <span style="font-size:10.5px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:700">🌅 ครึ่งวันเช้า</span>' : (item.time_slot === 'AFTERNOON' ? ' <span style="font-size:10.5px;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;font-weight:700">🌆 ครึ่งวันบ่าย</span>' : '')) + ')</div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
       (item.medical_cert_url ? 
         '<div style="margin-bottom:8px">' +
-          '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(item.full_name || item.emp_id) + '\', \'วันที่ลา: ' + esc(item.start_date || '-') + ' ถึง ' + esc(item.end_date || '-') + ' (' + esc(item.leave_type || '') + ')\')" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">' +
+          '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(item.full_name || item.emp_id) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">' +
             '<i class="fa-solid fa-file-medical" style="color:#2563eb;font-size:13px"></i> ดูรูปใบรับรองแพทย์แนบ (คลิกเพื่อดูภาพขยาย)' +
           '</button>' +
         '</div>' : '') +
@@ -10359,7 +10441,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
         '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
-      '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-orange"></i> วันที่ทำ OT: <b>' + (item.date || '-') + '</b> | จำนวน <b>' + (item.planned_hours || item.actual_hours || 0) + ' ชม.</b></div>' +
+      '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-orange"></i> วันที่ทำ OT: <b>' + formatDateThaiBE(item.date) + '</b> | จำนวน <b>' + (item.planned_hours || item.actual_hours || 0) + ' ชม.</b></div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
       '<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">' +
         getAttendanceActionButtons('ot', item) +
@@ -10378,7 +10460,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
         '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
-      '<div style="font-size:12px;color:#334155;margin-bottom:2px"><i class="fa-regular fa-calendar text-green"></i> วันที่ขอเบิก: <b>' + (item.request_date || '-') + '</b></div>' +
+      '<div style="font-size:12px;color:#334155;margin-bottom:2px"><i class="fa-regular fa-calendar text-green"></i> วันที่ขอเบิก: <b>' + formatDateThaiBE(item.request_date) + '</b></div>' +
       '<div style="font-size:13px;color:#047857;font-weight:700;margin-bottom:4px"><i class="fa-solid fa-money-bill-wave"></i> จำนวนเงิน: ฿' + Number(item.amount || 0).toLocaleString() + ' บาท</div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
       '<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">' +
@@ -11401,7 +11483,7 @@ function renderAttendanceKpiModalList() {
         name: l.full_name || l.emp_id,
         dept: l.department || '',
         title: 'ขอลาหยุด (' + (l.leave_type || 'ลา') + ')',
-        sub: 'วันที่: ' + (l.start_date || '') + ' ถึง ' + (l.end_date || '') + ' (' + (l.days_count || 1) + ' วัน)',
+        sub: 'วันที่: ' + formatDateThaiBE(l.start_date) + ' ถึง ' + formatDateThaiBE(l.end_date) + ' (' + (l.days_count || 1) + ' วัน)',
         reason: l.reason || '-',
         color: '#7c3aed',
         medicalCertUrl: l.medical_cert_url || l.cert_photo_url || null,
@@ -11416,7 +11498,7 @@ function renderAttendanceKpiModalList() {
         name: o.full_name || o.emp_id,
         dept: o.department || '',
         title: 'ขอทำ OT (' + (o.hours || 0) + ' ชม.)',
-        sub: 'วันที่: ' + (o.date || '') + ' เวลา ' + (o.start_time || '') + ' - ' + (o.end_time || ''),
+        sub: 'วันที่: ' + formatDateThaiBE(o.date) + ' เวลา ' + (o.start_time || '') + ' - ' + (o.end_time || ''),
         reason: o.reason || '-',
         color: '#2563eb',
         createdAt: o.created_at
@@ -11430,7 +11512,7 @@ function renderAttendanceKpiModalList() {
         name: a.full_name || a.emp_id,
         dept: a.department || '',
         title: 'ขอเบิกเงินฉุกเฉินล่วงหน้า (' + formatMoney(a.amount || 0) + ' บาท)',
-        sub: 'วันที่ขอ: ' + (a.request_date || (a.created_at ? a.created_at.substring(0, 10) : '')),
+        sub: 'วันที่ขอ: ' + formatDateThaiBE(a.request_date || (a.created_at ? a.created_at.substring(0, 10) : '')),
         reason: a.reason || '-',
         color: '#059669',
         createdAt: a.created_at
