@@ -1911,7 +1911,7 @@ async function handleAction(db, action, params) {
 
           // 1. หักตามนาทีสายจริง (Deduct strictly based on actual late minutes)
           let lateHours = 0;
-          if (lateMins > 0 && !isMorningAbsence) {
+          if (lateMins > 0 && !isMorningAbsence && !isAfternoonAbsence) {
             lateHours = Math.round((lateMins / 60) * 100) / 100;
             const lateDeductAmt = lateHours * hourlyRate;
             empLateMinutes[row.emp_id] = (empLateMinutes[row.emp_id] || 0) + lateMins;
@@ -2136,6 +2136,19 @@ async function handleAction(db, action, params) {
             for (const l of empLogs) {
               const logDate = new Date(l.date + 'T00:00:00Z');
               if (logDate.getUTCDay() === 0 || holidayDatesSet.has(l.date)) continue; // Skip Sunday and Company Holiday
+
+              const inM = timeStringToMinutes(l.clock_in);
+              const outM = timeStringToMinutes(l.clock_out);
+              const bOM = timeStringToMinutes(l.break_out);
+              const bIM = timeStringToMinutes(l.break_in);
+              const wH = Number(l.work_hours) || 0;
+              const isMorningMiss = (inM !== null && inM >= lunchStart);
+              const isAfternoonMiss = (outM !== null && outM <= lunchEnd) ||
+                                      (l.date < todayStr && (
+                                        (bOM !== null && bIM === null && outM === null) ||
+                                        (outM === null && bIM === null && wH <= 0)
+                                      ));
+              if (isMorningMiss || isAfternoonMiss) continue;
 
               const lMins = Number(l.late_minutes) || 0;
               if (lMins > 0) {
