@@ -3854,7 +3854,7 @@ async function handleAction(db, action, params) {
       const targetStatus = (rawStatus === 'PENDING' || rawStatus === 'pending') ? 'PENDING' : 'APPROVED';
       const nowStr = new Date(Date.now() + 7 * 3600 * 1000).toISOString().replace('T', ' ').substring(0, 19);
       const auditNote = `[สร้างแทนโดย HR: ${callerUser} เมื่อ ${nowStr}]`;
-      const approvedBy = targetStatus === 'APPROVED' ? callerUser : null;
+      const approverId = targetStatus === 'APPROVED' ? callerUser : null;
       const approvedAt = targetStatus === 'APPROVED' ? nowStr : null;
 
       let resultMsg = '';
@@ -3869,10 +3869,10 @@ async function handleAction(db, action, params) {
         const finalReason = reason ? `${reason} ${auditNote}` : auditNote;
 
         await db.prepare(`
-          INSERT INTO leave_requests (emp_id, leave_type, start_date, end_date, days_count, time_slot, reason, medical_cert_url, status, approved_by, approved_at)
+          INSERT INTO leave_requests (emp_id, leave_type, start_date, end_date, days_count, time_slot, reason, medical_cert_url, status, approver_id, approved_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          empId, leaveType, normalizeDateToIso(startDate), normalizeDateToIso(endDate), finalDays, finalSlot, finalReason, medicalCertUrl || null, targetStatus, approvedBy, approvedAt
+          empId, leaveType, normalizeDateToIso(startDate), normalizeDateToIso(endDate), finalDays, finalSlot, finalReason, medicalCertUrl || null, targetStatus, approverId, approvedAt
         ).run();
 
         const slotLabel = finalSlot === 'MORNING' ? ' (ครึ่งเช้า)' : (finalSlot === 'AFTERNOON' ? ' (ครึ่งบ่าย)' : ' (เต็มวัน)');
@@ -3891,10 +3891,10 @@ async function handleAction(db, action, params) {
         const finalReason = reason ? `${reason} ${auditNote}` : auditNote;
 
         await db.prepare(`
-          INSERT INTO ot_requests (emp_id, date, start_time, end_time, planned_hours, actual_hours, ot_type, reason, status, approved_by, approved_at)
+          INSERT INTO ot_requests (emp_id, date, start_time, end_time, planned_hours, actual_hours, ot_type, reason, status, approver_id, approved_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          empId, cleanDate, startTime || null, endTime || null, otHoursVal, otHoursVal, otType, finalReason, targetStatus, approvedBy, approvedAt
+          empId, cleanDate, startTime || null, endTime || null, otHoursVal, otHoursVal, otType, finalReason, targetStatus, approverId, approvedAt
         ).run();
 
         resultMsg = `สร้างคำขอ OT (${otHoursVal} ชม. วันที่ ${cleanDate}) ให้ ${empRow.full_name} สำเร็จ (${targetStatus === 'APPROVED' ? 'อนุมัติทันที' : 'รออนุมัติ'})`;
@@ -3908,10 +3908,10 @@ async function handleAction(db, action, params) {
         const finalReason = reason ? `${reason} ${auditNote}` : auditNote;
 
         await db.prepare(`
-          INSERT INTO advance_requests (emp_id, amount, request_date, period, reason, status, approved_by, approved_at)
+          INSERT INTO advance_requests (emp_id, amount, request_date, period, reason, status, approver_id, approved_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          empId, amtVal, rDate, targetPeriod, finalReason, targetStatus, approvedBy, approvedAt
+          empId, amtVal, rDate, targetPeriod, finalReason, targetStatus, approverId, approvedAt
         ).run();
 
         resultMsg = `สร้างคำขอเบิกเงินล่วงหน้า (฿${amtVal.toLocaleString()}) ให้ ${empRow.full_name} สำเร็จ (${targetStatus === 'APPROVED' ? 'อนุมัติทันที' : 'รออนุมัติ'})`;
