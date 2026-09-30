@@ -1903,12 +1903,6 @@ async function handleAction(db, action, params) {
         }
 
         if (row.clock_in) {
-          const isBranchEarlyDismissal = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) && !isUndertimeExempt;
-          if (isBranchEarlyDismissal) {
-            // Whole-branch early dismissal mode: entire day full pay waived
-            continue;
-          }
-
           // 1. หักตามนาทีสายจริง (Deduct strictly based on actual late minutes)
           let lateHours = 0;
           if (lateMins > 0 && !isMorningAbsence && !isAfternoonAbsence) {
@@ -1918,6 +1912,12 @@ async function handleAction(db, action, params) {
             empLateCount[row.emp_id] = (empLateCount[row.emp_id] || 0) + 1;
             missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
             earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + lateDeductAmt;
+          }
+
+          const isBranchEarlyDismissal = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน')));
+          if (isBranchEarlyDismissal) {
+            // Whole-branch early dismissal mode: early departure/undertime waived
+            continue;
           }
 
           // 2. ตรวจสอบเวลาออกก่อนเวลา/ขาดช่วง (Undertime / Early Departure) สำหรับพนักงานที่ไม่ได้รับการยกเว้น
