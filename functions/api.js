@@ -485,6 +485,8 @@ async function ensureGlobalSchemas(db) {
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN late_minutes INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN late_count INTEGER DEFAULT 0').run().catch(() => {});
+    await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN carried_debt REAL DEFAULT 0').run().catch(() => {});
+    await db.prepare('ALTER TABLE payroll_calcs ADD COLUMN carried_debt REAL DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE branches ADD COLUMN early_dismissal_full_pay INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE time_logs ADD COLUMN is_full_pay INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare(`
@@ -774,6 +776,21 @@ function parsePeriodYearMonth(periodStr) {
   return { yearCE, yearBE: yearCE + 543, month };
 }
 
+function getPreviousPeriodStr(periodStr) {
+  const thaiMonths = [
+    'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+    'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
+  ];
+  const { yearBE, month } = parsePeriodYearMonth(periodStr);
+  let prevMonth = month - 1;
+  let prevYearBE = yearBE;
+  if (prevMonth < 1) {
+    prevMonth = 12;
+    prevYearBE -= 1;
+  }
+  return `${thaiMonths[prevMonth - 1]} ${prevYearBE}`;
+}
+
 async function getCutoffDatesForPeriod(db, periodStr) {
   let cutoffDay = 25;
   if (db) {
@@ -822,6 +839,19 @@ function getActualWorkingDaysInCutoff(startDate, endDate, holidayDatesSet = new 
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return count > 0 ? count : 26;
+}
+
+function calculateNewHireProRataRatio(joinDateStr, startDate, endDate, holidayDatesSet = new Set()) {
+  if (!joinDateStr || joinDateStr <= startDate) {
+    return { isMidPeriod: false, notStarted: false, ratio: 1.0, eligibleDays: 0, totalDays: 0 };
+  }
+  if (joinDateStr > endDate) {
+    return { isMidPeriod: false, notStarted: true, ratio: 0, eligibleDays: 0, totalDays: 0 };
+  }
+  const totalDays = getActualWorkingDaysInCutoff(startDate, endDate, holidayDatesSet);
+  const eligibleDays = getActualWorkingDaysInCutoff(joinDateStr, endDate, holidayDatesSet);
+  const ratio = totalDays > 0 ? (eligibleDays / totalDays) : 1.0;
+  return { isMidPeriod: true, notStarted: false, ratio, eligibleDays, totalDays };
 }
 
 async function getCompanyHolidayDatesSet(db, startDate, endDate) {
@@ -1017,6 +1047,7 @@ async function handleAction(db, action, params) {
         bonus: Number(i.bonus) || 0,
         advanceDeduct: Number(i.advance_deduct) || 0,
         otherDeduct: Number(i.other_deduct) || 0,
+        carriedDebt: Number(i.carried_debt) || 0,
         sso: (i.sso !== null && i.sso !== undefined && !isNaN(Number(i.sso))) ? Number(i.sso) : 0,
         tax: Number(i.tax) || 0
       }));
@@ -1065,6 +1096,7 @@ async function handleAction(db, action, params) {
             tax: Number(c.tax) || 0,
             advanceDeduct: Number(c.advance_deduct) || 0,
             otherDeduct: Number(c.other_deduct) || 0,
+            carriedDebt: Number(c.carried_debt) || 0,
             totalDeductions: ded,
             netPay: net
           };
@@ -1416,18 +1448,19 @@ async function handleAction(db, action, params) {
 
       const lateMins = (r.lateMinutes !== undefined && r.lateMinutes !== null) ? Number(r.lateMinutes) : 0;
       const lateCnt = (r.lateCount !== undefined && r.lateCount !== null) ? Number(r.lateCount) : 0;
+      const carriedDebt = (r.carriedDebt !== undefined && r.carriedDebt !== null) ? Number(r.carriedDebt) : 0;
 
       await db.prepare(`
         INSERT OR REPLACE INTO monthly_inputs
-        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, carried_debt, sso, tax)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         period, nextNo, r.empId, r.empName || '', baseSal, pfRate, pfAmt,
         Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.unpaidSickLeaveDays) || 0, Number(r.lateDeduct) || 0,
         lateMins, lateCnt,
         Number(r.otHours) || 0, otRate,
         Number(r.allowance) || 0, Number(r.bonus) || 0, Number(r.advanceDeduct) || 0,
-        Number(r.otherDeduct) || 0, (r.sso !== null && r.sso !== undefined && !isNaN(Number(r.sso))) ? Number(r.sso) : 0, Number(r.tax) || 0
+        Number(r.otherDeduct) || 0, carriedDebt, (r.sso !== null && r.sso !== undefined && !isNaN(Number(r.sso))) ? Number(r.sso) : 0, Number(r.tax) || 0
       ).run();
 
       await calculateAndSavePayroll(db, period);
@@ -1483,20 +1516,49 @@ async function handleAction(db, action, params) {
       const existingMap = {};
       for (const row of existingInput.results || []) existingMap[row.emp_id] = row;
 
+      const dates = await getCutoffDatesForPeriod(db, period);
+      const holidayDatesSet = await getCompanyHolidayDatesSet(db, dates.startDate, dates.endDate);
+
+      // Query carried debt from previous period
+      const prevPeriodStr = getPreviousPeriodStr(period);
+      const prevCalcs = await db.prepare('SELECT emp_id, carried_debt FROM payroll_calcs WHERE period = ? AND carried_debt > 0').bind(prevPeriodStr).all().catch(() => ({ results: [] }));
+      const prevDebtMap = {};
+      for (const r of (prevCalcs.results || [])) {
+        if (r.emp_id && Number(r.carried_debt) > 0) prevDebtMap[r.emp_id] = Number(r.carried_debt);
+      }
+
       let added = 0;
       let nextNo = 0;
 
       for (const emp of employees) {
         if (emp.status === 'Resigned') continue;
+        const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
+        if (joinDateStr && joinDateStr > dates.endDate) continue; // Not started yet
+
         nextNo++;
         added++;
-        const baseSal = Number(emp.base_salary) || 0;
+
+        const proRata = calculateNewHireProRataRatio(joinDateStr, dates.startDate, dates.endDate, holidayDatesSet);
+        const contractBaseSal = Number(emp.base_salary) || 0;
+        const effectiveBaseSal = proRata.isMidPeriod
+          ? (Math.round((contractBaseSal * proRata.ratio) * 100) / 100)
+          : contractBaseSal;
+
+        const exist = existingMap[emp.emp_id] || {};
+        let baseSal = effectiveBaseSal;
+        if (exist.base_salary !== undefined && exist.base_salary !== null && Number(exist.base_salary) > 0) {
+          if (proRata.isMidPeriod && Number(exist.base_salary) === contractBaseSal) {
+            baseSal = effectiveBaseSal;
+          } else {
+            baseSal = Number(exist.base_salary);
+          }
+        }
+
         const pfRate = (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05;
         const pfAmt = pfRate > 0 ? Math.round(baseSal * pfRate * 100) / 100 : 0;
         const sso = (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 0;
         const tax = Number(emp.default_tax) || 0;
 
-        const exist = existingMap[emp.emp_id] || {};
         const absentDays = Number(exist.absent_days) || 0;
         const leaveDays = Number(exist.leave_days) || 0;
         const sickLeaveDays = Number(exist.sick_leave_days) || 0;
@@ -1512,14 +1574,17 @@ async function handleAction(db, action, params) {
         const bonus = Number(exist.bonus) || 0;
         const advDed = Number(exist.advance_deduct) || 0;
         const othDed = Number(exist.other_deduct) || 0;
+        const carriedDebt = (exist.carried_debt !== undefined && exist.carried_debt !== null && Number(exist.carried_debt) > 0)
+          ? Number(exist.carried_debt)
+          : (prevDebtMap[emp.emp_id] || 0);
 
         await db.prepare(`
           INSERT OR REPLACE INTO monthly_inputs
-          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, carried_debt, sso, tax)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, lateMins, lateCnt, otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
+          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, lateMins, lateCnt, otHours, otRate, allowance, bonus, advDed, othDed, carriedDebt, sso, tax
         ).run();
       }
 
@@ -1972,24 +2037,54 @@ async function handleAction(db, action, params) {
       }
       let totalAbsentCount = 0;
 
+      // Query carried debt from previous period
+      const prevPeriodStr = getPreviousPeriodStr(period);
+      const prevCalcs = await db.prepare('SELECT emp_id, carried_debt FROM payroll_calcs WHERE period = ? AND carried_debt > 0').bind(prevPeriodStr).all().catch(() => ({ results: [] }));
+      const prevDebtMap = {};
+      for (const r of (prevCalcs.results || [])) {
+        if (r.emp_id && Number(r.carried_debt) > 0) prevDebtMap[r.emp_id] = Number(r.carried_debt);
+      }
+
       for (const emp of employees) {
         if (emp.status === 'Resigned' && !existingMap[emp.emp_id]) {
           continue;
+        }
+        const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
+        if (joinDateStr && joinDateStr > endDate && !existingMap[emp.emp_id]) {
+          continue; // Not started yet
         }
 
         if (!targetEmpId) {
           nextNo++;
         }
         syncedCount++;
-        const baseSal = Number(emp.base_salary) || 0;
+
+        const proRata = calculateNewHireProRataRatio(joinDateStr, startDate, endDate, holidayDatesSet);
+        const contractBaseSal = Number(emp.base_salary) || 0;
+        const effectiveBaseSal = proRata.isMidPeriod
+          ? (Math.round((contractBaseSal * proRata.ratio) * 100) / 100)
+          : contractBaseSal;
+
+        const exist = existingMap[emp.emp_id] || {};
+        let baseSal = effectiveBaseSal;
+        if (exist.base_salary !== undefined && exist.base_salary !== null && Number(exist.base_salary) > 0) {
+          if (proRata.isMidPeriod && Number(exist.base_salary) === contractBaseSal) {
+            baseSal = effectiveBaseSal;
+          } else {
+            baseSal = Number(exist.base_salary);
+          }
+        }
+
         const pfRate = (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05;
         const pfAmt = pfRate > 0 ? Math.round(baseSal * pfRate * 100) / 100 : 0;
         const sso = (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 0;
         const tax = Number(emp.default_tax) || 0;
 
-        const exist = existingMap[emp.emp_id] || {};
         const bonus = Number(exist.bonus) || 0;
         const othDed = Number(exist.other_deduct) || 0;
+        const carriedDebt = (exist.carried_debt !== undefined && exist.carried_debt !== null && Number(exist.carried_debt) > 0)
+          ? Number(exist.carried_debt)
+          : (prevDebtMap[emp.emp_id] || 0);
         const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : fallbackOtRate;
 
         // Apply synced data from PTN Time (strictly 0 if employee is not eligible for OT)
@@ -2201,12 +2296,12 @@ async function handleAction(db, action, params) {
 
         await db.prepare(`
           INSERT OR REPLACE INTO monthly_inputs
-          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, carried_debt, sso, tax)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
           absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, lateMins, lateCnt,
-          otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
+          otHours, otRate, allowance, bonus, advDed, othDed, carriedDebt, sso, tax
         ).run();
       }
 
@@ -5739,14 +5834,15 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     if (s.key === 'SickLeaveQuota' && !isNaN(Number(s.value))) sickLeaveQuota = Number(s.value);
   }
 
+  const dates = await getCutoffDatesForPeriod(db, period);
+  const holidayDatesSet = await getCompanyHolidayDatesSet(db, dates.startDate, dates.endDate);
+
   let workDays = explicitWorkDays;
   if (!workDays) {
     const wdRow = settingsRows.find(s => s.key === `Period_WorkDays_${period}`);
     if (wdRow && wdRow.value && !isNaN(Number(wdRow.value))) {
       workDays = Number(wdRow.value);
     } else {
-      const dates = await getCutoffDatesForPeriod(db, period);
-      const holidayDatesSet = await getCompanyHolidayDatesSet(db, dates.startDate, dates.endDate);
       workDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate, holidayDatesSet);
     }
   }
@@ -5788,14 +5884,24 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const empId = inp.emp_id;
     const emp = empMap[empId] || { emp_id: empId, full_name: inp.emp_name || empId, base_salary: inp.base_salary || 0, pf_rate: inp.pf_rate || 0.05, default_sso: (inp.sso !== undefined && inp.sso !== null && !isNaN(Number(inp.sso))) ? Number(inp.sso) : 0, default_tax: inp.tax || 0 };
 
-    const baseSal = Number(inp.base_salary > 0 ? inp.base_salary : (emp.base_salary || 0));
+    const contractBaseSal = Number(emp.base_salary) || 0;
+    const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
+    const proRata = calculateNewHireProRataRatio(joinDateStr, dates.startDate, dates.endDate, holidayDatesSet);
+
+    let baseSal = Number(inp.base_salary > 0 ? inp.base_salary : contractBaseSal);
+    // If mid-period new hire and input base salary equals full contract salary, apply pro-rata:
+    if (proRata.isMidPeriod && (baseSal === contractBaseSal || !inp.base_salary)) {
+      baseSal = Math.round((contractBaseSal * proRata.ratio) * 100) / 100;
+    }
+
     const pfRate = (inp.pf_rate !== null && inp.pf_rate !== undefined && !isNaN(Number(inp.pf_rate))) ? Number(inp.pf_rate) : ((emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0);
     const pfAmt = (pfRate > 0) ? (Number(inp.pf_amount !== undefined && inp.pf_amount > 0 ? inp.pf_amount : Math.round(baseSal * pfRate * 100) / 100)) : 0;
 
     const otRate = (inp.ot_rate !== null && inp.ot_rate !== undefined && !isNaN(Number(inp.ot_rate))) ? Number(inp.ot_rate) : defaultOtRate;
     const otPay = Math.round((Number(inp.ot_hours) || 0) * otRate * 100) / 100;
 
-    const dailyRate = workDays > 0 ? (baseSal / workDays) : (baseSal / 30);
+    // Daily rate is ALWAYS based on contractBaseSal and workDays so absence on eligible days is docked at standard rate
+    const dailyRate = workDays > 0 ? (contractBaseSal / workDays) : (contractBaseSal / 30);
 
     const absentDays = Number(inp.absent_days) || 0;
     const absentDed = absentDays * dailyRate * absentFactor;
@@ -5829,20 +5935,35 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const tax = Number(inp.tax !== undefined ? inp.tax : (emp.default_tax || 0));
     const advDed = Number(inp.advance_deduct) || 0;
     const othDed = Number(inp.other_deduct) || 0;
-    const totalDed = Math.round((sso + pf + tax + advDed + othDed) * 100) / 100;
-    const netPay = Math.round((grossPay - totalDed) * 100) / 100;
+    const carriedDebtIn = Number(inp.carried_debt) || 0;
+    const totalDed = Math.round((sso + pf + tax + advDed + othDed + carriedDebtIn) * 100) / 100;
+    const rawNetPay = Math.round((grossPay - totalDed) * 100) / 100;
+
+    let carriedDebtOut = 0;
+    let netPay = 0;
+    if (rawNetPay < 0) {
+      carriedDebtOut = Math.round(Math.abs(rawNetPay) * 100) / 100;
+      netPay = 0;
+    } else {
+      carriedDebtOut = 0;
+      netPay = rawNetPay;
+    }
 
     await db.prepare(`
       INSERT OR REPLACE INTO payroll_calcs
-      (period, emp_id, full_name, department, position, bank_name, bank_account, base_salary, ot_hours, ot_rate, ot_pay, allowance, bonus, leave_deduction, gross_pay, sso, pf, tax, advance_deduct, other_deduct, total_deductions, net_pay)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (period, emp_id, full_name, department, position, bank_name, bank_account, base_salary, ot_hours, ot_rate, ot_pay, allowance, bonus, leave_deduction, gross_pay, sso, pf, tax, advance_deduct, other_deduct, carried_debt, total_deductions, net_pay)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       period, empId, inp.emp_name || emp.full_name || empId,
       emp.department || '', emp.position || '', emp.bank_name || '', emp.bank_account || '',
       baseSal, Number(inp.ot_hours) || 0, otRate, otPay,
       allowance, bonus,
-      leaveDed, grossPay, sso, pf, tax, advDed, othDed, totalDed, netPay
+      leaveDed, grossPay, sso, pf, tax, advDed, othDed, carriedDebtOut, totalDed, netPay
     ).run();
+
+    if (carriedDebtOut > 0) {
+      await db.prepare('UPDATE monthly_inputs SET carried_debt = ? WHERE period = ? AND emp_id = ?').bind(carriedDebtOut, period, empId).run().catch(() => {});
+    }
   }
 
   return count;

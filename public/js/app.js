@@ -953,8 +953,12 @@ function renderDashboard() {
       '<td class="font-bold">' + esc(row.name) + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.baseSalary) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + (canViewSalary ? fmt(row.grossPay) : '฿***') + '</td>' +
-      '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(row.totalDeductions) : '฿***') + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light">' + (canViewSalary ? fmt(row.netPay) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold bg-green-light">' +
+        (canViewSalary ? (
+          '<span class="text-green">' + fmt(row.netPay) + '</span>' +
+          (Number(row.carriedDebt) > 0 ? '<div style="font-size:9.5px;font-weight:700;color:#dc2626"><i class="fa-solid fa-triangle-exclamation"></i> หนี้ ' + fmt(row.carriedDebt) + '</div>' : '')
+        ) : '฿***') +
+      '</td>' +
       '<td class="text-center">' + (canViewSalary ? '<button type="button" class="btn btn-slate btn-sm" onclick="viewPayslip(\'' + esc(row.empId) + '\')"><i class="fa-solid fa-file-invoice"></i> สลิป</button>' : '<span class="text-muted" style="font-size:11px">-</span>') + '</td>' +
     '</tr>';
   });
@@ -1010,8 +1014,12 @@ function renderPayrollTable() {
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.tax) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(row.advanceDeduct) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(row.otherDeduct) : '฿***') + '</td>' +
-      '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(row.totalDeductions) : '฿***') + '</td>' +
-      '<td class="text-right font-mono font-bold text-green bg-green-light" style="font-size:13px">' + (canViewSalary ? fmt(row.netPay) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold bg-green-light" style="font-size:13px">' +
+        (canViewSalary ? (
+          '<span class="text-green">' + fmt(row.netPay) + '</span>' +
+          (Number(row.carriedDebt) > 0 ? '<div style="font-size:10px;font-weight:700;color:#dc2626;white-space:nowrap;margin-top:2px"><i class="fa-solid fa-triangle-exclamation"></i> หนี้ยกยอด ' + fmt(row.carriedDebt) + '</div>' : '')
+        ) : '฿***') +
+      '</td>' +
       '<td class="text-center">' +
         (canViewPayslip ? '<button type="button" class="btn btn-primary btn-sm" onclick="viewPayslip(\'' + esc(row.empId) + '\')"><i class="fa-solid fa-print"></i> สลิป</button>' : '<span class="text-muted">-</span>') +
       '</td>' +
@@ -1087,8 +1095,12 @@ function renderInputTable() {
       '<td class="text-right font-mono font-bold text-blue">' + (canViewSalary ? fmt(pfAmt) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(i.sso !== undefined && i.sso !== null ? i.sso : 0) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(i.tax || 0) : '฿***') + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + fmt(i.advanceDeduct || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(i.otherDeduct || 0) + '</td>' +
+      (function() {
+        var oth = Number(i.otherDeduct) || 0;
+        var cDebt = Number(i.carriedDebt) || 0;
+        var debtBadge = cDebt > 0 ? '<div style="font-size:10px;color:#dc2626;font-weight:700;line-height:1.2;margin-top:2px" title="หนี้ค้างยกยอดมาจากงวดก่อน"><i class="fa-solid fa-triangle-exclamation"></i> หนี้ ' + fmt(cDebt) + '</div>' : '';
+        return '<td class="text-right font-mono text-red">' + fmt(oth) + debtBadge + '</td>';
+      })() +
       '<td class="text-center">' +
         (canSyncPtnTime ? '<button type="button" class="btn-icon" style="color:#0284c7;background:#e0f2fe;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(i.empId) + '\', \'' + esc(i.empName || '') + '\')" title="ดึงข้อมูล OT, วันลา และยอดเบิกเงินของ ' + esc(i.empName || i.empId) + ' จาก PTN Time"><i class="fa-solid fa-rotate"></i> ดึงเฉพาะคนนี้</button> ' : '') +
         (canEditInputs ?
@@ -2661,6 +2673,7 @@ function openAddInputModal() {
   document.getElementById('miBonus').value = '0';
   document.getElementById('miAdvanceDeduct').value = '0';
   document.getElementById('miOtherDeduct').value = '0';
+  if (document.getElementById('miCarriedDebt')) document.getElementById('miCarriedDebt').value = '0';
   document.getElementById('miSso').value = '0';
   document.getElementById('miTax').value = '0';
   updateModalDailyRate(0);
@@ -2700,6 +2713,7 @@ function openEditInputModal(empId) {
   document.getElementById('miBonus').value = r.bonus || 0;
   document.getElementById('miAdvanceDeduct').value = r.advanceDeduct || 0;
   document.getElementById('miOtherDeduct').value = r.otherDeduct || 0;
+  if (document.getElementById('miCarriedDebt')) document.getElementById('miCarriedDebt').value = r.carriedDebt || 0;
   document.getElementById('miSso').value = (r.sso !== undefined && r.sso !== null) ? r.sso : 0;
   document.getElementById('miTax').value = r.tax || 0;
   updateModalDailyRate(r.baseSalary || 0);
@@ -2781,6 +2795,7 @@ function saveInputRecordForm(e, openPayslipAfter) {
     bonus: Number(document.getElementById('miBonus').value) || 0,
     advanceDeduct: Number(document.getElementById('miAdvanceDeduct').value) || 0,
     otherDeduct: Number(document.getElementById('miOtherDeduct').value) || 0,
+    carriedDebt: Number(document.getElementById('miCarriedDebt') ? document.getElementById('miCarriedDebt').value : 0) || 0,
     sso: (document.getElementById('miSso') && document.getElementById('miSso').value !== '' && !isNaN(Number(document.getElementById('miSso').value))) ? Number(document.getElementById('miSso').value) : 0,
     tax: Number(document.getElementById('miTax').value) || 0
   };
@@ -3198,6 +3213,35 @@ function populatePayslipModal(row) {
   document.getElementById('psOtherDed').textContent = fmt(row.otherDeduct);
   document.getElementById('psTotalDed').textContent = fmt(row.totalDeductions);
   document.getElementById('psNetPay').textContent = fmt(row.netPay);
+
+  // Carried debt deduction from previous period (if any)
+  var inputRec = State.inputRecords.find(function(x) { return x.empId === row.empId; });
+  var carriedDebtIn = inputRec ? (Number(inputRec.carriedDebt) || 0) : 0;
+  var carriedDebtRow = document.getElementById('psCarriedDebtDeductRow');
+  if (carriedDebtRow) {
+    if (carriedDebtIn > 0) {
+      carriedDebtRow.style.display = 'flex';
+      if (document.getElementById('psCarriedDebtDeduct')) {
+        document.getElementById('psCarriedDebtDeduct').textContent = fmt(carriedDebtIn);
+      }
+    } else {
+      carriedDebtRow.style.display = 'none';
+    }
+  }
+
+  // Carried debt ending deficit to next period (if net pay would have been negative)
+  var debtEndingAmt = Number(row.carriedDebt) || 0;
+  var noticeEl = document.getElementById('psCarriedDebtNotice');
+  if (noticeEl) {
+    if (debtEndingAmt > 0) {
+      noticeEl.style.display = 'block';
+      if (document.getElementById('psCarriedDebtAmount')) {
+        document.getElementById('psCarriedDebtAmount').textContent = fmt(debtEndingAmt);
+      }
+    } else {
+      noticeEl.style.display = 'none';
+    }
+  }
 
   openModal('payslipModal');
 }

@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS monthly_inputs (
   other_deduct REAL DEFAULT 0,
   sso REAL DEFAULT 750,
   tax REAL DEFAULT 0,
+  carried_debt REAL DEFAULT 0,
   PRIMARY KEY (period, emp_id)
 );
 
@@ -88,6 +89,7 @@ CREATE TABLE IF NOT EXISTS payroll_calcs (
   other_deduct REAL DEFAULT 0,
   total_deductions REAL DEFAULT 0,
   net_pay REAL DEFAULT 0,
+  carried_debt REAL DEFAULT 0,
   PRIMARY KEY (period, emp_id)
 );
 
