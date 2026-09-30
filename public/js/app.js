@@ -680,7 +680,8 @@ function renderCompanyHolidaysList() {
   });
 
   if (periodSummaryEl) {
-    periodSummaryEl.innerHTML = '<i class="fa-solid fa-calendar-check"></i> ในงวด <strong>' + esc(State.period) + '</strong> (' + esc(startStr) + ' ถึง ' + esc(endStr) + ') มีวันหยุดบริษัท <strong>' + inPeriodCount + '</strong> วัน';
+    var rangeText = cutoff && cutoff.label ? cutoff.label : (esc(startStr) + ' ถึง ' + esc(endStr));
+    periodSummaryEl.innerHTML = '<i class="fa-solid fa-calendar-check"></i> ในงวด <strong>' + esc(State.period || 'ปัจจุบัน') + '</strong> (' + rangeText + ') มีวันหยุดบริษัท <strong>' + inPeriodCount + '</strong> วัน';
   }
 
   if (holidays.length === 0) {
@@ -7644,6 +7645,21 @@ function getAttendanceCutoffDatesClient(periodStr, customCutDay) {
       if (y > 2400) y -= 543;
       yearCE = y;
       month = parseInt(ym[2], 10);
+    } else {
+      var fullThaiMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+      var shortThaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+      for (var mi = 0; mi < 12; mi++) {
+        if (str.indexOf(fullThaiMonths[mi]) >= 0 || str.indexOf(shortThaiMonths[mi]) >= 0) {
+          month = mi + 1;
+          break;
+        }
+      }
+      var numMatch = str.match(/\b(25\d{2}|20\d{2})\b/) || str.match(/\d{4}/);
+      if (numMatch) {
+        var py = parseInt(numMatch[1] || numMatch[0], 10);
+        if (py > 2400) py -= 543;
+        yearCE = py;
+      }
     }
   }
 
