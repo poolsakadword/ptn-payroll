@@ -10871,11 +10871,19 @@ function openAddAttendanceLogModal() {
   if (empSel) {
     empSel.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
     var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active'; });
-    list.sort(function(a, b) { return (a.emp_id || '').localeCompare(b.emp_id || ''); });
+    list.sort(function(a, b) {
+      var idA = a.empId || a.emp_id || '';
+      var idB = b.empId || b.emp_id || '';
+      return idA.localeCompare(idB);
+    });
     list.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      var dept = e.department ? ' - ' + e.department : '';
       var opt = document.createElement('option');
-      opt.value = e.emp_id;
-      opt.textContent = '[' + e.emp_id + '] ' + (e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '') + (e.department ? ' - ' + e.department : '');
+      opt.value = id;
+      opt.textContent = '[' + id + '] ' + name + nick + dept;
       empSel.appendChild(opt);
     });
 
@@ -10924,9 +10932,10 @@ function openAddAttendanceLogModal() {
 function onAddAttendanceEmpChanged() {
   var empId = document.getElementById('addAttEmpId') ? document.getElementById('addAttEmpId').value : '';
   if (!empId) return;
-  var emp = (State.employees || []).find(function(e) { return e.emp_id === empId; });
-  if (emp && emp.branch_id && document.getElementById('addAttBranchId')) {
-    document.getElementById('addAttBranchId').value = emp.branch_id;
+  var emp = (State.employees || []).find(function(e) { return (e.empId || e.emp_id) === empId; });
+  var brId = emp ? (emp.branchId || emp.branch_id) : '';
+  if (brId && document.getElementById('addAttBranchId')) {
+    document.getElementById('addAttBranchId').value = brId;
   }
   onAddAttendanceTimeChanged();
 }
@@ -11093,13 +11102,26 @@ function openCreateAdminRequestModal() {
   if (empSel) {
     empSel.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
     var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active'; });
-    list.sort(function(a, b) { return (a.emp_id || '').localeCompare(b.emp_id || ''); });
+    list.sort(function(a, b) {
+      var idA = a.empId || a.emp_id || '';
+      var idB = b.empId || b.emp_id || '';
+      return idA.localeCompare(idB);
+    });
     list.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      var dept = e.department ? ' - ' + e.department : '';
       var opt = document.createElement('option');
-      opt.value = e.emp_id;
-      opt.textContent = '[' + e.emp_id + '] ' + (e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '') + (e.department ? ' - ' + e.department : '');
+      opt.value = id;
+      opt.textContent = '[' + id + '] ' + name + nick + dept;
       empSel.appendChild(opt);
     });
+
+    var curFilterEmp = (typeof _currentAttendanceEmpId !== 'undefined' && _currentAttendanceEmpId && _currentAttendanceEmpId !== 'ALL') ? _currentAttendanceEmpId : '';
+    if (curFilterEmp) {
+      empSel.value = curFilterEmp;
+    }
   }
 
   var todayStr = new Date().toISOString().substring(0, 10);
