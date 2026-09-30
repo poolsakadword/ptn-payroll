@@ -8681,6 +8681,22 @@ function loadTimeAttendanceDashboard() {
         if (setToggleLeave) setToggleLeave.checked = (r.settings.enable_leave_requests !== 'false');
         if (setToggleOt) setToggleOt.checked = (r.settings.enable_ot_requests !== 'false');
         if (setToggleAdvance) setToggleAdvance.checked = (r.settings.enable_advance_requests !== 'false');
+
+        // Dynamically toggle OT request controls in Approvals Center if company disabled OT requests
+        var isOtReqEnabled = (r.settings.enable_ot_requests !== 'false');
+        var optOtFilter = document.querySelector('#attReqTypeFilter option[value="OT"]');
+        if (optOtFilter) {
+          optOtFilter.style.display = isOtReqEnabled ? '' : 'none';
+          if (!isOtReqEnabled && _currentAttendanceRequestType === 'OT') {
+            _currentAttendanceRequestType = 'ALL';
+            if (document.getElementById('attReqTypeFilter')) document.getElementById('attReqTypeFilter').value = 'ALL';
+          }
+        }
+        var tabBtnCreateReqOt = document.getElementById('tabBtnCreateReq_OT');
+        if (tabBtnCreateReqOt) {
+          tabBtnCreateReqOt.style.display = isOtReqEnabled ? '' : 'none';
+        }
+
         if (setToggleDirectGps) setToggleDirectGps.checked = (r.settings.allow_direct_gps !== 'false');
         var setToggleFaceDetect = document.getElementById('attSetEnableFaceDetect');
         if (setToggleFaceDetect) setToggleFaceDetect.checked = (r.settings.enable_face_detection !== 'false');

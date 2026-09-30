@@ -2416,10 +2416,10 @@ async function handleAction(db, action, params) {
 
       // 2. Pending OTs
       const otsQ = await db.prepare(`
-        SELECT ot.id, ot.emp_id, ot.ot_date, ot.ot_hours, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name
+        SELECT ot.id, ot.emp_id, ot.date, COALESCE(ot.actual_hours, ot.planned_hours, 0) as hours, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name
         FROM ot_requests ot
         LEFT JOIN employees e ON ot.emp_id = e.emp_id
-        WHERE ot.status = 'PENDING'
+        WHERE ot.status = 'PENDING' AND (COALESCE(ot.reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(ot.reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(ot.reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')
         ORDER BY ot.created_at DESC
         LIMIT 10
       `).all().catch(() => ({ results: [] }));
@@ -2514,6 +2514,9 @@ async function handleAction(db, action, params) {
       // 2. OT conditions
       const otConds = [];
       const otBinds = [];
+      // Always exclude automated daily punch-clock OT records from approvals center
+      otConds.push("(COALESCE(ot.reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(ot.reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(ot.reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')");
+
       if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
         otConds.push("ot.status = ?");
         otBinds.push(reqStatus);
@@ -2815,6 +2818,9 @@ async function handleAction(db, action, params) {
 
       const otConds = [];
       const otBinds = [];
+      // Always exclude automated daily punch-clock OT records from approvals center
+      otConds.push("(COALESCE(ot.reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(ot.reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(ot.reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')");
+
       if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
         otConds.push("ot.status = ?");
         otBinds.push(reqStatus);
@@ -2879,7 +2885,7 @@ async function handleAction(db, action, params) {
         ? await db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 100`).bind(...advBinds).all().catch(() => ({ results: [] }))
         : { results: [] };
       const approvedLeavesOnDate = await db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) = 'APPROVED' AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] }));
-      const pendingCountRow = await db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 }));
+      const pendingCountRow = await db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 }));
       const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
 
       const branches = branchRows.results || [];
@@ -4999,7 +5005,7 @@ async function handleAction(db, action, params) {
       const pendingRow = await db.prepare(`
         SELECT 
           (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') as pending_leaves,
-          (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING') as pending_ots,
+          (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) as pending_ots,
           (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as pending_advances
       `).first().catch(() => null);
 
