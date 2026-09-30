@@ -483,6 +483,8 @@ async function ensureGlobalSchemas(db) {
     await db.prepare('ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT "false"').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN diligence_allowance REAL').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
+    await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN late_minutes INTEGER DEFAULT 0').run().catch(() => {});
+    await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN late_count INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE branches ADD COLUMN early_dismissal_full_pay INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE time_logs ADD COLUMN is_full_pay INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare(`
@@ -588,12 +590,20 @@ function getBranchShiftSessions(branch) {
 function normalizeDateToIso(str) {
   if (!str) return '';
   const s = String(str).trim();
-  const match = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (match) {
-    const d = match[1].padStart(2, '0');
-    const m = match[2].padStart(2, '0');
-    let y = parseInt(match[3], 10);
+  const dmyMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmyMatch) {
+    const d = dmyMatch[1].padStart(2, '0');
+    const m = dmyMatch[2].padStart(2, '0');
+    let y = parseInt(dmyMatch[3], 10);
     if (y > 2400) y -= 543; // Convert B.E. to C.E.
+    return `${y}-${m}-${d}`;
+  }
+  const ymdMatch = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymdMatch) {
+    let y = parseInt(ymdMatch[1], 10);
+    if (y > 2400) y -= 543; // Convert B.E. to C.E.
+    const m = ymdMatch[2].padStart(2, '0');
+    const d = ymdMatch[3].padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
   return s.substring(0, 10);
@@ -999,6 +1009,8 @@ async function handleAction(db, action, params) {
         sickLeaveDays: Number(i.sick_leave_days) || 0,
         unpaidSickLeaveDays: Number(i.unpaid_sick_leave_days) || 0,
         lateDeduct: Number(i.late_deduct) || 0,
+        lateMinutes: Number(i.late_minutes) || 0,
+        lateCount: Number(i.late_count) || 0,
         otHours: Number(i.ot_hours) || 0,
         otRate: (i.ot_rate !== null && i.ot_rate !== undefined && !isNaN(Number(i.ot_rate))) ? Number(i.ot_rate) : 40,
         allowance: Number(i.allowance) || 0,
@@ -1402,13 +1414,17 @@ async function handleAction(db, action, params) {
       const countRow = await db.prepare('SELECT COUNT(*) as count FROM monthly_inputs WHERE period = ?').bind(period).first();
       const nextNo = (countRow ? countRow.count : 0) + 1;
 
+      const lateMins = (r.lateMinutes !== undefined && r.lateMinutes !== null) ? Number(r.lateMinutes) : 0;
+      const lateCnt = (r.lateCount !== undefined && r.lateCount !== null) ? Number(r.lateCount) : 0;
+
       await db.prepare(`
         INSERT OR REPLACE INTO monthly_inputs
-        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         period, nextNo, r.empId, r.empName || '', baseSal, pfRate, pfAmt,
         Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.unpaidSickLeaveDays) || 0, Number(r.lateDeduct) || 0,
+        lateMins, lateCnt,
         Number(r.otHours) || 0, otRate,
         Number(r.allowance) || 0, Number(r.bonus) || 0, Number(r.advanceDeduct) || 0,
         Number(r.otherDeduct) || 0, (r.sso !== null && r.sso !== undefined && !isNaN(Number(r.sso))) ? Number(r.sso) : 0, Number(r.tax) || 0
@@ -1486,6 +1502,8 @@ async function handleAction(db, action, params) {
         const sickLeaveDays = Number(exist.sick_leave_days) || 0;
         const unpaidSickLeaveDays = Number(exist.unpaid_sick_leave_days) || 0;
         const lateDeduct = Number(exist.late_deduct) || 0;
+        const lateMins = Number(exist.late_minutes) || 0;
+        const lateCnt = Number(exist.late_count) || 0;
         const otHours = Number(exist.ot_hours) || 0;
         const defOtRow = await db.prepare('SELECT value FROM settings WHERE key = "DefaultOtRate"').first().catch(() => null);
         const fallbackOtRate = (defOtRow && defOtRow.value && !isNaN(Number(defOtRow.value))) ? Number(defOtRow.value) : 40;
@@ -1497,11 +1515,11 @@ async function handleAction(db, action, params) {
 
         await db.prepare(`
           INSERT OR REPLACE INTO monthly_inputs
-          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
+          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, lateMins, lateCnt, otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
         ).run();
       }
 
@@ -1637,6 +1655,8 @@ async function handleAction(db, action, params) {
       let employeeHasLogs = {};
       let logsByEmpDate = {};
       let timeLogsList = [];
+      let empLateMinutes = {};
+      let empLateCount = {};
       try {
         let tlSql = `
           SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark
@@ -1673,8 +1693,24 @@ async function handleAction(db, action, params) {
       let detailedLeaves = [];
       let autoAdjustedLeaves = [];
       let overriddenDatesByEmp = {}; // { 'EMP_YYYY-MM-DD': 'FULL' | 'HALF' }
+      let pendingLeavesCount = 0;
 
       try {
+        // Check pending leaves in this cutoff window to notify HR
+        let penSql = `
+          SELECT COUNT(*) as count
+          FROM leave_requests
+          WHERE UPPER(TRIM(status)) = 'PENDING'
+            AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))
+        `;
+        let penBinds = [startDate, endDate, startDate, endDate, startDate, endDate];
+        if (targetEmpId) {
+          penSql += ` AND TRIM(emp_id) = TRIM(?)`;
+          penBinds.push(targetEmpId);
+        }
+        const penRes = await db.prepare(penSql).bind(...penBinds).first();
+        pendingLeavesCount = penRes ? (Number(penRes.count) || 0) : 0;
+
         let detSql = `
           SELECT id, emp_id, start_date, end_date, COALESCE(days_count, 1) as days_count, COALESCE(time_slot, 'FULL') as time_slot, leave_type, reason, medical_cert_url
           FROM leave_requests
@@ -1766,7 +1802,8 @@ async function handleAction(db, action, params) {
               leaveMap[lrEmpId].sickCert += effectiveDays;
             } else if (cat === 'SICK_NO_CERT') {
               leaveMap[lrEmpId].sickNoCert += effectiveDays;
-            } else if (cat === 'BUSINESS') {
+            } else {
+              // ลากิจ, ลาพักร้อน (ANNUAL), หรือประเภทอื่นๆ ที่ได้รับอนุมัติ ให้รวมไว้ที่ช่องลากิจ ตามที่ผู้ใช้งานกำหนด
               leaveMap[lrEmpId].business += effectiveDays;
             }
           }
@@ -1865,37 +1902,32 @@ async function handleAction(db, action, params) {
           }
         }
 
-        if (row.clock_in && row.clock_out && workHours > 0) {
+        if (row.clock_in) {
           const isBranchEarlyDismissal = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) && !isUndertimeExempt;
           if (isBranchEarlyDismissal) {
             // Whole-branch early dismissal mode: entire day full pay waived
             continue;
           }
 
-          if (isUndertimeExempt) {
-            // Option A: Early departure is NOT deducted, BUT late arrival IS deducted normally (unless morning absence)!
-            if (lateMins > 0 && !isMorningAbsence) {
-              const lateHours = Math.round((lateMins / 60) * 100) / 100;
-              missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
-              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
-            }
-            continue;
+          // 1. หักตามนาทีสายจริง (Deduct strictly based on actual late minutes)
+          let lateHours = 0;
+          if (lateMins > 0 && !isMorningAbsence) {
+            lateHours = Math.round((lateMins / 60) * 100) / 100;
+            const lateDeductAmt = lateHours * hourlyRate;
+            empLateMinutes[row.emp_id] = (empLateMinutes[row.emp_id] || 0) + lateMins;
+            empLateCount[row.emp_id] = (empLateCount[row.emp_id] || 0) + 1;
+            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
+            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + lateDeductAmt;
           }
 
-          // If neither morning nor afternoon absence was penalized as 0.5 absent day, deduct ordinary missing hours
-          if (!isMorningAbsence && !isAfternoonAbsence) {
-            if (workHours < targetHours) {
-              const missing = Math.round((targetHours - workHours) * 100) / 100;
-              missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + missing;
-              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (missing * hourlyRate);
+          // 2. ตรวจสอบเวลาออกก่อนเวลา/ขาดช่วง (Undertime / Early Departure) สำหรับพนักงานที่ไม่ได้รับการยกเว้น
+          if (!isUndertimeExempt && row.clock_out && workHours > 0 && !isMorningAbsence && !isAfternoonAbsence) {
+            const expectedHours = Math.max(0, targetHours - lateHours);
+            if (workHours < expectedHours) {
+              const earlyMissing = Math.round((expectedHours - workHours) * 100) / 100;
+              missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + earlyMissing;
+              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (earlyMissing * hourlyRate);
             }
-          }
-        } else if (row.clock_in && !row.clock_out && lateMins > 0) {
-          // If not penalized as morning absence, deduct late arrival at normal 1.0x
-          if (!isMorningAbsence && !isAfternoonAbsence) {
-            const lateHours = Math.round((lateMins / 60) * 100) / 100;
-            missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
-            earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (lateHours * hourlyRate);
           }
         }
       }
@@ -1975,7 +2007,7 @@ async function handleAction(db, action, params) {
         // Any past/present working day (excluding Sundays & company holidays) with no clock-in and no approved leave
         let autoAbsentDays = 0;
         if (emp.status !== 'Resigned') {
-          const joinDateStr = emp.join_date ? String(emp.join_date).trim().substring(0, 10) : null;
+          const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : null;
           for (const dStr of periodWorkingDates) {
             if (dStr > todayStr) continue; // Skip future dates in active/current period
             if (holidayDatesSet.has(dStr)) continue; // Skip company holidays
@@ -2063,6 +2095,14 @@ async function handleAction(db, action, params) {
           lateDeduct = 0;
         }
 
+        const lateMins = empLateMinutes[emp.emp_id] !== undefined
+          ? empLateMinutes[emp.emp_id]
+          : (Number(exist.late_minutes) || 0);
+
+        const lateCnt = empLateCount[emp.emp_id] !== undefined
+          ? empLateCount[emp.emp_id]
+          : (Number(exist.late_count) || 0);
+
         // --- AUTOMATIC DILIGENCE ALLOWANCE (คำนวณเบี้ยขยันอัตโนมัติ) ---
         let allowance = 0;
         let empDisqualifyReasons = [];
@@ -2144,11 +2184,11 @@ async function handleAction(db, action, params) {
 
         await db.prepare(`
           INSERT OR REPLACE INTO monthly_inputs
-          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct,
+          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, lateMins, lateCnt,
           otHours, otRate, allowance, bonus, advDed, othDed, sso, tax
         ).run();
       }
@@ -2163,12 +2203,15 @@ async function handleAction(db, action, params) {
         const empLeaveTotal = (empL.sickCert || 0) + (empL.sickNoCert || 0) + (empL.business || 0);
         const empMissingHrs = Math.round((missingHoursMap[targetEmpId] || 0) * 100) / 100;
         const empEarlyDed = Math.round((earlyDeductMap[targetEmpId] || 0) * 100) / 100;
+        const empLateM = empLateMinutes[targetEmpId] || 0;
+        const empLateC = empLateCount[targetEmpId] || 0;
         const diligenceEarned = targetEmpDiligenceResult && targetEmpDiligenceResult.status === 'QUALIFIED';
         const empDiligenceMsg = autoDiligenceEnabled
           ? (diligenceEarned ? `, ได้รับเบี้ยขยัน ฿${targetEmpDiligenceResult.allowance.toLocaleString()}` : `, เบี้ยขยัน ฿0 (${targetEmpDiligenceResult ? targetEmpDiligenceResult.reason : 'ตัดสิทธิ์'})`)
           : '';
+        const pendingNote = pendingLeavesCount > 0 ? `, คำขอลารออนุมัติ ${pendingLeavesCount} รายการ (ยังไม่ถูกดึงเข้า)` : '';
 
-        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time พนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (วันทำงานจริง ${periodWorkDays} วัน, ขาดงาน ${totalAbsentCount} วัน, เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${empDiligenceMsg})`);
+        await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC_EMP', `ดึงข้อมูลจาก PTN Time พนักงาน [${targetEmpId}] ${empName} เข้าสู่งวด ${period} (วันทำงานจริง ${periodWorkDays} วัน, ขาดงาน ${totalAbsentCount} วัน, เบิกเงิน ฿${empAdv.toLocaleString()}, OT ${empOt} ชม., ลารวม ${empLeaveTotal} วัน${empEarlyDed > 0 ? `, หักสาย ฿${empEarlyDed.toLocaleString()} (${empLateM} นาที / ${empLateC} ครั้ง)` : ''}${empDiligenceMsg}${pendingNote})`);
 
         return {
           success: true,
@@ -2181,19 +2224,26 @@ async function handleAction(db, action, params) {
           leaveTotal: empLeaveTotal,
           missingHours: empMissingHrs,
           lateDeduct: empEarlyDed,
+          lateMinutes: empLateM,
+          lateCount: empLateC,
+          pendingLeavesCount: pendingLeavesCount,
           allowance: targetEmpDiligenceResult ? targetEmpDiligenceResult.allowance : 0,
           diligenceStatus: targetEmpDiligenceResult ? targetEmpDiligenceResult.status : 'NONE',
           diligenceReason: targetEmpDiligenceResult ? targetEmpDiligenceResult.reason : '',
           workingDays: periodWorkDays,
           autoAdjustedLeaves: autoAdjustedLeaves.filter(a => a.empId === targetEmpId),
-          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, ขาดงาน ${totalAbsentCount} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลาสุทธิ ${empLeaveTotal} วัน${empMissingHrs > 0 ? `, ขาด/ออกก่อน ${empMissingHrs} ชม. หัก ฿${empEarlyDed.toLocaleString()}` : ''}${empDiligenceMsg}${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length > 0 ? `, ตรวจพบมาทำงานในวันลา ${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length} วัน (ยกเว้นการหักวันลาอัตโนมัติ)` : ''})`
+          message: `ดึงข้อมูลพนักงาน [${targetEmpId}] ${empName} สำเร็จ (วันทำงานจริง ${periodWorkDays} วัน, ขาดงาน ${totalAbsentCount} วัน, OT ${empOt} ชม., เบิกเงิน ฿${empAdv.toLocaleString()}, ลาสุทธิ ${empLeaveTotal} วัน${empEarlyDed > 0 ? `, หักสาย ฿${empEarlyDed.toLocaleString()} (${empLateM} นาที / ${empLateC} ครั้ง)` : ''}${empDiligenceMsg}${pendingNote}${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length > 0 ? `, ตรวจพบมาทำงานในวันลา ${autoAdjustedLeaves.filter(a => a.empId === targetEmpId).length} วัน (ยกเว้นการหักวันลาอัตโนมัติ)` : ''})`
         };
       }
 
       let totalMissingHours = 0;
       let totalEarlyDeduct = 0;
+      let totalLateMins = 0;
+      let totalLateCount = 0;
       for (const k in missingHoursMap) totalMissingHours += missingHoursMap[k];
       for (const k in earlyDeductMap) totalEarlyDeduct += earlyDeductMap[k];
+      for (const k in empLateMinutes) totalLateMins += empLateMinutes[k];
+      for (const k in empLateCount) totalLateCount += empLateCount[k];
       totalMissingHours = Math.round(totalMissingHours * 100) / 100;
       totalEarlyDeduct = Math.round(totalEarlyDeduct * 100) / 100;
       totalAbsentCount = Math.round(totalAbsentCount * 1000) / 1000;
@@ -2206,8 +2256,12 @@ async function handleAction(db, action, params) {
       if (autoDiligenceEnabled) {
         diligenceSummary = `, เบี้ยขยัน: ได้รับ ${diligenceQualifiedList.length} คน, ตัดสิทธิ์ ${diligenceDisqualifiedList.length} คน`;
       }
+      let pendingSummary = '';
+      if (pendingLeavesCount > 0) {
+        pendingSummary = `, คำขอลารออนุมัติ ${pendingLeavesCount} รายการ (ยังไม่ถูกดึงเข้าจนกว่าจะอนุมัติ)`;
+      }
 
-      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, ขาดงานรวม ${totalAbsentCount} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ลาสุทธิ ${totalLeaveCount} วัน, ขาด/ออกก่อน ${totalMissingHours} ชม. หัก ฿${totalEarlyDeduct.toLocaleString()}${diligenceSummary}${adjustSummary})`);
+      await logSystemActivity(db, params.username || 'Admin', 'PTN_TIME_SYNC', `ดึงข้อมูลจาก PTN Time รอบ ${startDate} ถึง ${endDate} เข้าสู่งวด ${period} (พนักงาน ${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, ขาดงานรวม ${totalAbsentCount} วัน, เบิกเงิน ฿${totalAdvAmount.toLocaleString()}, OT ${totalOtHours} ชม., ลาสุทธิ ${totalLeaveCount} วัน, หักสายรวม ฿${totalEarlyDeduct.toLocaleString()} (${totalLateMins} นาที / ${totalLateCount} ครั้ง)${diligenceSummary}${pendingSummary}${adjustSummary})`);
 
       return {
         success: true,
@@ -2225,9 +2279,10 @@ async function handleAction(db, action, params) {
         autoAdjustedLeaves: autoAdjustedLeaves,
         diligenceQualifiedCount: diligenceQualifiedList.length,
         diligenceDisqualifiedCount: diligenceDisqualifiedList.length,
-        diligenceQualified: diligenceQualifiedList,
-        diligenceDisqualified: diligenceDisqualifiedList,
-        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, ขาดงานรวม ${totalAbsentCount} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, ลาสุทธิ ${totalLeaveCount} วัน${totalMissingHours > 0 ? `, ขาด/ออกก่อนรวม ${totalMissingHours} ชม. หักรวม ฿${totalEarlyDeduct.toLocaleString()}` : ''}${diligenceSummary}${adjustSummary})`
+        totalLateMins: totalLateMins,
+        totalLateCount: totalLateCount,
+        pendingLeavesCount: pendingLeavesCount,
+        message: `ดึงข้อมูลจาก PTN Time สำเร็จ (${syncedCount} คน, วันทำงานจริง ${periodWorkDays} วัน, ขาดงานรวม ${totalAbsentCount} วัน, OT รวม ${totalOtHours} ชม., เบิกเงินรวม ฿${totalAdvAmount.toLocaleString()}, ลาสุทธิ ${totalLeaveCount} วัน, หักสายรวม ฿${totalEarlyDeduct.toLocaleString()} (${totalLateMins} นาที / ${totalLateCount} ครั้ง)${diligenceSummary}${pendingSummary}${adjustSummary})`
       };
     }
 

@@ -1069,7 +1069,17 @@ function renderInputTable() {
       '<td class="text-right font-mono text-red font-bold">' + (i.absentDays || 0) + '</td>' +
       '<td class="text-right font-mono">' + (i.leaveDays || 0) + '</td>' +
       '<td class="text-right font-mono text-red">' + (i.sickLeaveDays || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + fmt(i.lateDeduct || 0) + '</td>' +
+      (function() {
+        var lateDed = Number(i.lateDeduct) || 0;
+        var lateMins = Number(i.lateMinutes) || 0;
+        var lateCnt = Number(i.lateCount) || 0;
+        var badge = '';
+        if (lateMins > 0 || lateCnt > 0) {
+          badge = '<div style="font-size:10.5px;color:#dc2626;font-weight:600;line-height:1.2;margin-top:2px">' +
+                  lateMins + ' นาที' + (lateCnt > 0 ? ' (' + lateCnt + ' ครั้ง)' : '') + '</div>';
+        }
+        return '<td class="text-right font-mono text-red font-bold">' + fmt(lateDed) + badge + '</td>';
+      })() +
       '<td class="text-right font-mono">' + (i.otHours || 0) + '</td>' +
       '<td class="text-right font-mono">' + fmt(i.otRate || 40) + '</td>' +
       '<td class="text-right font-mono text-green font-bold">' + fmt(i.allowance || 0) + '</td>' +
@@ -2678,6 +2688,12 @@ function openEditInputModal(empId) {
   document.getElementById('miSickLeaveDays').value = r.sickLeaveDays || 0;
   if (document.getElementById('miUnpaidSickLeaveDays')) document.getElementById('miUnpaidSickLeaveDays').value = r.unpaidSickLeaveDays || 0;
   document.getElementById('miLateDeduct').value = r.lateDeduct || 0;
+  var hintEl = document.getElementById('miLateDeductHint');
+  if (hintEl) {
+    var lm = Number(r.lateMinutes) || 0;
+    var lc = Number(r.lateCount) || 0;
+    hintEl.textContent = (lm > 0 || lc > 0) ? '(สาย ' + lm + ' นาที' + (lc > 0 ? ' / ' + lc + ' ครั้ง' : '') + ')' : '';
+  }
   document.getElementById('miOtHours').value = r.otHours || 0;
   document.getElementById('miOtRate').value = (r.otRate !== null && r.otRate !== undefined && !isNaN(Number(r.otRate))) ? r.otRate : 40;
   document.getElementById('miAllowance').value = r.allowance || 0;
@@ -2757,6 +2773,8 @@ function saveInputRecordForm(e, openPayslipAfter) {
     sickLeaveDays: Number(document.getElementById('miSickLeaveDays').value) || 0,
     unpaidSickLeaveDays: Number(document.getElementById('miUnpaidSickLeaveDays') ? document.getElementById('miUnpaidSickLeaveDays').value : 0) || 0,
     lateDeduct: Number(document.getElementById('miLateDeduct').value) || 0,
+    lateMinutes: 0,
+    lateCount: 0,
     otHours: Number(document.getElementById('miOtHours').value) || 0,
     otRate: Number(document.getElementById('miOtRate').value) || 40,
     allowance: Number(document.getElementById('miAllowance').value) || 0,
@@ -2769,6 +2787,11 @@ function saveInputRecordForm(e, openPayslipAfter) {
 
   if (!d.empId) { showToast('กรุณาเลือกรหัสพนักงาน', 'error'); return; }
   var orig = document.getElementById('inputOrigEmpId').value;
+  var origRec = State.inputRecords.find(function(x) { return x.empId === (orig || d.empId); });
+  if (origRec) {
+    d.lateMinutes = Number(origRec.lateMinutes) || 0;
+    d.lateCount = Number(origRec.lateCount) || 0;
+  }
 
   callApi('saveInputRecord', { record: d, origEmpId: orig })
     .then(function(r) {
