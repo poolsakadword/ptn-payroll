@@ -2136,6 +2136,10 @@ async function handleAction(db, action, params) {
             for (const l of empLogs) {
               const logDate = new Date(l.date + 'T00:00:00Z');
               if (logDate.getUTCDay() === 0 || holidayDatesSet.has(l.date)) continue; // Skip Sunday and Company Holiday
+              const lBranch = branchMap[l.branch_id || emp.branch_id] || (emp ? branchMap[emp.branch_id] : null);
+              const lSessions = getBranchShiftSessions(lBranch);
+              const lunchStart = lSessions.lunchStartMin;
+              const lunchEnd = lSessions.lunchEndMin;
 
               const inM = timeStringToMinutes(l.clock_in);
               const outM = timeStringToMinutes(l.clock_out);
