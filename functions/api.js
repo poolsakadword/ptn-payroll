@@ -2709,7 +2709,7 @@ async function handleAction(db, action, params) {
             lateCount++;
             totalLateMinutes += Number(l.late_minutes || 0);
           }
-          if (l.clock_in && !l.clock_out) {
+          if (l.clock_in && !l.clock_out && l.date < today) {
             missingClockOutCount++;
           }
           if (l.status === 'ANOMALY' || l.status === 'GEOFENCE_FAIL' || (l.overbreak_minutes || 0) > 0) {
