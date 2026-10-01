@@ -4333,7 +4333,7 @@ async function handleAction(db, action, params) {
       let finalLateMinutes = Number(lateMinutes) || 0;
       let finalBreakMinutes = breakMinutes !== undefined && breakMinutes !== null ? Number(breakMinutes) : 0;
 
-      if (clockIn && clockOut && finalWorkHours <= 0) {
+      if (clockIn) {
         try {
           const branchRow = await db.prepare('SELECT * FROM branches WHERE branch_id = ?').bind(finalBranchId).first().catch(() => null);
           const toMin = (s) => {
@@ -4342,39 +4342,47 @@ async function handleAction(db, action, params) {
             return p.length >= 2 ? (parseInt(p[0], 10) * 60 + parseInt(p[1], 10)) : null;
           };
           const inMin = toMin(clockIn);
-          const outMin = toMin(clockOut);
           const startMin = toMin(branchRow && branchRow.work_start_time) || (9 * 60 + 30);
-          const endMin = toMin(branchRow && branchRow.work_end_time) || (19 * 60);
-          const lunchStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
-          const lunchEnd = toMin(branchRow && branchRow.lunch_end_time) || (14 * 60);
-          const otStartMin = toMin(branchRow && (branchRow.ot_start_time || branchRow.work_end_time)) || (19 * 60);
+          const graceMin = Number(branchRow && branchRow.grace_minutes) || 0;
 
-          if (inMin !== null && outMin !== null) {
-            const d = new Date(date + 'T00:00:00');
-            const isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
-
-            if (inMin > startMin) {
+          if (inMin !== null) {
+            if (inMin > (startMin + graceMin)) {
               finalLateMinutes = inMin - startMin;
-            }
-
-            if (finalBreakMinutes === 0 && Math.max(inMin, startMin) <= lunchStart && outMin >= lunchEnd) {
-              finalBreakMinutes = 60;
-            }
-
-            if (isFullPayVal === 1) {
-              finalWorkHours = Math.max(0, Math.round(((endMin - startMin - finalBreakMinutes) / 60) * 10) / 10) || 8.5;
-            } else if (isSunday) {
-              const sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - finalBreakMinutes);
-              finalOtHours = Math.floor(sunMin / 30) * 0.5;
-              finalWorkHours = 0;
             } else {
-              const effIn = Math.max(inMin, startMin);
-              const cappedOut = Math.min(outMin, endMin);
-              const normMin = Math.max(0, cappedOut - effIn - finalBreakMinutes);
-              finalWorkHours = Math.round((normMin / 60) * 10) / 10;
+              finalLateMinutes = 0;
+            }
+          }
 
-              if (outMin > otStartMin) {
-                finalOtHours = Math.floor((outMin - otStartMin) / 30) * 0.5;
+          if (clockOut && finalWorkHours <= 0) {
+            const outMin = toMin(clockOut);
+            const endMin = toMin(branchRow && branchRow.work_end_time) || (19 * 60);
+            const lunchStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
+            const lunchEnd = toMin(branchRow && branchRow.lunch_end_time) || (14 * 60);
+            const otStartMin = toMin(branchRow && (branchRow.ot_start_time || branchRow.work_end_time)) || (19 * 60);
+
+            if (inMin !== null && outMin !== null) {
+              const d = new Date(date + 'T00:00:00');
+              const isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
+
+              if (finalBreakMinutes === 0 && Math.max(inMin, startMin) <= lunchStart && outMin >= lunchEnd) {
+                finalBreakMinutes = 60;
+              }
+
+              if (isFullPayVal === 1) {
+                finalWorkHours = Math.max(0, Math.round(((endMin - startMin - finalBreakMinutes) / 60) * 10) / 10) || 8.5;
+              } else if (isSunday) {
+                const sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - finalBreakMinutes);
+                finalOtHours = Math.floor(sunMin / 30) * 0.5;
+                finalWorkHours = 0;
+              } else {
+                const effIn = Math.max(inMin, startMin);
+                const cappedOut = Math.min(outMin, endMin);
+                const normMin = Math.max(0, cappedOut - effIn - finalBreakMinutes);
+                finalWorkHours = Math.round((normMin / 60) * 10) / 10;
+
+                if (outMin > otStartMin) {
+                  finalOtHours = Math.floor((outMin - otStartMin) / 30) * 0.5;
+                }
               }
             }
           }
@@ -4461,27 +4469,45 @@ async function handleAction(db, action, params) {
       const existing = await db.prepare('SELECT * FROM time_logs WHERE id = ?').bind(id).first().catch(() => null);
       if (!existing) return { success: false, message: 'ไม่พบรายการบันทึกเวลา' };
 
+      const empRow = await db.prepare('SELECT emp_id, branch_id, is_ot_eligible FROM employees WHERE emp_id = ?').bind(existing.emp_id).first().catch(() => null);
+      const branchId = existing.branch_id || (empRow && empRow.branch_id);
+      const branchRow = branchId ? await db.prepare('SELECT * FROM branches WHERE branch_id = ?').bind(branchId).first().catch(() => null) : null;
+
+      const toMin = (s) => {
+        if (!s) return null;
+        const p = String(s).trim().split(':');
+        return p.length >= 2 ? (parseInt(p[0], 10) * 60 + parseInt(p[1], 10)) : null;
+      };
+
       let finalWorkHours = Number(workHours) || 0;
       let finalOtHours = Number(otHours) || (Number(existing.ot_hours) || 0);
       let finalBreakMinutes = breakMinutes !== undefined && breakMinutes !== null ? Number(breakMinutes) : (Number(existing.break_minutes) || 0);
-      let finalLateMinutes = Number(lateMinutes) || (Number(existing.late_minutes) || 0);
+      let finalLateMinutes = lateMinutes !== undefined && lateMinutes !== null ? Number(lateMinutes) : (Number(existing.late_minutes) || 0);
+
+      const inMin = toMin(clockIn);
+      const startMin = toMin(branchRow && branchRow.work_start_time) || (9 * 60 + 30);
+      const graceMin = Number(branchRow && branchRow.grace_minutes) || 0;
+
+      // Recalculate late minutes dynamically if clockIn is provided
+      if (inMin !== null) {
+        if (inMin > (startMin + graceMin)) {
+          finalLateMinutes = inMin - startMin;
+        } else {
+          finalLateMinutes = 0;
+        }
+      }
+
+      let finalStatus = status || existing.status || 'NORMAL';
+      if (finalLateMinutes === 0 && finalStatus === 'LATE') {
+        finalStatus = 'NORMAL';
+      } else if (finalLateMinutes > 0 && finalStatus === 'NORMAL') {
+        finalStatus = 'LATE';
+      }
 
       // Backend fallback calculation: If clockIn and clockOut exist but workHours is 0
       if (clockIn && clockOut && finalWorkHours <= 0) {
         try {
-          const empRow = await db.prepare('SELECT emp_id, branch_id FROM employees WHERE emp_id = ?').bind(existing.emp_id).first().catch(() => null);
-          const branchId = existing.branch_id || (empRow && empRow.branch_id);
-          const branchRow = branchId ? await db.prepare('SELECT * FROM branches WHERE branch_id = ?').bind(branchId).first().catch(() => null) : null;
-
-          const toMin = (s) => {
-            if (!s) return null;
-            const p = String(s).trim().split(':');
-            return p.length >= 2 ? (parseInt(p[0], 10) * 60 + parseInt(p[1], 10)) : null;
-          };
-
-          const inMin = toMin(clockIn);
           const outMin = toMin(clockOut);
-          const startMin = toMin(branchRow && branchRow.work_start_time) || (9 * 60 + 30);
           const endMin = toMin(branchRow && branchRow.work_end_time) || (19 * 60);
           const lunchStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
           const lunchEnd = toMin(branchRow && branchRow.lunch_end_time) || (14 * 60);
@@ -4531,7 +4557,7 @@ async function handleAction(db, action, params) {
         finalLateMinutes,
         finalWorkHours,
         finalOtHours,
-        status || 'NORMAL',
+        finalStatus,
         remark || '',
         isFullPayVal,
         id
@@ -4540,7 +4566,6 @@ async function handleAction(db, action, params) {
       // If OT occurred and employee is eligible, record or update in ot_requests automatically
       if (finalOtHours > 0) {
         try {
-          const empRow = await db.prepare('SELECT is_ot_eligible FROM employees WHERE emp_id = ?').bind(existing.emp_id).first().catch(() => null);
           const isOtEligible = !(empRow && (empRow.is_ot_eligible === 'false' || empRow.is_ot_eligible === false));
           if (isOtEligible) {
             const d = new Date((existing.date || '') + 'T00:00:00');

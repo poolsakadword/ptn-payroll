@@ -10167,25 +10167,14 @@ function autoCalculateAttendanceHours(isUserAction) {
   var otBadge = document.getElementById('editAttOtBadge');
   var otText = document.getElementById('editAttOtHoursText');
 
-  if (!clockIn || !clockOut) {
-    if (helper) {
-      if (clockIn && !clockOut) {
-        helper.style.display = 'block';
-        helper.style.background = '#fffbeb';
-        helper.style.border = '1px solid #fde68a';
-        helper.style.color = '#b45309';
-        helper.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> กรุณากรอกหรือเลือก <b>เวลาออกงาน (Clock Out)</b> เพื่อให้ระบบคำนวณชั่วโมงทำงานอัตโนมัติ';
-      } else {
-        helper.style.display = 'none';
-      }
-    }
+  if (!clockIn) {
+    if (helper) helper.style.display = 'none';
     if (otBadge) otBadge.style.display = 'none';
     return;
   }
 
   var inMin = parseTimeToMin(clockIn);
-  var outMin = parseTimeToMin(clockOut);
-  if (inMin === null || outMin === null) return;
+  if (inMin === null) return;
 
   // Retrieve branch schedule
   var branch = null;
@@ -10208,17 +10197,44 @@ function autoCalculateAttendanceHours(isUserAction) {
   var lunchEndMin = parseTimeToMin(lunchEndStr) || (14 * 60);
   var otStartMin = parseTimeToMin(otStartStr) || (19 * 60);
 
+  // 1. Late minutes & status
+  var lateMin = 0;
+  if (inMin > (workStartMin + graceMin)) {
+    lateMin = inMin - workStartMin;
+  }
+
+  var lateMinInputEl = document.getElementById('editAttLateMinutes');
+  if (lateMinInputEl) lateMinInputEl.value = lateMin;
+
+  var statusInputEl = document.getElementById('editAttStatus');
+  if (statusInputEl) {
+    if (lateMin === 0 && statusInputEl.value === 'LATE') {
+      statusInputEl.value = 'NORMAL';
+    } else if (lateMin > 0 && statusInputEl.value === 'NORMAL') {
+      statusInputEl.value = 'LATE';
+    }
+  }
+
+  if (!clockOut) {
+    if (helper) {
+      helper.style.display = 'block';
+      helper.style.background = '#fffbeb';
+      helper.style.border = '1px solid #fde68a';
+      helper.style.color = '#b45309';
+      helper.innerHTML = '<i class="fa-solid fa-clock text-amber"></i> เวลาเข้างานคำนวณแล้ว (' + (lateMin > 0 ? '<b style="color:#dc2626">สาย ' + lateMin + ' นาที</b>' : '<b style="color:#059669">ตรงเวลา ไม่สาย</b>') + ') — กรุณากรอก <b>เวลาออกงาน (Clock Out)</b> เพื่อให้ระบบคำนวณชั่วโมงทำงานอัตโนมัติ';
+    }
+    if (otBadge) otBadge.style.display = 'none';
+    return;
+  }
+
+  var outMin = parseTimeToMin(clockOut);
+  if (outMin === null) return;
+
   // Day of week
   var isSunday = false;
   if (dateStr) {
     var dt = new Date(dateStr + 'T00:00:00');
     if (!isNaN(dt.getTime()) && dt.getDay() === 0) isSunday = true;
-  }
-
-  // 1. Late minutes
-  var lateMin = 0;
-  if (inMin > (workStartMin + graceMin)) {
-    lateMin = inMin - workStartMin;
   }
 
   // 2. Break minutes
@@ -10368,13 +10384,14 @@ function saveAttendanceLogEditForm(e) {
   var remark = document.getElementById('editAttRemark').value.trim();
   var isFullPay = (document.getElementById('editAttIsFullPay') && document.getElementById('editAttIsFullPay').checked) ? 1 : 0;
 
-  // Safeguard: If clockIn and clockOut are present, but workHours is 0, auto-recalculate before submitting!
-  if (clockIn && clockOut && workHours <= 0 && !isFullPay) {
+  // Auto-calculate derived fields (late minutes, status, work hours, OT) if clockIn is present
+  if (clockIn) {
     autoCalculateAttendanceHours(true);
     workHours = Number(document.getElementById('editAttWorkHours').value) || 0;
     otHours = Number(document.getElementById('editAttOtHours') ? document.getElementById('editAttOtHours').value : 0) || 0;
     breakMinutes = Number(document.getElementById('editAttBreakMinutes').value) || 0;
     lateMinutes = Number(document.getElementById('editAttLateMinutes').value) || 0;
+    status = document.getElementById('editAttStatus').value;
   }
 
   callApi('updateAttendanceLog', {
