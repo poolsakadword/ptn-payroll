@@ -3163,7 +3163,7 @@ async function handleAction(db, action, params) {
       for (const b of branches) branchMap[b.branch_id] = b;
 
       // Load Employees (Include all active working staff: Active, Probation, etc.)
-      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status FROM employees WHERE (status IS NULL OR UPPER(TRIM(status)) != 'RESIGNED')";
+      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status, join_date FROM employees WHERE (status IS NULL OR UPPER(TRIM(status)) != 'RESIGNED')";
       const empBinds = [];
       if (branchId && branchId !== 'ALL') {
         empSql += " AND branch_id = ?";
@@ -3268,6 +3268,7 @@ async function handleAction(db, action, params) {
         }
 
         // Check each working date for attendance and late
+        const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
         const dailyRecords = [];
         let absentDays = 0;
         let absentTimes = 0;
@@ -3466,6 +3467,13 @@ async function handleAction(db, action, params) {
               isHoliday = true;
               statusText = `วันหยุด: ${holidayInfo.holiday_name}`;
               statusColor = '#0d9488';
+              if (currentlyAbsentSequence) {
+                absentTimes++;
+                currentlyAbsentSequence = false;
+              }
+            } else if (joinDateStr && dateStr < joinDateStr) {
+              statusText = 'ยังไม่เริ่มงาน';
+              statusColor = '#94a3b8';
               if (currentlyAbsentSequence) {
                 absentTimes++;
                 currentlyAbsentSequence = false;
