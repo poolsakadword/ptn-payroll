@@ -92,10 +92,24 @@ function applyRolePermissions() {
   }
 
   var canViewDash = hasPermission('view_dash');
-  var canViewPayroll = hasPermission('view_payroll');
-  var canViewInputs = hasPermission('view_inputs');
-  var canViewEmp = hasPermission('view_emp');
-  var canViewHistory = hasPermission('view_history');
+  var canViewPayroll = hasPermission('view_payroll') ||
+                       hasPermission('calc_payroll') ||
+                       hasPermission('view_payslip') ||
+                       hasPermission('close_period') ||
+                       isSuperAdmin();
+  var canViewInputs = hasPermission('view_inputs') ||
+                      hasPermission('edit_inputs') ||
+                      hasPermission('populate_inputs') ||
+                      isSuperAdmin();
+  var canViewEmp = hasPermission('view_emp') ||
+                   hasPermission('edit_emp') ||
+                   hasPermission('del_emp') ||
+                   hasPermission('view_salary') ||
+                   hasPermission('unlock_device') ||
+                   isSuperAdmin();
+  var canViewHistory = hasPermission('view_history') ||
+                       hasPermission('print_history') ||
+                       isSuperAdmin();
   var canManageCompany = hasPermission('manage_company') || hasPermission('manage_backup') || isSuperAdmin();
   var canManageUsers = hasPermission('manage_users') || isSuperAdmin();
   var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
@@ -451,14 +465,19 @@ function navigateToAuthorizedTab() {
                             hasPermission('sync_ptn_time') ||
                             hasPermission('manage_attendance_settings');
 
+  var canAccessPayroll = hasPermission('view_payroll') || hasPermission('calc_payroll') || hasPermission('view_payslip') || hasPermission('close_period') || isSuperAdmin();
+  var canAccessInputs = hasPermission('view_inputs') || hasPermission('edit_inputs') || hasPermission('populate_inputs') || isSuperAdmin();
+  var canAccessEmp = hasPermission('view_emp') || hasPermission('edit_emp') || hasPermission('del_emp') || hasPermission('view_salary') || hasPermission('unlock_device') || isSuperAdmin();
+  var canAccessHistory = hasPermission('view_history') || hasPermission('print_history') || isSuperAdmin();
+
   // If on a forbidden tab or first login, switch to primary allowed tab
   var isAllowed = false;
   if (curId === 'tab-dashboard' && hasPermission('view_dash')) isAllowed = true;
   else if (curId === 'tab-attendance' && canAccessAttendance) isAllowed = true;
-  else if (curId === 'tab-payroll' && hasPermission('view_payroll')) isAllowed = true;
-  else if (curId === 'tab-input' && hasPermission('view_inputs')) isAllowed = true;
-  else if (curId === 'tab-employees' && hasPermission('view_emp')) isAllowed = true;
-  else if (curId === 'tab-history' && hasPermission('view_history')) isAllowed = true;
+  else if (curId === 'tab-payroll' && canAccessPayroll) isAllowed = true;
+  else if (curId === 'tab-input' && canAccessInputs) isAllowed = true;
+  else if (curId === 'tab-employees' && canAccessEmp) isAllowed = true;
+  else if (curId === 'tab-history' && canAccessHistory) isAllowed = true;
   else if (curId === 'tab-analytics' && (hasPermission('view_analytics') || isSuperAdmin())) isAllowed = true;
   else if (curId === 'tab-documents' && (isSuperAdmin() || hasPermission('view_documents') || hasPermission('all'))) isAllowed = true;
   else if (curId === 'tab-company' && (hasPermission('manage_company') || hasPermission('manage_backup') || isSuperAdmin())) isAllowed = true;
@@ -467,10 +486,10 @@ function navigateToAuthorizedTab() {
   if (!isAllowed) {
     if (hasPermission('view_dash')) switchTab('dashboard');
     else if (canAccessAttendance) switchTab('attendance');
-    else if (hasPermission('view_emp')) switchTab('employees');
-    else if (hasPermission('view_inputs')) switchTab('input');
-    else if (hasPermission('view_payroll')) switchTab('payroll');
-    else if (hasPermission('view_history')) switchTab('history');
+    else if (canAccessEmp) switchTab('employees');
+    else if (canAccessInputs) switchTab('input');
+    else if (canAccessPayroll) switchTab('payroll');
+    else if (canAccessHistory) switchTab('history');
     else if (hasPermission('view_analytics')) switchTab('analytics');
     else if (hasPermission('view_documents')) switchTab('documents');
     else if (hasPermission('manage_company')) switchTab('company');
@@ -2360,8 +2379,9 @@ function switchTab(tabId) {
   var role = (State.currentUser && State.currentUser.role) ? String(State.currentUser.role).trim() : 'User';
   var isGeneralUser = (role.toLowerCase() === 'user');
 
-  // If General User, force tab to employees only
-  if (isGeneralUser && tabId !== 'employees') {
+  // If General User with no other permissions, force tab to employees only
+  var hasOtherPerms = (State.currentUser && State.currentUser.permissions && State.currentUser.permissions.length > 1);
+  if (isGeneralUser && !hasOtherPerms && tabId !== 'employees') {
     tabId = 'employees';
   }
 
@@ -2373,14 +2393,16 @@ function switchTab(tabId) {
   }
 
   // Payroll tab
-  if (tabId === 'payroll' && !hasPermission('view_payroll')) {
+  var canAccessPayroll = hasPermission('view_payroll') || hasPermission('calc_payroll') || hasPermission('view_payslip') || hasPermission('close_period') || isSuperAdmin();
+  if (tabId === 'payroll' && !canAccessPayroll) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบคำนวณเงินเดือน', 'warning');
     navigateToAuthorizedTab();
     return;
   }
 
   // Input tab
-  if (tabId === 'input' && !hasPermission('view_inputs')) {
+  var canAccessInputs = hasPermission('view_inputs') || hasPermission('edit_inputs') || hasPermission('populate_inputs') || isSuperAdmin();
+  if (tabId === 'input' && !canAccessInputs) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานบันทึกข้อมูลประจำงวด', 'warning');
     navigateToAuthorizedTab();
     return;
@@ -2402,14 +2424,16 @@ function switchTab(tabId) {
   }
 
   // Employees tab
-  if (tabId === 'employees' && !hasPermission('view_emp')) {
+  var canAccessEmp = hasPermission('view_emp') || hasPermission('edit_emp') || hasPermission('del_emp') || hasPermission('view_salary') || hasPermission('unlock_device') || isSuperAdmin();
+  if (tabId === 'employees' && !canAccessEmp) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานทะเบียนพนักงาน', 'warning');
     navigateToAuthorizedTab();
     return;
   }
 
   // History tab
-  if (tabId === 'history' && !hasPermission('view_history')) {
+  var canAccessHistory = hasPermission('view_history') || hasPermission('print_history') || isSuperAdmin();
+  if (tabId === 'history' && !canAccessHistory) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานประวัติการทำงาน', 'warning');
     navigateToAuthorizedTab();
     return;
