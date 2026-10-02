@@ -1131,9 +1131,9 @@ function renderInputTable() {
     })() +
       '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + (i.absentDays || 0) + '</td>' +
-      '<td class="text-right font-mono">' + (i.leaveDays || 0) + '</td>' +
-      '<td class="text-right font-mono text-red">' + (i.sickLeaveDays || 0) + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + (Math.round((Number(i.absentDays) || 0) * 100) / 100) + '</td>' +
+      '<td class="text-right font-mono">' + (Math.round((Number(i.leaveDays) || 0) * 100) / 100) + '</td>' +
+      '<td class="text-right font-mono text-red">' + (Math.round((Number(i.sickLeaveDays) || 0) * 100) / 100) + '</td>' +
       (function() {
         var lateDed = Number(i.lateDeduct) || 0;
         var lateMins = Number(i.lateMinutes) || 0;
@@ -9407,11 +9407,22 @@ function renderAttendancePeriodSummary(data) {
         html += '<td style="border:1px solid #cbd5e1;padding:6px;font-family:monospace;font-weight:700;color:#1e40af">' + esc(r.empId) + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px 8px;text-align:left"><strong style="color:#0f172a;cursor:pointer" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')">' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' <span style="color:#64748b">(' + esc(r.nickname) + ')</span>' : '') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;text-align:left;color:#334155;white-space:nowrap">' + esc(r.branchName) + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#eff6ff;color:#1e40af;font-weight:800">' + r.presentDays + ' / ' + r.expectedWorkDays + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fef2f2;color:' + (r.absentDays > 0 ? '#b91c1c;font-weight:700' : '#64748b') + '">' + (r.absentDays > 0 ? (r.absentDays + ' วัน (' + r.absentTimes + ' ครั้ง)') : '-') + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#f0f9ff;color:' + (r.sickWithCertDays > 0 ? '#0369a1;font-weight:700' : '#64748b') + '">' + (r.sickWithCertDays > 0 ? (r.sickWithCertDays + ' วัน (' + r.sickWithCertTimes + ' ครั้ง)') : '-') + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fffbeb;color:' + (r.sickNoCertDays > 0 ? '#b45309;font-weight:700' : '#64748b') + '">' + (r.sickNoCertDays > 0 ? (r.sickNoCertDays + ' วัน (' + r.sickNoCertTimes + ' ครั้ง)') : '-') + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#faf5ff;color:' + (r.businessLeaveDays > 0 ? '#6d28d9;font-weight:700' : '#64748b') + '">' + (r.businessLeaveDays > 0 ? (r.businessLeaveDays + ' วัน (' + r.businessLeaveTimes + ' ครั้ง)') : '-') + '</td>';
+        var pDays = Math.round((Number(r.presentDays) || 0) * 100) / 100;
+        var aDays = Math.round((Number(r.absentDays) || 0) * 100) / 100;
+        var scDays = Math.round((Number(r.sickWithCertDays) || 0) * 100) / 100;
+        var sncDays = Math.round((Number(r.sickNoCertDays) || 0) * 100) / 100;
+        var bDays = Math.round((Number(r.businessLeaveDays) || 0) * 100) / 100;
+
+        html += '<tr style="border-bottom:1px solid #e2e8f0;text-align:center;font-size:12px;height:38px">';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;color:#64748b">' + r.no + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;font-family:monospace;font-weight:700;color:#1e40af">' + esc(r.empId) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px 8px;text-align:left"><strong style="color:#0f172a;cursor:pointer" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')">' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' <span style="color:#64748b">(' + esc(r.nickname) + ')</span>' : '') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;text-align:left;color:#334155;white-space:nowrap">' + esc(r.branchName) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#eff6ff;color:#1e40af;font-weight:800">' + pDays + ' / ' + r.expectedWorkDays + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fef2f2;color:' + (aDays > 0 ? '#b91c1c;font-weight:700' : '#64748b') + '">' + (aDays > 0 ? (aDays + ' วัน (' + r.absentTimes + ' ครั้ง)') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#f0f9ff;color:' + (scDays > 0 ? '#0369a1;font-weight:700' : '#64748b') + '">' + (scDays > 0 ? (scDays + ' วัน (' + r.sickWithCertTimes + ' ครั้ง)') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fffbeb;color:' + (sncDays > 0 ? '#b45309;font-weight:700' : '#64748b') + '">' + (sncDays > 0 ? (sncDays + ' วัน (' + r.sickNoCertTimes + ' ครั้ง)') : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#faf5ff;color:' + (bDays > 0 ? '#6d28d9;font-weight:700' : '#64748b') + '">' + (bDays > 0 ? (bDays + ' วัน (' + r.businessLeaveTimes + ' ครั้ง)') : '-') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fff7ed;color:' + (r.lateTimes > 0 ? '#c2410c;font-weight:800' : '#64748b') + '">' + (r.lateTimes > 0 ? (r.lateTimes + ' ครั้ง (' + r.lateMinutes + ' น.)') : '-') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#eef2ff;color:' + (r.otHours > 0 ? '#4338ca;font-weight:800' : '#64748b') + '">' + (r.otHours > 0 ? (r.otHours + ' ชม.') : '-') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px">' + diligenceBadge + '</td>';
@@ -9426,11 +9437,11 @@ function renderAttendancePeriodSummary(data) {
   if (tfoot) {
     var footHtml = '<tr style="border-top:2px solid #94a3b8;font-size:12px;height:42px">';
     footHtml += '<td colspan="4" style="border:1px solid #cbd5e1;padding:8px;text-align:right;font-weight:800">รวมยอดทั้งสิ้น (' + list.length + ' คน):</td>';
-    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#eff6ff;color:#1e40af;font-weight:800">' + (grand.totalPresentDays || 0) + ' วัน</td>';
-    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#fef2f2;color:#991b1b;font-weight:800">' + (grand.totalAbsentDays || 0) + ' วัน (' + (grand.totalAbsentTimes || 0) + ' ครั้ง)</td>';
-    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#f0f9ff;color:#075985;font-weight:800">' + (grand.totalSickWithCertDays || 0) + ' วัน (' + (grand.totalSickWithCertTimes || 0) + ' ครั้ง)</td>';
-    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#fffbeb;color:#92400e;font-weight:800">' + (grand.totalSickNoCertDays || 0) + ' วัน (' + (grand.totalSickNoCertTimes || 0) + ' ครั้ง)</td>';
-    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#faf5ff;color:#6b21a8;font-weight:800">' + (grand.totalBusinessDays || 0) + ' วัน (' + (grand.totalBusinessTimes || 0) + ' ครั้ง)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#eff6ff;color:#1e40af;font-weight:800">' + (Math.round((Number(grand.totalPresentDays) || 0) * 100) / 100) + ' วัน</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#fef2f2;color:#991b1b;font-weight:800">' + (Math.round((Number(grand.totalAbsentDays) || 0) * 100) / 100) + ' วัน (' + (grand.totalAbsentTimes || 0) + ' ครั้ง)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#f0f9ff;color:#075985;font-weight:800">' + (Math.round((Number(grand.totalSickWithCertDays) || 0) * 100) / 100) + ' วัน (' + (grand.totalSickWithCertTimes || 0) + ' ครั้ง)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#fffbeb;color:#92400e;font-weight:800">' + (Math.round((Number(grand.totalSickNoCertDays) || 0) * 100) / 100) + ' วัน (' + (grand.totalSickNoCertTimes || 0) + ' ครั้ง)</td>';
+    footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#faf5ff;color:#6b21a8;font-weight:800">' + (Math.round((Number(grand.totalBusinessDays) || 0) * 100) / 100) + ' วัน (' + (grand.totalBusinessTimes || 0) + ' ครั้ง)</td>';
     footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#fff7ed;color:#9a3412;font-weight:800">' + (grand.totalLateTimes || 0) + ' ครั้ง (' + (grand.totalLateMinutes || 0) + ' น.)</td>';
     footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;background:#eef2ff;color:#3730a3;font-weight:800">' + (grand.totalOtHours || 0) + ' ชม.</td>';
     footHtml += '<td style="border:1px solid #cbd5e1;padding:8px;font-size:11px;font-weight:700">ผ่าน ' + (grand.diligencePassedCount || 0) + '<br><span style="color:#b91c1c">ตก ' + (grand.diligenceFailedCount || 0) + '</span></td>';
@@ -9485,13 +9496,13 @@ function renderIndividualAttendanceSheet(empId) {
   var lateEl = document.getElementById('attSingleLate');
   var otEl = document.getElementById('attSingleOt');
 
-  if (presEl) presEl.textContent = emp.presentDays + ' / ' + emp.expectedWorkDays + ' วัน';
-  if (absEl) absEl.textContent = emp.absentDays + ' วัน (' + emp.absentTimes + ' ครั้ง)';
-  if (scEl) scEl.textContent = emp.sickWithCertDays + ' วัน (' + emp.sickWithCertTimes + ' ครั้ง)';
-  if (sncEl) sncEl.textContent = emp.sickNoCertDays + ' วัน (' + emp.sickNoCertTimes + ' ครั้ง)';
-  if (busEl) busEl.textContent = emp.businessLeaveDays + ' วัน (' + emp.businessLeaveTimes + ' ครั้ง)';
+  if (presEl) presEl.textContent = (Math.round((Number(emp.presentDays) || 0) * 100) / 100) + ' / ' + emp.expectedWorkDays + ' วัน';
+  if (absEl) absEl.textContent = (Math.round((Number(emp.absentDays) || 0) * 100) / 100) + ' วัน (' + emp.absentTimes + ' ครั้ง)';
+  if (scEl) scEl.textContent = (Math.round((Number(emp.sickWithCertDays) || 0) * 100) / 100) + ' วัน (' + emp.sickWithCertTimes + ' ครั้ง)';
+  if (sncEl) sncEl.textContent = (Math.round((Number(emp.sickNoCertDays) || 0) * 100) / 100) + ' วัน (' + emp.sickNoCertTimes + ' ครั้ง)';
+  if (busEl) busEl.textContent = (Math.round((Number(emp.businessLeaveDays) || 0) * 100) / 100) + ' วัน (' + emp.businessLeaveTimes + ' ครั้ง)';
   if (lateEl) lateEl.textContent = emp.lateTimes + ' ครั้ง (' + emp.lateMinutes + ' น.)';
-  if (otEl) otEl.textContent = emp.otHours + ' ชม.';
+  if (otEl) otEl.textContent = (Math.round((Number(emp.otHours) || 0) * 100) / 100) + ' ชม.';
 
   // Daily punch table
   var tbody = document.getElementById('attSingleDailyLogsBody');
@@ -9698,11 +9709,16 @@ function printAttendanceSummaryReport() {
       html += '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:700">' + esc(r.empId) + '</td>';
       html += '<td style="border:1px solid #cbd5e1;padding:4px 8px;text-align:left"><strong>' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' (' + esc(r.nickname) + ')' : '') + '</td>';
       html += '<td style="border:1px solid #cbd5e1;padding:4px;text-align:left">' + esc(r.branchName) + '</td>';
-      html += '<td style="border:1px solid #cbd5e1;padding:4px;font-weight:700">' + r.presentDays + '</td>';
-      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.absentDays > 0 ? (r.absentDays + ' (' + r.absentTimes + ')') : '-') + '</td>';
-      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.sickWithCertDays > 0 ? (r.sickWithCertDays + ' (' + r.sickWithCertTimes + ')') : '-') + '</td>';
-      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.sickNoCertDays > 0 ? (r.sickNoCertDays + ' (' + r.sickNoCertTimes + ')') : '-') + '</td>';
-      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.businessLeaveDays > 0 ? (r.businessLeaveDays + ' (' + r.businessLeaveTimes + ')') : '-') + '</td>';
+      var prDays = Math.round((Number(r.presentDays) || 0) * 100) / 100;
+      var abDays = Math.round((Number(r.absentDays) || 0) * 100) / 100;
+      var scDays = Math.round((Number(r.sickWithCertDays) || 0) * 100) / 100;
+      var sncDays = Math.round((Number(r.sickNoCertDays) || 0) * 100) / 100;
+      var blDays = Math.round((Number(r.businessLeaveDays) || 0) * 100) / 100;
+      html += '<td style="border:1px solid #cbd5e1;padding:4px;font-weight:700">' + prDays + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (abDays > 0 ? (abDays + ' (' + r.absentTimes + ')') : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (scDays > 0 ? (scDays + ' (' + r.sickWithCertTimes + ')') : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (sncDays > 0 ? (sncDays + ' (' + r.sickNoCertTimes + ')') : '-') + '</td>';
+      html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (blDays > 0 ? (blDays + ' (' + r.businessLeaveTimes + ')') : '-') + '</td>';
       html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.lateTimes > 0 ? (r.lateTimes + ' (' + r.lateMinutes + ' น.)') : '-') + '</td>';
       html += '<td style="border:1px solid #cbd5e1;padding:4px">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
       html += '<td style="border:1px solid #cbd5e1;padding:4px;font-weight:700">' + dText + '</td>';
@@ -9712,11 +9728,11 @@ function printAttendanceSummaryReport() {
     html += '</tbody><tfoot style="background:#f1f5f9;font-weight:800;border-top:1.5px solid #0f172a">';
     html += '<tr style="height:36px">';
     html += '<td colspan="4" style="border:1px solid #94a3b8;padding:6px;text-align:right">รวมยอดทั้งสิ้น (' + list.length + ' คน):</td>';
-    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalPresentDays || 0) + ' วัน</td>';
-    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalAbsentDays || 0) + ' (' + (grand.totalAbsentTimes || 0) + ')</td>';
-    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalSickWithCertDays || 0) + ' (' + (grand.totalSickWithCertTimes || 0) + ')</td>';
-    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalSickNoCertDays || 0) + ' (' + (grand.totalSickNoCertTimes || 0) + ')</td>';
-    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalBusinessDays || 0) + ' (' + (grand.totalBusinessTimes || 0) + ')</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (Math.round((Number(grand.totalPresentDays) || 0) * 100) / 100) + ' วัน</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (Math.round((Number(grand.totalAbsentDays) || 0) * 100) / 100) + ' (' + (grand.totalAbsentTimes || 0) + ')</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (Math.round((Number(grand.totalSickWithCertDays) || 0) * 100) / 100) + ' (' + (grand.totalSickWithCertTimes || 0) + ')</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (Math.round((Number(grand.totalSickNoCertDays) || 0) * 100) / 100) + ' (' + (grand.totalSickNoCertTimes || 0) + ')</td>';
+    html += '<td style="border:1px solid #94a3b8;padding:6px">' + (Math.round((Number(grand.totalBusinessDays) || 0) * 100) / 100) + ' (' + (grand.totalBusinessTimes || 0) + ')</td>';
     html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalLateTimes || 0) + ' (' + (grand.totalLateMinutes || 0) + ' น.)</td>';
     html += '<td style="border:1px solid #94a3b8;padding:6px">' + (grand.totalOtHours || 0) + ' ชม.</td>';
     html += '<td style="border:1px solid #94a3b8;padding:6px;font-size:11px">ผ่าน ' + (grand.diligencePassedCount || 0) + '<br>ตก ' + (grand.diligenceFailedCount || 0) + '</td>';
@@ -9770,13 +9786,13 @@ function printAttendanceSummaryReport() {
     sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">OT รวม</td>';
     sHtml += '</tr>';
     sHtml += '<tr style="font-weight:800;font-size:13px;height:34px">';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#1e40af">' + emp.presentDays + ' / ' + emp.expectedWorkDays + ' วัน</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#991b1b">' + emp.absentDays + ' วัน (' + emp.absentTimes + ' ครั้ง)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#0369a1">' + emp.sickWithCertDays + ' วัน (' + emp.sickWithCertTimes + ' ครั้ง)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#b45309">' + emp.sickNoCertDays + ' วัน (' + emp.sickNoCertTimes + ' ครั้ง)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#6d28d9">' + emp.businessLeaveDays + ' วัน (' + emp.businessLeaveTimes + ' ครั้ง)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#1e40af">' + (Math.round((Number(emp.presentDays) || 0) * 100) / 100) + ' / ' + emp.expectedWorkDays + ' วัน</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#991b1b">' + (Math.round((Number(emp.absentDays) || 0) * 100) / 100) + ' วัน (' + emp.absentTimes + ' ครั้ง)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#0369a1">' + (Math.round((Number(emp.sickWithCertDays) || 0) * 100) / 100) + ' วัน (' + emp.sickWithCertTimes + ' ครั้ง)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#b45309">' + (Math.round((Number(emp.sickNoCertDays) || 0) * 100) / 100) + ' วัน (' + emp.sickNoCertTimes + ' ครั้ง)</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#6d28d9">' + (Math.round((Number(emp.businessLeaveDays) || 0) * 100) / 100) + ' วัน (' + emp.businessLeaveTimes + ' ครั้ง)</td>';
     sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#c2410c">' + emp.lateTimes + ' ครั้ง (' + emp.lateMinutes + ' น.)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#3730a3">' + emp.otHours + ' ชม.</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#3730a3">' + (Math.round((Number(emp.otHours) || 0) * 100) / 100) + ' ชม.</td>';
     sHtml += '</tr></table>';
 
     // Daily Logs Table

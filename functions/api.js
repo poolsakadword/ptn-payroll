@@ -2175,7 +2175,7 @@ async function handleAction(db, action, params) {
           }
         }
 
-        const absentDays = Math.round(autoAbsentDays * 1000) / 1000;
+        const absentDays = Math.round(autoAbsentDays * 100) / 100;
         totalAbsentCount += absentDays;
 
         // Deduct missing hours / early departure based on actual workdays
@@ -2300,7 +2300,11 @@ async function handleAction(db, action, params) {
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, lateMins, lateCnt,
+          Math.round(absentDays * 100) / 100,
+          Math.round(leaveDays * 100) / 100,
+          Math.round(sickLeaveDays * 100) / 100,
+          Math.round(unpaidSickLeaveDays * 100) / 100,
+          lateDeduct, lateMins, lateCnt,
           otHours, otRate, allowance, bonus, advDed, othDed, carriedDebt, sso, tax
         ).run();
       }
@@ -3371,8 +3375,9 @@ async function handleAction(db, action, params) {
             if (isHalfAbsent) {
               isAbsent = true;
               isPresent = true;
-              presentDays += Math.round((1.0 - currentAbsentFraction) * 1000) / 1000;
-              absentDays += currentAbsentFraction;
+              const roundedCurAbsent = Math.round(currentAbsentFraction * 100) / 100;
+              presentDays += Math.round((1.0 - roundedCurAbsent) * 100) / 100;
+              absentDays += roundedCurAbsent;
               absentTimes++;
               statusText = halfAbsentLabel;
               statusColor = '#dc2626';
@@ -3611,14 +3616,14 @@ async function handleAction(db, action, params) {
           department: emp.department || '-',
           baseSalary: Number(emp.base_salary) || 0,
           expectedWorkDays: totalExpectedWorkDays,
-          presentDays: Math.round(presentDays * 1000) / 1000,
-          absentDays: Math.round(absentDays * 1000) / 1000,
+          presentDays: Math.round(presentDays * 100) / 100,
+          absentDays: Math.round(absentDays * 100) / 100,
           absentTimes,
-          sickWithCertDays,
+          sickWithCertDays: Math.round(sickWithCertDays * 100) / 100,
           sickWithCertTimes,
-          sickNoCertDays,
+          sickNoCertDays: Math.round(sickNoCertDays * 100) / 100,
           sickNoCertTimes,
-          businessLeaveDays,
+          businessLeaveDays: Math.round(businessLeaveDays * 100) / 100,
           businessLeaveTimes,
           lateTimes,
           lateMinutes,
@@ -3650,8 +3655,11 @@ async function handleAction(db, action, params) {
         }
       }
 
-      grandTotals.totalPresentDays = Math.round(grandTotals.totalPresentDays * 1000) / 1000;
-      grandTotals.totalAbsentDays = Math.round(grandTotals.totalAbsentDays * 1000) / 1000;
+      grandTotals.totalPresentDays = Math.round(grandTotals.totalPresentDays * 100) / 100;
+      grandTotals.totalAbsentDays = Math.round(grandTotals.totalAbsentDays * 100) / 100;
+      grandTotals.totalSickWithCertDays = Math.round(grandTotals.totalSickWithCertDays * 100) / 100;
+      grandTotals.totalSickNoCertDays = Math.round(grandTotals.totalSickNoCertDays * 100) / 100;
+      grandTotals.totalBusinessDays = Math.round(grandTotals.totalBusinessDays * 100) / 100;
       grandTotals.totalOtHours = Math.round(grandTotals.totalOtHours * 100) / 100;
 
       return {
@@ -5985,7 +5993,8 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
       netPay = 0;
     } else {
       carriedDebtOut = 0;
-      netPay = rawNetPay;
+      // คิดทศนิยมเต็มในสูตร แล้วปัดเศษสตางค์ 2 ตำแหน่ง ปัดขึ้นเป็นบาทถ้วน (เช่น 14,352.50 -> 14,353.00 บาท)
+      netPay = Math.ceil(rawNetPay);
     }
 
     await db.prepare(`
