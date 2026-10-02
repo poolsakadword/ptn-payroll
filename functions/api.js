@@ -1986,9 +1986,11 @@ async function handleAction(db, action, params) {
           }
 
           // 2. ตรวจสอบเวลาออกก่อนเวลา/ขาดช่วง (Undertime / Early Departure) สำหรับพนักงานที่ไม่ได้รับการยกเว้น
+          // ผ่อนผัน 15 นาที (0.25 ชม.) ก่อนเวลาเลิกงานกะ ไม่คิดหักเงิน
           if (!isUndertimeExempt && row.clock_out && workHours > 0 && !isMorningAbsence && !isAfternoonAbsence) {
             const expectedHours = Math.max(0, targetHours - lateHours);
-            if (workHours < expectedHours) {
+            const earlyGraceHours = 15 / 60; // ผ่อนผัน 15 นาที
+            if (workHours < (expectedHours - earlyGraceHours)) {
               const earlyMissing = Math.round((expectedHours - workHours) * 100) / 100;
               missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + earlyMissing;
               earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (earlyMissing * hourlyRate);
