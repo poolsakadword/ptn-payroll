@@ -108,7 +108,14 @@ function applyRolePermissions() {
   var canPrintHistory = hasPermission('print_history') || isSuperAdmin();
   var canExportCsv = hasPermission('export_csv') || isSuperAdmin();
   var canViewAnalytics = hasPermission('view_analytics') || isSuperAdmin();
-  var canViewAttendance = hasPermission('view_attendance') || isSuperAdmin();
+  var canViewAttendance = hasPermission('view_attendance') ||
+                          hasPermission('manage_time_logs') ||
+                          hasPermission('approve_attendance') ||
+                          hasPermission('create_attendance_requests') ||
+                          hasPermission('unlock_device') ||
+                          hasPermission('sync_ptn_time') ||
+                          hasPermission('manage_attendance_settings') ||
+                          isSuperAdmin();
   var canApproveAttendance = hasPermission('approve_attendance') || isSuperAdmin();
   var canUnlockDevice = hasPermission('unlock_device') || isSuperAdmin();
   var canSyncPtnTime = hasPermission('sync_ptn_time') || isSuperAdmin();
@@ -166,6 +173,16 @@ function applyRolePermissions() {
       else if (canViewHistory) switchTab('history');
       else if (canViewAnalytics) switchTab('analytics');
       else if (canViewDocuments) switchTab('documents');
+      else if (canManageCompany) switchTab('company');
+      else if (canManageUsers) switchTab('users');
+      else {
+        // Fallback: user has no standard main tabs, switch to first visible tab
+        var firstVisibleNav = document.querySelector('.nav-tab-btn:not([style*="display: none"])');
+        if (firstVisibleNav && firstVisibleNav.id) {
+          var targetTabName = firstVisibleNav.id.replace('navBtn-', '');
+          switchTab(targetTabName);
+        }
+      }
     }
   }
 
@@ -425,10 +442,19 @@ function navigateToAuthorizedTab() {
   var curActiveTab = document.querySelector('.tab-content.active');
   var curId = curActiveTab ? curActiveTab.id : '';
 
+  var canAccessAttendance = isSuperAdmin() ||
+                            hasPermission('view_attendance') ||
+                            hasPermission('manage_time_logs') ||
+                            hasPermission('approve_attendance') ||
+                            hasPermission('create_attendance_requests') ||
+                            hasPermission('unlock_device') ||
+                            hasPermission('sync_ptn_time') ||
+                            hasPermission('manage_attendance_settings');
+
   // If on a forbidden tab or first login, switch to primary allowed tab
   var isAllowed = false;
   if (curId === 'tab-dashboard' && hasPermission('view_dash')) isAllowed = true;
-  else if (curId === 'tab-attendance' && (isSuperAdmin() || hasPermission('view_attendance'))) isAllowed = true;
+  else if (curId === 'tab-attendance' && canAccessAttendance) isAllowed = true;
   else if (curId === 'tab-payroll' && hasPermission('view_payroll')) isAllowed = true;
   else if (curId === 'tab-input' && hasPermission('view_inputs')) isAllowed = true;
   else if (curId === 'tab-employees' && hasPermission('view_emp')) isAllowed = true;
@@ -440,13 +466,22 @@ function navigateToAuthorizedTab() {
 
   if (!isAllowed) {
     if (hasPermission('view_dash')) switchTab('dashboard');
-    else if (hasPermission('view_attendance')) switchTab('attendance');
+    else if (canAccessAttendance) switchTab('attendance');
     else if (hasPermission('view_emp')) switchTab('employees');
     else if (hasPermission('view_inputs')) switchTab('input');
     else if (hasPermission('view_payroll')) switchTab('payroll');
     else if (hasPermission('view_history')) switchTab('history');
+    else if (hasPermission('view_analytics')) switchTab('analytics');
+    else if (hasPermission('view_documents')) switchTab('documents');
     else if (hasPermission('manage_company')) switchTab('company');
     else if (hasPermission('manage_users')) switchTab('users');
+    else {
+      var firstVisibleNav = document.querySelector('.nav-tab-btn:not([style*="display: none"])');
+      if (firstVisibleNav && firstVisibleNav.id) {
+        var targetTabName = firstVisibleNav.id.replace('navBtn-', '');
+        switchTab(targetTabName);
+      }
+    }
   }
 }
 
@@ -955,7 +990,8 @@ function renderDashboard() {
       '<td class="font-bold">' + esc(row.name) + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.baseSalary) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + (canViewSalary ? fmt(row.grossPay) : '฿***') + '</td>' +
-      '<td class="text-right font-mono font-bold bg-green-light">' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(row.totalDeductions || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-green bg-green-light">' +
         (canViewSalary ? (
           '<span class="text-green">' + fmt(row.netPay) + '</span>' +
           (Number(row.carriedDebt) > 0 ? '<div style="font-size:9.5px;font-weight:700;color:#dc2626"><i class="fa-solid fa-triangle-exclamation"></i> หนี้ ' + fmt(row.carriedDebt) + '</div>' : '')
@@ -2351,7 +2387,14 @@ function switchTab(tabId) {
   }
 
   // Attendance tab
-  var canAccessAttendance = isSuperAdmin() || hasPermission('view_attendance');
+  var canAccessAttendance = isSuperAdmin() ||
+                            hasPermission('view_attendance') ||
+                            hasPermission('manage_time_logs') ||
+                            hasPermission('approve_attendance') ||
+                            hasPermission('create_attendance_requests') ||
+                            hasPermission('unlock_device') ||
+                            hasPermission('sync_ptn_time') ||
+                            hasPermission('manage_attendance_settings');
   if (tabId === 'attendance' && !canAccessAttendance) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา', 'warning');
     navigateToAuthorizedTab();
