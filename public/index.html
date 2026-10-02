@@ -318,6 +318,10 @@
 
       <!-- 3. MONTHLY INPUT TAB (19 COLUMNS) -->
       <div class="tab-content" id="tab-input">
+        <!-- PERIOD LOCKED ALERT BANNER -->
+        <div id="inputPeriodLockedBanner" style="display:none;margin-bottom:14px;padding:12px 18px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--radius-md);color:#991b1b;align-items:center;justify-content:space-between;gap:12px">
+        </div>
+
         <div class="card">
           <div class="card-header">
             <div>
@@ -335,13 +339,13 @@
               <button type="button" id="btnInputSyncFromPtnTime" class="btn btn-slate" style="background:#0284c7;color:#ffffff;border-color:#0284c7;font-weight:700" onclick="syncFromPtnTime()" title="ดึงข้อมูลเวลา ขาด ลา มาสาย OT และยอดเบิกเงินล่วงหน้า (รอบตัดวิก 26 ถึง 25) จากระบบ PTN Time อัตโนมัติ">
                 <i class="fa-solid fa-clock-rotate-left"></i> ดึงข้อมูลจาก PTN Time (1-Click)
               </button>
-              <button type="button" class="btn btn-slate" style="background:#059669;color:#ffffff;border-color:#059669;font-weight:700" onclick="openImportAttendanceModal()" title="นำเข้าข้อมูลวันขาด ลากิจ ลาป่วย และ OT จากไฟล์ Excel หรือ CSV">
+              <button type="button" id="btnImportAttendance" class="btn btn-slate" style="background:#059669;color:#ffffff;border-color:#059669;font-weight:700" onclick="openImportAttendanceModal()" title="นำเข้าข้อมูลวันขาด ลากิจ ลาป่วย และ OT จากไฟล์ Excel หรือ CSV">
                 <i class="fa-solid fa-file-import"></i> นำเข้าเวลาจาก Excel/CSV
               </button>
               <button type="button" class="btn btn-slate" onclick="exportToCSV('input')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
               </button>
-              <button type="button" class="btn btn-primary" onclick="openAddInputModal()">
+              <button type="button" id="btnAddInputModal" class="btn btn-primary" onclick="openAddInputModal()">
                 <i class="fa-solid fa-plus"></i> บันทึกข้อมูลรายคน
               </button>
             </div>

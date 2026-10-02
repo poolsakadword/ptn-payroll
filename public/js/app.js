@@ -620,6 +620,10 @@ function onPeriodChanged() {
 }
 
 function setPeriodWorkingDays() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้แก้ไขจำนวนวันทำงาน กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   var canSetWorkDays = isSuperAdmin() || hasPermission('calc_payroll');
   if (!canSetWorkDays) {
     showToast('สิทธิ์ไม่เพียงพอ: การตั้งค่าวันทำงานสงวนสิทธิ์เฉพาะ Super Admin และ Admin เท่านั้น', 'warning');
@@ -646,6 +650,10 @@ function setPeriodWorkingDays() {
 }
 
 function resetToActualWorkDays() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้แก้ไขจำนวนวันทำงาน กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   var canSetWorkDays = isSuperAdmin() || hasPermission('calc_payroll');
   if (!canSetWorkDays) {
     showToast('สิทธิ์ไม่เพียงพอ: การตั้งค่าวันทำงานสงวนสิทธิ์เฉพาะ Super Admin และ Admin เท่านั้น', 'warning');
@@ -1085,10 +1093,57 @@ function renderPayrollTable() {
   tbody.innerHTML = h;
 }
 
-// 3. MONTHLY INPUT TABLE RENDERER (19 COLUMNS)
+// // 3. MONTHLY INPUT TABLE RENDERER (19 COLUMNS)
 function renderInputTable() {
   var tbody = document.getElementById('inputTableBody');
   if (!tbody) return;
+
+  var banner = document.getElementById('inputPeriodLockedBanner');
+  if (banner) {
+    banner.style.display = State.isClosed ? 'flex' : 'none';
+    if (State.isClosed) {
+      banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px">' +
+        '<i class="fa-solid fa-lock" style="font-size:18px;color:#dc2626"></i>' +
+        '<div><div style="font-weight:700;font-size:13.5px;color:#991b1b">งวดประจำเดือน ' + esc(State.period) + ' ถูกปิดและล็อคแล้ว</div>' +
+        '<div style="font-size:11.5px;color:#b91c1c;margin-top:2px">ผลการคำนวณและข้อมูลถูกล็อคถาวร ไม่อนุญาตให้แก้ไข ลบ หรือซิงค์ข้อมูลใหม่ หากต้องการแก้ไขกรุณากดปุ่ม "ปลดล็อคงวด" ด้านขวา</div></div>' +
+        '</div>' +
+        (hasPermission('close_period') || isSuperAdmin() ? '<button type="button" class="btn btn-slate btn-sm" onclick="reopenPeriod()" style="background:#ffffff;border:1px solid #fca5a5;color:#dc2626;font-weight:700;white-space:nowrap"><i class="fa-solid fa-lock-open"></i> ปลดล็อคงวด</button>' : '');
+    }
+  }
+
+  var btnPopulate = document.getElementById('btnBatchPopulate');
+  if (btnPopulate) {
+    btnPopulate.disabled = State.isClosed;
+    btnPopulate.style.opacity = State.isClosed ? '0.5' : '1';
+    btnPopulate.style.cursor = State.isClosed ? 'not-allowed' : 'pointer';
+    btnPopulate.title = State.isClosed ? 'งวดนี้ปิดแล้ว ไม่อนุญาตให้นำเข้าพนักงาน' : 'ดึงพนักงานทุกคนเข้างวดนี้';
+  }
+  var btnSync = document.getElementById('btnInputSyncFromPtnTime');
+  if (btnSync) {
+    btnSync.disabled = State.isClosed;
+    btnSync.style.opacity = State.isClosed ? '0.5' : '1';
+    btnSync.style.cursor = State.isClosed ? 'not-allowed' : 'pointer';
+    btnSync.title = State.isClosed ? 'งวดนี้ปิดแล้ว ไม่อนุญาตให้ดึงข้อมูลจาก PTN Time' : 'ดึงข้อมูลจาก PTN Time (1-Click)';
+  }
+  var btnImp = document.getElementById('btnImportAttendance');
+  if (btnImp) {
+    btnImp.disabled = State.isClosed;
+    btnImp.style.opacity = State.isClosed ? '0.5' : '1';
+    btnImp.style.cursor = State.isClosed ? 'not-allowed' : 'pointer';
+    btnImp.title = State.isClosed ? 'งวดนี้ปิดแล้ว ไม่อนุญาตให้นำเข้าข้อมูล' : 'นำเข้าเวลาจาก Excel/CSV';
+  }
+  var btnAddInp = document.getElementById('btnAddInputModal');
+  if (btnAddInp) {
+    btnAddInp.disabled = State.isClosed;
+    btnAddInp.style.opacity = State.isClosed ? '0.5' : '1';
+    btnAddInp.style.cursor = State.isClosed ? 'not-allowed' : 'pointer';
+    btnAddInp.title = State.isClosed ? 'งวดนี้ปิดแล้ว ไม่อนุญาตให้เพิ่มข้อมูล' : 'บันทึกข้อมูลรายคน';
+  }
+  var selAll = document.getElementById('inputSelectAll');
+  if (selAll) {
+    selAll.disabled = State.isClosed;
+    if (State.isClosed) selAll.checked = false;
+  }
 
   var q = (document.getElementById('inputSearchInput') ? document.getElementById('inputSearchInput').value : '').trim().toLowerCase();
   var list = State.inputRecords.filter(function(i) {
@@ -1115,12 +1170,13 @@ function renderInputTable() {
     var pfAmt = (pfRate > 0) ? ((i.pfAmount !== undefined && i.pfAmount > 0) ? Number(i.pfAmount) : Math.round(baseSal * pfRate * 100) / 100) : 0;
 
     var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
-    var canEditInputs = hasPermission('edit_inputs') || isSuperAdmin();
-    var canSyncPtnTime = hasPermission('sync_ptn_time') || isSuperAdmin();
+    var canEditInputs = !State.isClosed && (hasPermission('edit_inputs') || isSuperAdmin());
+    var canSyncPtnTime = !State.isClosed && (hasPermission('sync_ptn_time') || isSuperAdmin());
 
     h += '<tr>' +
       '<td class="text-center" style="width:40px">' +
-        (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>') +
+        (State.isClosed ? '<span class="text-muted" title="งวดนี้ปิดแล้ว"><i class="fa-solid fa-lock" style="font-size:11px;color:#cbd5e1"></i></span>' :
+          (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>')) +
       '</td>' +
       '<td class="text-center font-mono">' + (i.no || (idx + 1)) + '</td>' +
       '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
@@ -1159,11 +1215,12 @@ function renderInputTable() {
         return '<td class="text-right font-mono text-red">' + fmt(oth) + debtBadge + '</td>';
       })() +
       '<td class="text-center">' +
-        (canSyncPtnTime ? '<button type="button" class="btn-icon" style="color:#0284c7;background:#e0f2fe;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(i.empId) + '\', \'' + esc(i.empName || '') + '\')" title="ดึงข้อมูล OT, วันลา และยอดเบิกเงินของ ' + esc(i.empName || i.empId) + ' จาก PTN Time"><i class="fa-solid fa-rotate"></i> ดึงเฉพาะคนนี้</button> ' : '') +
-        (canEditInputs ?
-          '<button type="button" class="btn-icon edit" onclick="openEditInputModal(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
-          '<button type="button" class="btn-icon del" onclick="deleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
-        (!canSyncPtnTime && !canEditInputs ? '<span class="text-muted">-</span>' : '') +
+        (State.isClosed ? '<span class="status-badge" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-size:11px;padding:2px 8px;font-weight:600"><i class="fa-solid fa-lock"></i> ล็อคงวดแล้ว</span>' :
+          ((canSyncPtnTime ? '<button type="button" class="btn-icon" style="color:#0284c7;background:#e0f2fe;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(i.empId) + '\', \'' + esc(i.empName || '') + '\')" title="ดึงข้อมูล OT, วันลา และยอดเบิกเงินของ ' + esc(i.empName || i.empId) + ' จาก PTN Time"><i class="fa-solid fa-rotate"></i> ดึงเฉพาะคนนี้</button> ' : '') +
+          (canEditInputs ?
+            '<button type="button" class="btn-icon edit" onclick="openEditInputModal(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' +
+            '<button type="button" class="btn-icon del" onclick="deleteInputRecord(\'' + esc(i.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
+          (!canSyncPtnTime && !canEditInputs ? '<span class="text-muted">-</span>' : ''))) +
       '</td>' +
     '</tr>';
   });
@@ -1209,6 +1266,10 @@ function deselectAllInputRecords() {
 }
 
 function batchDeleteInputRecords() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ลบข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   if (!hasPermission('edit_inputs') && !isSuperAdmin()) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด', 'warning');
     return;
@@ -2530,12 +2591,13 @@ function closeModal(id) {
 
 // POPULATE ALL EMPLOYEES
 function batchPopulateEmployees() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้นำเข้าพนักงาน กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   if (!hasPermission('populate_inputs') && !isSuperAdmin()) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงพนักงานเข้างวดนี้', 'warning');
     return;
-  }
-  if (State.isClosed) {
-    if (!confirm('คำเตือน: งวด ' + State.period + ' ถูกปิดงวดแล้ว ต้องการนำเข้าข้อมูลหรือไม่?')) return;
   }
   if (!confirm('ต้องการนำเข้า/ซิงค์พนักงานทั้งหมดเข้างวด ' + State.period + ' (อัตรา OT เริ่มต้น 40 บาท) ใช่หรือไม่?')) return;
 
@@ -2549,12 +2611,13 @@ function batchPopulateEmployees() {
 
 // 1-CLICK SYNC ATTENDANCE, LEAVE, OT & SALARY ADVANCES FROM PTN TIME
 function syncFromPtnTime() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ดึงข้อมูลจาก PTN Time กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   if (!hasPermission('sync_ptn_time') && !isSuperAdmin()) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงข้อมูลจากระบบ PTN Time', 'warning');
     return;
-  }
-  if (State.isClosed) {
-    if (!confirm('คำเตือน: งวด ' + State.period + ' ถูกปิดงวดแล้ว ต้องการดึงข้อมูลหรือไม่?')) return;
   }
 
   var cutDay = (State.settings && State.settings.cutoff_day) ? Number(State.settings.cutoff_day) : 25;
@@ -2584,20 +2647,18 @@ function syncFromPtnTime() {
 
 // SYNC INDIVIDUAL EMPLOYEE ATTENDANCE, LEAVE, OT & ADVANCE FROM PTN TIME
 function syncFromPtnTimeForEmp(empId, empName) {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ดึงข้อมูลจาก PTN Time กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return Promise.resolve(null);
+  }
   if (!hasPermission('sync_ptn_time') && !isSuperAdmin()) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงข้อมูลจากระบบ PTN Time', 'warning');
     return Promise.resolve(null);
   }
   if (!empId) return Promise.resolve(null);
   var nameStr = empName ? (' (' + empName + ')') : '';
-  if (State.isClosed) {
-    if (!confirm('คำเตือน: งวด ' + State.period + ' ถูกปิดงวดแล้ว ต้องการดึงข้อมูลของ [' + empId + ']' + nameStr + ' หรือไม่?')) {
-      return Promise.resolve(null);
-    }
-  } else {
-    if (!confirm('ต้องการดึงข้อมูล OT, วันลา และยอดเบิกเงินล่วงหน้าของ [' + empId + ']' + nameStr + ' จากระบบ PTN Time เข้าสู่งวด ' + State.period + ' ใช่หรือไม่?')) {
-      return Promise.resolve(null);
-    }
+  if (!confirm('ต้องการดึงข้อมูล OT, วันลา และยอดเบิกเงินล่วงหน้าของ [' + empId + ']' + nameStr + ' จากระบบ PTN Time เข้าสู่งวด ' + State.period + ' ใช่หรือไม่?')) {
+    return Promise.resolve(null);
   }
 
   showToast('กำลังดึงข้อมูลของ ' + empId + ' จาก PTN Time...', 'info');
@@ -2722,6 +2783,10 @@ function syncInputRulesNotices() {
 }
 
 function openAddInputModal() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้เพิ่มข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   document.getElementById('inputModalTitle').innerHTML = '<i class="fa-solid fa-calendar-plus"></i> บันทึกข้อมูลประจำงวด';
   document.getElementById('inputOrigEmpId').value = '';
   document.getElementById('miEmpId').value = '';
@@ -2752,6 +2817,10 @@ function openAddInputModal() {
 }
 
 function openEditInputModal(empId) {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้แก้ไขข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   var r = State.inputRecords.find(function(x) { return x.empId === empId; });
   if (!r) return;
 
@@ -2841,6 +2910,10 @@ function updateModalDailyRate(sal) {
 
 function saveInputRecordForm(e, openPayslipAfter) {
   if (e && e.preventDefault) e.preventDefault();
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้บันทึกข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   var baseSal = Number(document.getElementById('miBaseSalary').value) || 0;
   var pfRate = (document.getElementById('miPfRate') && document.getElementById('miPfRate').value !== '' && !isNaN(Number(document.getElementById('miPfRate').value))) ? Number(document.getElementById('miPfRate').value) : 0;
   var pfAmt = pfRate > 0 ? (Number(document.getElementById('miPfAmount').value) || Math.round(baseSal * pfRate * 100) / 100) : 0;
@@ -2894,6 +2967,10 @@ function saveInputRecordForm(e, openPayslipAfter) {
 }
 
 function deleteInputRecord(empId) {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ลบข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   if (!confirm('ยืนยันลบข้อมูลประจำงวดของ ' + empId + ' ใช่หรือไม่?')) return;
   callApi('deleteInputRecord', {
     empId: empId,
@@ -3570,6 +3647,10 @@ function reopenPeriod() {
 }
 
 function runPayrollRecalc() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ผลการคำนวณถูกล็อคถาวร กรุณาปลดล็อคงวดก่อนดำเนินการ', 'warning');
+    return;
+  }
   if (!hasPermission('calc_payroll')) {
     showToast('สิทธิ์ไม่เพียงพอ: คุณไม่ได้รับสิทธิ์ประมวลผลคำนวณเงินเดือน', 'error');
     return;
@@ -5309,6 +5390,10 @@ function printMonthlyPayrollSummary() {
 var parsedAttendanceRecords = [];
 
 function openImportAttendanceModal() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้นำเข้าข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   if (!hasPermission('edit_inputs')) {
     showToast('คุณไม่มีสิทธิ์นำเข้าข้อมูลเวลาทำงาน', 'warning');
     return;
@@ -5427,6 +5512,10 @@ function parseAttendanceCsvText(text) {
 }
 
 function confirmImportAttendance() {
+  if (State.isClosed) {
+    showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้นำเข้าข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
+    return;
+  }
   if (parsedAttendanceRecords.length === 0) {
     showToast('ไม่มีข้อมูลที่พร้อมนำเข้า', 'warning');
     return;

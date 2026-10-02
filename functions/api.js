@@ -873,6 +873,16 @@ async function getCompanyHolidayDatesSet(db, startDate, endDate) {
   }
 }
 
+async function isPeriodLocked(db, period) {
+  if (!period) return false;
+  try {
+    const row = await db.prepare('SELECT value FROM settings WHERE key = ?').bind(`Period_Status_${period}`).first();
+    return !!(row && row.value && row.value.startsWith('CLOSED'));
+  } catch (e) {
+    return false;
+  }
+}
+
 async function handleAction(db, action, params) {
   if (params.verifiedUser) {
     params.username = params.verifiedUser;
@@ -1251,6 +1261,9 @@ async function handleAction(db, action, params) {
       if (!allowed) {
         return { success: false, message: 'สิทธิ์ไม่เพียงพอ: การตั้งค่าวันทำงานสงวนสิทธิ์เฉพาะ Super Admin และ Admin เท่านั้น' };
       }
+      if (await isPeriodLocked(db, period)) {
+        return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้แก้ไขจำนวนวันทำงาน กรุณาปลดล็อคงวดก่อนดำเนินการ` };
+      }
       const days = Number(params.workingDays) || 30;
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_WorkDays_${period}`, String(days)).run();
       const count = await calculateAndSavePayroll(db, period, days);
@@ -1371,18 +1384,21 @@ async function handleAction(db, action, params) {
         diligenceAllowanceVal
       ).run();
 
-      // Immediately sync changes to current period monthly_inputs if employee exists in current period
+      // Immediately sync changes to current period monthly_inputs if employee exists in current period and period is not locked
       const targetEmpId = origId || emp.empId;
-      await db.prepare(`
-        UPDATE monthly_inputs 
-        SET emp_id = ?, emp_name = ?, base_salary = ?, pf_rate = ?, pf_amount = ?, sso = ?, tax = ?
-        WHERE emp_id = ? AND period = ?
-      `).bind(
-        emp.empId, emp.fullName, baseSalaryVal, pfRateVal, pfAmtVal, ssoVal, taxVal,
-        targetEmpId, period
-      ).run();
+      const isCurPeriodLocked = await isPeriodLocked(db, period);
+      if (!isCurPeriodLocked) {
+        await db.prepare(`
+          UPDATE monthly_inputs 
+          SET emp_id = ?, emp_name = ?, base_salary = ?, pf_rate = ?, pf_amount = ?, sso = ?, tax = ?
+          WHERE emp_id = ? AND period = ?
+        `).bind(
+          emp.empId, emp.fullName, baseSalaryVal, pfRateVal, pfAmtVal, ssoVal, taxVal,
+          targetEmpId, period
+        ).run();
 
-      await calculateAndSavePayroll(db, period);
+        await calculateAndSavePayroll(db, period);
+      }
       return { success: true, message: 'บันทึกข้อมูลพนักงานเรียบร้อยแล้ว' };
     }
 
@@ -1429,6 +1445,9 @@ async function handleAction(db, action, params) {
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์บันทึกข้อมูลประจำงวด' };
+      if (await isPeriodLocked(db, period)) {
+        return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้แก้ไขหรือบันทึกข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ` };
+      }
 
       const r = params.record || {};
       const origEmpId = params.origEmpId;
@@ -1471,6 +1490,9 @@ async function handleAction(db, action, params) {
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด' };
+      if (await isPeriodLocked(db, period)) {
+        return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ลบข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ` };
+      }
 
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
@@ -1485,6 +1507,9 @@ async function handleAction(db, action, params) {
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด' };
+      if (await isPeriodLocked(db, period)) {
+        return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ลบข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ` };
+      }
 
       const empIds = Array.isArray(params.empIds) ? params.empIds : [];
       if (empIds.length === 0) return { success: false, message: 'กรุณาเลือกรายการที่ต้องการลบ' };
@@ -1505,6 +1530,9 @@ async function handleAction(db, action, params) {
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'populate_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงพนักงานเข้างวดนี้' };
+      if (await isPeriodLocked(db, period)) {
+        return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ดึงพนักงานเข้างวด กรุณาปลดล็อคงวดก่อนดำเนินการ` };
+      }
 
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
       const employees = empQuery.results || [];
@@ -1602,6 +1630,9 @@ async function handleAction(db, action, params) {
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'sync_ptn_time')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงข้อมูลจากระบบ PTN Time' };
+      if (await isPeriodLocked(db, period)) {
+        return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ดึงข้อมูลจาก PTN Time กรุณาปลดล็อคงวดก่อนดำเนินการ` };
+      }
 
       const dates = await getCutoffDatesForPeriod(db, period);
       const startDate = dates.startDate;
@@ -4650,6 +4681,9 @@ async function handleAction(db, action, params) {
       const callerUser = params.currentUsername || params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'calc_payroll')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ประมวลผลเงินเดือน' };
+      if (await isPeriodLocked(db, period)) {
+        return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ผลการคำนวณถูกล็อคถาวร ไม่อนุญาตให้คำนวณใหม่ กรุณาปลดล็อคงวดก่อนดำเนินการ` };
+      }
 
       const count = await calculateAndSavePayroll(db, period);
       await logSystemActivity(db, callerUser || 'Admin', 'CALC_PAYROLL', `ประมวลผลคำนวณเงินเดือนงวด ${period} (${count} รายการ)`);
@@ -5241,6 +5275,9 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์นำเข้าข้อมูลประจำงวด' };
+      if (await isPeriodLocked(db, period)) {
+        return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้นำเข้าข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ` };
+      }
 
       const records = params.records || [];
       if (!Array.isArray(records) || records.length === 0) {
