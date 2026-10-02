@@ -10919,7 +10919,7 @@ function openAddAttendanceLogModal() {
   var empSel = document.getElementById('addAttEmpId');
   if (empSel) {
     empSel.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
-    var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active'; });
+    var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active' || e.status === 'Probation'; });
     list.sort(function(a, b) {
       var idA = a.empId || a.emp_id || '';
       var idB = b.empId || b.emp_id || '';
@@ -11150,7 +11150,7 @@ function openCreateAdminRequestModal() {
   var empSel = document.getElementById('createAdminReqEmpId');
   if (empSel) {
     empSel.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
-    var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active'; });
+    var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active' || e.status === 'Probation'; });
     list.sort(function(a, b) {
       var idA = a.empId || a.emp_id || '';
       var idB = b.empId || b.emp_id || '';
