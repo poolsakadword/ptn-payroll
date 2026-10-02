@@ -916,6 +916,7 @@ function renderAllViews() {
   try { renderDocumentsTab(true); } catch(e) { console.error('renderDocumentsTab error:', e); }
   try { renderCompanySettings(); } catch(e) { console.error('renderCompanySettings error:', e); }
   try { renderUsersTable(); } catch(e) { console.error('renderUsersTable error:', e); }
+  try { refreshAllEmployeeSelects(); } catch(e) { console.error('refreshAllEmployeeSelects error:', e); }
 }
 
 // 1. DASHBOARD RENDERER
@@ -2950,6 +2951,158 @@ function populateBranchSelects() {
   }
 }
 
+// ==============================================================================
+// GLOBAL EMPLOYEE SELECTS SYNCHRONIZER
+// Automatically updates ALL employee dropdowns/pickers across every menu & modal
+// whenever employees are loaded, added, edited, or passed probation
+// ==============================================================================
+function refreshAllEmployeeSelects() {
+  var employees = State.employees || [];
+  var workingEmps = employees.filter(function(e) {
+    var st = String(e.status || 'Active').trim().toUpperCase();
+    return st !== 'RESIGNED';
+  }).sort(function(a, b) {
+    var idA = String(a.empId || a.emp_id || '');
+    var idB = String(b.empId || b.emp_id || '');
+    return idA.localeCompare(idB);
+  });
+
+  // 1. miEmpId (Payroll Monthly Input Modal)
+  var miSel = document.getElementById('miEmpId');
+  if (miSel) {
+    var curMiVal = miSel.value;
+    var miOpts = '<option value="">-- เลือกรหัสพนักงาน --</option>';
+    workingEmps.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      var empPf = (e.pfRate !== null && e.pfRate !== undefined && !isNaN(Number(e.pfRate))) ? Number(e.pfRate) : 0;
+      var empSso = (e.defaultSso !== null && e.defaultSso !== undefined && !isNaN(Number(e.defaultSso))) ? Number(e.defaultSso) : 0;
+      miOpts += '<option value="' + esc(id) + '" data-name="' + esc(name) + '" data-salary="' + (e.baseSalary || 0) + '" data-pf="' + empPf + '" data-sso="' + empSso + '" data-tax="' + (e.defaultTax || 0) + '" data-remark="' + esc(e.remark || '') + '">' + esc(id) + ' - ' + esc(name) + nick + '</option>';
+    });
+    miSel.innerHTML = miOpts;
+    if (curMiVal) miSel.value = curMiVal;
+  }
+
+  // 2. histEmpSelect (History Tab)
+  var histSel = document.getElementById('histEmpSelect');
+  if (histSel) {
+    var curHistVal = histSel.value;
+    var histOpts = '<option value="">-- เลือกรหัสพนักงาน --</option>';
+    workingEmps.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      histOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + '</option>';
+    });
+    histSel.innerHTML = histOpts;
+    if (curHistVal) histSel.value = curHistVal;
+  }
+
+  // 3. docCertEmpSelect (Document Center)
+  var docSel = document.getElementById('docCertEmpSelect');
+  if (docSel) {
+    var curDocVal = docSel.value;
+    var docOpts = '';
+    workingEmps.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      var dept = e.department ? ' [' + e.department + ']' : '';
+      docOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + dept + '</option>';
+    });
+    docSel.innerHTML = docOpts || '<option value="">ไม่มีข้อมูลพนักงาน</option>';
+    if (curDocVal) docSel.value = curDocVal;
+  }
+
+  // 4. addAttEmpId (Manual Attendance Clock-in Modal)
+  var addAttSel = document.getElementById('addAttEmpId');
+  if (addAttSel) {
+    var curAddAttVal = addAttSel.value;
+    var addAttOpts = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
+    workingEmps.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      var dept = e.department ? ' - ' + e.department : '';
+      addAttOpts += '<option value="' + esc(id) + '">[' + esc(id) + '] ' + esc(name) + nick + dept + '</option>';
+    });
+    addAttSel.innerHTML = addAttOpts;
+    if (curAddAttVal) addAttSel.value = curAddAttVal;
+  }
+
+  // 5. createAdminReqEmpId (Admin Create Request Modal)
+  var adminReqSel = document.getElementById('createAdminReqEmpId');
+  if (adminReqSel) {
+    var curAdminReqVal = adminReqSel.value;
+    var adminReqOpts = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
+    workingEmps.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      var dept = e.department ? ' - ' + e.department : '';
+      adminReqOpts += '<option value="' + esc(id) + '">[' + esc(id) + '] ' + esc(name) + nick + dept + '</option>';
+    });
+    adminReqSel.innerHTML = adminReqOpts;
+    if (curAdminReqVal) adminReqSel.value = curAdminReqVal;
+  }
+
+  // 6. expAttEmployee (Export Attendance CSV/Excel Modal)
+  var expAttSel = document.getElementById('expAttEmployee');
+  if (expAttSel) {
+    var curExpVal = expAttSel.value || 'ALL';
+    var expOpts = '<option value="ALL">👥 พนักงานทุกคน (All Employees - คนละ 1 แผ่น A4)</option>';
+    workingEmps.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      expOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + '</option>';
+    });
+    expAttSel.innerHTML = expOpts;
+    if (curExpVal) expAttSel.value = curExpVal;
+  }
+
+  // 7. attSumSingleEmpSelect (Attendance Summary / ใบลงเวลารายบุคคล)
+  var attSumSingleSel = document.getElementById('attSumSingleEmpSelect');
+  if (attSumSingleSel) {
+    var curAttSumVal = attSumSingleSel.value || State.activeAttendanceSummarySingleEmpId;
+    var attSumOpts = '';
+    workingEmps.forEach(function(e) {
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname && e.nickname !== '-' ? ' (' + e.nickname + ')' : '';
+      attSumOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + '</option>';
+    });
+    if (attSumOpts) {
+      attSumSingleSel.innerHTML = attSumOpts;
+      if (curAttSumVal && workingEmps.some(function(x) { return (x.empId || x.emp_id) === curAttSumVal; })) {
+        attSumSingleSel.value = curAttSumVal;
+        State.activeAttendanceSummarySingleEmpId = curAttSumVal;
+      } else if (workingEmps.length) {
+        var firstId = workingEmps[0].empId || workingEmps[0].emp_id;
+        attSumSingleSel.value = firstId;
+        State.activeAttendanceSummarySingleEmpId = firstId;
+      }
+    }
+  }
+
+  // 8. Attendance Filters (attFilterEmp & attReqEmpFilter)
+  if (typeof populateAttendanceEmployeeSelects === 'function') {
+    populateAttendanceEmployeeSelects(workingEmps.map(function(e) {
+      return {
+        emp_id: e.empId || e.emp_id,
+        name: e.fullName || e.full_name || e.name,
+        full_name: e.fullName || e.full_name || e.name,
+        nickname: e.nickname,
+        department: e.department,
+        position: e.position,
+        branch_id: e.branchId || e.branch_id,
+        photo_url: e.photoUrl || e.photo_url
+      };
+    }));
+  }
+}
+
 function getNextEmployeeId() {
   var emps = State.employees || [];
   var maxNum = 0;
@@ -3166,6 +3319,10 @@ function saveEmployeeForm(e, openPayslipAfter) {
           setTimeout(function() { viewPayslip(d.empId); }, 300);
         }
       }
+      try { refreshAllEmployeeSelects(); } catch(e) {}
+      if (typeof loadAttendancePeriodSummary === 'function') {
+        loadAttendancePeriodSummary();
+      }
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }
@@ -3176,6 +3333,10 @@ function deleteEmployee(empId) {
     .then(function(r) {
       showToast(r.message || 'ลบพนักงานสำเร็จ');
       loadAppData();
+      try { refreshAllEmployeeSelects(); } catch(e) {}
+      if (typeof loadAttendancePeriodSummary === 'function') {
+        loadAttendancePeriodSummary();
+      }
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }
@@ -5343,6 +5504,10 @@ function passProbation(empId) {
     }
     showToast(r.message, 'success');
     loadAppData();
+    try { refreshAllEmployeeSelects(); } catch(e) {}
+    if (typeof loadAttendancePeriodSummary === 'function') {
+      loadAttendancePeriodSummary();
+    }
   })
   .catch(function(err) {
     showToast('Error: ' + err.message, 'error');
@@ -9098,6 +9263,7 @@ function loadAttendancePeriodSummary() {
     // Populate single employee select
     var empSel = document.getElementById('attSumSingleEmpSelect');
     if (empSel && res.summaryList) {
+      var prevVal = empSel.value || State.activeAttendanceSummarySingleEmpId;
       empSel.innerHTML = '';
       res.summaryList.forEach(function(e) {
         var opt = document.createElement('option');
@@ -9105,11 +9271,12 @@ function loadAttendancePeriodSummary() {
         opt.textContent = e.empId + ' - ' + e.fullName + (e.nickname && e.nickname !== '-' ? ' (' + e.nickname + ')' : '');
         empSel.appendChild(opt);
       });
-      if (!State.activeAttendanceSummarySingleEmpId && res.summaryList.length) {
+      if (prevVal && res.summaryList.some(function(x) { return x.empId === prevVal; })) {
+        State.activeAttendanceSummarySingleEmpId = prevVal;
+        empSel.value = prevVal;
+      } else if (res.summaryList.length) {
         State.activeAttendanceSummarySingleEmpId = res.summaryList[0].empId;
-      }
-      if (State.activeAttendanceSummarySingleEmpId) {
-        empSel.value = State.activeAttendanceSummarySingleEmpId;
+        empSel.value = res.summaryList[0].empId;
       }
     }
 
@@ -10919,7 +11086,10 @@ function openAddAttendanceLogModal() {
   var empSel = document.getElementById('addAttEmpId');
   if (empSel) {
     empSel.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
-    var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active' || e.status === 'Probation'; });
+    var list = (State.employees || []).filter(function(e) {
+      var st = String(e.status || 'Active').trim().toUpperCase();
+      return st !== 'RESIGNED';
+    });
     list.sort(function(a, b) {
       var idA = a.empId || a.emp_id || '';
       var idB = b.empId || b.emp_id || '';
@@ -11150,7 +11320,10 @@ function openCreateAdminRequestModal() {
   var empSel = document.getElementById('createAdminReqEmpId');
   if (empSel) {
     empSel.innerHTML = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
-    var list = (State.employees || []).filter(function(e) { return !e.status || e.status === 'Active' || e.status === 'Probation'; });
+    var list = (State.employees || []).filter(function(e) {
+      var st = String(e.status || 'Active').trim().toUpperCase();
+      return st !== 'RESIGNED';
+    });
     list.sort(function(a, b) {
       var idA = a.empId || a.emp_id || '';
       var idB = b.empId || b.emp_id || '';

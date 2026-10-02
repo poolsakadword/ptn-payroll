@@ -3162,8 +3162,8 @@ async function handleAction(db, action, params) {
       const branchMap = {};
       for (const b of branches) branchMap[b.branch_id] = b;
 
-      // Load Employees
-      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status FROM employees WHERE (status IS NULL OR status = 'Active')";
+      // Load Employees (Include all active working staff: Active, Probation, etc.)
+      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status FROM employees WHERE (status IS NULL OR UPPER(TRIM(status)) != 'RESIGNED')";
       const empBinds = [];
       if (branchId && branchId !== 'ALL') {
         empSql += " AND branch_id = ?";
