@@ -11896,10 +11896,10 @@ function saveAttendanceSettingsFromPayroll(e) {
   var sStart = document.getElementById('attSetShiftStart').value || '09:30';
   var sEnd = document.getElementById('attSetShiftEnd').value || '19:00';
   var sCutoffDay = Number(document.getElementById('attSetCutoffDay') ? document.getElementById('attSetCutoffDay').value : 25) || 25;
-  var sGrace = Number(document.getElementById('attSetGraceMinutes').value) || 0;
-  var sRadius = Number(document.getElementById('attSetRadiusMeters').value) || 200;
-  var sLat = Number(document.getElementById('attSetLat').value) || 13.727896;
-  var sLng = Number(document.getElementById('attSetLng').value) || 100.524123;
+  var sGrace = Number(document.getElementById('attSetGraceMinutes') ? document.getElementById('attSetGraceMinutes').value : 0) || 0;
+  var elRadius = document.getElementById('attSetRadiusMeters');
+  var elLat = document.getElementById('attSetLat');
+  var elLng = document.getElementById('attSetLng');
   
   var enableLeave = document.getElementById('attSetEnableLeave') ? (document.getElementById('attSetEnableLeave').checked ? 'true' : 'false') : 'true';
   var enableOt = document.getElementById('attSetEnableOt') ? (document.getElementById('attSetEnableOt').checked ? 'true' : 'false') : 'true';
@@ -11964,9 +11964,6 @@ function saveAttendanceSettingsFromPayroll(e) {
     cutoff_day: sCutoffDay,
     grace_minutes: sGrace,
     grace_period_morning_minutes: sGrace,
-    geofence_radius_meters: sRadius,
-    office_lat: sLat,
-    office_lng: sLng,
     enable_leave_requests: enableLeave,
     enable_ot_requests: enableOt,
     enable_advance_requests: enableAdv,
@@ -12016,6 +12013,10 @@ function saveAttendanceSettingsFromPayroll(e) {
     selfie_custom_messages_break: selfieCustomMessagesBreak,
     selfie_custom_messages_out: selfieCustomMessagesOut
   };
+
+  if (elRadius && elRadius.value) settings.geofence_radius_meters = Number(elRadius.value);
+  if (elLat && elLat.value) settings.office_lat = Number(elLat.value);
+  if (elLng && elLng.value) settings.office_lng = Number(elLng.value);
 
   callApi('saveAttendanceSettings', {
     settings: settings,
@@ -12486,21 +12487,97 @@ function deleteBranchPrompt(branchId, branchName) {
 
 function getCurrentLocationForBranchEdit() {
   if (!navigator.geolocation) {
-    showToast('เบราว์เซอร์ไม่รองรับ Geolocation', 'warning');
+    showToast('เบราว์เซอร์ไม่รองรับการดึงพิกัด Geolocation', 'warning');
     return;
   }
-  showToast('กำลังตรวจหาพิกัด GPS...', 'info');
+
+  var btn = document.getElementById('btnGetBranchLocation');
+  var origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังหาพิกัด...';
+  }
+  showToast('กำลังตรวจหาพิกัด GPS จากอุปกรณ์...', 'info');
+
+  function onSuccess(pos) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+    var lat = pos.coords.latitude.toFixed(6);
+    var lng = pos.coords.longitude.toFixed(6);
+    var acc = Math.round(pos.coords.accuracy || 0);
+    document.getElementById('bLat').value = lat;
+    document.getElementById('bLng').value = lng;
+    showToast('ดึงพิกัดสำเร็จ: ' + lat + ', ' + lng + (acc ? ' (ความแม่นยำ ±' + acc + 'm)' : ''), 'success');
+  }
+
+  function handleGeoError(err) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+
+    if (err.code === 1) { // PERMISSION_DENIED
+      alert('⚠️ ไม่สามารถดึงพิกัดได้: สิทธิ์เข้าถึงตำแหน่ง (Location) ถูกปิดอยู่\n\nวิธีเปิดสิทธิ์ในเบราว์เซอร์:\n1. กดที่ไอคอนแม่กุญแจ 🔒 หรือการตั้งค่าเว็บไซต์ ที่แถบ URL ด้านบน\n2. ไปที่หัวข้อ "ตำแหน่ง" (Location / Site Permissions)\n3. เลือกเปลี่ยนเป็น "อนุญาต" (Allow)\n4. กดยืนยันแล้วกด "ดึงพิกัดปัจจุบัน" อีกครั้งครับ\n\n(หรือสามารถกดปุ่ม "วางพิกัด" เพื่อคัดลอกจาก Google Maps มาใส่ได้ทันที)');
+      showToast('เบราว์เซอร์ถูกปิดสิทธิ์ตำแหน่ง (Location Denied): กรุณากดไอคอนแม่กุญแจ 🔒 ที่แถบ URL ด้านบน แล้วเลือก "อนุญาต"', 'error');
+    } else if (err.code === 3) { // TIMEOUT
+      showToast('หมดเวลารอดึงพิกัด GPS (Timeout): แนะนำให้เปิด Wi-Fi หรือคัดลอกพิกัดจาก Google Maps มาวางแทนครับ', 'warning');
+    } else if (err.code === 2) { // POSITION_UNAVAILABLE
+      showToast('ไม่พบสัญญาณตำแหน่ง: อุปกรณ์ไม่พร้อมระบุพิกัด แนะนำให้คัดลอกพิกัดจาก Google Maps มาใส่แทนครับ', 'warning');
+    } else {
+      showToast('ไม่สามารถดึงพิกัดได้: ' + (err.message || 'เกิดข้อผิดพลาด'), 'error');
+    }
+  }
+
+  function tryLowAccuracy() {
+    navigator.geolocation.getCurrentPosition(
+      onSuccess,
+      handleGeoError,
+      { enableHighAccuracy: false, timeout: 15000, maximumAge: 300000 }
+    );
+  }
+
+  // Attempt 1: High accuracy (fast timeout 6s)
   navigator.geolocation.getCurrentPosition(
-    function(pos) {
-      document.getElementById('bLat').value = pos.coords.latitude.toFixed(6);
-      document.getElementById('bLng').value = pos.coords.longitude.toFixed(6);
-      showToast('ดึงพิกัดสำเร็จ: ' + pos.coords.latitude.toFixed(6) + ', ' + pos.coords.longitude.toFixed(6));
-    },
+    onSuccess,
     function(err) {
-      showToast('ไม่สามารถดึงพิกัดได้: ' + err.message, 'error');
+      if (err.code === 1) {
+        // Permission denied directly -> do not retry, show instructions
+        handleGeoError(err);
+      } else {
+        // Timeout or Position unavailable -> try low accuracy fallback (Wi-Fi / network)
+        console.warn('GPS High accuracy failed, falling back to network positioning...', err);
+        tryLowAccuracy();
+      }
     },
-    { enableHighAccuracy: true, timeout: 8000 }
+    { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
   );
+}
+
+function viewBranchOnGoogleMaps() {
+  var lat = document.getElementById('bLat') ? document.getElementById('bLat').value.trim() : '';
+  var lng = document.getElementById('bLng') ? document.getElementById('bLng').value.trim() : '';
+  if (!lat || !lng) {
+    showToast('กรุณาระบุพิกัด Latitude และ Longitude ก่อนตรวจสอบแผนที่', 'warning');
+    return;
+  }
+  window.open('https://www.google.com/maps?q=' + encodeURIComponent(lat + ',' + lng), '_blank');
+}
+
+function pasteCoordinatesFromMaps() {
+  var input = prompt('กรุณาวางพิกัดจาก Google Maps\n(เช่น 15.698765, 100.524123 หรือลิงก์ Google Maps):');
+  if (!input) return;
+  var match = input.match(/(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/);
+  if (match) {
+    var lat = parseFloat(match[1]).toFixed(6);
+    var lng = parseFloat(match[2]).toFixed(6);
+    document.getElementById('bLat').value = lat;
+    document.getElementById('bLng').value = lng;
+    showToast('กำหนดพิกัดสำเร็จ: ' + lat + ', ' + lng, 'success');
+  } else {
+    showToast('ไม่พบรูปแบบพิกัด (ตัวอย่างที่ถูกต้อง: 15.698765, 100.524123)', 'warning');
+  }
 }
 
 function syncAttendanceToPayrollPeriod() {

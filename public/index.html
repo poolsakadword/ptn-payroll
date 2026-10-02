@@ -1168,7 +1168,7 @@
                     </div>
                   </div>
 
-                  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
                     <div>
                       <label style="font-size:11px;font-weight:600;color:#0369a1">📅 วันตัดวิก (วันที่)</label>
                       <input type="number" id="attSetCutoffDay" value="25" min="1" max="31" style="width:100%;padding:6px;border:1.5px solid #38bdf8;border-radius:6px;font-size:12px;font-weight:700;color:#0284c7;background:#f0f9ff" required title="ระบุวันที่ตัดรอบวิก เช่น 25 (รอบคือ 26 เดือนก่อน ถึง 25 เดือนปัจจุบัน)">
@@ -1177,21 +1177,22 @@
                       <label style="font-size:11px;font-weight:600;color:#64748b">ผ่อนผันสาย (นาที)</label>
                       <input type="number" id="attSetGraceMinutes" value="0" min="0" max="120" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
                     </div>
-                    <div>
-                      <label style="font-size:11px;font-weight:600;color:#64748b">รัศมี GPS (เมตร)</label>
-                      <input type="number" id="attSetRadiusMeters" value="200" min="20" max="5000" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
-                    </div>
                   </div>
 
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
-                    <div>
-                      <label style="font-size:11px;font-weight:600;color:#64748b">พิกัด Lat</label>
-                      <input type="number" step="0.000001" id="attSetLat" value="13.727896" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
+                  <!-- Consolidated GPS Notice -->
+                  <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div style="width:34px;height:34px;border-radius:8px;background:#dcfce7;color:#16a34a;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">
+                        <i class="fa-solid fa-location-dot"></i>
+                      </div>
+                      <div>
+                        <div style="font-size:12px;font-weight:700;color:#166534">การตั้งค่าพิกัด GPS &amp; รัศมีสาขา</div>
+                        <div style="font-size:11px;color:#475569">กำหนดพิกัดและรัศมีสแกนแยกตามแต่ละสาขา (B01-B04) อย่างอิสระได้ที่แท็บ <b>จัดการสาขา</b></div>
+                      </div>
                     </div>
-                    <div>
-                      <label style="font-size:11px;font-weight:600;color:#64748b">พิกัด Lng</label>
-                      <input type="number" step="0.000001" id="attSetLng" value="100.524123" style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px" required>
-                    </div>
+                    <button type="button" class="btn btn-sm" style="font-size:11.5px;padding:6px 12px;background:#16a34a;color:#ffffff;border-radius:6px;white-space:nowrap;font-weight:700;display:flex;align-items:center;gap:6px" onclick="switchAttendanceSubTab('branches')">
+                      <i class="fa-solid fa-store"></i> ไปที่จัดการสาขา
+                    </button>
                   </div>
 
                   <!-- Break Tracking Mode Setting -->
@@ -4721,28 +4722,39 @@
           </div>
 
           <!-- GPS Coordinates & Geofence -->
-          <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center">
-              <div style="font-size:11.5px;font-weight:700;color:#166534;display:flex;align-items:center;gap:6px">
-                <i class="fa-solid fa-location-dot text-green"></i> พิกัด GPS &amp; รัศมีสาขา
+          <div style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+              <div style="font-size:12px;font-weight:700;color:#166534;display:flex;align-items:center;gap:6px">
+                <i class="fa-solid fa-location-dot text-green"></i> พิกัด GPS &amp; รัศมีสาขา (Geofence)
               </div>
-              <button type="button" class="btn btn-sm" style="font-size:11px;padding:2px 8px;background:#dcfce7;color:#15803d;border:1px solid #86efac" onclick="getCurrentLocationForBranchEdit()">
-                <i class="fa-solid fa-crosshairs"></i> ดึงพิกัดปัจจุบัน
-              </button>
+              <div style="display:flex;align-items:center;gap:6px">
+                <button type="button" id="btnGetBranchLocation" class="btn btn-sm" style="font-size:11px;padding:4px 10px;background:#dcfce7;color:#15803d;border:1px solid #86efac;font-weight:600" onclick="getCurrentLocationForBranchEdit()" title="ดึงพิกัด GPS จากอุปกรณ์ปัจจุบัน">
+                  <i class="fa-solid fa-crosshairs"></i> ดึงพิกัดปัจจุบัน
+                </button>
+                <button type="button" class="btn btn-sm" style="font-size:11px;padding:4px 10px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;font-weight:600" onclick="pasteCoordinatesFromMaps()" title="คัดลอก Lat, Lng จาก Google Maps มาวาง">
+                  <i class="fa-solid fa-paste"></i> วางพิกัด
+                </button>
+                <button type="button" class="btn btn-sm" style="font-size:11px;padding:4px 10px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-weight:600" onclick="viewBranchOnGoogleMaps()" title="เปิดแผนที่เพื่อตรวจสอบหมุดของสาขานี้">
+                  <i class="fa-solid fa-map-location-dot"></i> ดูบน Maps
+                </button>
+              </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
               <div>
-                <label style="font-size:11px;font-weight:600;color:#166534">Latitude</label>
-                <input type="number" step="0.000001" id="bLat" value="13.727896" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-family:monospace">
+                <label style="font-size:11px;font-weight:600;color:#166534">Latitude (ละติจูด)</label>
+                <input type="number" step="0.000001" id="bLat" value="13.727896" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-family:monospace;font-weight:600">
               </div>
               <div>
-                <label style="font-size:11px;font-weight:600;color:#166534">Longitude</label>
-                <input type="number" step="0.000001" id="bLng" value="100.524123" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-family:monospace">
+                <label style="font-size:11px;font-weight:600;color:#166534">Longitude (ลองจิจูด)</label>
+                <input type="number" step="0.000001" id="bLng" value="100.524123" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-family:monospace;font-weight:600">
               </div>
               <div>
-                <label style="font-size:11px;font-weight:600;color:#166534">รัศมี (เมตร)</label>
-                <input type="number" id="bRadius" value="200" min="20" max="5000" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px">
+                <label style="font-size:11px;font-weight:600;color:#166534">รัศมีสแกน (เมตร)</label>
+                <input type="number" id="bRadius" value="200" min="20" max="5000" required style="width:100%;padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:12px;font-weight:700;color:#047857">
               </div>
+            </div>
+            <div style="font-size:10.5px;color:#15803d;display:flex;align-items:center;gap:4px">
+              <i class="fa-solid fa-circle-info"></i> หากอยู่นอกสาขา สามารถเปิด Google Maps เพื่อค้นหาตำแหน่งร้าน คลิกขวาคัดลอกพิกัด แล้วกดปุ่ม <b>"วางพิกัด"</b> ได้ทันที
             </div>
           </div>
 
@@ -5580,6 +5592,6 @@
   <div id="payrollSummaryPrintContainer" style="display:none"></div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.41"></script>
+  <script src="js/app.js?v=9.42"></script>
 </body>
 </html>
