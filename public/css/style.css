@@ -379,6 +379,9 @@ table.data-table thead {
   top: 0;
   z-index: 20;
 }
+th {
+  color: #0f172a;
+}
 table.data-table thead th {
   position: sticky;
   top: 0;
