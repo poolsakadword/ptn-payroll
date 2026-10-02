@@ -9502,16 +9502,21 @@ function renderIndividualAttendanceSheet(empId) {
     } else {
       var html = '';
       recs.forEach(function(r) {
-        var dayColor = (r.dayOfWeek === 'อา.' || r.dayOfWeek === 'Sun') ? '#dc2626' : '#334155';
-        html += '<tr style="border-bottom:1px solid #f1f5f9;height:30px">';
-        html += '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace;font-weight:600">' + r.date.substring(5) + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:4px;color:' + dayColor + ';font-weight:700">' + r.dayOfWeek + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace">' + esc(r.clockIn) + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:4px;font-family:monospace">' + esc(r.clockOut) + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:4px;color:' + (r.lateMinutes > 0 ? '#ea580c;font-weight:700' : '#64748b') + '">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:4px;color:' + (r.otHours > 0 ? '#4338ca;font-weight:700' : '#64748b') + '">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:4px;text-align:left;color:' + r.statusColor + ';font-weight:700">' + esc(r.statusText) + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:4px;text-align:left;color:#64748b;font-size:11px">' + esc(r.remark || '-') + '</td>';
+        var dayColor = (r.dayOfWeek === 'อา.' || r.dayOfWeek === 'Sun') ? '#dc2626' : '#1e293b';
+        var clockInText = (r.clockIn && r.clockIn !== '-') ? r.clockIn : '-';
+        var clockOutText = (r.clockOut && r.clockOut !== '-') ? r.clockOut : '-';
+        var clockInColor = (clockInText !== '-') ? '#0f172a' : '#94a3b8';
+        var clockOutColor = (clockOutText !== '-') ? '#0f172a' : '#94a3b8';
+
+        html += '<tr style="border-bottom:1px solid #f1f5f9;height:32px;color:#0f172a">';
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;font-family:monospace;font-weight:700;color:#0f172a;font-size:12px">' + r.date.substring(5) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;color:' + dayColor + ';font-weight:700">' + r.dayOfWeek + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;font-family:monospace;font-weight:700;color:' + clockInColor + ';font-size:12px">' + esc(clockInText) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;font-family:monospace;font-weight:700;color:' + clockOutColor + ';font-size:12px">' + esc(clockOutText) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;color:' + (r.lateMinutes > 0 ? '#c2410c;font-weight:800' : '#64748b;font-weight:600') + ';font-family:monospace;font-size:12px">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;color:' + (r.otHours > 0 ? '#4338ca;font-weight:800' : '#64748b;font-weight:600') + ';font-family:monospace;font-size:12px">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:left;color:' + r.statusColor + ';font-weight:700">' + esc(r.statusText) + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:left;color:#334155;font-size:11px">' + esc(r.remark || '-') + '</td>';
         html += '</tr>';
       });
       tbody.innerHTML = html;
@@ -9788,15 +9793,21 @@ function printAttendanceSummaryReport() {
     sHtml += '</tr></thead><tbody>';
 
     (emp.dailyRecords || []).forEach(function(r) {
-      sHtml += '<tr style="border-bottom:1px solid #e2e8f0;height:24px">';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace">' + r.date.substring(5) + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-weight:700">' + r.dayOfWeek + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace">' + esc(r.clockIn) + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace">' + esc(r.clockOut) + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-weight:600">' + esc(r.statusText) + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-size:10px;color:#64748b">' + esc(r.remark || '-') + '</td>';
+      var dayColor = (r.dayOfWeek === 'อา.' || r.dayOfWeek === 'Sun') ? '#dc2626' : '#1e293b';
+      var clockInText = (r.clockIn && r.clockIn !== '-') ? r.clockIn : '-';
+      var clockOutText = (r.clockOut && r.clockOut !== '-') ? r.clockOut : '-';
+      var clockInColor = (clockInText !== '-') ? '#0f172a' : '#94a3b8';
+      var clockOutColor = (clockOutText !== '-') ? '#0f172a' : '#94a3b8';
+
+      sHtml += '<tr style="border-bottom:1px solid #cbd5e1;height:24px;color:#0f172a">';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:#0f172a">' + r.date.substring(5) + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-weight:700;color:' + dayColor + '">' + r.dayOfWeek + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:' + clockInColor + '">' + esc(clockInText) + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:' + clockOutColor + '">' + esc(clockOutText) + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;color:' + (r.lateMinutes > 0 ? '#c2410c;font-weight:800' : '#64748b') + ';font-family:monospace">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;color:' + (r.otHours > 0 ? '#4338ca;font-weight:800' : '#64748b') + ';font-family:monospace">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-weight:600;color:' + r.statusColor + '">' + esc(r.statusText) + '</td>';
+      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-size:10px;color:#334155">' + esc(r.remark || '-') + '</td>';
       sHtml += '</tr>';
     });
     sHtml += '</tbody></table>';

@@ -420,6 +420,21 @@ table.data-table td {
 }
 table.data-table tr:hover td { background: #f8fafc; }
 
+/* INDIVIDUAL ATTENDANCE TIMESHEET STYLES */
+#attSumSingleContainer {
+  color: #0f172a;
+}
+#attSumSingleContainer table {
+  color: #0f172a;
+}
+#attSumSingleContainer th {
+  color: #0f172a !important;
+  background-color: #f1f5f9 !important;
+}
+#attSumSingleContainer td {
+  color: #0f172a;
+}
+
 /* TABLE CELL HELPERS */
 .text-right { text-align: right; }
 .text-center { text-align: center; }
