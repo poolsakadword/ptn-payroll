@@ -9402,11 +9402,6 @@ function renderAttendancePeriodSummary(data) {
           ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:12px;font-weight:700;font-size:11px;display:inline-block" title="ได้รับเบี้ยขยัน ฿' + (r.diligenceAmount || 1000).toLocaleString() + '"><i class="fa-solid fa-circle-check"></i> ได้รับ</span>'
           : '<span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:12px;font-weight:700;font-size:11px;display:inline-block" title="' + esc(r.diligenceDisqualifyReason || 'ไม่ผ่านเกณฑ์') + '"><i class="fa-solid fa-circle-xmark"></i> หลุดสิทธิ์</span>';
 
-        html += '<tr style="border-bottom:1px solid #e2e8f0;text-align:center;font-size:12px;height:38px">';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;color:#64748b">' + r.no + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;font-family:monospace;font-weight:700;color:#1e40af">' + esc(r.empId) + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px 8px;text-align:left"><strong style="color:#0f172a;cursor:pointer" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')">' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' <span style="color:#64748b">(' + esc(r.nickname) + ')</span>' : '') + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;text-align:left;color:#334155;white-space:nowrap">' + esc(r.branchName) + '</td>';
         var pDays = Math.round((Number(r.presentDays) || 0) * 100) / 100;
         var aDays = Math.round((Number(r.absentDays) || 0) * 100) / 100;
         var scDays = Math.round((Number(r.sickWithCertDays) || 0) * 100) / 100;
