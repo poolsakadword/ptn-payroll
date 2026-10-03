@@ -1036,9 +1036,20 @@ async function handleAction(db, action, params) {
 
       // Monthly Inputs
       const inputQuery = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ? ORDER BY no ASC, emp_id ASC').bind(period).all();
-      const inputRecords = (inputQuery.results || []).map(i => ({
+      let rawInputs = inputQuery.results || [];
+      const uniqueNos = new Set(rawInputs.map(r => r.no));
+      if (rawInputs.length > 1 && (uniqueNos.size === 1 || rawInputs.some(r => !r.no || Number(r.no) <= 0))) {
+        // Auto-heal duplicate or corrupted sequence numbers in DB sequentially 1..N by emp_id
+        for (let idx = 0; idx < rawInputs.length; idx++) {
+          const correctNo = idx + 1;
+          rawInputs[idx].no = correctNo;
+          await db.prepare('UPDATE monthly_inputs SET no = ? WHERE period = ? AND emp_id = ?')
+            .bind(correctNo, period, rawInputs[idx].emp_id).run().catch(() => {});
+        }
+      }
+      const inputRecords = rawInputs.map((i, idx) => ({
         period: i.period,
-        no: Number(i.no) || 1,
+        no: Number(i.no) || (idx + 1),
         empId: i.emp_id,
         empName: i.emp_name || '',
         baseSalary: Number(i.base_salary) || 0,
@@ -1462,8 +1473,16 @@ async function handleAction(db, action, params) {
         await db.prepare('DELETE FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, origEmpId).run();
       }
 
-      const countRow = await db.prepare('SELECT COUNT(*) as count FROM monthly_inputs WHERE period = ?').bind(period).first();
-      const nextNo = (countRow ? countRow.count : 0) + 1;
+      let recordNo = Number(r.no) || 0;
+      if (!recordNo) {
+        const existRow = await db.prepare('SELECT no FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, origEmpId || r.empId).first();
+        if (existRow && existRow.no) {
+          recordNo = Number(existRow.no);
+        } else {
+          const maxRow = await db.prepare('SELECT COALESCE(MAX(no), 0) as max_no FROM monthly_inputs WHERE period = ?').bind(period).first();
+          recordNo = (maxRow ? Number(maxRow.max_no) : 0) + 1;
+        }
+      }
 
       const lateMins = (r.lateMinutes !== undefined && r.lateMinutes !== null) ? Number(r.lateMinutes) : 0;
       const lateCnt = (r.lateCount !== undefined && r.lateCount !== null) ? Number(r.lateCount) : 0;
@@ -1474,7 +1493,7 @@ async function handleAction(db, action, params) {
         (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, carried_debt, sso, tax)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        period, nextNo, r.empId, r.empName || '', baseSal, pfRate, pfAmt,
+        period, recordNo, r.empId, r.empName || '', baseSal, pfRate, pfAmt,
         Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.unpaidSickLeaveDays) || 0, Number(r.lateDeduct) || 0,
         lateMins, lateCnt,
         Number(r.otHours) || 0, otRate,

@@ -1178,7 +1178,7 @@ function renderInputTable() {
         (State.isClosed ? '<span class="text-muted" title="งวดนี้ปิดแล้ว"><i class="fa-solid fa-lock" style="font-size:11px;color:#cbd5e1"></i></span>' :
           (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>')) +
       '</td>' +
-      '<td class="text-center font-mono">' + (i.no || (idx + 1)) + '</td>' +
+      '<td class="text-center font-mono">' + (idx + 1) + '</td>' +
       '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
       (function() {
       var emp = State.employees.find(function(e) { return e.empId === i.empId; });
