@@ -5468,7 +5468,8 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
         // 11. BACKUP & RESTORE DATABASE (ENTERPRISE FULL TABLE COVERAGE & SELECTIVE RESTORE)
     case 'backupDatabase': {
       const callerUser = params.currentUsername || params.username || '';
-      const allowed = (await userHasPermission(db, callerUser, 'manage_backup')) || (await userHasPermission(db, callerUser, 'close_period')) || (await isUserSuperAdmin(db, callerUser));
+      let allowed = (await userHasPermission(db, callerUser, 'manage_backup')) || (await userHasPermission(db, callerUser, 'close_period')) || (await isUserSuperAdmin(db, callerUser));
+      if (params.cronSecret && params.cronSecret === (env.CRON_SECRET || 'PTN_SUPER_SECRET_CRON_KEY_2026')) allowed = true;
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์สำรองข้อมูล' };
 
       await ensureBranchTables(db);
