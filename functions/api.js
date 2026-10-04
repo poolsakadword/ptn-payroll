@@ -5485,9 +5485,17 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
       const push_subscriptions = (await db.prepare('SELECT * FROM push_subscriptions').all().catch(() => ({ results: [] }))).results || [];
       const activity_logs = (await db.prepare('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 500').all().catch(() => ({ results: [] }))).results || [];
 
+      const includePhotos = params.includePhotos === true;
       // PTN Time tables (if present in D1)
-      const time_logs = (await db.prepare('SELECT * FROM time_logs').all().catch(() => ({ results: [] }))).results || [];
-      const leave_requests = (await db.prepare('SELECT * FROM leave_requests').all().catch(() => ({ results: [] }))).results || [];
+      const time_logs_sql = includePhotos 
+        ? 'SELECT * FROM time_logs' 
+        : 'SELECT id, emp_id, date, clock_in, clock_out, in_lat, in_lng, out_lat, out_lng, late_minutes, work_hours, ot_hours, status, remark, created_at, break_out, break_in, break_out_lat, break_out_lng, break_in_lat, break_in_lng, break_minutes, overbreak_minutes, branch_id, branch_name, is_full_pay FROM time_logs';
+      const time_logs = (await db.prepare(time_logs_sql).all().catch(() => ({ results: [] }))).results || [];
+
+      const leave_requests_sql = includePhotos
+        ? 'SELECT * FROM leave_requests'
+        : 'SELECT id, emp_id, leave_type, start_date, end_date, days_count, reason, status, approver_id, approved_at, rejection_reason, created_at, time_slot FROM leave_requests';
+      const leave_requests = (await db.prepare(leave_requests_sql).all().catch(() => ({ results: [] }))).results || [];
       const ot_requests = (await db.prepare('SELECT * FROM ot_requests').all().catch(() => ({ results: [] }))).results || [];
       const advance_requests = (await db.prepare('SELECT * FROM advance_requests').all().catch(() => ({ results: [] }))).results || [];
       const attendance_settings = (await db.prepare('SELECT * FROM attendance_settings').all().catch(() => ({ results: [] }))).results || [];
