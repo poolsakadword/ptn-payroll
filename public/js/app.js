@@ -3993,6 +3993,54 @@ function attachPermissionCheckboxListeners() {
   });
 }
 
+function onToggleEarlyDismissalPermChange(checked) {
+  var sublist = document.getElementById('earlyDismissalBranchSublist');
+  if (sublist) sublist.style.display = checked ? 'block' : 'none';
+  if (checked) {
+    var allCheck = document.getElementById('perm_early_branch_all');
+    if (!allCheck) renderEarlyDismissalBranchCheckboxes(['toggle_early_dismissal']);
+  }
+}
+
+function renderEarlyDismissalBranchCheckboxes(userPerms) {
+  var container = document.getElementById('earlyDismissalBranchCheckboxes');
+  if (!container) return;
+  var branches = State.branches || [];
+  var isAll = !userPerms || userPerms.indexOf('all') >= 0 || userPerms.indexOf('toggle_early_dismissal') >= 0;
+
+  var html = '<label style="display:inline-flex;align-items:center;gap:4px;font-weight:700;color:#581c87;cursor:pointer">' +
+    '<input type="checkbox" id="perm_early_branch_all" ' + (isAll ? 'checked' : '') + ' onchange="onToggleEarlyBranchAll(this.checked)"> ทุกสาขา' +
+  '</label>';
+
+  branches.forEach(function(b) {
+    var hasBranch = isAll || (userPerms && userPerms.indexOf('toggle_early_dismissal:' + b.branch_id) >= 0);
+    html += '<label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer;color:#334155">' +
+      '<input type="checkbox" class="perm-early-branch-item" data-branch="' + esc(b.branch_id) + '" ' + (hasBranch ? 'checked' : '') + ' onchange="onToggleEarlyBranchItem()">' +
+      esc(b.branch_name || b.branch_id) +
+    '</label>';
+  });
+  container.innerHTML = html;
+}
+
+function onToggleEarlyBranchAll(isChecked) {
+  var items = document.querySelectorAll('.perm-early-branch-item');
+  items.forEach(function(el) { el.checked = isChecked; });
+}
+
+function onToggleEarlyBranchItem() {
+  var allCheck = document.getElementById('perm_early_branch_all');
+  var items = document.querySelectorAll('.perm-early-branch-item');
+  var allChecked = true;
+  items.forEach(function(el) { if (!el.checked) allChecked = false; });
+  if (allCheck) allCheck.checked = allChecked;
+}
+
+function canToggleBranchEarlyDismissal(branchId) {
+  if (hasPermission('manage_attendance_settings') || hasPermission('approve_attendance') || hasPermission('toggle_early_dismissal')) return true;
+  var perms = (State.currentUser && State.currentUser.permissions) || [];
+  return perms.indexOf('toggle_early_dismissal:' + branchId) >= 0;
+}
+
 function openAddUserModal() {
   document.getElementById('userModalTitle').innerHTML = '<i class="fa-solid fa-user-plus"></i> เพิ่มผู้ใช้งาน';
   document.getElementById('userOrigUsername').value = '';
@@ -4089,6 +4137,13 @@ function openEditUserModal(username) {
     }
   });
 
+  var hasEarlyPerm = isAll || perms.some(function(k) { return k === 'toggle_early_dismissal' || String(k).indexOf('toggle_early_dismissal:') === 0; });
+  var elEarly = document.getElementById('perm_toggle_early_dismissal');
+  if (elEarly) elEarly.checked = hasEarlyPerm;
+  var sublistEarly = document.getElementById('earlyDismissalBranchSublist');
+  if (sublistEarly) sublistEarly.style.display = hasEarlyPerm ? 'block' : 'none';
+  renderEarlyDismissalBranchCheckboxes(isAll ? ['toggle_early_dismissal'] : perms);
+
   attachPermissionCheckboxListeners();
   openModal('userModal');
 }
@@ -4126,7 +4181,6 @@ function saveUserForm(e) {
       { id: 'perm_approve_attendance', key: 'approve_attendance' },
       { id: 'perm_unlock_device', key: 'unlock_device' },
       { id: 'perm_sync_ptn_time', key: 'sync_ptn_time' },
-      { id: 'perm_toggle_early_dismissal', key: 'toggle_early_dismissal' },
       { id: 'perm_manage_attendance_settings', key: 'manage_attendance_settings' },
       { id: 'perm_view_documents', key: 'view_documents' },
       { id: 'perm_issue_salary_cert', key: 'issue_salary_cert' },
@@ -4145,6 +4199,22 @@ function saveUserForm(e) {
       var el = document.getElementById(item.id);
       if (el && el.checked) perms.push(item.key);
     });
+
+    if (document.getElementById('perm_toggle_early_dismissal') && document.getElementById('perm_toggle_early_dismissal').checked) {
+      var allCheck = document.getElementById('perm_early_branch_all');
+      if (allCheck && allCheck.checked) {
+        perms.push('toggle_early_dismissal');
+      } else {
+        var branchItems = document.querySelectorAll('.perm-early-branch-item:checked');
+        if (branchItems.length === 0) {
+          perms.push('toggle_early_dismissal');
+        } else {
+          branchItems.forEach(function(item) {
+            perms.push('toggle_early_dismissal:' + item.getAttribute('data-branch'));
+          });
+        }
+      }
+    }
   }
 
   var userData = {
@@ -12680,8 +12750,8 @@ function renderBranchEarlyDismissalBar() {
 }
 
 function toggleBranchEarlyDismissal(branchId, enabled) {
-  if (!hasPermission('toggle_early_dismissal') && !hasPermission('manage_attendance_settings') && !hasPermission('approve_attendance')) {
-    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เปิด/ปิดโหมดงานเสร็จ', 'error');
+  if (!canToggleBranchEarlyDismissal(branchId)) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เปิด/ปิดโหมดงานเสร็จของสาขานี้', 'error');
     return;
   }
   var b = (State.branches || []).find(function(x) { return x.branch_id === branchId; });
