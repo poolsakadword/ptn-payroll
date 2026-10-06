@@ -481,6 +481,7 @@ async function ensureGlobalSchemas(db) {
     await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT "true"').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT "false"').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN is_attendance_exempt TEXT DEFAULT "false"').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN diligence_allowance REAL').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN late_minutes INTEGER DEFAULT 0').run().catch(() => {});
@@ -1016,6 +1017,7 @@ async function handleAction(db, action, params) {
         allowAllBranches: e.allow_all_branches === 'true',
         isOtEligible: (e.is_ot_eligible !== 'false' && e.is_ot_eligible !== false),
         isUndertimeExempt: (e.is_undertime_exempt === 'true' || e.is_undertime_exempt === true || e.is_undertime_exempt === 1 || e.is_undertime_exempt === '1'),
+        isAttendanceExempt: (e.is_attendance_exempt === 'true' || e.is_attendance_exempt === true || e.is_attendance_exempt === 1 || e.is_attendance_exempt === '1'),
         baseSalary: Number(e.base_salary) || 0,
         bankName: e.bank_name || '',
         bankAccount: e.bank_account || '',
@@ -1372,14 +1374,15 @@ async function handleAction(db, action, params) {
       const allowAllVal = (emp.allowAllBranches === 'true' || emp.allowAllBranches === true) ? 'true' : 'false';
       const isOtEligibleVal = (emp.isOtEligible === false || emp.isOtEligible === 'false') ? 'false' : 'true';
       const isUndertimeExemptVal = (emp.isUndertimeExempt === true || emp.isUndertimeExempt === 'true' || emp.isUndertimeExempt === 1 || emp.isUndertimeExempt === '1') ? 'true' : 'false';
+      const isAttendanceExemptVal = (emp.isAttendanceExempt === true || emp.isAttendanceExempt === 'true' || emp.isAttendanceExempt === 1 || emp.isAttendanceExempt === '1') ? 'true' : 'false';
       const diligenceAllowanceVal = (emp.diligenceAllowance !== undefined && emp.diligenceAllowance !== null && emp.diligenceAllowance !== '' && !isNaN(Number(emp.diligenceAllowance)))
         ? Number(emp.diligenceAllowance)
         : null;
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -1392,7 +1395,8 @@ async function handleAction(db, action, params) {
         branchIdVal, allowAllVal,
         isOtEligibleVal,
         isUndertimeExemptVal,
-        diligenceAllowanceVal
+        diligenceAllowanceVal,
+        isAttendanceExemptVal
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period and period is not locked
@@ -1407,6 +1411,15 @@ async function handleAction(db, action, params) {
           emp.empId, emp.fullName, baseSalaryVal, pfRateVal, pfAmtVal, ssoVal, taxVal,
           targetEmpId, period
         ).run();
+        if (isAttendanceExemptVal === 'true') {
+          await db.prepare(`
+            UPDATE monthly_inputs 
+            SET absent_days = 0, leave_days = 0, sick_leave_days = 0, unpaid_sick_leave_days = 0,
+                late_deduct = 0, late_minutes = 0, late_count = 0, ot_hours = 0
+            WHERE emp_id = ? AND period = ?
+          `).bind(targetEmpId, period).run().catch(() => {});
+          await calculateAndSavePayroll(db, period);
+        }
 
         await calculateAndSavePayroll(db, period);
       }
@@ -1999,6 +2012,8 @@ async function handleAction(db, action, params) {
         const coveredHours = approvedLeaveDays * shiftHours;
         const targetHours = Math.max(0, shiftHours - coveredHours);
 
+        const isAttendanceExemptRow = (emp && (emp.is_attendance_exempt === 'true' || emp.is_attendance_exempt === true || emp.is_attendance_exempt === 1 || emp.is_attendance_exempt === '1'));
+        if (isAttendanceExemptRow) continue;
         const isUndertimeExempt = (emp && (emp.is_undertime_exempt === 'true' || emp.is_undertime_exempt === true || emp.is_undertime_exempt === 1 || emp.is_undertime_exempt === '1'));
 
         // Check if morning or afternoon absence is active (penalized as pro-rata absent day at 1.5x)
@@ -2153,7 +2168,8 @@ async function handleAction(db, action, params) {
         // Auto-calculate absent days from PTN Time:
         // Any past/present working day (excluding Sundays & company holidays) with no clock-in and no approved leave
         let autoAbsentDays = 0;
-        if (emp.status !== 'Resigned') {
+        const isAttendanceExempt = (emp && (emp.is_attendance_exempt === 'true' || emp.is_attendance_exempt === true || emp.is_attendance_exempt === 1 || emp.is_attendance_exempt === '1'));
+        if (emp.status !== 'Resigned' && !isAttendanceExempt) {
           const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : null;
           for (const dStr of periodWorkingDates) {
             if (dStr > todayStr) continue; // Skip future dates in active/current period
@@ -2227,28 +2243,30 @@ async function handleAction(db, action, params) {
           }
         }
 
-        const absentDays = Math.round(autoAbsentDays * 100) / 100;
-        totalAbsentCount += absentDays;
+        const absentDays = isAttendanceExempt ? 0 : Math.round(autoAbsentDays * 100) / 100;
+        if (!isAttendanceExempt) totalAbsentCount += absentDays;
 
         // Deduct missing hours / early departure based on actual workdays
-        const calcEarlyDeduct = earlyDeductMap[emp.emp_id] !== undefined
+        const calcEarlyDeduct = (!isAttendanceExempt && earlyDeductMap[emp.emp_id] !== undefined)
           ? Math.round(earlyDeductMap[emp.emp_id] * 100) / 100
           : 0;
 
         let lateDeduct = Number(exist.late_deduct) || 0;
-        if (calcEarlyDeduct > 0) {
+        if (isAttendanceExempt) {
+          lateDeduct = 0;
+        } else if (calcEarlyDeduct > 0) {
           lateDeduct = calcEarlyDeduct;
         } else if (employeeHasLogs[emp.emp_id]) {
           lateDeduct = 0;
         }
 
-        const lateMins = empLateMinutes[emp.emp_id] !== undefined
+        const lateMins = isAttendanceExempt ? 0 : (empLateMinutes[emp.emp_id] !== undefined
           ? empLateMinutes[emp.emp_id]
-          : (Number(exist.late_minutes) || 0);
+          : (Number(exist.late_minutes) || 0));
 
-        const lateCnt = empLateCount[emp.emp_id] !== undefined
+        const lateCnt = isAttendanceExempt ? 0 : (empLateCount[emp.emp_id] !== undefined
           ? empLateCount[emp.emp_id]
-          : (Number(exist.late_count) || 0);
+          : (Number(exist.late_count) || 0));
 
         // --- AUTOMATIC DILIGENCE ALLOWANCE (คำนวณเบี้ยขยันอัตโนมัติ) ---
         let allowance = 0;
@@ -3029,6 +3047,7 @@ async function handleAction(db, action, params) {
       // Unclocked employees (Active employees who did NOT clock in on targetDate)
       const notClockedInList = [];
       for (const emp of activeEmps) {
+        if (emp.is_attendance_exempt === 'true' || emp.is_attendance_exempt === true || emp.is_attendance_exempt === 1 || emp.is_attendance_exempt === '1') continue;
         if (!targetLogsMap[emp.emp_id]) {
           const empBranch = branchMap[emp.branch_id] || {};
           const branchName = empBranch.branch_name || emp.branch_id || 'สำนักงานใหญ่';
@@ -5681,6 +5700,7 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
         await db.prepare("ALTER TABLE employees ADD COLUMN allow_all_branches TEXT DEFAULT 'false'").run().catch(() => {});
         await db.prepare("ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT 'true'").run().catch(() => {});
         await db.prepare("ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT 'false'").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN is_attendance_exempt TEXT DEFAULT 'false'").run().catch(() => {});
 
         if (!opts.selectiveMode) {
           await db.prepare('DELETE FROM employees').run().catch(() => {});
@@ -5690,8 +5710,8 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
           if (e.emp_id && e.full_name) {
             stmts.push(db.prepare(`
               INSERT OR REPLACE INTO employees 
-              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, is_attendance_exempt)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               e.emp_id, e.full_name, e.nickname || '', e.citizen_id || '', e.phone || '', e.address || '',
               e.department || '', e.position || '', Number(e.base_salary) || 0,
@@ -5708,7 +5728,8 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
               e.branch_id || 'B01',
               String(e.allow_all_branches || 'false'),
               String(e.is_ot_eligible !== undefined && e.is_ot_eligible !== null ? e.is_ot_eligible : 'true'),
-              String(e.is_undertime_exempt !== undefined && e.is_undertime_exempt !== null ? e.is_undertime_exempt : 'false')
+              String(e.is_undertime_exempt !== undefined && e.is_undertime_exempt !== null ? e.is_undertime_exempt : 'false'),
+              String(e.is_attendance_exempt !== undefined && e.is_attendance_exempt !== null ? e.is_attendance_exempt : 'false')
             ));
           }
         }

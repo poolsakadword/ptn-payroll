@@ -3315,6 +3315,8 @@ function openAddEmployeeModal() {
   if (ssoLbl) { ssoLbl.textContent = '(750฿)'; ssoLbl.style.color = '#dc2626'; }
   document.getElementById('mDefaultTax').value = '0';
   if (document.getElementById('mDiligenceAllowance')) document.getElementById('mDiligenceAllowance').value = '';
+  var isAttendanceExemptCheck = document.getElementById('mIsAttendanceExempt');
+  if (isAttendanceExemptCheck) isAttendanceExemptCheck.checked = false;
   updateBirthDateThaiHint();
   updateJoinDateThaiHint();
   updateProbEndDateThaiHint();
@@ -3340,6 +3342,8 @@ function openEditEmployeeModal(empId) {
   if (isOtCheck) isOtCheck.checked = (e.isOtEligible !== false && e.isOtEligible !== 'false');
   var isUndertimeCheck = document.getElementById('mIsUndertimeExempt');
   if (isUndertimeCheck) isUndertimeCheck.checked = (e.isUndertimeExempt === true || e.isUndertimeExempt === 'true');
+  var isAttendanceExemptCheck = document.getElementById('mIsAttendanceExempt');
+  if (isAttendanceExemptCheck) isAttendanceExemptCheck.checked = (e.isAttendanceExempt === true || e.isAttendanceExempt === 'true');
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
   document.getElementById('empOrigId').value = e.empId;
@@ -3434,6 +3438,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
     allowAllBranches: allowAllBranchesVal,
     isOtEligible: (document.getElementById('mIsOtEligible') ? document.getElementById('mIsOtEligible').checked : true),
     isUndertimeExempt: (document.getElementById('mIsUndertimeExempt') ? document.getElementById('mIsUndertimeExempt').checked : false),
+    isAttendanceExempt: (document.getElementById('mIsAttendanceExempt') ? document.getElementById('mIsAttendanceExempt').checked : false),
     status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
     probationDays: (document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119),
     probationEndDate: (document.getElementById('mProbationEndDate') ? document.getElementById('mProbationEndDate').value : ''),
