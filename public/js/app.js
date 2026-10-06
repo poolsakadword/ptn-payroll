@@ -3979,6 +3979,8 @@ function onRoleTemplateChanged() {
       if (el) el.checked = (userPerms.indexOf(p) >= 0);
     });
   }
+  var elEarly = document.getElementById('perm_toggle_early_dismissal');
+  if (elEarly) onToggleEarlyDismissalPermChange(elEarly.checked);
 }
 
 function attachPermissionCheckboxListeners() {
