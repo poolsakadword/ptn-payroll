@@ -2733,6 +2733,10 @@ async function handleAction(db, action, params) {
       let logsQuery;
       if (isIndividual) {
         selectedEmp = employeeList.find(e => e.emp_id === empFilter) || (await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empFilter).first().catch(() => null));
+        if (selectedEmp) {
+          selectedEmp.name = selectedEmp.name || selectedEmp.full_name;
+          selectedEmp.full_name = selectedEmp.full_name || selectedEmp.name;
+        }
         
         logsQuery = await db.prepare(`
           SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.phone, e.photo_url, e.branch_id as emp_branch_id, b.branch_name
@@ -3160,6 +3164,7 @@ async function handleAction(db, action, params) {
         endDate,
         isIndividualView: isIndividual,
         selectedEmp,
+        selectedEmpInfo: selectedEmp,
         empSummary,
         employeeList,
         logsToday,

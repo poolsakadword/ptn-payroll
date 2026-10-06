@@ -8322,6 +8322,20 @@ function selectAttendanceEmp(empId, displayText) {
     }
   }
 
+  if (_currentAttendanceEmpId !== 'ALL') {
+    _currentAttendanceIsIndividual = true;
+    _currentAttendanceSelectedEmpInfo = (_currentAttendanceEmployeeList || []).find(function(x) { return x.emp_id === _currentAttendanceEmpId; }) ||
+                                        (State.employees || []).find(function(x) { return (x.emp_id || x.empId) === _currentAttendanceEmpId; }) ||
+                                        { emp_id: _currentAttendanceEmpId, name: displayText || _currentAttendanceEmpId, full_name: displayText || _currentAttendanceEmpId };
+    var btnPrint = document.getElementById('btnAttPrintTimesheet');
+    if (btnPrint) btnPrint.style.display = 'inline-flex';
+  } else {
+    _currentAttendanceIsIndividual = false;
+    _currentAttendanceSelectedEmpInfo = null;
+    var btnPrint = document.getElementById('btnAttPrintTimesheet');
+    if (btnPrint) btnPrint.style.display = 'none';
+  }
+
   closeAttendanceEmpDropdown();
   loadTimeAttendanceDashboard();
 }
@@ -9016,8 +9030,17 @@ function loadTimeAttendanceDashboard() {
       _currentAttendanceLogs = r.logsToday || [];
       _currentAttendanceSettings = r.settings || {};
       _currentAttendanceEmpSummary = r.empSummary || null;
-      _currentAttendanceIsIndividual = !!r.isIndividualView;
-      _currentAttendanceSelectedEmpInfo = r.selectedEmpInfo || null;
+      _currentAttendanceIsIndividual = Boolean(r.isIndividualView || (_currentAttendanceEmpId && _currentAttendanceEmpId !== 'ALL'));
+      _currentAttendanceSelectedEmpInfo = r.selectedEmpInfo || r.selectedEmp || _currentAttendanceSelectedEmpInfo || null;
+
+      if (_currentAttendanceSelectedEmpInfo) {
+        if (!_currentAttendanceSelectedEmpInfo.name && _currentAttendanceSelectedEmpInfo.full_name) {
+          _currentAttendanceSelectedEmpInfo.name = _currentAttendanceSelectedEmpInfo.full_name;
+        }
+        if (!_currentAttendanceSelectedEmpInfo.full_name && _currentAttendanceSelectedEmpInfo.name) {
+          _currentAttendanceSelectedEmpInfo.full_name = _currentAttendanceSelectedEmpInfo.name;
+        }
+      }
 
       // Toggle Print Timesheet button
       var btnPrintTimesheet = document.getElementById('btnAttPrintTimesheet');
@@ -10215,12 +10238,19 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
 }
 
 function printIndividualAttendanceTimesheet() {
-  if (!_currentAttendanceIsIndividual || !_currentAttendanceSelectedEmpInfo) {
+  var empId = _currentAttendanceEmpId || (document.getElementById('attFilterEmp') ? document.getElementById('attFilterEmp').value : 'ALL');
+  if (!empId || empId === 'ALL') {
     showToast('โปรดเลือกพนักงานที่ต้องการพิมพ์ Timesheet ก่อน', 'warning');
     return;
   }
 
-  var emp = _currentAttendanceSelectedEmpInfo || {};
+  var emp = _currentAttendanceSelectedEmpInfo ||
+            (_currentAttendanceEmployeeList || []).find(function(x) { return x.emp_id === empId; }) ||
+            (State.employees || []).find(function(x) { return (x.emp_id || x.empId) === empId; }) ||
+            { emp_id: empId, name: empId, full_name: empId };
+
+  if (!emp.name && emp.full_name) emp.name = emp.full_name;
+  if (!emp.full_name && emp.name) emp.full_name = emp.name;
   var summary = _currentAttendanceEmpSummary || {};
   var logs = _currentAttendanceLogs || [];
 
@@ -10229,10 +10259,6 @@ function printIndividualAttendanceTimesheet() {
   var periodStr = document.getElementById('attIndivPeriodBadge') ? document.getElementById('attIndivPeriodBadge').textContent.trim() : '';
 
   var printWin = window.open('', '_blank');
-  if (!printWin) {
-    showToast('โปรดอนุญาตให้เปิดหน้าต่าง Pop-up เพื่อพิมพ์เอกสาร', 'warning');
-    return;
-  }
 
   var now = new Date();
   var thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -10267,7 +10293,7 @@ function printIndividualAttendanceTimesheet() {
   });
 
   var docHtml = '<!DOCTYPE html>' +
-    '<html><head><meta charset="utf-8"><title>Timesheet - ' + (emp.name || emp.emp_id) + '</title>' +
+    '<html><head><meta charset="utf-8"><title>Timesheet - ' + (emp.full_name || emp.name || emp.emp_id) + '</title>' +
     '<style>' +
       '@page { size: A4 portrait; margin: 12mm; }' +
       'body { font-family: "Sarabun", "Segoe UI", Arial, sans-serif; font-size: 12px; color: #0f172a; margin: 0; padding: 10px; }' +
@@ -10288,7 +10314,7 @@ function printIndividualAttendanceTimesheet() {
     '</div>' +
     '<div style="display:flex;justify-content:space-between;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;font-size:11.5px">' +
       '<div>' +
-        '<div><b>รหัสพนักงาน:</b> ' + (emp.emp_id || '-') + ' &nbsp;&nbsp; <b>ชื่อ-สกุล:</b> ' + (emp.name || '-') + (emp.nickname ? ' (' + emp.nickname + ')' : '') + '</div>' +
+        '<div><b>รหัสพนักงาน:</b> ' + (emp.emp_id || '-') + ' &nbsp;&nbsp; <b>ชื่อ-สกุล:</b> ' + (emp.full_name || emp.name || '-') + (emp.nickname ? ' (' + emp.nickname + ')' : '') + '</div>' +
         '<div style="margin-top:3px"><b>แผนก:</b> ' + (emp.department || '-') + ' &nbsp;&nbsp; <b>ตำแหน่ง:</b> ' + (emp.position || '-') + ' &nbsp;&nbsp; <b>สาขา:</b> ' + (emp.branch_name || 'สำนักงานใหญ่') + '</div>' +
       '</div>' +
       '<div style="text-align:right">' +
@@ -10325,7 +10351,7 @@ function printIndividualAttendanceTimesheet() {
     '<div class="sign-grid">' +
       '<div>' +
         '<div class="sign-line"></div>' +
-        '<div>( ' + (emp.name || 'พนักงาน') + ' )</div>' +
+        '<div>( ' + (emp.full_name || emp.name || 'พนักงาน') + ' )</div>' +
         '<div style="font-size:10.5px;color:#64748b;margin-top:2px">ลายมือชื่อพนักงานผู้ปฏิบัติงาน</div>' +
         '<div style="font-size:10px;color:#94a3b8;margin-top:2px">วันที่ ...../...../..........</div>' +
       '</div>' +
@@ -10345,9 +10371,32 @@ function printIndividualAttendanceTimesheet() {
     '<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };<\/script>' +
     '</body></html>';
 
-  printWin.document.open();
-  printWin.document.write(docHtml);
-  printWin.document.close();
+  if (printWin) {
+    printWin.document.open();
+    printWin.document.write(docHtml);
+    printWin.document.close();
+  } else {
+    var printIframe = document.getElementById('timesheetPrintIframe');
+    if (!printIframe) {
+      printIframe = document.createElement('iframe');
+      printIframe.id = 'timesheetPrintIframe';
+      printIframe.style.position = 'fixed';
+      printIframe.style.right = '0';
+      printIframe.style.bottom = '0';
+      printIframe.style.width = '0';
+      printIframe.style.height = '0';
+      printIframe.style.border = '0';
+      document.body.appendChild(printIframe);
+    }
+    var iDoc = printIframe.contentWindow.document;
+    iDoc.open();
+    iDoc.write(docHtml);
+    iDoc.close();
+    setTimeout(function() {
+      printIframe.contentWindow.focus();
+      printIframe.contentWindow.print();
+    }, 400);
+  }
 }
 
 // BATCH OPERATIONS & CHECKBOXES
