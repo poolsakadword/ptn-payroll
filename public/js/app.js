@@ -4045,7 +4045,7 @@ function onToggleEarlyBranchItem() {
 }
 
 function canToggleBranchEarlyDismissal(branchId) {
-  if (hasPermission('manage_attendance_settings') || hasPermission('approve_attendance') || hasPermission('toggle_early_dismissal')) return true;
+  if (isSuperAdmin() || hasPermission('manage_attendance_settings') || hasPermission('toggle_early_dismissal')) return true;
   var perms = (State.currentUser && State.currentUser.permissions) || [];
   return perms.indexOf('toggle_early_dismissal:' + branchId) >= 0;
 }
@@ -12734,8 +12734,9 @@ function renderBranchManagerTable() {
       '<td class="text-center">' + statusBadge + '</td>' +
       (function() {
         var isEarly = (b.early_dismissal_full_pay === 1 || b.early_dismissal_full_pay === '1' || b.early_dismissal_full_pay === 'true' || b.early_dismissal_full_pay === true);
-        var earlyBtn = '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 8px;font-weight:700;background:' + (isEarly ? '#ecfdf5' : '#f8fafc') + ';color:' + (isEarly ? '#059669' : '#64748b') + ';border:1.5px solid ' + (isEarly ? '#10b981' : '#cbd5e1') + '" onclick="toggleBranchEarlyDismissal(\'' + esc(b.branch_id) + '\', ' + !isEarly + ')" title="คลิกเพื่อเปิด/ปิดโหมดงานเสร็จ">' +
-          (isEarly ? '🟢 เปิด (จ่ายเต็ม)' : '⚪ ปิด (ปกติ)') +
+        var canToggle = canToggleBranchEarlyDismissal(b.branch_id);
+        var earlyBtn = '<button type="button" class="btn btn-sm" ' + (!canToggle ? 'disabled style="font-size:11px;padding:3px 8px;font-weight:700;background:#f1f5f9;color:#94a3b8;border:1.5px solid #e2e8f0;cursor:not-allowed;opacity:0.6"' : 'style="font-size:11px;padding:3px 8px;font-weight:700;background:' + (isEarly ? '#ecfdf5' : '#f8fafc') + ';color:' + (isEarly ? '#059669' : '#64748b') + ';border:1.5px solid ' + (isEarly ? '#10b981' : '#cbd5e1') + '" onclick="toggleBranchEarlyDismissal(\'' + esc(b.branch_id) + '\', ' + !isEarly + ')"') + ' title="' + (!canToggle ? 'ไม่มีสิทธิ์ควบคุมสาขานี้' : 'คลิกเพื่อเปิด/ปิดโหมดงานเสร็จ') + '">' +
+          (isEarly ? '🟢 เปิด (จ่ายเต็ม)' : '⚪ ปิด (ปกติ)') + (!canToggle ? ' 🔒' : '') +
         '</button>';
         return '<td class="text-center">' + earlyBtn + '</td>';
       })() +
@@ -12769,22 +12770,29 @@ function renderBranchEarlyDismissalBar() {
   var html = '';
   bList.forEach(function(b) {
     var isEarly = (b.early_dismissal_full_pay === 1 || b.early_dismissal_full_pay === '1' || b.early_dismissal_full_pay === 'true' || b.early_dismissal_full_pay === true);
+    var canToggle = canToggleBranchEarlyDismissal(b.branch_id);
     var badgeBg = isEarly ? '#ecfdf5' : '#f8fafc';
     var badgeBorder = isEarly ? '#10b981' : '#cbd5e1';
     var textColor = isEarly ? '#047857' : '#475569';
     var statusText = isEarly ? '🟢 เปิด (จ่ายเต็มวัน)' : '⚪ ปกติ';
 
-    html += '<div style="display:flex;align-items:center;gap:8px;background:' + badgeBg + ';border:1.5px solid ' + badgeBorder + ';padding:6px 12px;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:all 0.2s">' +
+    if (!canToggle) {
+      badgeBg = '#f1f5f9';
+      badgeBorder = '#e2e8f0';
+      textColor = '#94a3b8';
+    }
+
+    html += '<div style="display:flex;align-items:center;gap:8px;background:' + badgeBg + ';border:1.5px solid ' + badgeBorder + ';padding:6px 12px;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,0.04);transition:all 0.2s;' + (!canToggle ? 'opacity:0.65;' : '') + '" title="' + (!canToggle ? 'บัญชีของคุณไม่มีสิทธิ์ควบคุมโหมดงานเสร็จของสาขานี้' : '') + '">' +
       '<div style="font-weight:700;font-size:12px;color:' + textColor + '">' +
         '<i class="fa-solid fa-store" style="margin-right:4px"></i>' + esc(b.branch_name) +
       '</div>' +
-      '<label class="switch-toggle" style="position:relative;display:inline-block;width:38px;height:20px;cursor:pointer">' +
-        '<input type="checkbox" ' + (isEarly ? 'checked' : '') + ' onchange="toggleBranchEarlyDismissal(\'' + esc(b.branch_id) + '\', this.checked)" style="opacity:0;width:0;height:0">' +
+      '<label class="switch-toggle" style="position:relative;display:inline-block;width:38px;height:20px;' + (canToggle ? 'cursor:pointer' : 'cursor:not-allowed') + '">' +
+        '<input type="checkbox" ' + (isEarly ? 'checked' : '') + ' ' + (!canToggle ? 'disabled' : '') + ' onchange="toggleBranchEarlyDismissal(\'' + esc(b.branch_id) + '\', this.checked)" style="opacity:0;width:0;height:0">' +
         '<span style="position:absolute;top:0;left:0;right:0;bottom:0;background:' + (isEarly ? '#10b981' : '#cbd5e1') + ';border-radius:20px;transition:0.3s;box-shadow:inset 0 1px 2px rgba(0,0,0,0.1)">' +
           '<span style="position:absolute;content:\'\';height:14px;width:14px;left:' + (isEarly ? '20px' : '3px') + ';bottom:3px;background:white;border-radius:50%;transition:0.3s;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></span>' +
         '</span>' +
       '</label>' +
-      '<span style="font-size:11px;font-weight:700;color:' + textColor + '">' + statusText + '</span>' +
+      '<span style="font-size:11px;font-weight:700;color:' + textColor + '">' + statusText + (!canToggle ? ' <i class="fa-solid fa-lock" style="font-size:10px" title="ไม่มีสิทธิ์ควบคุมสาขานี้"></i>' : '') + '</span>' +
     '</div>';
   });
 
