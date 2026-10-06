@@ -10315,6 +10315,39 @@ function deselectAllAttendanceLogs() {
   updateAttendanceBatchToolbar();
 }
 
+function batchSetEarlyDismissal(enabled) {
+  var cbs = document.querySelectorAll('.att-log-checkbox:checked');
+  var ids = Array.from(cbs).map(function(cb) { return Number(cb.value); });
+  if (ids.length === 0) {
+    showToast('กรุณาเลือกรายการที่ต้องการดำเนินการอย่างน้อย 1 รายการ', 'warning');
+    return;
+  }
+
+  var actionText = enabled ? 'อนุมัติโหมดงานเสร็จ (จ่ายค่าแรงเต็มวัน ไม่หักเงิน)' : 'ยกเลิกโหมดงานเสร็จ (กลับสู่โหมดปกติ)';
+  if (!confirm('ยืนยัน' + actionText + ' สำหรับพนักงานที่เลือกทั้งหมด ' + ids.length + ' รายการ ใช่หรือไม่?')) {
+    return;
+  }
+
+  showToast('กำลังบันทึกข้อมูล...', 'info');
+  callApi('batchSetAttendanceEarlyDismissal', {
+    ids: ids,
+    enabled: enabled,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (r && r.success) {
+        showToast(r.message || 'บันทึกสถานะเรียบร้อยแล้ว');
+        deselectAllAttendanceLogs();
+        loadTimeAttendanceDashboard();
+      } else {
+        showToast((r && r.message) || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
+      }
+    })
+    .catch(function(err) {
+      showToast('เกิดข้อผิดพลาด: ' + (err.message || err), 'error');
+    });
+}
+
 function batchDeleteAttendanceLogs() {
   var cbs = document.querySelectorAll('.att-log-checkbox:checked');
   var ids = Array.from(cbs).map(function(cb) { return Number(cb.value); });

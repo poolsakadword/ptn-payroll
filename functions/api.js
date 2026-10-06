@@ -4718,6 +4718,69 @@ async function handleAction(db, action, params) {
       return { success: true, count: deletedCount, message: `ลบข้อมูลการลงเวลาสำเร็จ ${deletedCount} รายการ` };
     }
 
+    // 5.9 BATCH SET EARLY DISMISSAL (โหมดงานเสร็จ - จ่ายเต็มวัน)
+    case 'batchSetAttendanceEarlyDismissal': {
+      const callerUser = params.username || 'Admin';
+      const allowed = (await userHasPermission(db, callerUser, 'toggle_early_dismissal')) ||
+                      (await userHasPermission(db, callerUser, 'approve_attendance')) ||
+                      (await userHasPermission(db, callerUser, 'manage_attendance_settings')) ||
+                      (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการโหมดงานเสร็จ' };
+
+      const ids = Array.isArray(params.ids) ? params.ids : [];
+      if (ids.length === 0) return { success: false, message: 'กรุณาเลือกรายการที่ต้องการดำเนินการ' };
+
+      const enabled = (params.enabled === true || params.enabled === 'true' || params.enabled === 1 || params.enabled === '1') ? 1 : 0;
+      let updatedCount = 0;
+
+      // Load branch settings to calculate shift work hours
+      const branchesRes = await db.prepare('SELECT branch_id, work_start_time, work_end_time, lunch_start_time, lunch_end_time FROM branches').all().catch(() => ({ results: [] }));
+      const bMap = {};
+      (branchesRes.results || []).forEach(b => { bMap[b.branch_id] = b; });
+
+      for (const id of ids) {
+        const log = await db.prepare('SELECT * FROM time_logs WHERE id = ?').bind(id).first();
+        if (!log) continue;
+
+        let curRemark = String(log.remark || '').trim();
+        const tag = 'งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน';
+
+        if (enabled === 1) {
+          if (!curRemark.includes(tag)) {
+            curRemark = curRemark ? (curRemark + ' | ' + tag) : tag;
+          }
+          const branch = bMap[log.branch_id] || {};
+          const sMin = timeStringToMinutes(branch.work_start_time || '09:30') || 570;
+          const eMin = timeStringToMinutes(branch.work_end_time || '19:00') || 1140;
+          const lStart = timeStringToMinutes(branch.lunch_start_time || '13:00') || 780;
+          const lEnd = timeStringToMinutes(branch.lunch_end_time || '14:00') || 840;
+          const breakMin = (lEnd > lStart) ? (lEnd - lStart) : 60;
+          const fullShiftHours = Math.max(0, Math.round(((eMin - sMin - breakMin) / 60) * 10) / 10) || 8.5;
+
+          const newWorkHours = Math.max(Number(log.work_hours) || 0, fullShiftHours);
+
+          await db.prepare('UPDATE time_logs SET is_full_pay = 1, work_hours = ?, remark = ? WHERE id = ?')
+            .bind(newWorkHours, curRemark, id).run();
+          updatedCount++;
+        } else {
+          // Turn off: remove tag
+          curRemark = curRemark.replace(new RegExp('\s*\|\s*' + tag, 'g'), '')
+                               .replace(new RegExp(tag, 'g'), '').trim();
+          await db.prepare('UPDATE time_logs SET is_full_pay = 0, remark = ? WHERE id = ?')
+            .bind(curRemark, id).run();
+          updatedCount++;
+        }
+      }
+
+      const actionText = enabled === 1 ? 'อนุมัติโหมดงานเสร็จ (จ่ายเต็มวัน)' : 'ยกเลิกโหมดงานเสร็จ';
+      await logSystemActivity(db, callerUser, 'BATCH_EARLY_DISMISSAL', `${actionText} จำนวน ${updatedCount} รายการ`);
+      return {
+        success: true,
+        count: updatedCount,
+        message: `${actionText} สำหรับ ${updatedCount} รายการเรียบร้อยแล้ว`
+      };
+    }
+
     // 6. PROCESS PAYROLL
     case 'processPayroll': {
       const callerUser = params.currentUsername || params.username || '';
