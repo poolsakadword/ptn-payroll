@@ -3991,6 +3991,9 @@ function attachPermissionCheckboxListeners() {
       if (roleSel && roleSel.value !== 'Custom') {
         roleSel.value = 'Custom';
       }
+      if (input.id === 'perm_toggle_early_dismissal') {
+        onToggleEarlyDismissalPermChange(input.checked);
+      }
     };
   });
 }
@@ -3999,15 +4002,19 @@ function onToggleEarlyDismissalPermChange(checked) {
   var sublist = document.getElementById('earlyDismissalBranchSublist');
   if (sublist) sublist.style.display = checked ? 'block' : 'none';
   if (checked) {
-    var allCheck = document.getElementById('perm_early_branch_all');
-    if (!allCheck) renderEarlyDismissalBranchCheckboxes(['toggle_early_dismissal']);
+    var items = document.querySelectorAll('.perm-early-branch-item');
+    if (items.length === 0) renderEarlyDismissalBranchCheckboxes(['toggle_early_dismissal']);
   }
 }
 
 function renderEarlyDismissalBranchCheckboxes(userPerms) {
   var container = document.getElementById('earlyDismissalBranchCheckboxes');
   if (!container) return;
-  var branches = State.branches || [];
+  var branches = (State.branches && State.branches.length > 0) ? State.branches : [
+    { branch_id: 'B01', branch_name: 'สำนักงานใหญ่' },
+    { branch_id: 'B02', branch_name: 'พัฒนาเภสัช' },
+    { branch_id: 'B03', branch_name: 'พัฒนาชุมชน' }
+  ];
   var isAll = !userPerms || userPerms.indexOf('all') >= 0 || userPerms.indexOf('toggle_early_dismissal') >= 0;
 
   var html = '<label style="display:inline-flex;align-items:center;gap:4px;font-weight:700;color:#581c87;cursor:pointer">' +
