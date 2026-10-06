@@ -3922,7 +3922,7 @@ function onRoleTemplateChanged() {
     'perm_view_emp', 'perm_view_salary', 'perm_edit_emp', 'perm_del_emp',
     'perm_view_inputs', 'perm_edit_inputs', 'perm_populate_inputs',
     'perm_view_payroll', 'perm_calc_payroll', 'perm_view_payslip', 'perm_close_period',
-    'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time', 'perm_manage_attendance_settings',
+    'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time', 'perm_toggle_early_dismissal', 'perm_manage_attendance_settings',
     'perm_view_documents', 'perm_issue_salary_cert', 'perm_export_bank_files', 'perm_export_tax_sso',
     'perm_view_dash', 'perm_view_history', 'perm_print_history', 'perm_export_csv', 'perm_view_analytics',
     'perm_manage_users', 'perm_company_settings', 'perm_backup_restore'
@@ -3934,7 +3934,7 @@ function onRoleTemplateChanged() {
       if (el) el.checked = true;
     });
   } else if (role === 'Supervisor') {
-    var supPerms = ['perm_view_emp', 'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device'];
+    var supPerms = ['perm_view_emp', 'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device', 'perm_toggle_early_dismissal'];
     allPerms.forEach(function(p) {
       var el = document.getElementById(p);
       if (el) el.checked = (supPerms.indexOf(p) >= 0);
@@ -3955,7 +3955,7 @@ function onRoleTemplateChanged() {
   } else if (role === 'HR Time Attendance') {
     var attPerms = [
       'perm_view_emp', 'perm_view_inputs', 'perm_edit_inputs', 'perm_populate_inputs',
-      'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time',
+      'perm_view_attendance', 'perm_manage_time_logs', 'perm_create_attendance_requests', 'perm_approve_attendance', 'perm_unlock_device', 'perm_sync_ptn_time', 'perm_toggle_early_dismissal',
       'perm_view_history', 'perm_print_history'
     ];
     allPerms.forEach(function(p) {
@@ -4064,6 +4064,7 @@ function openEditUserModal(username) {
     'perm_approve_attendance': ['approve_attendance'],
     'perm_unlock_device': ['unlock_device'],
     'perm_sync_ptn_time': ['sync_ptn_time'],
+    'perm_toggle_early_dismissal': ['toggle_early_dismissal'],
     'perm_manage_attendance_settings': ['manage_attendance_settings'],
     'perm_view_documents': ['view_documents'],
     'perm_issue_salary_cert': ['issue_salary_cert'],
@@ -4125,6 +4126,7 @@ function saveUserForm(e) {
       { id: 'perm_approve_attendance', key: 'approve_attendance' },
       { id: 'perm_unlock_device', key: 'unlock_device' },
       { id: 'perm_sync_ptn_time', key: 'sync_ptn_time' },
+      { id: 'perm_toggle_early_dismissal', key: 'toggle_early_dismissal' },
       { id: 'perm_manage_attendance_settings', key: 'manage_attendance_settings' },
       { id: 'perm_view_documents', key: 'view_documents' },
       { id: 'perm_issue_salary_cert', key: 'issue_salary_cert' },
@@ -12678,6 +12680,10 @@ function renderBranchEarlyDismissalBar() {
 }
 
 function toggleBranchEarlyDismissal(branchId, enabled) {
+  if (!hasPermission('toggle_early_dismissal') && !hasPermission('manage_attendance_settings') && !hasPermission('approve_attendance')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เปิด/ปิดโหมดงานเสร็จ', 'error');
+    return;
+  }
   var b = (State.branches || []).find(function(x) { return x.branch_id === branchId; });
   var bName = b ? b.branch_name : branchId;
 
