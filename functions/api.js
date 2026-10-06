@@ -2537,7 +2537,10 @@ async function handleAction(db, action, params) {
     // 5.2.1 DEDICATED LIGHTWEIGHT ATTENDANCE REQUESTS FOR APPROVALS CENTER TAB
     case 'getAttendanceRequests': {
       const callerUser = params.username || 'Admin';
-      const isAllowed = await userHasPermission(db, callerUser, 'view_attendance');
+      const isAllowed = (await userHasPermission(db, callerUser, 'view_attendance')) ||
+                        (await userHasPermission(db, callerUser, 'approve_attendance')) ||
+                        (await userHasPermission(db, callerUser, 'create_attendance_requests')) ||
+                        (await isUserSuperAdmin(db, callerUser));
       if (!isAllowed) {
         return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา' };
       }

@@ -77,6 +77,29 @@ function isSuperAdmin() {
   return false;
 }
 
+function canAccessTimeAttendanceModule() {
+  if (isSuperAdmin()) return true;
+  if (hasPermission('view_attendance') ||
+      hasPermission('manage_time_logs') ||
+      hasPermission('create_attendance_requests') ||
+      hasPermission('approve_attendance') ||
+      hasPermission('unlock_device') ||
+      hasPermission('sync_ptn_time') ||
+      hasPermission('manage_attendance_settings') ||
+      hasPermission('toggle_early_dismissal')) {
+    return true;
+  }
+  var perms = (State.currentUser && State.currentUser.permissions) || [];
+  return perms.some(function(p) { return String(p).indexOf('toggle_early_dismissal:') === 0; });
+}
+
+function getDefaultAuthorizedAttendanceSubTab() {
+  if (isSuperAdmin() || hasPermission('view_attendance')) return 'logs';
+  if (hasPermission('approve_attendance') || hasPermission('create_attendance_requests')) return 'approvals';
+  if (hasPermission('manage_attendance_settings')) return 'branches';
+  return '';
+}
+
 function applyRolePermissions() {
   if (!State.currentUser) return;
 
@@ -122,15 +145,9 @@ function applyRolePermissions() {
   var canPrintHistory = hasPermission('print_history') || isSuperAdmin();
   var canExportCsv = hasPermission('export_csv') || isSuperAdmin();
   var canViewAnalytics = hasPermission('view_analytics') || isSuperAdmin();
-  var canViewAttendance = hasPermission('view_attendance') ||
-                          hasPermission('manage_time_logs') ||
-                          hasPermission('approve_attendance') ||
-                          hasPermission('create_attendance_requests') ||
-                          hasPermission('unlock_device') ||
-                          hasPermission('sync_ptn_time') ||
-                          hasPermission('manage_attendance_settings') ||
-                          isSuperAdmin();
-  var canApproveAttendance = hasPermission('approve_attendance') || isSuperAdmin();
+  var canViewAttendance = canAccessTimeAttendanceModule();
+  var canViewAttendanceLogs = hasPermission('view_attendance') || isSuperAdmin();
+  var canApproveAttendance = hasPermission('approve_attendance') || hasPermission('create_attendance_requests') || isSuperAdmin();
   var canUnlockDevice = hasPermission('unlock_device') || isSuperAdmin();
   var canSyncPtnTime = hasPermission('sync_ptn_time') || isSuperAdmin();
   var canManageAttendanceSettings = hasPermission('manage_attendance_settings') || isSuperAdmin();
@@ -304,20 +321,43 @@ function applyRolePermissions() {
   var cardAttSettings = document.getElementById('cardAttendanceSettings');
   if (cardAttSettings) cardAttSettings.style.display = canManageAttendanceSettings ? 'block' : 'none';
 
-  // Sub-tabs in Attendance Navigation (Settings & Branches)
+  // Sub-tabs in Attendance Navigation
+  var tabBtnLogs = document.getElementById('attSubTabBtn_logs');
+  if (tabBtnLogs) tabBtnLogs.style.display = canViewAttendanceLogs ? 'inline-flex' : 'none';
+  var tabBtnSummary = document.getElementById('attSubTabBtn_summary');
+  if (tabBtnSummary) tabBtnSummary.style.display = canViewAttendanceLogs ? 'inline-flex' : 'none';
+  var tabBtnApprovals = document.getElementById('attSubTabBtn_approvals');
+  if (tabBtnApprovals) tabBtnApprovals.style.display = canApproveAttendance ? 'inline-flex' : 'none';
   var tabBtnBranches = document.getElementById('attSubTabBtn_branches');
   if (tabBtnBranches) tabBtnBranches.style.display = canManageAttendanceSettings ? 'inline-flex' : 'none';
   var tabBtnSettings = document.getElementById('attSubTabBtn_settings');
   if (tabBtnSettings) tabBtnSettings.style.display = canManageAttendanceSettings ? 'inline-flex' : 'none';
 
   // Fallback if currently viewing a restricted sub-tab
-  if (!canManageAttendanceSettings && (typeof _activeAttendanceSubTab !== 'undefined') && (_activeAttendanceSubTab === 'branches' || _activeAttendanceSubTab === 'settings')) {
-    switchAttendanceSubTab('logs');
+  var currentSubTabAllowed = true;
+  if ((_activeAttendanceSubTab === 'logs' || _activeAttendanceSubTab === 'summary') && !canViewAttendanceLogs) {
+    currentSubTabAllowed = false;
+  } else if (_activeAttendanceSubTab === 'approvals' && !canApproveAttendance) {
+    currentSubTabAllowed = false;
+  } else if ((_activeAttendanceSubTab === 'branches' || _activeAttendanceSubTab === 'settings') && !canManageAttendanceSettings) {
+    currentSubTabAllowed = false;
+  }
+
+  if (!currentSubTabAllowed) {
+    var defTab = getDefaultAuthorizedAttendanceSubTab();
+    if (defTab) {
+      switchAttendanceSubTab(defTab);
+    } else {
+      ['logs', 'summary', 'approvals', 'settings', 'branches'].forEach(function(t) {
+        var p = document.getElementById('attSubTabPane_' + t);
+        if (p) p.style.display = 'none';
+      });
+    }
   }
 
   // Attendance Add Log Button
   var btnAddLog = document.getElementById('btnAddAttendanceLog');
-  var canManageLogs = hasPermission('manage_time_logs') || hasPermission('approve_attendance') || isSuperAdmin();
+  var canManageLogs = (hasPermission('manage_time_logs') || isSuperAdmin()) && canViewAttendanceLogs;
   if (btnAddLog) btnAddLog.style.display = canManageLogs ? 'inline-flex' : 'none';
 
   // 11. Document Center Categories
@@ -456,14 +496,7 @@ function navigateToAuthorizedTab() {
   var curActiveTab = document.querySelector('.tab-content.active');
   var curId = curActiveTab ? curActiveTab.id : '';
 
-  var canAccessAttendance = isSuperAdmin() ||
-                            hasPermission('view_attendance') ||
-                            hasPermission('manage_time_logs') ||
-                            hasPermission('approve_attendance') ||
-                            hasPermission('create_attendance_requests') ||
-                            hasPermission('unlock_device') ||
-                            hasPermission('sync_ptn_time') ||
-                            hasPermission('manage_attendance_settings');
+  var canAccessAttendance = canAccessTimeAttendanceModule();
 
   var canAccessPayroll = hasPermission('view_payroll') || hasPermission('calc_payroll') || hasPermission('view_payslip') || hasPermission('close_period') || isSuperAdmin();
   var canAccessInputs = hasPermission('view_inputs') || hasPermission('edit_inputs') || hasPermission('populate_inputs') || isSuperAdmin();
@@ -2470,14 +2503,7 @@ function switchTab(tabId) {
   }
 
   // Attendance tab
-  var canAccessAttendance = isSuperAdmin() ||
-                            hasPermission('view_attendance') ||
-                            hasPermission('manage_time_logs') ||
-                            hasPermission('approve_attendance') ||
-                            hasPermission('create_attendance_requests') ||
-                            hasPermission('unlock_device') ||
-                            hasPermission('sync_ptn_time') ||
-                            hasPermission('manage_attendance_settings');
+  var canAccessAttendance = canAccessTimeAttendanceModule();
   if (tabId === 'attendance' && !canAccessAttendance) {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา', 'warning');
     navigateToAuthorizedTab();
@@ -2549,7 +2575,20 @@ function switchTab(tabId) {
   } else if (tabId === 'documents') {
     renderDocumentsTab();
   } else if (tabId === 'attendance') {
-    loadTimeAttendanceDashboard();
+    if (!isSuperAdmin() && !hasPermission('view_attendance')) {
+      var defSubTab = getDefaultAuthorizedAttendanceSubTab();
+      if (defSubTab) {
+        switchAttendanceSubTab(defSubTab);
+      } else {
+        ['logs', 'summary', 'approvals', 'settings', 'branches'].forEach(function(t) {
+          var p = document.getElementById('attSubTabPane_' + t);
+          if (p) p.style.display = 'none';
+        });
+      }
+      renderBranchEarlyDismissalBar();
+    } else {
+      loadTimeAttendanceDashboard();
+    }
   } else if (tabId === 'employees') {
     renderEmployeesTable();
   } else if (tabId === 'company') {
@@ -8898,8 +8937,14 @@ var _loadAttendanceReqSeq = 0;
 function loadTimeAttendanceDashboard() {
   var currentReqSeq = ++_loadAttendanceReqSeq;
   if (!isSuperAdmin() && !hasPermission('view_attendance')) {
-    showToast('สิทธิ์ไม่เพียงพอ: หน้าลงเวลาสงวนสิทธิ์เฉพาะผู้มีสิทธิ์เข้าใช้งานระบบลงเวลาเท่านั้น', 'warning');
-    navigateToAuthorizedTab();
+    var defSubTab = getDefaultAuthorizedAttendanceSubTab();
+    if (defSubTab) {
+      switchAttendanceSubTab(defSubTab);
+    } else {
+      showToast('สิทธิ์ไม่เพียงพอ: หน้าลงเวลาสงวนสิทธิ์เฉพาะผู้มีสิทธิ์เข้าใช้งานระบบลงเวลาเท่านั้น', 'warning');
+      navigateToAuthorizedTab();
+    }
+    renderBranchEarlyDismissalBar();
     return;
   }
 
@@ -9260,13 +9305,30 @@ function switchAttendanceSubTab(tabName) {
   var tabs = ['logs', 'summary', 'approvals', 'settings', 'branches'];
   if (tabs.indexOf(tabName) === -1) tabName = 'logs';
 
-  // Permission guard for sensitive attendance management sub-tabs
-  if (tabName === 'branches' || tabName === 'settings') {
-    var canManageAttendanceSettings = hasPermission('manage_attendance_settings') || isSuperAdmin();
-    if (!canManageAttendanceSettings) {
-      showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการสาขาหรือตั้งค่าระบบ', 'warning');
+  var canViewLogs = isSuperAdmin() || hasPermission('view_attendance');
+  var canApprove = isSuperAdmin() || hasPermission('approve_attendance') || hasPermission('create_attendance_requests');
+  var canManageSettings = isSuperAdmin() || hasPermission('manage_attendance_settings');
+
+  // Permission guards
+  if ((tabName === 'logs' || tabName === 'summary') && !canViewLogs) {
+    var defTab = getDefaultAuthorizedAttendanceSubTab();
+    if (defTab && defTab !== tabName) {
+      showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูหน้าบันทึกเวลาประจำวัน', 'warning');
+      switchAttendanceSubTab(defTab);
       return;
     }
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูหน้าบันทึกเวลาประจำวัน', 'warning');
+    return;
+  }
+
+  if (tabName === 'approvals' && !canApprove) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานศูนย์อนุมัติคำขอ', 'warning');
+    return;
+  }
+
+  if ((tabName === 'branches' || tabName === 'settings') && !canManageSettings) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการสาขาหรือตั้งค่าระบบ', 'warning');
+    return;
   }
 
   _activeAttendanceSubTab = tabName;
@@ -10042,6 +10104,7 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
   var thaiDays = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
 
   var html = '';
+  var canManageLogs = (hasPermission('manage_time_logs') || isSuperAdmin());
   logs.forEach(function(l, idx) {
     var inPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
     if (l.in_photo_url) {
@@ -10132,12 +10195,14 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
           '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:4px" onclick="viewAttendanceLogDetail(' + l.id + ')" title="ดูรายละเอียดการลงเวลา">' +
             '<i class="fa-solid fa-eye text-blue"></i>' +
           '</button>' +
-          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;border-radius:4px" onclick="openEditAttendanceLogModal(' + l.id + ')" title="แก้ไขเวลาเข้า-ออก">' +
-            '<i class="fa-solid fa-pen-to-square"></i>' +
-          '</button>' +
-          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:4px" onclick="deleteSingleAttendanceLog(' + l.id + ', \'' + esc(l.full_name || l.emp_id) + '\')" title="ลบรายการนี้">' +
-            '<i class="fa-solid fa-trash-can"></i>' +
-          '</button>' +
+          (canManageLogs ? (
+            '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;border-radius:4px" onclick="openEditAttendanceLogModal(' + l.id + ')" title="แก้ไขเวลาเข้า-ออก">' +
+              '<i class="fa-solid fa-pen-to-square"></i>' +
+            '</button>' +
+            '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:4px" onclick="deleteSingleAttendanceLog(' + l.id + ', \'' + esc(l.full_name || l.emp_id) + '\')" title="ลบรายการนี้">' +
+              '<i class="fa-solid fa-trash-can"></i>' +
+            '</button>'
+          ) : '') +
           '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 7px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;border-radius:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(l.emp_id) + '\', \'' + esc(l.full_name || '') + '\')" title="ดึงข้อมูลเข้าสู่คำนวณเงินเดือน">' +
             '<i class="fa-solid fa-cloud-arrow-down"></i>' +
           '</button>' +
@@ -11871,6 +11936,10 @@ var _currentAttKpiMode = 'NOT_CLOCKED_IN';
 var _currentAttKpiSubFilter = 'ALL';
 
 function openAttendanceKpiModal(mode) {
+  if (!isSuperAdmin() && !hasPermission('view_attendance')) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูรายละเอียดการลงเวลา', 'warning');
+    return;
+  }
   _currentAttKpiMode = mode || 'NOT_CLOCKED_IN';
   _currentAttKpiSubFilter = 'ALL';
 
