@@ -459,6 +459,15 @@ async function ensureTimeAttendanceTables(db) {
     await db.prepare("ALTER TABLE leave_requests ADD COLUMN medical_cert_url TEXT").run().catch(() => {});
     await db.prepare("ALTER TABLE leave_requests ADD COLUMN days_count REAL DEFAULT 1.0").run().catch(() => {});
     await db.prepare("ALTER TABLE leave_requests ADD COLUMN time_slot TEXT DEFAULT 'FULL'").run().catch(() => {});
+
+    // High Performance Indexes for Attendance & Requests
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_time_logs_date ON time_logs(date)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_time_logs_emp_date ON time_logs(emp_id, date)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_time_logs_branch_date ON time_logs(branch_id, date)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_leave_requests_emp ON leave_requests(emp_id)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_leave_requests_dates ON leave_requests(start_date, end_date)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_ot_requests_emp_date ON ot_requests(emp_id, date)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_advance_requests_emp_date ON advance_requests(emp_id, request_date)").run().catch(() => {});
   } catch(e) {
     console.error('ensureTimeAttendanceTables note:', e);
   }
@@ -2827,17 +2836,11 @@ async function handleAction(db, action, params) {
           sumBindsAdv.push(cutoffInfo.startDate, cutoffInfo.endDate);
           sumOtClause += " AND (date BETWEEN ? AND ?)";
           sumBindsOt.push(cutoffInfo.startDate, cutoffInfo.endDate);
-        }
-
-        const appLeavesQ = await db.prepare(`
-          SELECT SUM(COALESCE(days_count, 1)) as sum_days FROM leave_requests WHERE ${sumLeaveClause}
-        `).bind(...sumBindsLeave).first().catch(() => null);
-        const appAdvQ = await db.prepare(`
-          SELECT SUM(amount) as sum_amount FROM advance_requests WHERE ${sumAdvClause}
-        `).bind(...sumBindsAdv).first().catch(() => null);
-        const appOtQ = await db.prepare(`
-          SELECT SUM(actual_hours) as sum_ot FROM ot_requests WHERE ${sumOtClause}
-        `).bind(...sumBindsOt).first().catch(() => null);
+        }        const [appLeavesQ, appAdvQ, appOtQ] = await Promise.all([
+          db.prepare(`SELECT SUM(COALESCE(days_count, 1)) as sum_days FROM leave_requests WHERE ${sumLeaveClause}`).bind(...sumBindsLeave).first().catch(() => null),
+          db.prepare(`SELECT SUM(amount) as sum_amount FROM advance_requests WHERE ${sumAdvClause}`).bind(...sumBindsAdv).first().catch(() => null),
+          db.prepare(`SELECT SUM(actual_hours) as sum_ot FROM ot_requests WHERE ${sumOtClause}`).bind(...sumBindsOt).first().catch(() => null)
+        ]);
 
         empSummary = {
           daysWorked,
@@ -2954,20 +2957,30 @@ async function handleAction(db, action, params) {
       }
       const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
 
-      // 3. EXECUTE INDEPENDENT QUERIES SEQUENTIALLY TO PREVENT CLOUDFLARE WORKER RESOURCE LIMIT (ERROR 1102 / 503)
-      const branchRows = await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
-      const leavesQuery = (reqType === 'ALL' || reqType === 'LEAVE')
-        ? await db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT 100`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
-        : { results: [] };
-      const otsQuery = (reqType === 'ALL' || reqType === 'OT')
-        ? await db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT 100`).bind(...otBinds).all().catch(() => ({ results: [] }))
-        : { results: [] };
-      const advQuery = (reqType === 'ALL' || reqType === 'ADVANCE')
-        ? await db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 100`).bind(...advBinds).all().catch(() => ({ results: [] }))
-        : { results: [] };
-      const approvedLeavesOnDate = await db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) = 'APPROVED' AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] }));
-      const pendingCountRow = await db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 }));
-      const setRows = await db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }));
+      // 3. EXECUTE INDEPENDENT QUERIES IN PARALLEL FOR HIGH PERFORMANCE
+      const [
+        branchRows,
+        leavesQuery,
+        otsQuery,
+        advQuery,
+        approvedLeavesOnDate,
+        pendingCountRow,
+        setRows
+      ] = await Promise.all([
+        db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] })),
+        (reqType === 'ALL' || reqType === 'LEAVE')
+          ? db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT 100`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
+          : Promise.resolve({ results: [] }),
+        (reqType === 'ALL' || reqType === 'OT')
+          ? db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT 100`).bind(...otBinds).all().catch(() => ({ results: [] }))
+          : Promise.resolve({ results: [] }),
+        (reqType === 'ALL' || reqType === 'ADVANCE')
+          ? db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 100`).bind(...advBinds).all().catch(() => ({ results: [] }))
+          : Promise.resolve({ results: [] }),
+        db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) = 'APPROVED' AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] })),
+        db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 })),
+        db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }))
+      ]);
 
       const branches = branchRows.results || [];
       const pendingLeaves = leavesQuery.results || [];
