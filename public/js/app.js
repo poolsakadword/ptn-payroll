@@ -10321,7 +10321,7 @@ async function fetchApprovalReportData() {
   var branchId = document.getElementById('rptBranch') ? document.getElementById('rptBranch').value : 'ALL';
   var status = document.getElementById('rptStatus') ? document.getElementById('rptStatus').value : 'APPROVED';
 
-  showLoading(true, 'กำลังรวบรวมข้อมูลคำขอสำหรับจัดพิมพ์รายงาน...');
+  showToast('กำลังรวบรวมข้อมูลคำขอ...', 'info');
   try {
     var res = await callApi('getTimeAttendanceDashboard', {
       username: (State.currentUser && State.currentUser.username) || 'Admin',
@@ -10334,7 +10334,6 @@ async function fetchApprovalReportData() {
       requestPeriod: period,
       requestLimit: 1000
     });
-    showLoading(false);
 
     if (!res || !res.success) {
       showToast(res && res.message ? res.message : 'ไม่สามารถดึงข้อมูลคำขอได้', 'error');
@@ -10371,7 +10370,6 @@ async function fetchApprovalReportData() {
       employeeList: res.employeeList || State.employees || []
     };
   } catch(err) {
-    showLoading(false);
     console.error('fetchApprovalReportData error:', err);
     showToast('เกิดข้อผิดพลาดในการดึงข้อมูลรายงาน', 'error');
     return null;
