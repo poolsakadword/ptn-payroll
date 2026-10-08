@@ -10237,6 +10237,509 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
   tbody.innerHTML = html;
 }
 
+// ==============================================================================
+// APPROVAL REQUESTS A4 PRINTING & EXCEL EXPORT SYSTEM
+// ==============================================================================
+function openApprovalReportModal() {
+  // Sync Branches
+  var branchSel = document.getElementById('rptBranch');
+  if (branchSel) {
+    branchSel.innerHTML = '<option value="ALL">🏢 ทุกสาขา (All Branches)</option>';
+    var branches = State.branches || [];
+    branches.forEach(function(b) {
+      var opt = document.createElement('option');
+      opt.value = b.branch_id;
+      opt.textContent = b.branch_id + ' - ' + b.branch_name;
+      branchSel.appendChild(opt);
+    });
+  }
+
+  // Pre-fill dates based on current view
+  var today = new Date();
+  var y = today.getFullYear();
+  var m = String(today.getMonth() + 1).padStart(2, '0');
+  var d = String(today.getDate()).padStart(2, '0');
+  var curMonthStr = y + '-' + m;
+
+  var startEl = document.getElementById('rptStartDate');
+  var endEl = document.getElementById('rptEndDate');
+  var monthEl = document.getElementById('rptMonth');
+  var periodEl = document.getElementById('rptPeriod');
+
+  if (startEl && !startEl.value) startEl.value = curMonthStr + '-01';
+  if (endEl && !endEl.value) endEl.value = y + '-' + m + '-' + d;
+  if (monthEl && !monthEl.value) monthEl.value = curMonthStr;
+  if (periodEl && !periodEl.value) periodEl.value = curMonthStr;
+
+  // Sync with current filter in approvals tab if active
+  if (_currentAttendanceRequestDateMode === 'RANGE' && _currentAttendanceRequestStartDate && _currentAttendanceRequestEndDate) {
+    if (startEl) startEl.value = _currentAttendanceRequestStartDate;
+    if (endEl) endEl.value = _currentAttendanceRequestEndDate;
+    var modeSel = document.getElementById('rptDateMode');
+    if (modeSel) modeSel.value = 'RANGE';
+  } else if (_currentAttendanceRequestDateMode === 'MONTH' && _currentAttendanceRequestMonth) {
+    if (monthEl) monthEl.value = _currentAttendanceRequestMonth;
+    var modeSel = document.getElementById('rptDateMode');
+    if (modeSel) modeSel.value = 'MONTH';
+  } else if (_currentAttendanceRequestDateMode === 'PERIOD' && _currentAttendanceRequestPeriod) {
+    if (periodEl) periodEl.value = _currentAttendanceRequestPeriod;
+    var modeSel = document.getElementById('rptDateMode');
+    if (modeSel) modeSel.value = 'PERIOD';
+  }
+
+  onRptDateModeChanged();
+  openModal('modalApprovalReport');
+}
+
+function onRptDateModeChanged() {
+  var mode = document.getElementById('rptDateMode') ? document.getElementById('rptDateMode').value : 'RANGE';
+  var wRange = document.getElementById('rptDateWrapRange');
+  var wMonth = document.getElementById('rptDateWrapMonth');
+  var wPeriod = document.getElementById('rptDateWrapPeriod');
+
+  if (wRange) wRange.style.display = (mode === 'RANGE') ? 'grid' : 'none';
+  if (wMonth) wMonth.style.display = (mode === 'MONTH') ? 'block' : 'none';
+  if (wPeriod) wPeriod.style.display = (mode === 'PERIOD') ? 'block' : 'none';
+}
+
+function onRptConfigChanged() {
+  // Callback when radio type changes
+}
+
+async function fetchApprovalReportData() {
+  var reqType = 'ALL';
+  var typeRadios = document.getElementsByName('rptReqType');
+  for (var i = 0; i < typeRadios.length; i++) {
+    if (typeRadios[i].checked) { reqType = typeRadios[i].value; break; }
+  }
+
+  var dateMode = document.getElementById('rptDateMode') ? document.getElementById('rptDateMode').value : 'RANGE';
+  var startDate = document.getElementById('rptStartDate') ? document.getElementById('rptStartDate').value : '';
+  var endDate = document.getElementById('rptEndDate') ? document.getElementById('rptEndDate').value : '';
+  var month = document.getElementById('rptMonth') ? document.getElementById('rptMonth').value : '';
+  var period = document.getElementById('rptPeriod') ? document.getElementById('rptPeriod').value : '';
+  var branchId = document.getElementById('rptBranch') ? document.getElementById('rptBranch').value : 'ALL';
+  var status = document.getElementById('rptStatus') ? document.getElementById('rptStatus').value : 'APPROVED';
+
+  showLoading(true, 'กำลังรวบรวมข้อมูลคำขอสำหรับจัดพิมพ์รายงาน...');
+  try {
+    var res = await callApi('getTimeAttendanceDashboard', {
+      username: (State.currentUser && State.currentUser.username) || 'Admin',
+      requestStatus: status,
+      requestType: reqType,
+      requestDateMode: dateMode,
+      requestStartDate: startDate,
+      requestEndDate: endDate,
+      requestMonth: month,
+      requestPeriod: period,
+      requestLimit: 1000
+    });
+    showLoading(false);
+
+    if (!res || !res.success) {
+      showToast(res && res.message ? res.message : 'ไม่สามารถดึงข้อมูลคำขอได้', 'error');
+      return null;
+    }
+
+    // Filter by branch if selected
+    var leaves = res.pendingLeaves || [];
+    var ots = res.pendingOts || [];
+    var advances = res.pendingAdvances || [];
+
+    if (branchId && branchId !== 'ALL') {
+      var empBranchMap = {};
+      (res.employeeList || State.employees || []).forEach(function(e) {
+        empBranchMap[e.emp_id] = e.branch_id;
+      });
+      leaves = leaves.filter(function(x) { return (x.branch_id || empBranchMap[x.emp_id]) === branchId; });
+      ots = ots.filter(function(x) { return (x.branch_id || empBranchMap[x.emp_id]) === branchId; });
+      advances = advances.filter(function(x) { return (x.branch_id || empBranchMap[x.emp_id]) === branchId; });
+    }
+
+    return {
+      reqType: reqType,
+      dateMode: dateMode,
+      startDate: startDate,
+      endDate: endDate,
+      month: month,
+      period: period,
+      branchId: branchId,
+      status: status,
+      leaves: leaves,
+      ots: ots,
+      advances: advances,
+      employeeList: res.employeeList || State.employees || []
+    };
+  } catch(err) {
+    showLoading(false);
+    console.error('fetchApprovalReportData error:', err);
+    showToast('เกิดข้อผิดพลาดในการดึงข้อมูลรายงาน', 'error');
+    return null;
+  }
+}
+
+async function printApprovalReportA4() {
+  var data = await fetchApprovalReportData();
+  if (!data) return;
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด (PTN PHARMA CENTER CO., LTD.)';
+  var compTax = State.company.taxId || '0105559876543';
+
+  // Format Period string
+  var periodDisplay = '';
+  if (data.dateMode === 'RANGE') {
+    periodDisplay = (data.startDate || '-') + ' ถึง ' + (data.endDate || '-');
+  } else if (data.dateMode === 'MONTH') {
+    periodDisplay = 'ประจำเดือน ' + (data.month || '-');
+  } else if (data.dateMode === 'PERIOD') {
+    periodDisplay = 'รอบตัดวิก ' + (data.period || '-');
+  } else {
+    periodDisplay = 'ทุกช่วงเวลา';
+  }
+
+  var branchDisplay = 'ทุกสาขา (All Branches)';
+  if (data.branchId && data.branchId !== 'ALL') {
+    var bObj = (State.branches || []).find(function(b) { return b.branch_id === data.branchId; });
+    branchDisplay = bObj ? (bObj.branch_id + ' - ' + bObj.branch_name) : data.branchId;
+  }
+
+  var statusLabels = { 'APPROVED': 'อนุมัติแล้ว (Approved)', 'PENDING': 'รออนุมัติ (Pending)', 'REJECTED': 'ปฏิเสธแล้ว (Rejected)', 'ALL': 'ทั้งหมด (All)' };
+  var statusDisplay = statusLabels[data.status] || data.status;
+
+  var now = new Date();
+  var thMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var printDateStr = now.getDate() + ' ' + thMonths[now.getMonth()] + ' ' + (now.getFullYear() + 543) + ' เวลา ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0') + ' น.';
+
+  // Build Sections based on reqType
+  var sectionsHtml = '';
+
+  // 1. LEAVE SECTION
+  if (data.reqType === 'ALL' || data.reqType === 'LEAVE') {
+    var leaves = data.leaves || [];
+    var totalLeaveDays = 0;
+    var sickDays = 0;
+    var busDays = 0;
+
+    var rows = leaves.map(function(item, idx) {
+      var days = Number(item.days_count || 1);
+      totalLeaveDays += days;
+      var typeStr = item.leave_type || 'ลาหยุด';
+      if (typeStr.indexOf('ป่วย') !== -1) sickDays += days;
+      else busDays += days;
+
+      var stTag = item.status === 'APPROVED' ? '<span style="color:#15803d;font-weight:700">✓ อนุมัติ</span>' : (item.status === 'PENDING' ? '<span style="color:#b45309;font-weight:700">⏳ รออนุมัติ</span>' : '<span style="color:#dc2626;font-weight:700">✕ ปฏิเสธ</span>');
+      var rangeStr = (item.start_date === item.end_date) ? item.start_date : (item.start_date + ' ถึง ' + item.end_date);
+      if (item.time_slot && item.time_slot !== 'FULL') rangeStr += ' (' + item.time_slot + ')';
+
+      return '<tr>' +
+        '<td style="text-align:center">' + (idx + 1) + '</td>' +
+        '<td style="text-align:center">' + (item.created_at ? item.created_at.substring(0, 10) : '-') + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + (item.full_name || '-') + '</td>' +
+        '<td>' + (item.department || '-') + '</td>' +
+        '<td>' + typeStr + '</td>' +
+        '<td style="text-align:center">' + rangeStr + '</td>' +
+        '<td style="text-align:center;font-weight:700">' + days + ' วัน</td>' +
+        '<td>' + (item.reason || '-') + '</td>' +
+        '<td style="text-align:center">' + stTag + '</td>' +
+      '</tr>';
+    }).join('');
+
+    if (leaves.length === 0) {
+      rows = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:12px">ไม่มีรายการคำขอลางานในช่วงนี้</td></tr>';
+    }
+
+    sectionsHtml += '<div style="margin-bottom:20px">' +
+      '<div style="font-size:13px;font-weight:700;color:#1e3a8a;margin-bottom:6px;display:flex;justify-content:space-between">' +
+        '<span>🏖️ 1. รายการคำขอลางาน (Leave Requests) — ' + leaves.length + ' รายการ</span>' +
+        '<span>รวมวันลาทั้งสิ้น: <strong style="color:#16a34a">' + totalLeaveDays + ' วัน</strong> (ป่วย ' + sickDays + ' วัน / กิจ ' + busDays + ' วัน)</span>' +
+      '</div>' +
+      '<table>' +
+        '<thead><tr>' +
+          '<th style="width:28px">#</th><th style="width:70px">วันที่ยื่น</th><th>รหัส-ชื่อพนักงาน</th><th style="width:90px">แผนก</th><th style="width:100px">ประเภทการลา</th><th style="width:130px">ช่วงวันที่ลา</th><th style="width:55px">จำนวน</th><th>เหตุผล</th><th style="width:70px">สถานะ</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+    '</div>';
+  }
+
+  // 2. OT SECTION
+  if (data.reqType === 'ALL' || data.reqType === 'OT') {
+    var ots = data.ots || [];
+    var totalReqOt = 0;
+    var totalAppOt = 0;
+
+    var rows = ots.map(function(item, idx) {
+      var reqH = Number(item.hours || 0);
+      var appH = Number(item.actual_hours !== null && item.actual_hours !== undefined ? item.actual_hours : reqH);
+      totalReqOt += reqH;
+      totalAppOt += appH;
+
+      var stTag = item.status === 'APPROVED' ? '<span style="color:#15803d;font-weight:700">✓ อนุมัติ</span>' : (item.status === 'PENDING' ? '<span style="color:#b45309;font-weight:700">⏳ รออนุมัติ</span>' : '<span style="color:#dc2626;font-weight:700">✕ ปฏิเสธ</span>');
+      var timeRange = (item.start_time && item.end_time) ? (item.start_time + ' - ' + item.end_time) : '-';
+
+      return '<tr>' +
+        '<td style="text-align:center">' + (idx + 1) + '</td>' +
+        '<td style="text-align:center">' + (item.date || '-') + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + (item.full_name || '-') + '</td>' +
+        '<td>' + (item.department || '-') + '</td>' +
+        '<td style="text-align:center">' + timeRange + '</td>' +
+        '<td style="text-align:right">' + reqH.toFixed(1) + ' ชม.</td>' +
+        '<td style="text-align:right;font-weight:700;color:#b45309">' + appH.toFixed(1) + ' ชม.</td>' +
+        '<td>' + (item.reason || '-') + '</td>' +
+        '<td style="text-align:center">' + stTag + '</td>' +
+      '</tr>';
+    }).join('');
+
+    if (ots.length === 0) {
+      rows = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:12px">ไม่มีรายการขอทำ OT ในช่วงนี้</td></tr>';
+    }
+
+    sectionsHtml += '<div style="margin-bottom:20px">' +
+      '<div style="font-size:13px;font-weight:700;color:#b45309;margin-bottom:6px;display:flex;justify-content:space-between">' +
+        '<span>⏰ 2. รายการขอทำ OT (Overtime Requests) — ' + ots.length + ' รายการ</span>' +
+        '<span>รวมชั่วโมง OT: ขอทำ ' + totalReqOt.toFixed(1) + ' ชม. / <strong style="color:#b45309">อนุมัติ ' + totalAppOt.toFixed(1) + ' ชม.</strong></span>' +
+      '</div>' +
+      '<table>' +
+        '<thead><tr>' +
+          '<th style="width:28px">#</th><th style="width:70px">วันที่ทำ OT</th><th>รหัส-ชื่อพนักงาน</th><th style="width:90px">แผนก</th><th style="width:95px">ช่วงเวลา</th><th style="width:65px">ขอทำ</th><th style="width:65px">อนุมัติจริง</th><th>รายละเอียดงาน</th><th style="width:70px">สถานะ</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+    '</div>';
+  }
+
+  // 3. ADVANCE SECTION
+  if (data.reqType === 'ALL' || data.reqType === 'ADVANCE') {
+    var advances = data.advances || [];
+    var totalReqAdv = 0;
+    var totalAppAdv = 0;
+
+    var rows = advances.map(function(item, idx) {
+      var reqA = Number(item.amount || 0);
+      var appA = Number(item.status === 'APPROVED' ? reqA : 0);
+      totalReqAdv += reqA;
+      totalAppAdv += appA;
+
+      var stTag = item.status === 'APPROVED' ? '<span style="color:#15803d;font-weight:700">✓ อนุมัติ</span>' : (item.status === 'PENDING' ? '<span style="color:#b45309;font-weight:700">⏳ รออนุมัติ</span>' : '<span style="color:#dc2626;font-weight:700">✕ ปฏิเสธ</span>');
+
+      return '<tr>' +
+        '<td style="text-align:center">' + (idx + 1) + '</td>' +
+        '<td style="text-align:center">' + (item.request_date || '-') + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + (item.full_name || '-') + '</td>' +
+        '<td>' + (item.department || '-') + '</td>' +
+        '<td style="text-align:right;font-weight:700">฿' + reqA.toLocaleString() + '</td>' +
+        '<td style="text-align:right;font-weight:700;color:#15803d">฿' + appA.toLocaleString() + '</td>' +
+        '<td>' + (item.reason || '-') + '</td>' +
+        '<td style="text-align:center">' + (item.deduct_period || '-') + '</td>' +
+        '<td style="text-align:center">' + stTag + '</td>' +
+      '</tr>';
+    }).join('');
+
+    if (advances.length === 0) {
+      rows = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:12px">ไม่มีรายการขอเบิกเงินล่วงหน้าในช่วงนี้</td></tr>';
+    }
+
+    sectionsHtml += '<div style="margin-bottom:20px">' +
+      '<div style="font-size:13px;font-weight:700;color:#15803d;margin-bottom:6px;display:flex;justify-content:space-between">' +
+        '<span>💵 3. รายการขอเบิกเงินล่วงหน้า (Salary Advance Requests) — ' + advances.length + ' รายการ</span>' +
+        '<span>รวมยอดเงิน: ขอเบิก ฿' + totalReqAdv.toLocaleString() + ' / <strong style="color:#15803d">อนุมัติจ่าย ฿' + totalAppAdv.toLocaleString() + '</strong></span>' +
+      '</div>' +
+      '<table>' +
+        '<thead><tr>' +
+          '<th style="width:28px">#</th><th style="width:70px">วันที่ขอเบิก</th><th>รหัส-ชื่อพนักงาน</th><th style="width:90px">แผนก</th><th style="width:85px">ยอดขอเบิก</th><th style="width:85px">ยอดอนุมัติ</th><th>เหตุผลความจำเป็น</th><th style="width:80px">หักคืนงวด</th><th style="width:70px">สถานะ</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+      '</table>' +
+    '</div>';
+  }
+
+  var reportTitle = 'รายงานสรุปคำขอและการอนุมัติ (Approval & Request Report)';
+  if (data.reqType === 'LEAVE') reportTitle = 'รายงานสรุปการอนุมัติการลางาน (Leave Approval Report)';
+  else if (data.reqType === 'OT') reportTitle = 'รายงานสรุปการอนุมัติทำงานล่วงเวลา (Overtime Report)';
+  else if (data.reqType === 'ADVANCE') reportTitle = 'รายงานสรุปการอนุมัติเบิกเงินล่วงหน้า (Salary Advance Report)';
+
+  var docHtml = '<!DOCTYPE html>' +
+    '<html><head><meta charset="utf-8"><title>' + reportTitle + '</title>' +
+    '<style>' +
+      '@page { size: A4 portrait; margin: 12mm; }' +
+      'body { font-family: "Sarabun", "Segoe UI", Arial, sans-serif; font-size: 11px; color: #0f172a; margin: 0; padding: 10px; }' +
+      'table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10.5px; }' +
+      'th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 4px; text-align: center; color: #1e293b; }' +
+      'td { border: 1px solid #cbd5e1; padding: 5px 4px; vertical-align: middle; }' +
+      'tr:nth-child(even) td { background: #fafafa; }' +
+      '.header-box { border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px; }' +
+      '.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 10.5px; margin-top: 8px; }' +
+      '.sign-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 36px; text-align: center; font-size: 11px; }' +
+      '.sign-line { border-bottom: 1px dotted #64748b; width: 80%; margin: 38px auto 6px; }' +
+    '</style>' +
+    '</head><body>' +
+    '<div class="header-box">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div>' +
+          '<div style="font-size:15px;font-weight:bold;color:#0f172a">' + compName + '</div>' +
+          '<div style="font-size:10.5px;color:#475569">เลขประจำตัวผู้เสียภาษี: ' + compTax + '</div>' +
+        '</div>' +
+        '<div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-weight:bold;padding:3px 8px;border-radius:4px;font-size:10.5px">เอกสารงานบุคคล (HR Document)</div>' +
+      '</div>' +
+      '<div style="text-align:center;margin-top:6px">' +
+        '<div style="font-size:16px;font-weight:bold;color:#1e3a8a">' + reportTitle + '</div>' +
+      '</div>' +
+      '<div class="meta-grid">' +
+        '<div><b>ช่วงเวลา:</b> ' + periodDisplay + '</div>' +
+        '<div><b>สาขา:</b> ' + branchDisplay + '</div>' +
+        '<div><b>สถานะ:</b> ' + statusDisplay + '</div>' +
+        '<div><b>พิมพ์เมื่อ:</b> ' + printDateStr + '</div>' +
+        '<div><b>ผู้ออกเอกสาร:</b> Admin (ระบบบริหารบุคคล)</div>' +
+        '<div><b>หน้า:</b> 1 / 1</div>' +
+      '</div>' +
+    '</div>' +
+    sectionsHtml +
+    '<div class="sign-grid">' +
+      '<div>' +
+        '<div>ผู้จัดทำรายงาน / เจ้าหน้าที่ HR</div>' +
+        '<div class="sign-line"></div>' +
+        '<div>( .................................................... )</div>' +
+        '<div style="font-size:10px;color:#64748b;margin-top:2px">วันที่ ...../...../..........</div>' +
+      '</div>' +
+      '<div>' +
+        '<div>ผู้ตรวจสอบ / หัวหน้าฝ่าย</div>' +
+        '<div class="sign-line"></div>' +
+        '<div>( .................................................... )</div>' +
+        '<div style="font-size:10px;color:#64748b;margin-top:2px">วันที่ ...../...../..........</div>' +
+      '</div>' +
+      '<div>' +
+        '<div>ผู้อนุมัติ / ผู้จัดการฝ่ายบุคคล</div>' +
+        '<div class="sign-line"></div>' +
+        '<div>( .................................................... )</div>' +
+        '<div style="font-size:10px;color:#64748b;margin-top:2px">วันที่ ...../...../..........</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="margin-top:20px;border-top:1px solid #e2e8f0;padding-top:6px;font-size:9px;color:#94a3b8;display:flex;justify-content:space-between">' +
+      '<span>PTN Payroll & Time Management System • ระบบประมวลผลเงินเดือนและเวลาทำงาน</span>' +
+      '<span>เอกสารทางการ สงวนสิทธิ์ใช้งานภายในองค์กร</span>' +
+    '</div>' +
+    '<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };<\/script>' +
+    '</body></html>';
+
+  var printWin = window.open('', '_blank');
+  if (printWin) {
+    printWin.document.open();
+    printWin.document.write(docHtml);
+    printWin.document.close();
+  } else {
+    var iframe = document.getElementById('reportPrintIframe');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'reportPrintIframe';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = '0';
+      document.body.appendChild(iframe);
+    }
+    var iDoc = iframe.contentWindow.document;
+    iDoc.open();
+    iDoc.write(docHtml);
+    iDoc.close();
+    setTimeout(function() {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    }, 400);
+  }
+}
+
+async function exportApprovalReportExcel() {
+  var data = await fetchApprovalReportData();
+  if (!data) return;
+
+  var csvRows = [];
+  csvRows.push(['รายงานสรุปคำขอและการอนุมัติ (PTN Payroll & Time System)']);
+  csvRows.push(['ช่วงเวลา:', (data.dateMode === 'RANGE' ? (data.startDate + ' ถึง ' + data.endDate) : (data.dateMode === 'MONTH' ? data.month : data.period))]);
+  csvRows.push(['สาขา:', data.branchId]);
+  csvRows.push(['สถานะ:', data.status]);
+  csvRows.push([]);
+
+  // 1. LEAVE
+  if (data.reqType === 'ALL' || data.reqType === 'LEAVE') {
+    csvRows.push(['[หมวดคำขอลางาน]']);
+    csvRows.push(['ลำดับ', 'วันที่ยื่น', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'แผนก', 'ประเภทการลา', 'วันที่เริ่มต้น', 'วันที่สิ้นสุด', 'จำนวนวัน', 'ช่วงเวลา', 'เหตุผล', 'สถานะ']);
+    (data.leaves || []).forEach(function(l, idx) {
+      csvRows.push([
+        idx + 1,
+        l.created_at ? l.created_at.substring(0, 10) : '',
+        l.emp_id || '',
+        l.full_name || '',
+        l.department || '',
+        l.leave_type || '',
+        l.start_date || '',
+        l.end_date || '',
+        l.days_count || 1,
+        l.time_slot || 'FULL',
+        '"' + (l.reason || '').replace(/"/g, '""') + '"',
+        l.status || ''
+      ]);
+    });
+    csvRows.push([]);
+  }
+
+  // 2. OT
+  if (data.reqType === 'ALL' || data.reqType === 'OT') {
+    csvRows.push(['[หมวดขอทำ OT]']);
+    csvRows.push(['ลำดับ', 'วันที่ทำ OT', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'แผนก', 'เวลาเริ่มต้น', 'เวลาสิ้นสุด', 'ชม.ขอทำ', 'ชม.อนุมัติจริง', 'รายละเอียดงาน', 'สถานะ']);
+    (data.ots || []).forEach(function(o, idx) {
+      csvRows.push([
+        idx + 1,
+        o.date || '',
+        o.emp_id || '',
+        o.full_name || '',
+        o.department || '',
+        o.start_time || '',
+        o.end_time || '',
+        o.hours || 0,
+        o.actual_hours !== null && o.actual_hours !== undefined ? o.actual_hours : o.hours,
+        '"' + (o.reason || '').replace(/"/g, '""') + '"',
+        o.status || ''
+      ]);
+    });
+    csvRows.push([]);
+  }
+
+  // 3. ADVANCE
+  if (data.reqType === 'ALL' || data.reqType === 'ADVANCE') {
+    csvRows.push(['[หมวดขอเบิกเงินล่วงหน้า]']);
+    csvRows.push(['ลำดับ', 'วันที่ขอเบิก', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'แผนก', 'ยอดเงินขอเบิก (บาท)', 'เหตุผลความจำเป็น', 'รอบวิกที่หักคืน', 'สถานะ']);
+    (data.advances || []).forEach(function(a, idx) {
+      csvRows.push([
+        idx + 1,
+        a.request_date || '',
+        a.emp_id || '',
+        a.full_name || '',
+        a.department || '',
+        a.amount || 0,
+        '"' + (a.reason || '').replace(/"/g, '""') + '"',
+        a.deduct_period || '',
+        a.status || ''
+      ]);
+    });
+    csvRows.push([]);
+  }
+
+  var csvContent = '\uFEFF' + csvRows.map(function(e) { return e.join(','); }).join('\r\n');
+  var blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  var fileName = 'Approval_Report_' + (data.reqType) + '_' + (new Date().toISOString().substring(0, 10)) + '.csv';
+  a.setAttribute('download', fileName);
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast('ส่งออกไฟล์ Excel/CSV สำเร็จเรียบร้อย', 'success');
+}
+
+
 function printIndividualAttendanceTimesheet() {
   var empId = _currentAttendanceEmpId || (document.getElementById('attFilterEmp') ? document.getElementById('attFilterEmp').value : 'ALL');
   if (!empId || empId === 'ALL') {
