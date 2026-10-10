@@ -9839,7 +9839,7 @@ function exportAttendanceSummaryCsv() {
       r.no,
       escapeCsv(r.empId),
       escapeCsv(r.fullName),
-      escapeCsv(r.nickname),
+      escapeCsv(getEmpNickname(r.empId, r.nickname)),
       escapeCsv(r.branchName),
       escapeCsv(r.department),
       escapeCsv(r.position),
@@ -10240,17 +10240,36 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
 // ==============================================================================
 // APPROVAL REQUESTS A4 PRINTING & EXCEL EXPORT SYSTEM
 // ==============================================================================
-function getEmpNickname(empId, directNickname) {
-  if (directNickname && String(directNickname).trim()) return String(directNickname).trim();
+function getEmpNickname(empId, directNickname, employeeList) {
+  if (directNickname && String(directNickname).trim() && String(directNickname).trim() !== '-') {
+    return String(directNickname).trim();
+  }
   if (!empId) return '';
-  var emps = State.employees || _currentAttendanceEmployeeList || [];
-  var found = emps.find(function(e) { return (e.emp_id || e.empId) === empId; });
-  return (found && found.nickname) ? String(found.nickname).trim() : '';
+  var targetId = String(empId).trim();
+  if (Array.isArray(employeeList) && employeeList.length > 0) {
+    var found0 = employeeList.find(function(e) { return String(e.emp_id || e.empId || '').trim() === targetId; });
+    if (found0 && found0.nickname && String(found0.nickname).trim() && String(found0.nickname).trim() !== '-') {
+      return String(found0.nickname).trim();
+    }
+  }
+  if (Array.isArray(State.employees) && State.employees.length > 0) {
+    var found1 = State.employees.find(function(e) { return String(e.emp_id || e.empId || '').trim() === targetId; });
+    if (found1 && found1.nickname && String(found1.nickname).trim() && String(found1.nickname).trim() !== '-') {
+      return String(found1.nickname).trim();
+    }
+  }
+  if (Array.isArray(_currentAttendanceEmployeeList) && _currentAttendanceEmployeeList.length > 0) {
+    var found2 = _currentAttendanceEmployeeList.find(function(e) { return String(e.emp_id || e.empId || '').trim() === targetId; });
+    if (found2 && found2.nickname && String(found2.nickname).trim() && String(found2.nickname).trim() !== '-') {
+      return String(found2.nickname).trim();
+    }
+  }
+  return '';
 }
 
-function formatEmpNameWithNick(fullName, empId, directNickname) {
+function formatEmpNameWithNick(fullName, empId, directNickname, employeeList) {
   var name = fullName || empId || '-';
-  var nick = getEmpNickname(empId, directNickname);
+  var nick = getEmpNickname(empId, directNickname, employeeList);
   return nick ? (name + ' (' + nick + ')') : name;
 }
 
@@ -10666,32 +10685,39 @@ async function exportApprovalReportExcel() {
   var data = await fetchApprovalReportData();
   if (!data) return;
 
+  function escapeCsvCell(val) {
+    if (val === null || val === undefined) return '""';
+    var s = String(val).replace(/"/g, '""');
+    return '"' + s + '"';
+  }
+
+  var empList = data.employeeList || State.employees || [];
   var csvRows = [];
-  csvRows.push(['รายงานสรุปคำขอและการอนุมัติ (PTN Payroll & Time System)']);
-  csvRows.push(['ช่วงเวลา:', (data.dateMode === 'RANGE' ? (data.startDate + ' ถึง ' + data.endDate) : (data.dateMode === 'MONTH' ? data.month : data.period))]);
-  csvRows.push(['สาขา:', data.branchId]);
-  csvRows.push(['สถานะ:', data.status]);
+  csvRows.push([escapeCsvCell('รายงานสรุปคำขอและการอนุมัติ (PTN Payroll & Time System)')]);
+  csvRows.push([escapeCsvCell('ช่วงเวลา:'), escapeCsvCell(data.dateMode === 'RANGE' ? (data.startDate + ' ถึง ' + data.endDate) : (data.dateMode === 'MONTH' ? data.month : data.period))]);
+  csvRows.push([escapeCsvCell('สาขา:'), escapeCsvCell(data.branchId)]);
+  csvRows.push([escapeCsvCell('สถานะ:'), escapeCsvCell(data.status)]);
   csvRows.push([]);
 
   // 1. LEAVE
   if (data.reqType === 'ALL' || data.reqType === 'LEAVE') {
-    csvRows.push(['[หมวดคำขอลางาน]']);
-    csvRows.push(['ลำดับ', 'วันที่ยื่น', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'ประเภทการลา', 'วันที่เริ่มต้น', 'วันที่สิ้นสุด', 'จำนวนวัน', 'ช่วงเวลา', 'เหตุผล', 'สถานะ']);
+    csvRows.push([escapeCsvCell('[หมวดคำขอลางาน]')]);
+    csvRows.push(['ลำดับ', 'วันที่ยื่น', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'ประเภทการลา', 'วันที่เริ่มต้น', 'วันที่สิ้นสุด', 'จำนวนวัน', 'ช่วงเวลา', 'เหตุผล', 'สถานะ'].map(escapeCsvCell));
     (data.leaves || []).forEach(function(l, idx) {
       csvRows.push([
         idx + 1,
-        l.created_at ? l.created_at.substring(0, 10) : '',
-        l.emp_id || '',
-        l.full_name || '',
-        getEmpNickname(l.emp_id, l.nickname),
-        l.department || '',
-        l.leave_type || '',
-        l.start_date || '',
-        l.end_date || '',
+        escapeCsvCell(l.created_at ? l.created_at.substring(0, 10) : ''),
+        escapeCsvCell(l.emp_id || ''),
+        escapeCsvCell(l.full_name || ''),
+        escapeCsvCell(getEmpNickname(l.emp_id, l.nickname, empList)),
+        escapeCsvCell(l.department || ''),
+        escapeCsvCell(l.leave_type || ''),
+        escapeCsvCell(l.start_date || ''),
+        escapeCsvCell(l.end_date || ''),
         l.days_count || 1,
-        l.time_slot || 'FULL',
-        '"' + (l.reason || '').replace(/"/g, '""') + '"',
-        l.status || ''
+        escapeCsvCell(l.time_slot || 'FULL'),
+        escapeCsvCell(l.reason || ''),
+        escapeCsvCell(l.status || '')
       ]);
     });
     csvRows.push([]);
@@ -10699,22 +10725,22 @@ async function exportApprovalReportExcel() {
 
   // 2. OT
   if (data.reqType === 'ALL' || data.reqType === 'OT') {
-    csvRows.push(['[หมวดขอทำ OT]']);
-    csvRows.push(['ลำดับ', 'วันที่ทำ OT', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'เวลาเริ่มต้น', 'เวลาสิ้นสุด', 'ชม.ขอทำ', 'ชม.อนุมัติจริง', 'รายละเอียดงาน', 'สถานะ']);
+    csvRows.push([escapeCsvCell('[หมวดขอทำ OT]')]);
+    csvRows.push(['ลำดับ', 'วันที่ทำ OT', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'เวลาเริ่มต้น', 'เวลาสิ้นสุด', 'ชม.ขอทำ', 'ชม.อนุมัติจริง', 'รายละเอียดงาน', 'สถานะ'].map(escapeCsvCell));
     (data.ots || []).forEach(function(o, idx) {
       csvRows.push([
         idx + 1,
-        o.date || '',
-        o.emp_id || '',
-        o.full_name || '',
-        getEmpNickname(o.emp_id, o.nickname),
-        o.department || '',
-        o.start_time || '',
-        o.end_time || '',
+        escapeCsvCell(o.date || ''),
+        escapeCsvCell(o.emp_id || ''),
+        escapeCsvCell(o.full_name || ''),
+        escapeCsvCell(getEmpNickname(o.emp_id, o.nickname, empList)),
+        escapeCsvCell(o.department || ''),
+        escapeCsvCell(o.start_time || ''),
+        escapeCsvCell(o.end_time || ''),
         o.hours || 0,
-        o.actual_hours !== null && o.actual_hours !== undefined ? o.actual_hours : o.hours,
-        '"' + (o.reason || '').replace(/"/g, '""') + '"',
-        o.status || ''
+        (o.actual_hours !== null && o.actual_hours !== undefined) ? o.actual_hours : (o.hours || 0),
+        escapeCsvCell(o.reason || ''),
+        escapeCsvCell(o.status || '')
       ]);
     });
     csvRows.push([]);
@@ -10722,20 +10748,20 @@ async function exportApprovalReportExcel() {
 
   // 3. ADVANCE
   if (data.reqType === 'ALL' || data.reqType === 'ADVANCE') {
-    csvRows.push(['[หมวดขอเบิกเงินล่วงหน้า]']);
-    csvRows.push(['ลำดับ', 'วันที่ขอเบิก', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'ยอดเงินขอเบิก (บาท)', 'เหตุผลความจำเป็น', 'รอบวิกที่หักคืน', 'สถานะ']);
+    csvRows.push([escapeCsvCell('[หมวดขอเบิกเงินล่วงหน้า]')]);
+    csvRows.push(['ลำดับ', 'วันที่ขอเบิก', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'ยอดเงินขอเบิก (บาท)', 'เหตุผลความจำเป็น', 'รอบวิกที่หักคืน', 'สถานะ'].map(escapeCsvCell));
     (data.advances || []).forEach(function(a, idx) {
       csvRows.push([
         idx + 1,
-        a.request_date || '',
-        a.emp_id || '',
-        a.full_name || '',
-        getEmpNickname(a.emp_id, a.nickname),
-        a.department || '',
-        a.amount || 0,
-        '"' + (a.reason || '').replace(/"/g, '""') + '"',
-        a.deduct_period || '',
-        a.status || ''
+        escapeCsvCell(a.request_date || ''),
+        escapeCsvCell(a.emp_id || ''),
+        escapeCsvCell(a.full_name || ''),
+        escapeCsvCell(getEmpNickname(a.emp_id, a.nickname, empList)),
+        escapeCsvCell(a.department || ''),
+        Number(a.amount || 0),
+        escapeCsvCell(a.reason || ''),
+        escapeCsvCell(a.deduct_period || ''),
+        escapeCsvCell(a.status || '')
       ]);
     });
     csvRows.push([]);
