@@ -10240,26 +10240,57 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
 // ==============================================================================
 // APPROVAL REQUESTS A4 PRINTING & EXCEL EXPORT SYSTEM
 // ==============================================================================
-function getEmpNickname(empId, directNickname, employeeList) {
-  if (directNickname && String(directNickname).trim() && String(directNickname).trim() !== '-') {
+function getEmpNickname(firstArg, directNickname, employeeList) {
+  // Case 1: firstArg is an object (e.g. employee row or item object)
+  if (firstArg && typeof firstArg === 'object') {
+    var objNick = firstArg.nickname || firstArg.nick_name || directNickname;
+    if (objNick && String(objNick).trim() && String(objNick).trim() !== '-') {
+      return String(objNick).trim();
+    }
+    var targetIdFromObj = String(firstArg.emp_id || firstArg.empId || firstArg.id || '').trim();
+    if (!targetIdFromObj) return '';
+    var list1 = Array.isArray(employeeList) ? employeeList : (Array.isArray(directNickname) ? directNickname : null);
+    if (list1 && list1.length > 0) {
+      var f0 = list1.find(function(e) { return String((e && (e.emp_id || e.empId || e.id)) || '').trim() === targetIdFromObj; });
+      if (f0 && f0.nickname && String(f0.nickname).trim() && String(f0.nickname).trim() !== '-') {
+        return String(f0.nickname).trim();
+      }
+    }
+    if (Array.isArray(State.employees) && State.employees.length > 0) {
+      var f1 = State.employees.find(function(e) { return String((e && (e.emp_id || e.empId || e.id)) || '').trim() === targetIdFromObj; });
+      if (f1 && f1.nickname && String(f1.nickname).trim() && String(f1.nickname).trim() !== '-') {
+        return String(f1.nickname).trim();
+      }
+    }
+    if (Array.isArray(_currentAttendanceEmployeeList) && _currentAttendanceEmployeeList.length > 0) {
+      var f2 = _currentAttendanceEmployeeList.find(function(e) { return String((e && (e.emp_id || e.empId || e.id)) || '').trim() === targetIdFromObj; });
+      if (f2 && f2.nickname && String(f2.nickname).trim() && String(f2.nickname).trim() !== '-') {
+        return String(f2.nickname).trim();
+      }
+    }
+    return '';
+  }
+
+  // Case 2: firstArg is empId (string or number)
+  if (directNickname && typeof directNickname === 'string' && String(directNickname).trim() && String(directNickname).trim() !== '-') {
     return String(directNickname).trim();
   }
-  if (!empId) return '';
-  var targetId = String(empId).trim();
+  if (!firstArg) return '';
+  var targetId = String(firstArg).trim();
   if (Array.isArray(employeeList) && employeeList.length > 0) {
-    var found0 = employeeList.find(function(e) { return String(e.emp_id || e.empId || '').trim() === targetId; });
+    var found0 = employeeList.find(function(e) { return String((e && (e.emp_id || e.empId || e.id)) || '').trim() === targetId; });
     if (found0 && found0.nickname && String(found0.nickname).trim() && String(found0.nickname).trim() !== '-') {
       return String(found0.nickname).trim();
     }
   }
   if (Array.isArray(State.employees) && State.employees.length > 0) {
-    var found1 = State.employees.find(function(e) { return String(e.emp_id || e.empId || '').trim() === targetId; });
+    var found1 = State.employees.find(function(e) { return String((e && (e.emp_id || e.empId || e.id)) || '').trim() === targetId; });
     if (found1 && found1.nickname && String(found1.nickname).trim() && String(found1.nickname).trim() !== '-') {
       return String(found1.nickname).trim();
     }
   }
   if (Array.isArray(_currentAttendanceEmployeeList) && _currentAttendanceEmployeeList.length > 0) {
-    var found2 = _currentAttendanceEmployeeList.find(function(e) { return String(e.emp_id || e.empId || '').trim() === targetId; });
+    var found2 = _currentAttendanceEmployeeList.find(function(e) { return String((e && (e.emp_id || e.empId || e.id)) || '').trim() === targetId; });
     if (found2 && found2.nickname && String(found2.nickname).trim() && String(found2.nickname).trim() !== '-') {
       return String(found2.nickname).trim();
     }
@@ -10268,6 +10299,12 @@ function getEmpNickname(empId, directNickname, employeeList) {
 }
 
 function formatEmpNameWithNick(fullName, empId, directNickname, employeeList) {
+  if (fullName && typeof fullName === 'object') {
+    var item = fullName;
+    var name = item.full_name || item.fullName || item.name || item.emp_id || item.empId || '-';
+    var nick = getEmpNickname(item, item.nickname, employeeList);
+    return nick ? (name + ' (' + nick + ')') : name;
+  }
   var name = fullName || empId || '-';
   var nick = getEmpNickname(empId, directNickname, employeeList);
   return nick ? (name + ' (' + nick + ')') : name;
@@ -10465,7 +10502,7 @@ async function printApprovalReportA4() {
       return '<tr>' +
         '<td style="text-align:center">' + (idx + 1) + '</td>' +
         '<td style="text-align:center">' + (item.created_at ? item.created_at.substring(0, 10) : '-') + '</td>' +
-        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname, data.employeeList)) + '</td>' +
         '<td>' + (item.department || '-') + '</td>' +
         '<td>' + typeStr + '</td>' +
         '<td style="text-align:center">' + rangeStr + '</td>' +
@@ -10486,7 +10523,7 @@ async function printApprovalReportA4() {
       '</div>' +
       '<table>' +
         '<thead><tr>' +
-          '<th style="width:28px">#</th><th style="width:70px">วันที่ยื่น</th><th>รหัส-ชื่อพนักงาน</th><th style="width:90px">แผนก</th><th style="width:100px">ประเภทการลา</th><th style="width:130px">ช่วงวันที่ลา</th><th style="width:55px">จำนวน</th><th>เหตุผล</th><th style="width:70px">สถานะ</th>' +
+          '<th style="width:28px">#</th><th style="width:70px">วันที่ยื่น</th><th>รหัส-ชื่อพนักงาน (ชื่อเล่น)</th><th style="width:90px">แผนก</th><th style="width:100px">ประเภทการลา</th><th style="width:130px">ช่วงวันที่ลา</th><th style="width:55px">จำนวน</th><th>เหตุผล</th><th style="width:70px">สถานะ</th>' +
         '</tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table>' +
@@ -10511,7 +10548,7 @@ async function printApprovalReportA4() {
       return '<tr>' +
         '<td style="text-align:center">' + (idx + 1) + '</td>' +
         '<td style="text-align:center">' + (item.date || '-') + '</td>' +
-        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname, data.employeeList)) + '</td>' +
         '<td>' + (item.department || '-') + '</td>' +
         '<td style="text-align:center">' + timeRange + '</td>' +
         '<td style="text-align:right">' + reqH.toFixed(1) + ' ชม.</td>' +
@@ -10532,7 +10569,7 @@ async function printApprovalReportA4() {
       '</div>' +
       '<table>' +
         '<thead><tr>' +
-          '<th style="width:28px">#</th><th style="width:70px">วันที่ทำ OT</th><th>รหัส-ชื่อพนักงาน</th><th style="width:90px">แผนก</th><th style="width:95px">ช่วงเวลา</th><th style="width:65px">ขอทำ</th><th style="width:65px">อนุมัติจริง</th><th>รายละเอียดงาน</th><th style="width:70px">สถานะ</th>' +
+          '<th style="width:28px">#</th><th style="width:70px">วันที่ทำ OT</th><th>รหัส-ชื่อพนักงาน (ชื่อเล่น)</th><th style="width:90px">แผนก</th><th style="width:95px">ช่วงเวลา</th><th style="width:65px">ขอทำ</th><th style="width:65px">อนุมัติจริง</th><th>รายละเอียดงาน</th><th style="width:70px">สถานะ</th>' +
         '</tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table>' +
@@ -10556,7 +10593,7 @@ async function printApprovalReportA4() {
       return '<tr>' +
         '<td style="text-align:center">' + (idx + 1) + '</td>' +
         '<td style="text-align:center">' + (item.request_date || '-') + '</td>' +
-        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname, data.employeeList)) + '</td>' +
         '<td>' + (item.department || '-') + '</td>' +
         '<td style="text-align:right;font-weight:700">฿' + reqA.toLocaleString() + '</td>' +
         '<td style="text-align:right;font-weight:700;color:#15803d">฿' + appA.toLocaleString() + '</td>' +
@@ -10577,7 +10614,7 @@ async function printApprovalReportA4() {
       '</div>' +
       '<table>' +
         '<thead><tr>' +
-          '<th style="width:28px">#</th><th style="width:70px">วันที่ขอเบิก</th><th>รหัส-ชื่อพนักงาน</th><th style="width:90px">แผนก</th><th style="width:85px">ยอดขอเบิก</th><th style="width:85px">ยอดอนุมัติ</th><th>เหตุผลความจำเป็น</th><th style="width:80px">หักคืนงวด</th><th style="width:70px">สถานะ</th>' +
+          '<th style="width:28px">#</th><th style="width:70px">วันที่ขอเบิก</th><th>รหัส-ชื่อพนักงาน (ชื่อเล่น)</th><th style="width:90px">แผนก</th><th style="width:85px">ยอดขอเบิก</th><th style="width:85px">ยอดอนุมัติ</th><th>เหตุผลความจำเป็น</th><th style="width:80px">หักคืนงวด</th><th style="width:70px">สถานะ</th>' +
         '</tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
       '</table>' +
@@ -13864,9 +13901,8 @@ function getEmpFullName(e) {
   return String((e && (e.fullName || e.full_name || e.name)) || '').trim();
 }
 
-function getEmpNickname(e) {
-  return String((e && e.nickname) || '').trim();
-}
+// Note: getEmpNickname is declared globally above with full support for both object and (empId, nickname) arguments
+
 
 function getEmpBranchId(e) {
   return String((e && (e.branchId || e.branch_id || '')) || '').trim();
