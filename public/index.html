@@ -5728,11 +5728,28 @@
           </div>
         </div>
 
+        <!-- 4. Page Orientation -->
+        <div>
+          <label style="font-size:12px;font-weight:700;color:#334155;display:block;margin-bottom:5px">
+            <i class="fa-solid fa-file-lines text-blue"></i> 4. รูปแบบหน้ากระดาษ A4 สำหรับพิมพ์:
+          </label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px" id="rptOrientationSelector">
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1.5px solid #3b82f6;background:#eff6ff;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700;color:#1e40af">
+              <input type="radio" name="rptOrientation" value="LANDSCAPE" checked onchange="onRptOrientationChanged()">
+              <span>🖥️ แนวนอน (Landscape) - แนะนำ</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1.5px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;color:#334155">
+              <input type="radio" name="rptOrientation" value="PORTRAIT" onchange="onRptOrientationChanged()">
+              <span>📄 แนวตั้ง (Portrait)</span>
+            </label>
+          </div>
+        </div>
+
         <!-- Preview Notice Box -->
         <div style="background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:10px 14px;font-size:11.5px;color:#64748b;display:flex;align-items:flex-start;gap:8px">
           <i class="fa-solid fa-circle-info" style="color:#2563eb;margin-top:2px"></i>
           <span>
-            รายงาน A4 จะจัดหน้ากระดาษแนวตั้ง พร้อมหัวกระดาษบริษัท, ตารางสรุปยอดรวม, รายการคำขอ และ<strong>ช่องลงนาม 3 ตำแหน่ง</strong> เหมาะสำหรับพิมพ์แนบเอกสารรอบเงินเดือน
+            รายงาน A4 จะจัดหน้ากระดาษ<strong>แนวนอน (Landscape)</strong> เพื่อให้แสดงชื่อ-นามสกุล, ชื่อเล่น, วันที่ และเหตุผลได้อย่างสบายตา พร้อมหัวกระดาษบริษัท และ<strong>ช่องลงนาม 3 ตำแหน่ง</strong> เหมาะสำหรับพิมพ์แนบเอกสารรอบเงินเดือน
           </span>
         </div>
 
@@ -5759,6 +5776,6 @@
   <div id="payrollSummaryPrintContainer" style="display:none"></div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.46"></script>
+  <script src="js/app.js?v=9.47"></script>
 </body>
 </html>

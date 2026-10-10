@@ -10376,6 +10376,27 @@ function onRptConfigChanged() {
   // Callback when radio type changes
 }
 
+function onRptOrientationChanged() {
+  var rads = document.getElementsByName('rptOrientation');
+  for (var i = 0; i < rads.length; i++) {
+    var r = rads[i];
+    var lbl = r.parentElement;
+    if (lbl) {
+      if (r.checked) {
+        lbl.style.borderColor = '#3b82f6';
+        lbl.style.background = '#eff6ff';
+        lbl.style.color = '#1e40af';
+        lbl.style.fontWeight = '700';
+      } else {
+        lbl.style.borderColor = '#cbd5e1';
+        lbl.style.background = '#fff';
+        lbl.style.color = '#334155';
+        lbl.style.fontWeight = '600';
+      }
+    }
+  }
+}
+
 async function fetchApprovalReportData() {
   var reqType = 'ALL';
   var typeRadios = document.getElementsByName('rptReqType');
@@ -10626,19 +10647,26 @@ async function printApprovalReportA4() {
   else if (data.reqType === 'OT') reportTitle = 'รายงานสรุปการอนุมัติทำงานล่วงเวลา (Overtime Report)';
   else if (data.reqType === 'ADVANCE') reportTitle = 'รายงานสรุปการอนุมัติเบิกเงินล่วงหน้า (Salary Advance Report)';
 
+  var orientation = 'landscape';
+  var orientRadios = document.getElementsByName('rptOrientation');
+  for (var i = 0; i < orientRadios.length; i++) {
+    if (orientRadios[i].checked) { orientation = String(orientRadios[i].value).toLowerCase(); break; }
+  }
+  var isLandscape = (orientation === 'landscape');
+
   var docHtml = '<!DOCTYPE html>' +
     '<html><head><meta charset="utf-8"><title>' + reportTitle + '</title>' +
     '<style>' +
-      '@page { size: A4 portrait; margin: 12mm; }' +
-      'body { font-family: "Sarabun", "Segoe UI", Arial, sans-serif; font-size: 11px; color: #0f172a; margin: 0; padding: 10px; }' +
-      'table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 10.5px; }' +
-      'th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px 4px; text-align: center; color: #1e293b; }' +
-      'td { border: 1px solid #cbd5e1; padding: 5px 4px; vertical-align: middle; }' +
+      '@page { size: A4 ' + (isLandscape ? 'landscape' : 'portrait') + '; margin: ' + (isLandscape ? '8mm 10mm' : '12mm') + '; }' +
+      'body { font-family: "Sarabun", "Segoe UI", Arial, sans-serif; font-size: ' + (isLandscape ? '11px' : '10.5px') + '; color: #0f172a; margin: 0; padding: ' + (isLandscape ? '6px 12px' : '10px') + '; }' +
+      'table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: ' + (isLandscape ? '11px' : '10px') + '; }' +
+      'th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: ' + (isLandscape ? '6px 6px' : '6px 4px') + '; text-align: center; color: #1e293b; font-weight: 700; font-size: ' + (isLandscape ? '11px' : '10px') + '; }' +
+      'td { border: 1px solid #cbd5e1; padding: ' + (isLandscape ? '5.5px 6px' : '5px 4px') + '; vertical-align: middle; }' +
       'tr:nth-child(even) td { background: #fafafa; }' +
-      '.header-box { border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 12px; }' +
-      '.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; font-size: 10.5px; margin-top: 8px; }' +
-      '.sign-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 36px; text-align: center; font-size: 11px; }' +
-      '.sign-line { border-bottom: 1px dotted #64748b; width: 80%; margin: 38px auto 6px; }' +
+      '.header-box { border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 10px; }' +
+      '.meta-grid { display: grid; grid-template-columns: ' + (isLandscape ? 'repeat(6, auto)' : 'repeat(3, 1fr)') + '; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 12px; font-size: 10.5px; margin-top: 8px; ' + (isLandscape ? 'justify-content: space-between;' : '') + ' }' +
+      '.sign-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: ' + (isLandscape ? '36px' : '20px') + '; margin-top: 28px; text-align: center; font-size: 11px; }' +
+      '.sign-line { border-bottom: 1px dotted #64748b; width: 75%; margin: 34px auto 6px; }' +
     '</style>' +
     '</head><body>' +
     '<div class="header-box">' +
