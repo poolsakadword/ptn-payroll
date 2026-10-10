@@ -10240,6 +10240,20 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
 // ==============================================================================
 // APPROVAL REQUESTS A4 PRINTING & EXCEL EXPORT SYSTEM
 // ==============================================================================
+function getEmpNickname(empId, directNickname) {
+  if (directNickname && String(directNickname).trim()) return String(directNickname).trim();
+  if (!empId) return '';
+  var emps = State.employees || _currentAttendanceEmployeeList || [];
+  var found = emps.find(function(e) { return (e.emp_id || e.empId) === empId; });
+  return (found && found.nickname) ? String(found.nickname).trim() : '';
+}
+
+function formatEmpNameWithNick(fullName, empId, directNickname) {
+  var name = fullName || empId || '-';
+  var nick = getEmpNickname(empId, directNickname);
+  return nick ? (name + ' (' + nick + ')') : name;
+}
+
 function openApprovalReportModal() {
   // Sync Branches
   var branchSel = document.getElementById('rptBranch');
@@ -10432,7 +10446,7 @@ async function printApprovalReportA4() {
       return '<tr>' +
         '<td style="text-align:center">' + (idx + 1) + '</td>' +
         '<td style="text-align:center">' + (item.created_at ? item.created_at.substring(0, 10) : '-') + '</td>' +
-        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + (item.full_name || '-') + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '</td>' +
         '<td>' + (item.department || '-') + '</td>' +
         '<td>' + typeStr + '</td>' +
         '<td style="text-align:center">' + rangeStr + '</td>' +
@@ -10478,7 +10492,7 @@ async function printApprovalReportA4() {
       return '<tr>' +
         '<td style="text-align:center">' + (idx + 1) + '</td>' +
         '<td style="text-align:center">' + (item.date || '-') + '</td>' +
-        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + (item.full_name || '-') + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '</td>' +
         '<td>' + (item.department || '-') + '</td>' +
         '<td style="text-align:center">' + timeRange + '</td>' +
         '<td style="text-align:right">' + reqH.toFixed(1) + ' ชม.</td>' +
@@ -10523,7 +10537,7 @@ async function printApprovalReportA4() {
       return '<tr>' +
         '<td style="text-align:center">' + (idx + 1) + '</td>' +
         '<td style="text-align:center">' + (item.request_date || '-') + '</td>' +
-        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + (item.full_name || '-') + '</td>' +
+        '<td><strong>' + (item.emp_id || '-') + '</strong> ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '</td>' +
         '<td>' + (item.department || '-') + '</td>' +
         '<td style="text-align:right;font-weight:700">฿' + reqA.toLocaleString() + '</td>' +
         '<td style="text-align:right;font-weight:700;color:#15803d">฿' + appA.toLocaleString() + '</td>' +
@@ -10662,13 +10676,14 @@ async function exportApprovalReportExcel() {
   // 1. LEAVE
   if (data.reqType === 'ALL' || data.reqType === 'LEAVE') {
     csvRows.push(['[หมวดคำขอลางาน]']);
-    csvRows.push(['ลำดับ', 'วันที่ยื่น', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'แผนก', 'ประเภทการลา', 'วันที่เริ่มต้น', 'วันที่สิ้นสุด', 'จำนวนวัน', 'ช่วงเวลา', 'เหตุผล', 'สถานะ']);
+    csvRows.push(['ลำดับ', 'วันที่ยื่น', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'ประเภทการลา', 'วันที่เริ่มต้น', 'วันที่สิ้นสุด', 'จำนวนวัน', 'ช่วงเวลา', 'เหตุผล', 'สถานะ']);
     (data.leaves || []).forEach(function(l, idx) {
       csvRows.push([
         idx + 1,
         l.created_at ? l.created_at.substring(0, 10) : '',
         l.emp_id || '',
         l.full_name || '',
+        getEmpNickname(l.emp_id, l.nickname),
         l.department || '',
         l.leave_type || '',
         l.start_date || '',
@@ -10685,13 +10700,14 @@ async function exportApprovalReportExcel() {
   // 2. OT
   if (data.reqType === 'ALL' || data.reqType === 'OT') {
     csvRows.push(['[หมวดขอทำ OT]']);
-    csvRows.push(['ลำดับ', 'วันที่ทำ OT', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'แผนก', 'เวลาเริ่มต้น', 'เวลาสิ้นสุด', 'ชม.ขอทำ', 'ชม.อนุมัติจริง', 'รายละเอียดงาน', 'สถานะ']);
+    csvRows.push(['ลำดับ', 'วันที่ทำ OT', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'เวลาเริ่มต้น', 'เวลาสิ้นสุด', 'ชม.ขอทำ', 'ชม.อนุมัติจริง', 'รายละเอียดงาน', 'สถานะ']);
     (data.ots || []).forEach(function(o, idx) {
       csvRows.push([
         idx + 1,
         o.date || '',
         o.emp_id || '',
         o.full_name || '',
+        getEmpNickname(o.emp_id, o.nickname),
         o.department || '',
         o.start_time || '',
         o.end_time || '',
@@ -10707,13 +10723,14 @@ async function exportApprovalReportExcel() {
   // 3. ADVANCE
   if (data.reqType === 'ALL' || data.reqType === 'ADVANCE') {
     csvRows.push(['[หมวดขอเบิกเงินล่วงหน้า]']);
-    csvRows.push(['ลำดับ', 'วันที่ขอเบิก', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'แผนก', 'ยอดเงินขอเบิก (บาท)', 'เหตุผลความจำเป็น', 'รอบวิกที่หักคืน', 'สถานะ']);
+    csvRows.push(['ลำดับ', 'วันที่ขอเบิก', 'รหัสพนักงาน', 'ชื่อ-สกุล', 'ชื่อเล่น', 'แผนก', 'ยอดเงินขอเบิก (บาท)', 'เหตุผลความจำเป็น', 'รอบวิกที่หักคืน', 'สถานะ']);
     (data.advances || []).forEach(function(a, idx) {
       csvRows.push([
         idx + 1,
         a.request_date || '',
         a.emp_id || '',
         a.full_name || '',
+        getEmpNickname(a.emp_id, a.nickname),
         a.department || '',
         a.amount || 0,
         '"' + (a.reason || '').replace(/"/g, '""') + '"',
@@ -11706,12 +11723,12 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
         '</div>' +
         '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
-      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
+      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + formatDateThaiBE(item.start_date) + '</b> ถึง <b>' + formatDateThaiBE(item.end_date) + '</b> (' + (item.days_count || 1) + ' วัน' + (item.time_slot === 'MORNING' ? ' <span style="font-size:10.5px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:700">🌅 ครึ่งวันเช้า</span>' : (item.time_slot === 'AFTERNOON' ? ' <span style="font-size:10.5px;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;font-weight:700">🌆 ครึ่งวันบ่าย</span>' : '')) + ')</div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
       (item.medical_cert_url ? 
         '<div style="margin-bottom:8px">' +
-          '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(item.full_name || item.emp_id) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">' +
+          '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">' +
             '<i class="fa-solid fa-file-medical" style="color:#2563eb;font-size:13px"></i> ดูรูปใบรับรองแพทย์แนบ (คลิกเพื่อดูภาพขยาย)' +
           '</button>' +
         '</div>' : '') +
@@ -11731,7 +11748,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
         '</div>' +
         '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
-      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
+      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-orange"></i> วันที่ทำ OT: <b>' + formatDateThaiBE(item.date) + '</b> | จำนวน <b>' + (item.planned_hours || item.actual_hours || 0) + ' ชม.</b></div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
       '<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">' +
@@ -11750,7 +11767,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
         '</div>' +
         '<span style="font-size:11px;color:#64748b" title="วันที่ยื่นคำขอ (เวลาประเทศไทย)"><i class="fa-regular fa-clock" style="font-size:10px"></i> ยื่น: ' + formatThaiDateTime(item.created_at) + '</span>' +
       '</div>' +
-      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + (item.full_name || item.emp_id) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
+      '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:2px"><i class="fa-regular fa-calendar text-green"></i> วันที่ขอเบิก: <b>' + formatDateThaiBE(item.request_date) + '</b></div>' +
       '<div style="font-size:13px;color:#047857;font-weight:700;margin-bottom:4px"><i class="fa-solid fa-money-bill-wave"></i> จำนวนเงิน: ฿' + Number(item.amount || 0).toLocaleString() + ' บาท</div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
@@ -11839,7 +11856,7 @@ function openEditAttendanceRequestModal(type, id) {
   var nameEl = document.getElementById('editAttReqEmpName');
   var deptEl = document.getElementById('editAttReqEmpDept');
   var badgeEl = document.getElementById('editAttReqTypeBadge');
-  if (nameEl) nameEl.textContent = (item.full_name || item.emp_id) + (item.emp_id ? ' [' + item.emp_id + ']' : '');
+  if (nameEl) nameEl.textContent = formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname) + (item.emp_id ? ' [' + item.emp_id + ']' : '');
   if (deptEl) deptEl.textContent = item.department || '-';
 
   var leaveSection = document.getElementById('editAttReqLeaveFields');
@@ -12803,7 +12820,7 @@ function renderAttendanceKpiModalList() {
         type: 'leave',
         id: l.id,
         empId: l.emp_id,
-        name: l.full_name || l.emp_id,
+        name: formatEmpNameWithNick(l.full_name, l.emp_id, l.nickname),
         dept: l.department || '',
         title: 'ขอลาหยุด (' + (l.leave_type || 'ลา') + ')',
         sub: 'วันที่: ' + formatDateThaiBE(l.start_date) + ' ถึง ' + formatDateThaiBE(l.end_date) + ' (' + (l.days_count || 1) + ' วัน)',
@@ -12818,7 +12835,7 @@ function renderAttendanceKpiModalList() {
         type: 'ot',
         id: o.id,
         empId: o.emp_id,
-        name: o.full_name || o.emp_id,
+        name: formatEmpNameWithNick(o.full_name, o.emp_id, o.nickname),
         dept: o.department || '',
         title: 'ขอทำ OT (' + (o.hours || 0) + ' ชม.)',
         sub: 'วันที่: ' + formatDateThaiBE(o.date) + ' เวลา ' + (o.start_time || '') + ' - ' + (o.end_time || ''),
@@ -12832,7 +12849,7 @@ function renderAttendanceKpiModalList() {
         type: 'advance',
         id: a.id,
         empId: a.emp_id,
-        name: a.full_name || a.emp_id,
+        name: formatEmpNameWithNick(a.full_name, a.emp_id, a.nickname),
         dept: a.department || '',
         title: 'ขอเบิกเงินฉุกเฉินล่วงหน้า (' + formatMoney(a.amount || 0) + ' บาท)',
         sub: 'วันที่ขอ: ' + formatDateThaiBE(a.request_date || (a.created_at ? a.created_at.substring(0, 10) : '')),

@@ -2660,19 +2660,19 @@ async function handleAction(db, action, params) {
       // Sequential execution (ultra fast & zero Worker limit risk)
       let pendingLeaves = [];
       if (reqType === 'ALL' || reqType === 'LEAVE') {
-        const r = await db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT 150`).bind(...leaveBinds).all().catch(() => ({ results: [] }));
+        const r = await db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT 150`).bind(...leaveBinds).all().catch(() => ({ results: [] }));
         pendingLeaves = r.results || [];
       }
 
       let pendingOts = [];
       if (reqType === 'ALL' || reqType === 'OT') {
-        const r = await db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT 150`).bind(...otBinds).all().catch(() => ({ results: [] }));
+        const r = await db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT 150`).bind(...otBinds).all().catch(() => ({ results: [] }));
         pendingOts = r.results || [];
       }
 
       let pendingAdvances = [];
       if (reqType === 'ALL' || reqType === 'ADVANCE') {
-        const r = await db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 150`).bind(...advBinds).all().catch(() => ({ results: [] }));
+        const r = await db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 150`).bind(...advBinds).all().catch(() => ({ results: [] }));
         pendingAdvances = r.results || [];
       }
 
@@ -2971,13 +2971,13 @@ async function handleAction(db, action, params) {
       ] = await Promise.all([
         db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] })),
         (reqType === 'ALL' || reqType === 'LEAVE')
-          ? db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT ${reqLimit}`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
+          ? db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT ${reqLimit}`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
           : Promise.resolve({ results: [] }),
         (reqType === 'ALL' || reqType === 'OT')
-          ? db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT ${reqLimit}`).bind(...otBinds).all().catch(() => ({ results: [] }))
+          ? db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT ${reqLimit}`).bind(...otBinds).all().catch(() => ({ results: [] }))
           : Promise.resolve({ results: [] }),
         (reqType === 'ALL' || reqType === 'ADVANCE')
-          ? db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT ${reqLimit}`).bind(...advBinds).all().catch(() => ({ results: [] }))
+          ? db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT ${reqLimit}`).bind(...advBinds).all().catch(() => ({ results: [] }))
           : Promise.resolve({ results: [] }),
         db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) = 'APPROVED' AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] })),
         db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 })),
