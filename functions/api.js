@@ -2713,7 +2713,7 @@ async function handleAction(db, action, params) {
 
       // 1.0 Employees list for search & selector
       const empRows = await db.prepare(`
-        SELECT emp_id, full_name, nickname, department, position, branch_id, photo_url, phone
+        SELECT emp_id, full_name, nickname, department, position, branch_id, phone
         FROM employees
         WHERE status != 'Resigned'
         ORDER BY emp_id ASC
@@ -3103,7 +3103,6 @@ async function handleAction(db, action, params) {
             branchId: emp.branch_id || 'B01',
             branchName: branchName,
             phone: emp.phone || '',
-            photoUrl: emp.photo_url || '',
             shiftStart: shiftStart,
             shiftEnd: shiftEnd,
             shiftText: `${shiftStart} - ${shiftEnd} น.`,
