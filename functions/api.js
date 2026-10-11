@@ -666,6 +666,201 @@ function categorizeLeaveType(leaveType, medicalCertUrl) {
   return rawUpper || 'OTHER';
 }
 
+// ==============================================================================
+// SHARED BACKEND HELPERS (CONSOLIDATED LOGIC)
+// ==============================================================================
+
+function buildAttendanceRequestFilters(params, reqCutoff) {
+  const reqStatus = String(params.requestStatus || 'PENDING').toUpperCase();
+  const reqType = String(params.requestType || 'ALL').toUpperCase();
+  const reqDateMode = String(params.requestDateMode || (params.requestDate ? 'SINGLE' : 'ALL')).toUpperCase();
+  const reqDate = params.requestDate ? String(params.requestDate).trim() : '';
+  const reqMonth = params.requestMonth ? String(params.requestMonth).trim() : '';
+  const reqPeriod = params.requestPeriod ? String(params.requestPeriod).trim() : '';
+  const reqStartDate = params.requestStartDate ? String(params.requestStartDate).trim() : '';
+  const reqEndDate = params.requestEndDate ? String(params.requestEndDate).trim() : '';
+  const reqEmpFilter = String(params.requestEmpId || params.empId || 'ALL').trim();
+  const reqLimit = Math.min(Math.max(Number(params.requestLimit) || 200, 10), 1000);
+
+  // 1. Leave conditions
+  const leaveConds = [];
+  const leaveBinds = [];
+  if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+    leaveConds.push("lr.status = ?");
+    leaveBinds.push(reqStatus);
+  } else if (reqStatus === 'PENDING') {
+    leaveConds.push("lr.status = 'PENDING'");
+  }
+  if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+    leaveConds.push("lr.emp_id = ?");
+    leaveBinds.push(reqEmpFilter);
+  }
+  if (reqDateMode === 'SINGLE' && reqDate) {
+    leaveConds.push("(substr(datetime(lr.created_at, '+7 hours'), 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
+    leaveBinds.push(reqDate, reqDate);
+  } else if (reqDateMode === 'MONTH' && reqMonth) {
+    leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ? OR substr(datetime(lr.created_at, '+7 hours'), 1, 7) = ?)");
+    leaveBinds.push(reqMonth + '-%', reqMonth + '-%', reqMonth);
+  } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+    leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+    leaveBinds.push(reqCutoff.endDate, reqCutoff.startDate, reqCutoff.startDate, reqCutoff.endDate);
+  } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+    leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+    leaveBinds.push(reqEndDate, reqStartDate, reqStartDate, reqEndDate);
+  }
+  const leaveWhere = leaveConds.length > 0 ? "WHERE " + leaveConds.join(" AND ") : "";
+
+  // 2. OT conditions
+  const otConds = [];
+  const otBinds = [];
+  otConds.push("(COALESCE(ot.reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(ot.reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(ot.reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')");
+
+  if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+    otConds.push("ot.status = ?");
+    otBinds.push(reqStatus);
+  } else if (reqStatus === 'PENDING') {
+    otConds.push("ot.status = 'PENDING'");
+  }
+  if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+    otConds.push("ot.emp_id = ?");
+    otBinds.push(reqEmpFilter);
+  }
+  if (reqDateMode === 'SINGLE' && reqDate) {
+    otConds.push("(ot.date = ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 10) = ?)");
+    otBinds.push(reqDate, reqDate);
+  } else if (reqDateMode === 'MONTH' && reqMonth) {
+    otConds.push("(ot.date LIKE ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 7) = ?)");
+    otBinds.push(reqMonth + '-%', reqMonth);
+  } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+    otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+    otBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
+  } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+    otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+    otBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
+  }
+  const otWhere = otConds.length > 0 ? "WHERE " + otConds.join(" AND ") : "";
+
+  // 3. Advance conditions
+  const advConds = [];
+  const advBinds = [];
+  if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
+    advConds.push("ar.status = ?");
+    advBinds.push(reqStatus);
+  } else if (reqStatus === 'PENDING') {
+    advConds.push("ar.status = 'PENDING'");
+  }
+  if (reqEmpFilter && reqEmpFilter !== 'ALL') {
+    advConds.push("ar.emp_id = ?");
+    advBinds.push(reqEmpFilter);
+  }
+  if (reqDateMode === 'SINGLE' && reqDate) {
+    advConds.push("(ar.request_date = ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 10) = ?)");
+    advBinds.push(reqDate, reqDate);
+  } else if (reqDateMode === 'MONTH' && reqMonth) {
+    advConds.push("(ar.request_date LIKE ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 7) = ?)");
+    advBinds.push(reqMonth + '-%', reqMonth);
+  } else if (reqDateMode === 'PERIOD' && reqCutoff) {
+    advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+    advBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
+  } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
+    advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
+    advBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
+  }
+  const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
+
+  return {
+    reqStatus,
+    reqType,
+    reqDateMode,
+    reqDate,
+    reqMonth,
+    reqPeriod,
+    reqStartDate,
+    reqEndDate,
+    reqEmpFilter,
+    reqLimit,
+    leaveWhere,
+    leaveBinds,
+    otWhere,
+    otBinds,
+    advWhere,
+    advBinds
+  };
+}
+
+async function fetchAttendanceRequests(db, filterObj, customLimit) {
+  const { reqType, reqLimit, leaveWhere, leaveBinds, otWhere, otBinds, advWhere, advBinds } = filterObj;
+  const limit = customLimit || reqLimit || 150;
+
+  const [leavesQuery, otsQuery, advQuery] = await Promise.all([
+    (reqType === 'ALL' || reqType === 'LEAVE')
+      ? db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT ${limit}`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
+      : Promise.resolve({ results: [] }),
+    (reqType === 'ALL' || reqType === 'OT')
+      ? db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT ${limit}`).bind(...otBinds).all().catch(() => ({ results: [] }))
+      : Promise.resolve({ results: [] }),
+    (reqType === 'ALL' || reqType === 'ADVANCE')
+      ? db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT ${limit}`).bind(...advBinds).all().catch(() => ({ results: [] }))
+      : Promise.resolve({ results: [] })
+  ]);
+
+  return {
+    pendingLeaves: leavesQuery.results || [],
+    pendingOts: otsQuery.results || [],
+    pendingAdvances: advQuery.results || []
+  };
+}
+
+async function executeDeleteAttendanceRequest(db, type, id, callerUser) {
+  if (type === 'leave') {
+    await db.prepare('DELETE FROM leave_requests WHERE id = ?').bind(id).run();
+  } else if (type === 'ot') {
+    await db.prepare('DELETE FROM ot_requests WHERE id = ?').bind(id).run();
+  } else if (type === 'advance') {
+    await db.prepare('DELETE FROM advance_requests WHERE id = ?').bind(id).run();
+  } else {
+    return { success: false, message: 'ประเภทคำขอไม่ถูกต้อง' };
+  }
+  await logSystemActivity(db, callerUser, 'DELETE_ATTENDANCE_REQUEST', `ลบคำขอ ${type} (ID: ${id})`);
+  return { success: true, message: `ลบคำขอ ${type} ออกจากระบบเรียบร้อยแล้ว` };
+}
+
+function mapPayrollCalcHistoryRecord(c, inputMap, empMap) {
+  const inp = (inputMap && inputMap[`${c.period}_${c.emp_id}`]) || (inputMap && inputMap[c.period]) || {};
+  const emp = (empMap && empMap[c.emp_id]) || {};
+  return {
+    period: c.period,
+    empId: c.emp_id,
+    fullName: c.full_name || emp.full_name || '',
+    name: c.full_name || emp.full_name || '',
+    nickname: emp.nickname || '',
+    department: c.department || emp.department || '',
+    position: c.position || emp.position || '',
+    branchId: emp.branch_id || c.branch_id || 'B01',
+    joinDate: emp.join_date || '',
+    status: emp.status || 'ACTIVE',
+    baseSalary: Number(c.base_salary) || 0,
+    absentDays: Number(inp.absent_days) || 0,
+    leaveDays: Number(inp.leave_days) || 0,
+    sickLeaveDays: Number(inp.sick_leave_days) || 0,
+    lateDeduct: Number(inp.late_deduct) || 0,
+    otHours: Number(c.ot_hours) || 0,
+    otRate: Number(c.ot_rate) || 40,
+    otPay: Number(c.ot_pay) || 0,
+    allowance: Number(c.allowance) || 0,
+    bonus: Number(c.bonus) || 0,
+    leaveDeduction: Number(c.leave_deduction) || 0,
+    grossPay: Number(c.gross_pay) || 0,
+    sso: Number(c.sso) || 0,
+    pf: Number(c.pf) || 0,
+    tax: Number(c.tax) || 0,
+    advanceDeduct: Number(c.advance_deduct) || 0,
+    otherDeduct: Number(c.other_deduct) || 0,
+    totalDeductions: Number(c.total_deductions) || 0,
+    netPay: Number(c.net_pay) || 0
+  };
+}
+
 /**
  * ==============================================================================
  * PTN Payroll System V4.0 - Clean Enterprise Cloudflare D1 Backend
@@ -2554,133 +2749,21 @@ async function handleAction(db, action, params) {
         return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานระบบลงเวลา' };
       }
 
-      const reqStatus = String(params.requestStatus || 'PENDING').toUpperCase(); // 'PENDING', 'APPROVED', 'REJECTED', 'ALL'
-      const reqType = String(params.requestType || 'ALL').toUpperCase(); // 'ALL', 'LEAVE', 'OT', 'ADVANCE'
-      const reqDateMode = String(params.requestDateMode || 'ALL').toUpperCase(); // 'ALL', 'SINGLE', 'MONTH', 'PERIOD', 'RANGE'
-      const reqDate = params.requestDate ? String(params.requestDate).trim() : '';
-      const reqMonth = params.requestMonth ? String(params.requestMonth).trim() : '';
+      const reqDateMode = String(params.requestDateMode || 'ALL').toUpperCase();
       const reqPeriod = params.requestPeriod ? String(params.requestPeriod).trim() : '';
-      const reqStartDate = params.requestStartDate ? String(params.requestStartDate).trim() : '';
-      const reqEndDate = params.requestEndDate ? String(params.requestEndDate).trim() : '';
-      const reqLimit = Math.min(Math.max(Number(params.requestLimit) || 200, 10), 1000);
-      const reqEmpFilter = String(params.requestEmpId || params.empId || 'ALL').trim();
-
       let reqCutoff = null;
       if (reqDateMode === 'PERIOD' && reqPeriod) {
         reqCutoff = await getCutoffDatesForPeriod(db, reqPeriod);
       }
 
-      // 1. Leave conditions
-      const leaveConds = [];
-      const leaveBinds = [];
-      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
-        leaveConds.push("lr.status = ?");
-        leaveBinds.push(reqStatus);
-      } else if (reqStatus === 'PENDING') {
-        leaveConds.push("lr.status = 'PENDING'");
-      }
-      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
-        leaveConds.push("lr.emp_id = ?");
-        leaveBinds.push(reqEmpFilter);
-      }
-      if (reqDateMode === 'SINGLE' && reqDate) {
-        leaveConds.push("(substr(datetime(lr.created_at, '+7 hours'), 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
-        leaveBinds.push(reqDate, reqDate);
-      } else if (reqDateMode === 'MONTH' && reqMonth) {
-        leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ? OR substr(datetime(lr.created_at, '+7 hours'), 1, 7) = ?)");
-        leaveBinds.push(reqMonth + '-%', reqMonth + '-%', reqMonth);
-      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-        leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        leaveBinds.push(reqCutoff.endDate, reqCutoff.startDate, reqCutoff.startDate, reqCutoff.endDate);
-      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-        leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        leaveBinds.push(reqEndDate, reqStartDate, reqStartDate, reqEndDate);
-      }
-      const leaveWhere = leaveConds.length > 0 ? "WHERE " + leaveConds.join(" AND ") : "";
-
-      // 2. OT conditions
-      const otConds = [];
-      const otBinds = [];
-      // Always exclude automated daily punch-clock OT records from approvals center
-      otConds.push("(COALESCE(ot.reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(ot.reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(ot.reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')");
-
-      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
-        otConds.push("ot.status = ?");
-        otBinds.push(reqStatus);
-      } else if (reqStatus === 'PENDING') {
-        otConds.push("ot.status = 'PENDING'");
-      }
-      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
-        otConds.push("ot.emp_id = ?");
-        otBinds.push(reqEmpFilter);
-      }
-      if (reqDateMode === 'SINGLE' && reqDate) {
-        otConds.push("(ot.date = ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 10) = ?)");
-        otBinds.push(reqDate, reqDate);
-      } else if (reqDateMode === 'MONTH' && reqMonth) {
-        otConds.push("(ot.date LIKE ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 7) = ?)");
-        otBinds.push(reqMonth + '-%', reqMonth);
-      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-        otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        otBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
-      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-        otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        otBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
-      }
-      const otWhere = otConds.length > 0 ? "WHERE " + otConds.join(" AND ") : "";
-
-      // 3. Advance conditions
-      const advConds = [];
-      const advBinds = [];
-      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
-        advConds.push("ar.status = ?");
-        advBinds.push(reqStatus);
-      } else if (reqStatus === 'PENDING') {
-        advConds.push("ar.status = 'PENDING'");
-      }
-      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
-        advConds.push("ar.emp_id = ?");
-        advBinds.push(reqEmpFilter);
-      }
-      if (reqDateMode === 'SINGLE' && reqDate) {
-        advConds.push("(ar.request_date = ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 10) = ?)");
-        advBinds.push(reqDate, reqDate);
-      } else if (reqDateMode === 'MONTH' && reqMonth) {
-        advConds.push("(ar.request_date LIKE ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 7) = ?)");
-        advBinds.push(reqMonth + '-%', reqMonth);
-      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-        advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        advBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
-      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-        advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        advBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
-      }
-      const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
-
-      // Sequential execution (ultra fast & zero Worker limit risk)
-      let pendingLeaves = [];
-      if (reqType === 'ALL' || reqType === 'LEAVE') {
-        const r = await db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT 150`).bind(...leaveBinds).all().catch(() => ({ results: [] }));
-        pendingLeaves = r.results || [];
-      }
-
-      let pendingOts = [];
-      if (reqType === 'ALL' || reqType === 'OT') {
-        const r = await db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT 150`).bind(...otBinds).all().catch(() => ({ results: [] }));
-        pendingOts = r.results || [];
-      }
-
-      let pendingAdvances = [];
-      if (reqType === 'ALL' || reqType === 'ADVANCE') {
-        const r = await db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT 150`).bind(...advBinds).all().catch(() => ({ results: [] }));
-        pendingAdvances = r.results || [];
-      }
+      const filters = buildAttendanceRequestFilters(params, reqCutoff);
+      const reqData = await fetchAttendanceRequests(db, filters, 150);
 
       return {
         success: true,
-        pendingLeaves,
-        pendingOts,
-        pendingAdvances,
+        pendingLeaves: reqData.pendingLeaves,
+        pendingOts: reqData.pendingOts,
+        pendingAdvances: reqData.pendingAdvances,
         reqCutoffDates: reqCutoff
       };
     }
@@ -2859,127 +2942,27 @@ async function handleAction(db, action, params) {
 
       const targetDate = filterDate || today;
 
-      const reqStatus = String(params.requestStatus || 'PENDING').toUpperCase();
-      const reqType = String(params.requestType || 'ALL').toUpperCase(); // 'ALL', 'LEAVE', 'OT', 'ADVANCE'
-      const reqDateMode = String(params.requestDateMode || (params.requestDate ? 'SINGLE' : 'ALL')).toUpperCase(); // 'ALL', 'SINGLE', 'MONTH', 'PERIOD', 'RANGE'
-      const reqDate = params.requestDate ? String(params.requestDate).trim() : ''; // 'YYYY-MM-DD'
-      const reqMonth = params.requestMonth ? String(params.requestMonth).trim() : ''; // 'YYYY-MM'
+      const reqDateMode = String(params.requestDateMode || (params.requestDate ? 'SINGLE' : 'ALL')).toUpperCase();
+      const reqMonth = params.requestMonth ? String(params.requestMonth).trim() : '';
       const reqPeriod = params.requestPeriod ? String(params.requestPeriod).trim() : (reqMonth || filterPeriod);
-      const reqStartDate = params.requestStartDate ? String(params.requestStartDate).trim() : '';
-      const reqEndDate = params.requestEndDate ? String(params.requestEndDate).trim() : '';
-      const reqLimit = Math.min(Math.max(Number(params.requestLimit) || 200, 10), 1000);
-
       let reqCutoff = null;
       if (reqDateMode === 'PERIOD') {
         reqCutoff = await getCutoffDatesForPeriod(db, reqPeriod);
       }
 
-      // 2. Prepare WHERE clauses for Requests (Leaves, OTs, Advances)
-      const leaveConds = [];
-      const leaveBinds = [];
-      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
-        leaveConds.push("lr.status = ?");
-        leaveBinds.push(reqStatus);
-      } else if (reqStatus === 'PENDING') {
-        leaveConds.push("lr.status = 'PENDING'");
-      }
-      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
-        leaveConds.push("lr.emp_id = ?");
-        leaveBinds.push(reqEmpFilter);
-      }
-      if (reqDateMode === 'SINGLE' && reqDate) {
-        leaveConds.push("(substr(datetime(lr.created_at, '+7 hours'), 1, 10) = ? OR (? BETWEEN lr.start_date AND lr.end_date))");
-        leaveBinds.push(reqDate, reqDate);
-      } else if (reqDateMode === 'MONTH' && reqMonth) {
-        leaveConds.push("(lr.start_date LIKE ? OR lr.end_date LIKE ? OR substr(datetime(lr.created_at, '+7 hours'), 1, 7) = ?)");
-        leaveBinds.push(reqMonth + '-%', reqMonth + '-%', reqMonth);
-      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-        leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        leaveBinds.push(reqCutoff.endDate, reqCutoff.startDate, reqCutoff.startDate, reqCutoff.endDate);
-      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-        leaveConds.push("((lr.start_date <= ? AND lr.end_date >= ?) OR (substr(datetime(lr.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        leaveBinds.push(reqEndDate, reqStartDate, reqStartDate, reqEndDate);
-      }
-      const leaveWhere = leaveConds.length > 0 ? "WHERE " + leaveConds.join(" AND ") : "";
-
-      const otConds = [];
-      const otBinds = [];
-      // Always exclude automated daily punch-clock OT records from approvals center
-      otConds.push("(COALESCE(ot.reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(ot.reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(ot.reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')");
-
-      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
-        otConds.push("ot.status = ?");
-        otBinds.push(reqStatus);
-      } else if (reqStatus === 'PENDING') {
-        otConds.push("ot.status = 'PENDING'");
-      }
-      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
-        otConds.push("ot.emp_id = ?");
-        otBinds.push(reqEmpFilter);
-      }
-      if (reqDateMode === 'SINGLE' && reqDate) {
-        otConds.push("(ot.date = ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 10) = ?)");
-        otBinds.push(reqDate, reqDate);
-      } else if (reqDateMode === 'MONTH' && reqMonth) {
-        otConds.push("(ot.date LIKE ? OR substr(datetime(ot.created_at, '+7 hours'), 1, 7) = ?)");
-        otBinds.push(reqMonth + '-%', reqMonth);
-      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-        otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        otBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
-      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-        otConds.push("((ot.date BETWEEN ? AND ?) OR (substr(datetime(ot.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        otBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
-      }
-      const otWhere = otConds.length > 0 ? "WHERE " + otConds.join(" AND ") : "";
-
-      const advConds = [];
-      const advBinds = [];
-      if (reqStatus === 'APPROVED' || reqStatus === 'REJECTED') {
-        advConds.push("ar.status = ?");
-        advBinds.push(reqStatus);
-      } else if (reqStatus === 'PENDING') {
-        advConds.push("ar.status = 'PENDING'");
-      }
-      if (reqEmpFilter && reqEmpFilter !== 'ALL') {
-        advConds.push("ar.emp_id = ?");
-        advBinds.push(reqEmpFilter);
-      }
-      if (reqDateMode === 'SINGLE' && reqDate) {
-        advConds.push("(ar.request_date = ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 10) = ?)");
-        advBinds.push(reqDate, reqDate);
-      } else if (reqDateMode === 'MONTH' && reqMonth) {
-        advConds.push("(ar.request_date LIKE ? OR substr(datetime(ar.created_at, '+7 hours'), 1, 7) = ?)");
-        advBinds.push(reqMonth + '-%', reqMonth);
-      } else if (reqDateMode === 'PERIOD' && reqCutoff) {
-        advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        advBinds.push(reqCutoff.startDate, reqCutoff.endDate, reqCutoff.startDate, reqCutoff.endDate);
-      } else if (reqDateMode === 'RANGE' && reqStartDate && reqEndDate) {
-        advConds.push("((ar.request_date BETWEEN ? AND ?) OR (substr(datetime(ar.created_at, '+7 hours'), 1, 10) BETWEEN ? AND ?))");
-        advBinds.push(reqStartDate, reqEndDate, reqStartDate, reqEndDate);
-      }
-      const advWhere = advConds.length > 0 ? "WHERE " + advConds.join(" AND ") : "";
+      const reqFilters = buildAttendanceRequestFilters({ ...params, requestEmpId: reqEmpFilter, requestPeriod: reqPeriod }, reqCutoff);
 
       // 3. EXECUTE INDEPENDENT QUERIES IN PARALLEL FOR HIGH PERFORMANCE
       const [
         branchRows,
-        leavesQuery,
-        otsQuery,
-        advQuery,
+        reqData,
         approvedLeavesOnDate,
         pendingCountRow,
         setRows,
         targetHolidayRow
       ] = await Promise.all([
         db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] })),
-        (reqType === 'ALL' || reqType === 'LEAVE')
-          ? db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT ${reqLimit}`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
-          : Promise.resolve({ results: [] }),
-        (reqType === 'ALL' || reqType === 'OT')
-          ? db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT ${reqLimit}`).bind(...otBinds).all().catch(() => ({ results: [] }))
-          : Promise.resolve({ results: [] }),
-        (reqType === 'ALL' || reqType === 'ADVANCE')
-          ? db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT ${reqLimit}`).bind(...advBinds).all().catch(() => ({ results: [] }))
-          : Promise.resolve({ results: [] }),
+        fetchAttendanceRequests(db, reqFilters, reqFilters.reqLimit),
         db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) IN ('APPROVED', 'PENDING') AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] })),
         db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 })),
         db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] })),
@@ -2987,9 +2970,9 @@ async function handleAction(db, action, params) {
       ]);
 
       const branches = branchRows.results || [];
-      const pendingLeaves = leavesQuery.results || [];
-      const pendingOts = otsQuery.results || [];
-      const pendingAdvances = advQuery.results || [];
+      const pendingLeaves = reqData.pendingLeaves;
+      const pendingOts = reqData.pendingOts;
+      const pendingAdvances = reqData.pendingAdvances;
       const pendingApprovals = pendingCountRow?.total_pending || 0;
       const targetHoliday = targetHolidayRow || null;
       const isSunday = (new Date(targetDate + 'T00:00:00').getDay() === 0);
@@ -3814,15 +3797,7 @@ async function handleAction(db, action, params) {
       }
 
       if (decision === 'DELETE') {
-        if (type === 'leave') {
-          await db.prepare('DELETE FROM leave_requests WHERE id = ?').bind(id).run();
-        } else if (type === 'ot') {
-          await db.prepare('DELETE FROM ot_requests WHERE id = ?').bind(id).run();
-        } else if (type === 'advance') {
-          await db.prepare('DELETE FROM advance_requests WHERE id = ?').bind(id).run();
-        }
-        await logSystemActivity(db, approverId, 'DELETE_ATTENDANCE_REQUEST', `ลบคำขอ ${type} (ID: ${id})`);
-        return { success: true, message: `ลบคำขอ ${type} ออกจากระบบเรียบร้อยแล้ว` };
+        return await executeDeleteAttendanceRequest(db, type, id, approverId);
       }
 
       // Fetch request details before update to get target employee
@@ -3888,18 +3863,7 @@ async function handleAction(db, action, params) {
       const { type, id } = params;
       if (!type || !id) return { success: false, message: 'ระบุ type และ id' };
 
-      if (type === 'leave') {
-        await db.prepare('DELETE FROM leave_requests WHERE id = ?').bind(id).run();
-      } else if (type === 'ot') {
-        await db.prepare('DELETE FROM ot_requests WHERE id = ?').bind(id).run();
-      } else if (type === 'advance') {
-        await db.prepare('DELETE FROM advance_requests WHERE id = ?').bind(id).run();
-      } else {
-        return { success: false, message: 'ประเภทคำขอไม่ถูกต้อง' };
-      }
-
-      await logSystemActivity(db, callerUser, 'DELETE_ATTENDANCE_REQUEST', `ลบคำขอ ${type} ID: ${id}`);
-      return { success: true, message: `ลบคำขอ ${type} ออกจากระบบเรียบร้อยแล้ว` };
+      return await executeDeleteAttendanceRequest(db, type, id, callerUser);
     }
 
     // 5.3.2 UPDATE ATTENDANCE REQUEST (EDIT DETAILS FOR LEAVE, OT, ADVANCE)
@@ -5023,40 +4987,7 @@ async function handleAction(db, action, params) {
         inputMap[`${i.period}_${i.emp_id}`] = i;
       }
 
-      const allRecords = calcs.map(c => {
-        const inp = inputMap[`${c.period}_${c.emp_id}`] || {};
-        const emp = empMap[c.emp_id] || {};
-        return {
-          period: c.period,
-          empId: c.emp_id,
-          fullName: c.full_name || emp.full_name || '',
-          nickname: emp.nickname || '',
-          department: c.department || emp.department || '',
-          position: c.position || emp.position || '',
-          branchId: emp.branch_id || c.branch_id || 'B01',
-          joinDate: emp.join_date || '',
-          status: emp.status || 'ACTIVE',
-          baseSalary: Number(c.base_salary) || 0,
-          absentDays: Number(inp.absent_days) || 0,
-          leaveDays: Number(inp.leave_days) || 0,
-          sickLeaveDays: Number(inp.sick_leave_days) || 0,
-          lateDeduct: Number(inp.late_deduct) || 0,
-          otHours: Number(c.ot_hours) || 0,
-          otRate: Number(c.ot_rate) || 40,
-          otPay: Number(c.ot_pay) || 0,
-          allowance: Number(c.allowance) || 0,
-          bonus: Number(c.bonus) || 0,
-          leaveDeduction: Number(c.leave_deduction) || 0,
-          grossPay: Number(c.gross_pay) || 0,
-          sso: Number(c.sso) || 0,
-          pf: Number(c.pf) || 0,
-          tax: Number(c.tax) || 0,
-          advanceDeduct: Number(c.advance_deduct) || 0,
-          otherDeduct: Number(c.other_deduct) || 0,
-          totalDeductions: Number(c.total_deductions) || 0,
-          netPay: Number(c.net_pay) || 0
-        };
-      });
+      const allRecords = calcs.map(c => mapPayrollCalcHistoryRecord(c, inputMap, empMap));
 
       return { success: true, allHistory: allRecords, branches, advanceStats };
     }
@@ -5074,35 +5005,8 @@ async function handleAction(db, action, params) {
       const inputMap = {};
       for (const i of inputs.results || []) inputMap[i.period] = i;
 
-      const historyList = (calcs.results || []).map(c => {
-        const inp = inputMap[c.period] || {};
-        return {
-          period: c.period,
-          empId: c.emp_id,
-          name: c.full_name,
-          department: c.department,
-          position: c.position,
-          baseSalary: Number(c.base_salary) || 0,
-          absentDays: Number(inp.absent_days) || 0,
-          leaveDays: Number(inp.leave_days) || 0,
-          sickLeaveDays: Number(inp.sick_leave_days) || 0,
-          lateDeduct: Number(inp.late_deduct) || 0,
-          otHours: Number(c.ot_hours) || 0,
-          otRate: Number(c.ot_rate) || 40,
-          otPay: Number(c.ot_pay) || 0,
-          allowance: Number(c.allowance) || 0,
-          bonus: Number(c.bonus) || 0,
-          leaveDeduction: Number(c.leave_deduction) || 0,
-          grossPay: Number(c.gross_pay) || 0,
-          sso: Number(c.sso) || 0,
-          pf: Number(c.pf) || 0,
-          tax: Number(c.tax) || 0,
-          advanceDeduct: Number(c.advance_deduct) || 0,
-          otherDeduct: Number(c.other_deduct) || 0,
-          totalDeductions: Number(c.total_deductions) || 0,
-          netPay: Number(c.net_pay) || 0
-        };
-      });
+      const empMap = { [empId]: emp };
+      const historyList = (calcs.results || []).map(c => mapPayrollCalcHistoryRecord(c, inputMap, empMap));
 
       return {
         success: true,

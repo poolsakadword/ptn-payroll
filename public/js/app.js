@@ -10631,9 +10631,81 @@ function formatEmpNameWithNick(fullName, empId, directNickname, employeeList) {
     var nick = getEmpNickname(item, item.nickname, employeeList);
     return nick ? (name + ' (' + nick + ')') : name;
   }
-  var name = fullName || empId || '-';
   var nick = getEmpNickname(empId, directNickname, employeeList);
   return nick ? (name + ' (' + nick + ')') : name;
+}
+
+function generateStandardA4PrintDoc(options) {
+  options = options || {};
+  var title = options.title || 'รายงาน';
+  var subtitle = options.subtitle || '';
+  var orientation = options.orientation || 'portrait';
+  var isLandscape = (orientation === 'landscape');
+  var compName = options.companyName || (State.company && State.company.companyName) || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด (PTN PHARMA CENTER CO., LTD.)';
+  var compTax = options.companyTaxId || (State.company && State.company.taxId) || '0105559876543';
+  var metaGridHtml = options.metaGridHtml || '';
+  var contentHtml = options.contentHtml || '';
+  var extraStyles = options.extraStyles || '';
+  var signLabels = options.signLabels || [
+    'ผู้จัดทำรายงาน / เจ้าหน้าที่ HR',
+    'ผู้ตรวจสอบ / หัวหน้าฝ่าย',
+    'ผู้อนุมัติ / ผู้จัดการฝ่ายบุคคล'
+  ];
+  var autoPrint = options.autoPrint !== false;
+  var footerLeft = options.footerLeft || 'PTN Payroll & Time Management System • ระบบประมวลผลเงินเดือนและเวลาทำงาน';
+  var footerRight = options.footerRight || 'เอกสารทางการ สงวนสิทธิ์ใช้งานภายในองค์กร';
+
+  var signHtml = '<div class="sign-grid">' +
+    signLabels.map(function(label) {
+      return '<div>' +
+        '<div>' + label + '</div>' +
+        '<div class="sign-line"></div>' +
+        '<div>( .................................................... )</div>' +
+        '<div style="font-size:10px;color:#64748b;margin-top:2px">วันที่ ...../...../..........</div>' +
+      '</div>';
+    }).join('') +
+  '</div>';
+
+  var printScript = autoPrint ? '<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };<\\/script>' : '';
+
+  return '<!DOCTYPE html>' +
+    '<html><head><meta charset="utf-8"><title>' + title + '</title>' +
+    '<style>' +
+      '@page { size: A4 ' + (isLandscape ? 'landscape' : 'portrait') + '; margin: ' + (isLandscape ? '8mm 10mm' : '12mm') + '; }' +
+      'body { font-family: "Sarabun", "Segoe UI", Arial, sans-serif; font-size: ' + (isLandscape ? '11px' : '11px') + '; color: #0f172a; margin: 0; padding: ' + (isLandscape ? '6px 12px' : '10px') + '; }' +
+      'table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: ' + (isLandscape ? '11px' : '10.5px') + '; }' +
+      'th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: ' + (isLandscape ? '6px 6px' : '6px 4px') + '; text-align: center; color: #1e293b; font-weight: 700; font-size: ' + (isLandscape ? '11px' : '10.5px') + '; }' +
+      'td { border: 1px solid #cbd5e1; padding: ' + (isLandscape ? '5.5px 6px' : '5px 4px') + '; vertical-align: middle; }' +
+      'tr:nth-child(even) td { background: #fafafa; }' +
+      '.header-box { border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 10px; }' +
+      '.meta-grid { display: grid; grid-template-columns: ' + (isLandscape ? 'repeat(6, auto)' : 'repeat(3, 1fr)') + '; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 12px; font-size: 10.5px; margin-top: 8px; ' + (isLandscape ? 'justify-content: space-between;' : '') + ' }' +
+      '.sign-grid { display: grid; grid-template-columns: repeat(' + signLabels.length + ', 1fr); gap: ' + (isLandscape ? '36px' : '20px') + '; margin-top: 28px; text-align: center; font-size: 11px; }' +
+      '.sign-line { border-bottom: 1px dotted #64748b; width: 75%; margin: 34px auto 6px; }' +
+      extraStyles +
+    '</style>' +
+    '</head><body>' +
+    '<div class="header-box">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
+        '<div>' +
+          '<div style="font-size:15px;font-weight:bold;color:#0f172a">' + compName + '</div>' +
+          '<div style="font-size:10.5px;color:#475569">เลขประจำตัวผู้เสียภาษี: ' + compTax + '</div>' +
+        '</div>' +
+        '<div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-weight:bold;padding:3px 8px;border-radius:4px;font-size:10.5px">เอกสารงานบุคคล (HR Document)</div>' +
+      '</div>' +
+      '<div style="text-align:center;margin-top:6px">' +
+        '<div style="font-size:16px;font-weight:bold;color:#1e3a8a">' + title + '</div>' +
+        (subtitle ? '<div style="font-size:12px;color:#475569;margin-top:2px">' + subtitle + '</div>' : '') +
+      '</div>' +
+      metaGridHtml +
+    '</div>' +
+    contentHtml +
+    signHtml +
+    '<div style="margin-top:20px;border-top:1px solid #e2e8f0;padding-top:6px;font-size:9px;color:#94a3b8;display:flex;justify-content:space-between">' +
+      '<span>' + footerLeft + '</span>' +
+      '<span>' + footerRight + '</span>' +
+    '</div>' +
+    printScript +
+    '</body></html>';
 }
 
 function openApprovalReportModal() {
@@ -10980,68 +11052,21 @@ async function printApprovalReportA4() {
   }
   var isLandscape = (orientation === 'landscape');
 
-  var docHtml = '<!DOCTYPE html>' +
-    '<html><head><meta charset="utf-8"><title>' + reportTitle + '</title>' +
-    '<style>' +
-      '@page { size: A4 ' + (isLandscape ? 'landscape' : 'portrait') + '; margin: ' + (isLandscape ? '8mm 10mm' : '12mm') + '; }' +
-      'body { font-family: "Sarabun", "Segoe UI", Arial, sans-serif; font-size: ' + (isLandscape ? '11px' : '10.5px') + '; color: #0f172a; margin: 0; padding: ' + (isLandscape ? '6px 12px' : '10px') + '; }' +
-      'table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: ' + (isLandscape ? '11px' : '10px') + '; }' +
-      'th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: ' + (isLandscape ? '6px 6px' : '6px 4px') + '; text-align: center; color: #1e293b; font-weight: 700; font-size: ' + (isLandscape ? '11px' : '10px') + '; }' +
-      'td { border: 1px solid #cbd5e1; padding: ' + (isLandscape ? '5.5px 6px' : '5px 4px') + '; vertical-align: middle; }' +
-      'tr:nth-child(even) td { background: #fafafa; }' +
-      '.header-box { border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 10px; }' +
-      '.meta-grid { display: grid; grid-template-columns: ' + (isLandscape ? 'repeat(6, auto)' : 'repeat(3, 1fr)') + '; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 12px; font-size: 10.5px; margin-top: 8px; ' + (isLandscape ? 'justify-content: space-between;' : '') + ' }' +
-      '.sign-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: ' + (isLandscape ? '36px' : '20px') + '; margin-top: 28px; text-align: center; font-size: 11px; }' +
-      '.sign-line { border-bottom: 1px dotted #64748b; width: 75%; margin: 34px auto 6px; }' +
-    '</style>' +
-    '</head><body>' +
-    '<div class="header-box">' +
-      '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
-        '<div>' +
-          '<div style="font-size:15px;font-weight:bold;color:#0f172a">' + compName + '</div>' +
-          '<div style="font-size:10.5px;color:#475569">เลขประจำตัวผู้เสียภาษี: ' + compTax + '</div>' +
-        '</div>' +
-        '<div style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;font-weight:bold;padding:3px 8px;border-radius:4px;font-size:10.5px">เอกสารงานบุคคล (HR Document)</div>' +
-      '</div>' +
-      '<div style="text-align:center;margin-top:6px">' +
-        '<div style="font-size:16px;font-weight:bold;color:#1e3a8a">' + reportTitle + '</div>' +
-      '</div>' +
-      '<div class="meta-grid">' +
-        '<div><b>ช่วงเวลา:</b> ' + periodDisplay + '</div>' +
-        '<div><b>สาขา:</b> ' + branchDisplay + '</div>' +
-        '<div><b>สถานะ:</b> ' + statusDisplay + '</div>' +
-        '<div><b>พิมพ์เมื่อ:</b> ' + printDateStr + '</div>' +
-        '<div><b>ผู้ออกเอกสาร:</b> Admin (ระบบบริหารบุคคล)</div>' +
-        '<div><b>หน้า:</b> 1 / 1</div>' +
-      '</div>' +
-    '</div>' +
-    sectionsHtml +
-    '<div class="sign-grid">' +
-      '<div>' +
-        '<div>ผู้จัดทำรายงาน / เจ้าหน้าที่ HR</div>' +
-        '<div class="sign-line"></div>' +
-        '<div>( .................................................... )</div>' +
-        '<div style="font-size:10px;color:#64748b;margin-top:2px">วันที่ ...../...../..........</div>' +
-      '</div>' +
-      '<div>' +
-        '<div>ผู้ตรวจสอบ / หัวหน้าฝ่าย</div>' +
-        '<div class="sign-line"></div>' +
-        '<div>( .................................................... )</div>' +
-        '<div style="font-size:10px;color:#64748b;margin-top:2px">วันที่ ...../...../..........</div>' +
-      '</div>' +
-      '<div>' +
-        '<div>ผู้อนุมัติ / ผู้จัดการฝ่ายบุคคล</div>' +
-        '<div class="sign-line"></div>' +
-        '<div>( .................................................... )</div>' +
-        '<div style="font-size:10px;color:#64748b;margin-top:2px">วันที่ ...../...../..........</div>' +
-      '</div>' +
-    '</div>' +
-    '<div style="margin-top:20px;border-top:1px solid #e2e8f0;padding-top:6px;font-size:9px;color:#94a3b8;display:flex;justify-content:space-between">' +
-      '<span>PTN Payroll & Time Management System • ระบบประมวลผลเงินเดือนและเวลาทำงาน</span>' +
-      '<span>เอกสารทางการ สงวนสิทธิ์ใช้งานภายในองค์กร</span>' +
-    '</div>' +
-    '<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };<\/script>' +
-    '</body></html>';
+  var metaGridHtml = '<div class="meta-grid">' +
+    '<div><b>ช่วงเวลา:</b> ' + periodDisplay + '</div>' +
+    '<div><b>สาขา:</b> ' + branchDisplay + '</div>' +
+    '<div><b>สถานะ:</b> ' + statusDisplay + '</div>' +
+    '<div><b>พิมพ์เมื่อ:</b> ' + printDateStr + '</div>' +
+    '<div><b>ผู้ออกเอกสาร:</b> Admin (ระบบบริหารบุคคล)</div>' +
+    '<div><b>หน้า:</b> 1 / 1</div>' +
+  '</div>';
+
+  var docHtml = generateStandardA4PrintDoc({
+    title: reportTitle,
+    orientation: orientation,
+    metaGridHtml: metaGridHtml,
+    contentHtml: sectionsHtml
+  });
 
   var printWin = window.open('', '_blank');
   if (printWin) {
@@ -11227,84 +11252,63 @@ function printIndividualAttendanceTimesheet() {
     '</tr>';
   });
 
-  var docHtml = '<!DOCTYPE html>' +
-    '<html><head><meta charset="utf-8"><title>Timesheet - ' + (emp.full_name || emp.name || emp.emp_id) + '</title>' +
-    '<style>' +
-      '@page { size: A4 portrait; margin: 12mm; }' +
-      'body { font-family: "Sarabun", "Segoe UI", Arial, sans-serif; font-size: 12px; color: #0f172a; margin: 0; padding: 10px; }' +
-      'table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11.5px; }' +
-      'th { background: #f1f5f9; border: 1px solid #cbd5e1; padding: 6px; text-align: center; }' +
-      '.kpi-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 10px 0; }' +
-      '.kpi-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; text-align: center; background: #fafafa; }' +
-      '.kpi-title { font-size: 10px; color: #64748b; font-weight: 600; }' +
-      '.kpi-val { font-size: 13px; font-weight: bold; margin-top: 2px; }' +
-      '.sign-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 30px; text-align: center; }' +
-      '.sign-line { border-bottom: 1px dotted #64748b; width: 80%; margin: 35px auto 6px; }' +
-    '</style>' +
-    '</head><body>' +
-    '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:8px;margin-bottom:12px">' +
-      '<div style="font-size:16px;font-weight:bold">' + compName + '</div>' +
-      '<div style="font-size:11px;color:#475569">เลขประจำตัวผู้เสียภาษี: ' + compTax + '</div>' +
-      '<div style="font-size:14px;font-weight:bold;margin-top:6px;color:#1d4ed8">ใบรายงานบันทึกเวลาทำงานรายบุคคล (Individual Timesheet Report)</div>' +
+  var metaGridHtml = '<div style="display:flex;justify-content:space-between;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;font-size:11.5px;margin-top:8px">' +
+    '<div>' +
+      '<div><b>รหัสพนักงาน:</b> ' + (emp.emp_id || '-') + ' &nbsp;&nbsp; <b>ชื่อ-สกุล:</b> ' + (emp.full_name || emp.name || '-') + (emp.nickname ? ' (' + emp.nickname + ')' : '') + '</div>' +
+      '<div style="margin-top:3px"><b>แผนก:</b> ' + (emp.department || '-') + ' &nbsp;&nbsp; <b>ตำแหน่ง:</b> ' + (emp.position || '-') + ' &nbsp;&nbsp; <b>สาขา:</b> ' + (emp.branch_name || 'สำนักงานใหญ่') + '</div>' +
     '</div>' +
-    '<div style="display:flex;justify-content:space-between;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 12px;font-size:11.5px">' +
-      '<div>' +
-        '<div><b>รหัสพนักงาน:</b> ' + (emp.emp_id || '-') + ' &nbsp;&nbsp; <b>ชื่อ-สกุล:</b> ' + (emp.full_name || emp.name || '-') + (emp.nickname ? ' (' + emp.nickname + ')' : '') + '</div>' +
-        '<div style="margin-top:3px"><b>แผนก:</b> ' + (emp.department || '-') + ' &nbsp;&nbsp; <b>ตำแหน่ง:</b> ' + (emp.position || '-') + ' &nbsp;&nbsp; <b>สาขา:</b> ' + (emp.branch_name || 'สำนักงานใหญ่') + '</div>' +
-      '</div>' +
-      '<div style="text-align:right">' +
-        '<div><b>รอบ/ช่วงเวลา:</b> ' + periodStr + '</div>' +
-        '<div style="margin-top:3px;color:#64748b">พิมพ์เมื่อ: ' + printDateStr + '</div>' +
-      '</div>' +
+    '<div style="text-align:right">' +
+      '<div><b>รอบ/ช่วงเวลา:</b> ' + periodStr + '</div>' +
+      '<div style="margin-top:3px;color:#64748b">พิมพ์เมื่อ: ' + printDateStr + '</div>' +
     '</div>' +
-    '<div class="kpi-grid">' +
-      '<div class="kpi-box"><div class="kpi-title">วันทำงานจริง</div><div class="kpi-val" style="color:#047857">' + (summary.daysWorked || 0) + ' วัน</div></div>' +
-      '<div class="kpi-box"><div class="kpi-title">ชม.ทำงานรวม</div><div class="kpi-val" style="color:#1d4ed8">' + (summary.totalWorkHours || 0) + ' ชม.</div></div>' +
-      '<div class="kpi-box"><div class="kpi-title">OT ที่อนุมัติ</div><div class="kpi-val" style="color:#b45309">' + (summary.approvedOtHours || 0) + ' ชม.</div></div>' +
-      '<div class="kpi-box"><div class="kpi-title">มาสาย</div><div class="kpi-val" style="color:#c2410c">' + (summary.lateCount || 0) + ' ครั้ง (' + (summary.totalLateMinutes || 0) + 'น.)</div></div>' +
-      '<div class="kpi-box"><div class="kpi-title">ยังไม่สแกนออก</div><div class="kpi-val" style="color:#dc2626">' + (summary.missingClockOutCount || 0) + ' วัน</div></div>' +
-      '<div class="kpi-box"><div class="kpi-title">ลางาน (อนุมัติ)</div><div class="kpi-val" style="color:#2563eb">' + (summary.approvedLeaveDays || 0) + ' วัน</div></div>' +
-      '<div class="kpi-box"><div class="kpi-title">เบิกเงิน (อนุมัติ)</div><div class="kpi-val" style="color:#059669">฿' + Number(summary.approvedAdvanceAmount || 0).toLocaleString() + '</div></div>' +
-    '</div>' +
-    '<table>' +
-      '<thead>' +
-        '<tr>' +
-          '<th style="width:30px">#</th>' +
-          '<th style="width:75px">วันที่</th>' +
-          '<th style="width:65px">วัน</th>' +
-          '<th style="width:55px">เข้างาน</th>' +
-          '<th style="width:55px">ออกงาน</th>' +
-          '<th style="width:75px">พักกลางวัน</th>' +
-          '<th style="width:60px">ชม.ทำงาน</th>' +
-          '<th style="width:60px">สาย</th>' +
-          '<th style="width:90px">สาขา</th>' +
-          '<th>หมายเหตุ / สถานะ</th>' +
-        '</tr>' +
-      '</thead>' +
-      '<tbody>' + (rowsHtml || '<tr><td colspan="10" style="text-align:center;padding:15px;color:#94a3b8">ไม่มีบันทึกเวลาทำงานในช่วงนี้</td></tr>') + '</tbody>' +
-    '</table>' +
-    '<div class="sign-grid">' +
-      '<div>' +
-        '<div class="sign-line"></div>' +
-        '<div>( ' + (emp.full_name || emp.name || 'พนักงาน') + ' )</div>' +
-        '<div style="font-size:10.5px;color:#64748b;margin-top:2px">ลายมือชื่อพนักงานผู้ปฏิบัติงาน</div>' +
-        '<div style="font-size:10px;color:#94a3b8;margin-top:2px">วันที่ ...../...../..........</div>' +
-      '</div>' +
-      '<div>' +
-        '<div class="sign-line"></div>' +
-        '<div>( .................................................... )</div>' +
-        '<div style="font-size:10.5px;color:#64748b;margin-top:2px">ผู้ตรวจสอบ / หัวหน้างาน</div>' +
-        '<div style="font-size:10px;color:#94a3b8;margin-top:2px">วันที่ ...../...../..........</div>' +
-      '</div>' +
-      '<div>' +
-        '<div class="sign-line"></div>' +
-        '<div>( .................................................... )</div>' +
-        '<div style="font-size:10.5px;color:#64748b;margin-top:2px">กรรมการผู้จัดการ / ผู้อนุมัติ</div>' +
-        '<div style="font-size:10px;color:#94a3b8;margin-top:2px">วันที่ ...../...../..........</div>' +
-      '</div>' +
-    '</div>' +
-    '<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };<\/script>' +
-    '</body></html>';
+  '</div>';
+
+  var contentHtml = '<div class="kpi-grid">' +
+    '<div class="kpi-box"><div class="kpi-title">วันทำงานจริง</div><div class="kpi-val" style="color:#047857">' + (summary.daysWorked || 0) + ' วัน</div></div>' +
+    '<div class="kpi-box"><div class="kpi-title">ชม.ทำงานรวม</div><div class="kpi-val" style="color:#1d4ed8">' + (summary.totalWorkHours || 0) + ' ชม.</div></div>' +
+    '<div class="kpi-box"><div class="kpi-title">OT ที่อนุมัติ</div><div class="kpi-val" style="color:#b45309">' + (summary.approvedOtHours || 0) + ' ชม.</div></div>' +
+    '<div class="kpi-box"><div class="kpi-title">มาสาย</div><div class="kpi-val" style="color:#c2410c">' + (summary.lateCount || 0) + ' ครั้ง (' + (summary.totalLateMinutes || 0) + 'น.)</div></div>' +
+    '<div class="kpi-box"><div class="kpi-title">ยังไม่สแกนออก</div><div class="kpi-val" style="color:#dc2626">' + (summary.missingClockOutCount || 0) + ' วัน</div></div>' +
+    '<div class="kpi-box"><div class="kpi-title">ลางาน (อนุมัติ)</div><div class="kpi-val" style="color:#2563eb">' + (summary.approvedLeaveDays || 0) + ' วัน</div></div>' +
+    '<div class="kpi-box"><div class="kpi-title">เบิกเงิน (อนุมัติ)</div><div class="kpi-val" style="color:#059669">฿' + Number(summary.approvedAdvanceAmount || 0).toLocaleString() + '</div></div>' +
+  '</div>' +
+  '<table>' +
+    '<thead>' +
+      '<tr>' +
+        '<th style="width:30px">#</th>' +
+        '<th style="width:75px">วันที่</th>' +
+        '<th style="width:65px">วัน</th>' +
+        '<th style="width:55px">เข้างาน</th>' +
+        '<th style="width:55px">ออกงาน</th>' +
+        '<th style="width:75px">พักกลางวัน</th>' +
+        '<th style="width:60px">ชม.ทำงาน</th>' +
+        '<th style="width:60px">สาย</th>' +
+        '<th style="width:90px">สาขา</th>' +
+        '<th>หมายเหตุ / สถานะ</th>' +
+      '</tr>' +
+    '</thead>' +
+    '<tbody>' + (rowsHtml || '<tr><td colspan="10" style="text-align:center;padding:15px;color:#94a3b8">ไม่มีบันทึกเวลาทำงานในช่วงนี้</td></tr>') + '</tbody>' +
+  '</table>';
+
+  var extraStyles = '.kpi-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 10px 0; }' +
+    '.kpi-box { border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px; text-align: center; background: #fafafa; }' +
+    '.kpi-title { font-size: 10px; color: #64748b; font-weight: 600; }' +
+    '.kpi-val { font-size: 13px; font-weight: bold; margin-top: 2px; }';
+
+  var signLabels = [
+    (emp.full_name || emp.name || 'พนักงาน') + '<br><span style="font-size:10px;color:#64748b">ลายมือชื่อพนักงานผู้ปฏิบัติงาน</span>',
+    'ผู้ตรวจสอบ / หัวหน้างาน',
+    'กรรมการผู้จัดการ / ผู้อนุมัติ'
+  ];
+
+  var docHtml = generateStandardA4PrintDoc({
+    title: 'ใบรายงานบันทึกเวลาทำงานรายบุคคล (Individual Timesheet Report)',
+    orientation: 'portrait',
+    metaGridHtml: metaGridHtml,
+    contentHtml: contentHtml,
+    extraStyles: extraStyles,
+    signLabels: signLabels
+  });
 
   if (printWin) {
     printWin.document.open();
