@@ -10627,10 +10627,12 @@ function getEmpNickname(firstArg, directNickname, employeeList) {
 function formatEmpNameWithNick(fullName, empId, directNickname, employeeList) {
   if (fullName && typeof fullName === 'object') {
     var item = fullName;
-    var name = item.full_name || item.fullName || item.name || item.emp_id || item.empId || '-';
-    var nick = getEmpNickname(item, item.nickname, employeeList);
-    return nick ? (name + ' (' + nick + ')') : name;
+    var itemEmpId = item.emp_id || item.empId || '';
+    var n1 = item.full_name || item.fullName || item.name || itemEmpId || '-';
+    var nick1 = getEmpNickname(item, item.nickname, employeeList);
+    return nick1 ? (n1 + ' (' + nick1 + ')') : n1;
   }
+  var name = fullName || empId || '-';
   var nick = getEmpNickname(empId, directNickname, employeeList);
   return nick ? (name + ' (' + nick + ')') : name;
 }
