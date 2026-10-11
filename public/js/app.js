@@ -10109,6 +10109,114 @@ function setAttendanceFilterToday() {
   loadTimeAttendanceDashboard();
 }
 
+var _currentAttendanceTableFilter = 'ALL';
+
+function setAttendanceTableFilter(filter) {
+  _currentAttendanceTableFilter = filter || 'ALL';
+  var btnAll = document.getElementById('btnAttFilter_ALL');
+  var btnPresent = document.getElementById('btnAttFilter_PRESENT');
+  var btnLate = document.getElementById('btnAttFilter_LATE');
+  var btnLeave = document.getElementById('btnAttFilter_LEAVE');
+  var btnAbsent = document.getElementById('btnAttFilter_ABSENT');
+
+  var buttons = {
+    'ALL': btnAll,
+    'PRESENT': btnPresent,
+    'LATE': btnLate,
+    'LEAVE': btnLeave,
+    'ABSENT': btnAbsent
+  };
+
+  Object.keys(buttons).forEach(function(k) {
+    var b = buttons[k];
+    if (b) {
+      if (k === _currentAttendanceTableFilter) {
+        b.className = 'btn btn-sm';
+        b.style.background = '#2563eb';
+        b.style.color = '#ffffff';
+        b.style.borderColor = '#1d4ed8';
+        b.style.fontWeight = '700';
+        b.style.boxShadow = '0 1px 2px rgba(37,99,235,0.2)';
+      } else {
+        b.className = 'btn btn-sm btn-slate';
+        b.style.background = '#ffffff';
+        b.style.color = '#475569';
+        b.style.borderColor = '#cbd5e1';
+        b.style.fontWeight = '600';
+        b.style.boxShadow = 'none';
+      }
+    }
+  });
+
+  renderTimeAttendanceTodayLogs(_currentAttendanceLogs, _currentAttendanceIsIndividual);
+}
+
+function openAddAttendanceLogForEmp(empId, empName) {
+  openAddAttendanceLogModal();
+  var empSel = document.getElementById('addAttEmpId');
+  if (empSel && empId) {
+    empSel.value = empId;
+  }
+  var dateInp = document.getElementById('addAttDate');
+  var curFilterDate = (document.getElementById('attFilterDate') && document.getElementById('attFilterDate').value);
+  if (dateInp && curFilterDate) {
+    dateInp.value = curFilterDate;
+  }
+}
+
+function openLeaveDetailModal(leaveId, empId) {
+  var notClocked = (State.attendanceBreakdown && State.attendanceBreakdown.notClockedInList) || [];
+  var match = notClocked.find(function(x) { 
+    return (leaveId && String(x.leaveId) === String(leaveId)) || (empId && x.empId === empId && x.hasLeave); 
+  });
+
+  if (!match) {
+    var leaves = (State.attendanceCurrentRequests && State.attendanceCurrentRequests.leave) || (State.attendancePendingData && State.attendancePendingData.leaves) || [];
+    var lObj = leaves.find(function(x) { return leaveId && String(x.id) === String(leaveId); });
+    if (lObj) {
+      match = {
+        name: lObj.full_name || lObj.emp_id,
+        nickname: lObj.nickname || '',
+        empId: lObj.emp_id,
+        dept: lObj.department || '-',
+        leaveType: lObj.leave_type || 'ลางาน',
+        leaveStatus: lObj.status || 'APPROVED',
+        leaveDays: lObj.days_count || 1,
+        leaveSlot: lObj.time_slot || 'FULL',
+        leaveReason: lObj.reason || 'ไม่ได้ระบุเหตุผล',
+        medicalCertUrl: lObj.medical_cert_url || null
+      };
+    }
+  }
+
+  if (!match) {
+    showToast('ไม่พบข้อมูลคำขอลางาน', 'info');
+    return;
+  }
+
+  var slotText = match.leaveSlot === 'MORNING' ? 'ครึ่งวันเช้า' : (match.leaveSlot === 'AFTERNOON' ? 'ครึ่งวันบ่าย' : 'เต็มวัน');
+  var stLabel = match.leaveStatus === 'APPROVED' ? '<span style="color:#059669;font-weight:700">✓ อนุมัติแล้ว</span>' : (match.leaveStatus === 'PENDING' ? '<span style="color:#d97706;font-weight:700">⏳ รออนุมัติ</span>' : '<span style="color:#dc2626;font-weight:700">✕ ปฏิเสธ</span>');
+
+  var html = '<div style="text-align:left;font-size:12.5px;color:#334155;line-height:1.7">' +
+    '<div style="margin-bottom:8px"><strong>พนักงาน:</strong> ' + esc(match.name) + (match.nickname ? ' (' + esc(match.nickname) + ')' : '') + ' <span style="color:#64748b">[' + esc(match.empId) + ']</span></div>' +
+    '<div style="margin-bottom:8px"><strong>ประเภทการลา:</strong> <span style="color:#1d4ed8;font-weight:700">' + esc(match.leaveType) + '</span></div>' +
+    '<div style="margin-bottom:8px"><strong>จำนวนวันลา:</strong> ' + (match.leaveDays || 1) + ' วัน (' + slotText + ')</div>' +
+    '<div style="margin-bottom:8px"><strong>สถานะคำขอ:</strong> ' + stLabel + '</div>' +
+    '<div style="margin-bottom:12px"><strong>เหตุผลการลา:</strong> <div style="background:#f8fafc;padding:8px 10px;border-radius:6px;border:1px dashed #cbd5e1;margin-top:4px">' + esc(match.leaveReason || 'ไม่ได้ระบุเหตุผล') + '</div></div>';
+
+  if (match.medicalCertUrl) {
+    html += '<div><strong>เอกสารแนบ / ใบรับรองแพทย์:</strong><div style="margin-top:6px;text-align:center"><img src="' + match.medicalCertUrl + '" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #cbd5e1;cursor:pointer" onclick="previewAttendancePhoto(\'' + match.medicalCertUrl + '\', \'เอกสารแนบการลา\')" title="คลิกดูภาพใหญ่"></div></div>';
+  }
+  html += '</div>';
+
+  Swal.fire({
+    title: '📄 รายละเอียดการลางาน',
+    html: html,
+    confirmButtonText: 'ปิดหน้าต่าง',
+    confirmButtonColor: '#2563eb'
+  });
+}
+
 function renderTimeAttendanceTodayLogs(logs, isIndividual) {
   var tbody = document.getElementById('attLogsTableBody');
   if (!tbody) return;
@@ -10117,121 +10225,339 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
   var thDate = document.getElementById('thAttDate');
   if (thDate) thDate.style.display = isIndiv ? '' : 'none';
 
-  if (!logs || logs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ไม่พบข้อมูลการลงเวลาในช่วงที่เลือก</td></tr>';
-    return;
-  }
+  var filterBar = document.getElementById('attDailyFilterBar');
+  var dateMode = (document.getElementById('attFilterDateMode') && document.getElementById('attFilterDateMode').value) || _currentAttendanceDateMode || 'SINGLE';
+  var isDailyMode = (!isIndiv && dateMode === 'SINGLE');
+
+  var branchFilter = (document.getElementById('attFilterBranch') && document.getElementById('attFilterBranch').value) || 'ALL';
 
   var nowUtc = new Date();
   var bangkokToday = new Date(nowUtc.getTime() + (7 * 3600 * 1000)).toISOString().substring(0, 10);
   var thaiDays = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];
+  var canManageLogs = (hasPermission('manage_time_logs') || isSuperAdmin());
+
+  var notClockedInList = [];
+  if (isDailyMode && State.attendanceBreakdown && Array.isArray(State.attendanceBreakdown.notClockedInList)) {
+    notClockedInList = State.attendanceBreakdown.notClockedInList;
+    if (branchFilter && branchFilter !== 'ALL') {
+      notClockedInList = notClockedInList.filter(function(x) {
+        return (x.branchId === branchFilter);
+      });
+    }
+  }
+
+  // Filter logs by branch if needed
+  var filteredLogs = logs || [];
+  if (!isIndiv && branchFilter && branchFilter !== 'ALL') {
+    filteredLogs = filteredLogs.filter(function(l) {
+      return (l.branch_id === branchFilter || l.emp_branch_id === branchFilter);
+    });
+  }
+
+  if (isDailyMode && filterBar) {
+    filterBar.style.display = 'flex';
+    var cntPresent = filteredLogs.length;
+    var cntLate = filteredLogs.filter(function(l) { return (Number(l.late_minutes) || 0) > 0; }).length;
+    var cntLeave = notClockedInList.filter(function(x) { return x.hasLeave; }).length;
+    var cntAbsent = notClockedInList.filter(function(x) { return !x.hasLeave; }).length;
+    var cntAll = cntPresent + notClockedInList.length;
+
+    var elAll = document.getElementById('txtAttCountAll');
+    var elPresent = document.getElementById('txtAttCountPresent');
+    var elLate = document.getElementById('txtAttCountLate');
+    var elLeave = document.getElementById('txtAttCountLeave');
+    var elAbsent = document.getElementById('txtAttCountAbsent');
+    if (elAll) elAll.textContent = cntAll;
+    if (elPresent) elPresent.textContent = cntPresent;
+    if (elLate) elLate.textContent = cntLate;
+    if (elLeave) elLeave.textContent = cntLeave;
+    if (elAbsent) elAbsent.textContent = cntAbsent;
+  } else if (filterBar) {
+    filterBar.style.display = 'none';
+  }
+
+  // Build rows to render
+  var itemsToRender = [];
+
+  // 1. Clocked-in logs
+  filteredLogs.forEach(function(l) {
+    var isLate = (Number(l.late_minutes) || 0) > 0;
+    var itemType = isLate ? 'LATE' : 'PRESENT';
+    if (isDailyMode) {
+      if (_currentAttendanceTableFilter === 'ALL' ||
+          _currentAttendanceTableFilter === 'PRESENT' ||
+          (_currentAttendanceTableFilter === 'LATE' && isLate) ||
+          (_currentAttendanceTableFilter === 'LEAVE' && l.has_leave_conflict)) {
+        itemsToRender.push({ kind: 'LOG', data: l, itemType: itemType });
+      }
+    } else {
+      itemsToRender.push({ kind: 'LOG', data: l, itemType: itemType });
+    }
+  });
+
+  // 2. Unclocked / On Leave / Absent employees (only in daily view)
+  if (isDailyMode) {
+    notClockedInList.forEach(function(u) {
+      if (u.hasLeave) {
+        if (_currentAttendanceTableFilter === 'ALL' || _currentAttendanceTableFilter === 'LEAVE') {
+          itemsToRender.push({ kind: 'LEAVE', data: u, itemType: 'LEAVE' });
+        }
+      } else {
+        if (_currentAttendanceTableFilter === 'ALL' || _currentAttendanceTableFilter === 'ABSENT') {
+          itemsToRender.push({ kind: 'ABSENT', data: u, itemType: 'ABSENT' });
+        }
+      }
+    });
+  }
+
+  if (itemsToRender.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="14" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ไม่พบข้อมูลการลงเวลาหรือพนักงานตามเงื่อนไขที่เลือก</td></tr>';
+    return;
+  }
 
   var html = '';
-  var canManageLogs = (hasPermission('manage_time_logs') || isSuperAdmin());
-  logs.forEach(function(l, idx) {
-    var inPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
-    if (l.in_photo_url) {
-      inPhotoHtml = '<img src="' + l.in_photo_url + '" alt="IN" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #10b981;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + (l.full_name || l.emp_id) + '\', \'เวลาเข้า: ' + (l.clock_in || '-') + ' น. | พิกัด: ' + (l.in_lat ? l.in_lat.toFixed(4) + ', ' + l.in_lng.toFixed(4) : '-') + '\')" title="คลิกเพื่อดูรูปขยาย">';
-    }
+  var rowIdx = 1;
+  var filterDateVal = (document.getElementById('attFilterDate') && document.getElementById('attFilterDate').value) || bangkokToday;
 
-    var outPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
-    if (l.out_photo_url) {
-      outPhotoHtml = '<img src="' + l.out_photo_url + '" alt="OUT" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #ef4444;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + (l.full_name || l.emp_id) + '\', \'เวลาออก: ' + (l.clock_out || '-') + ' น. | พิกัด: ' + (l.out_lat ? l.out_lat.toFixed(4) + ', ' + l.out_lng.toFixed(4) : '-') + '\')" title="คลิกเพื่อดูรูปขยาย">';
-    }
-
-    var lateBadge = '';
-    if ((Number(l.late_minutes) || 0) > 0) {
-      lateBadge = '<span style="background:#fff7ed;color:#c2410c;font-weight:700;font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid #fed7aa">สาย ' + l.late_minutes + ' น.</span>';
-    } else {
-      lateBadge = '<span style="background:#ecfdf5;color:#059669;font-weight:600;font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid #a7f3d0">ปกติ</span>';
-    }
-
-    var hrsText = '';
-    if ((Number(l.work_hours) || 0) > 0) {
-      hrsText = '<div style="font-size:10.5px;color:#64748b;margin-top:2px">' + l.work_hours + ' ชม.</div>';
-    }
-
-    var statusHtml = '';
-    if (l.status === 'GEOFENCE_FAIL') {
-      statusHtml = '<span style="background:#fef2f2;color:#b91c1c;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #fecaca;font-weight:600"><i class="fa-solid fa-location-dot"></i> นอกพิกัด</span>';
-    } else if (l.status === 'SUNDAY_WORK') {
-      statusHtml = '<span style="background:#eff6ff;color:#1d4ed8;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #bfdbfe;font-weight:600">วันอาทิตย์</span>';
-    } else {
-      statusHtml = '<span style="background:#f0fdf4;color:#15803d;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #bbf7d0;font-weight:600"><i class="fa-solid fa-check"></i> ในสาขา</span>';
-    }
-
-    var nameDisplay = (l.full_name || '-') + (l.nickname ? ' (' + l.nickname + ')' : '');
-    var branchDisplay = l.branch_name || l.branch_id || 'สำนักงานใหญ่';
-
-    var dateColHtml = '';
-    if (isIndiv) {
-      var dObj = new Date(l.date + 'T00:00:00');
-      var dayName = isNaN(dObj.getDay()) ? '' : thaiDays[dObj.getDay()];
-      var dayBadge = '';
-      if (dObj.getDay() === 0) {
-        dayBadge = '<span style="background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">อาทิตย์</span>';
-      } else {
-        dayBadge = '<span style="background:#f1f5f9;color:#475569;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:600">' + dayName + '</span>';
+  itemsToRender.forEach(function(item) {
+    if (item.kind === 'LOG') {
+      var l = item.data;
+      var inPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
+      if (l.in_photo_url) {
+        inPhotoHtml = '<img src="' + l.in_photo_url + '" alt="IN" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #10b981;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + esc(l.full_name || l.emp_id) + '\', \'เวลาเข้า: ' + (l.clock_in || '-') + ' น. | พิกัด: ' + (l.in_lat ? l.in_lat.toFixed(4) + ', ' + l.in_lng.toFixed(4) : '-') + '\')" title="คลิกเพื่อดูรูปขยาย">';
       }
-      dateColHtml = '<td class="text-center" style="font-size:11.5px;font-weight:700;color:#1e3a8a;white-space:nowrap;padding:4px">' +
-        '<div>' + (l.date || '-') + '</div>' +
-        '<div style="margin-top:2px">' + dayBadge + '</div>' +
-      '</td>';
-    }
 
-    // Missing clock out anomaly check & half-day absence check
-    var missingOutAnomaly = '';
-    var inTimeStr = l.clock_in ? l.clock_in.substring(0, 5) : '';
-    if (inTimeStr && inTimeStr >= '13:00') {
-      missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="เข้างานหลังเวลาพักเที่ยง ถือเป็นขาดงานครึ่งเช้า 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>เข้างานบ่าย (ขาดงานครึ่งเช้า 0.5 วัน)</span></div>';
-    } else if (l.clock_in && (!l.clock_out || l.clock_out.trim() === '') && l.date < bangkokToday) {
-      missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="ไม่ลงเวลาออกงาน/ค้างเวลาพัก ถือเป็นขาดงานครึ่งบ่าย 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>ไม่สแกนออก (ขาดงานครึ่งบ่าย 0.5 วัน)</span></div>';
-    }
+      var outPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
+      if (l.out_photo_url) {
+        outPhotoHtml = '<img src="' + l.out_photo_url + '" alt="OUT" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #ef4444;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + esc(l.full_name || l.emp_id) + '\', \'เวลาออก: ' + (l.clock_out || '-') + ' น. | พิกัด: ' + (l.out_lat ? l.out_lat.toFixed(4) + ', ' + l.out_lng.toFixed(4) : '-') + '\')" title="คลิกเพื่อดูรูปขยาย">';
+      }
 
-    html += '<tr id="attLogRow_' + l.id + '">' +
-      '<td class="text-center" style="padding:4px">' +
-        '<input type="checkbox" class="att-log-checkbox" value="' + l.id + '" onchange="onAttendanceCheckboxChanged()" style="cursor:pointer;accent-color:#2563eb;width:15px;height:15px">' +
-      '</td>' +
-      '<td class="text-center font-bold" style="color:#64748b">' + (idx + 1) + '</td>' +
-      dateColHtml +
-      '<td class="text-center" style="padding:4px">' + inPhotoHtml + '</td>' +
-      '<td class="text-center" style="padding:4px">' + outPhotoHtml + '</td>' +
-      '<td class="font-bold" style="color:#1e40af;cursor:pointer" onclick="viewAttendanceLogDetail(' + l.id + ')" title="ดูรายละเอียด">' + (l.emp_id || '-') + '</td>' +
-      '<td>' +
-        '<div style="font-weight:700;color:#0f172a;cursor:pointer;display:inline-block" onclick="viewAttendanceLogDetail(' + l.id + ')" title="คลิกเพื่อดูรายละเอียดเชิงลึก">' +
-          nameDisplay + ' <i class="fa-solid fa-circle-info text-blue" style="font-size:11px;opacity:0.7"></i>' +
-        '</div>' +
-        '<div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div>' +
-        (l.break_out ? '<div style="font-size:10.5px;color:#b45309;font-weight:700;margin-top:2px"><i class="fa-solid fa-mug-hot"></i> พัก ' + l.break_out + (l.break_in ? ' - ' + l.break_in : ' (กำลังพัก)') + (l.break_minutes > 0 ? ' (' + l.break_minutes + 'น.)' : '') + '</div>' : '') +
-        missingOutAnomaly +
-        (l.has_leave_conflict ? '<div style="font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px" title="พนักงานมีใบลาที่อนุมัติไว้ในวันนี้ แต่มาทำงานจริง ระบบตรวจจับอัตโนมัติและยกเว้นการหักวันลา"><i class="fa-solid fa-shield-halved text-amber"></i> <span>มีใบลาอนุมัติไว้แต่วันนี้มาทำงานจริง (ระบบบันทึกเวลาทำงานปกติ ไม่หักวันลา)</span></div>' : '') +
-        ((l.remark && l.remark.includes('สิทธิ์ประจำตำแหน่ง')) ? '<div style="font-size:10px;color:#6b21a8;background:#faf5ff;border:1px solid #d8b4fe;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="สิทธิ์ประจำตำแหน่ง: ยกเว้นการหักเงินชั่วโมงออกก่อนให้อัตโนมัติ (หากเข้าสายหักตามปกติ)"><i class="fa-solid fa-sparkles text-purple"></i> <span>✨ สิทธิ์เต็มวัน (ไม่หักออกก่อน)</span></div>' : ((l.is_full_pay === 1 || l.is_full_pay === '1' || (l.remark && l.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) ? '<div style="font-size:10px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="ได้รับอนุมัติเลิกงานก่อนเนื่องจากงานเสร็จ ได้รับค่าแรงเต็มวัน ไม่หักเงิน"><i class="fa-solid fa-circle-check text-green"></i> <span>งานเสร็จ-จ่ายเต็มวัน (ไม่หักเงิน)</span></div>' : '')) +
-      '</td>' +
-      '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
-      '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
-      '<td class="text-center font-bold text-green" style="font-size:12.5px">' + (l.clock_in ? l.clock_in + ' น.' : '-') + '</td>' +
-      '<td class="text-center font-bold text-red" style="font-size:12.5px">' + (l.clock_out ? l.clock_out + ' น.' : '-') + '</td>' +
-      '<td class="text-center">' + lateBadge + hrsText + '</td>' +
-      '<td class="text-center">' + statusHtml + '</td>' +
-      '<td class="text-center" style="padding:4px;white-space:nowrap">' +
-        '<div style="display:inline-flex;gap:4px">' +
-          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:4px" onclick="viewAttendanceLogDetail(' + l.id + ')" title="ดูรายละเอียดการลงเวลา">' +
-            '<i class="fa-solid fa-eye text-blue"></i>' +
-          '</button>' +
-          (canManageLogs ? (
-            '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;border-radius:4px" onclick="openEditAttendanceLogModal(' + l.id + ')" title="แก้ไขเวลาเข้า-ออก">' +
-              '<i class="fa-solid fa-pen-to-square"></i>' +
+      var lateBadge = '';
+      if ((Number(l.late_minutes) || 0) > 0) {
+        lateBadge = '<span style="background:#fff7ed;color:#c2410c;font-weight:700;font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid #fed7aa">สาย ' + l.late_minutes + ' น.</span>';
+      } else {
+        lateBadge = '<span style="background:#ecfdf5;color:#059669;font-weight:600;font-size:11px;padding:2px 6px;border-radius:4px;border:1px solid #a7f3d0">ปกติ</span>';
+      }
+
+      var hrsText = '';
+      if ((Number(l.work_hours) || 0) > 0) {
+        hrsText = '<div style="font-size:10.5px;color:#64748b;margin-top:2px">' + l.work_hours + ' ชม.</div>';
+      }
+
+      var statusHtml = '';
+      if (l.status === 'GEOFENCE_FAIL') {
+        statusHtml = '<span style="background:#fef2f2;color:#b91c1c;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #fecaca;font-weight:600"><i class="fa-solid fa-location-dot"></i> นอกพิกัด</span>';
+      } else if (l.status === 'SUNDAY_WORK') {
+        statusHtml = '<span style="background:#eff6ff;color:#1d4ed8;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #bfdbfe;font-weight:600">วันอาทิตย์</span>';
+      } else {
+        statusHtml = '<span style="background:#f0fdf4;color:#15803d;font-size:10.5px;padding:2px 6px;border-radius:4px;border:1px solid #bbf7d0;font-weight:600"><i class="fa-solid fa-check"></i> ในสาขา</span>';
+      }
+
+      var nameDisplay = (l.full_name || '-') + (l.nickname ? ' (' + l.nickname + ')' : '');
+      var branchDisplay = l.branch_name || l.branch_id || 'สำนักงานใหญ่';
+
+      var dateColHtml = '';
+      if (isIndiv) {
+        var dObj = new Date(l.date + 'T00:00:00');
+        var dayName = isNaN(dObj.getDay()) ? '' : thaiDays[dObj.getDay()];
+        var dayBadge = '';
+        if (dObj.getDay() === 0) {
+          dayBadge = '<span style="background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">อาทิตย์</span>';
+        } else {
+          dayBadge = '<span style="background:#f1f5f9;color:#475569;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:600">' + dayName + '</span>';
+        }
+        dateColHtml = '<td class="text-center" style="font-size:11.5px;font-weight:700;color:#1e3a8a;white-space:nowrap;padding:4px">' +
+          '<div>' + (l.date || '-') + '</div>' +
+          '<div style="margin-top:2px">' + dayBadge + '</div>' +
+        '</td>';
+      }
+
+      // Missing clock out anomaly check & half-day absence check
+      var missingOutAnomaly = '';
+      var inTimeStr = l.clock_in ? l.clock_in.substring(0, 5) : '';
+      if (inTimeStr && inTimeStr >= '13:00') {
+        missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="เข้างานหลังเวลาพักเที่ยง ถือเป็นขาดงานครึ่งเช้า 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>เข้างานบ่าย (ขาดงานครึ่งเช้า 0.5 วัน)</span></div>';
+      } else if (l.clock_in && (!l.clock_out || l.clock_out.trim() === '') && l.date < bangkokToday) {
+        missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="ไม่ลงเวลาออกงาน/ค้างเวลาพัก ถือเป็นขาดงานครึ่งบ่าย 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>ไม่สแกนออก (ขาดงานครึ่งบ่าย 0.5 วัน)</span></div>';
+      }
+
+      html += '<tr id="attLogRow_' + l.id + '">' +
+        '<td class="text-center" style="padding:4px">' +
+          '<input type="checkbox" class="att-log-checkbox" value="' + l.id + '" onchange="onAttendanceCheckboxChanged()" style="cursor:pointer;accent-color:#2563eb;width:15px;height:15px">' +
+        '</td>' +
+        '<td class="text-center font-bold" style="color:#64748b">' + (rowIdx++) + '</td>' +
+        dateColHtml +
+        '<td class="text-center" style="padding:4px">' + inPhotoHtml + '</td>' +
+        '<td class="text-center" style="padding:4px">' + outPhotoHtml + '</td>' +
+        '<td class="font-bold" style="color:#1e40af;cursor:pointer" onclick="viewAttendanceLogDetail(' + l.id + ')" title="ดูรายละเอียด">' + (l.emp_id || '-') + '</td>' +
+        '<td>' +
+          '<div style="font-weight:700;color:#0f172a;cursor:pointer;display:inline-block" onclick="viewAttendanceLogDetail(' + l.id + ')" title="คลิกเพื่อดูรายละเอียดเชิงลึก">' +
+            esc(nameDisplay) + ' <i class="fa-solid fa-circle-info text-blue" style="font-size:11px;opacity:0.7"></i>' +
+          '</div>' +
+          '<div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div>' +
+          (l.break_out ? '<div style="font-size:10.5px;color:#b45309;font-weight:700;margin-top:2px"><i class="fa-solid fa-mug-hot"></i> พัก ' + l.break_out + (l.break_in ? ' - ' + l.break_in : ' (กำลังพัก)') + (l.break_minutes > 0 ? ' (' + l.break_minutes + 'น.)' : '') + '</div>' : '') +
+          missingOutAnomaly +
+          (l.has_leave_conflict ? '<div style="font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px" title="พนักงานมีใบลาที่อนุมัติไว้ในวันนี้ แต่มาทำงานจริง ระบบตรวจจับอัตโนมัติและยกเว้นการหักวันลา"><i class="fa-solid fa-shield-halved text-amber"></i> <span>มีใบลาอนุมัติไว้แต่วันนี้มาทำงานจริง (ระบบบันทึกเวลาทำงานปกติ ไม่หักวันลา)</span></div>' : '') +
+          ((l.remark && l.remark.includes('สิทธิ์ประจำตำแหน่ง')) ? '<div style="font-size:10px;color:#6b21a8;background:#faf5ff;border:1px solid #d8b4fe;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="สิทธิ์ประจำตำแหน่ง: ยกเว้นการหักเงินชั่วโมงออกก่อนให้อัตโนมัติ (หากเข้าสายหักตามปกติ)"><i class="fa-solid fa-sparkles text-purple"></i> <span>✨ สิทธิ์เต็มวัน (ไม่หักออกก่อน)</span></div>' : ((l.is_full_pay === 1 || l.is_full_pay === '1' || (l.remark && l.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) ? '<div style="font-size:10px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="ได้รับอนุมัติเลิกงานก่อนเนื่องจากงานเสร็จ ได้รับค่าแรงเต็มวัน ไม่หักเงิน"><i class="fa-solid fa-circle-check text-green"></i> <span>งานเสร็จ-จ่ายเต็มวัน (ไม่หักเงิน)</span></div>' : '')) +
+        '</td>' +
+        '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
+        '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
+        '<td class="text-center font-bold text-green" style="font-size:12.5px">' + (l.clock_in ? l.clock_in + ' น.' : '-') + '</td>' +
+        '<td class="text-center font-bold text-red" style="font-size:12.5px">' + (l.clock_out ? l.clock_out + ' น.' : '-') + '</td>' +
+        '<td class="text-center">' + lateBadge + hrsText + '</td>' +
+        '<td class="text-center">' + statusHtml + '</td>' +
+        '<td class="text-center" style="padding:4px;white-space:nowrap">' +
+          '<div style="display:inline-flex;gap:4px">' +
+            '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#f8fafc;color:#334155;border:1px solid #cbd5e1;border-radius:4px" onclick="viewAttendanceLogDetail(' + l.id + ')" title="ดูรายละเอียดการลงเวลา">' +
+              '<i class="fa-solid fa-eye text-blue"></i>' +
             '</button>' +
-            '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:4px" onclick="deleteSingleAttendanceLog(' + l.id + ', \'' + esc(l.full_name || l.emp_id) + '\')" title="ลบรายการนี้">' +
-              '<i class="fa-solid fa-trash-can"></i>' +
-            '</button>'
-          ) : '') +
-          '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 7px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;border-radius:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(l.emp_id) + '\', \'' + esc(l.full_name || '') + '\')" title="ดึงข้อมูลเข้าสู่คำนวณเงินเดือน">' +
-            '<i class="fa-solid fa-cloud-arrow-down"></i>' +
-          '</button>' +
-        '</div>' +
-      '</td>' +
+            (canManageLogs ? (
+              '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#e0f2fe;color:#0369a1;border:1px solid #bae6fd;border-radius:4px" onclick="openEditAttendanceLogModal(' + l.id + ')" title="แก้ไขเวลาเข้า-ออก">' +
+                '<i class="fa-solid fa-pen-to-square"></i>' +
+              '</button>' +
+              '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 6px;background:#fee2e2;color:#b91c1c;border:1px solid #fecaca;border-radius:4px" onclick="deleteSingleAttendanceLog(' + l.id + ', \'' + esc(l.full_name || l.emp_id) + '\')" title="ลบรายการนี้">' +
+                '<i class="fa-solid fa-trash-can"></i>' +
+              '</button>'
+            ) : '') +
+            '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 7px;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;border-radius:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(l.emp_id) + '\', \'' + esc(l.full_name || '') + '\')" title="ดึงข้อมูลเข้าสู่คำนวณเงินเดือน">' +
+              '<i class="fa-solid fa-cloud-arrow-down"></i>' +
+            '</button>' +
+          '</div>' +
+        '</td>' +
       '</tr>';
+
+    } else if (item.kind === 'LEAVE') {
+      var u = item.data;
+      var leaveIcon = '🏖️';
+      var leaveBg = '#eff6ff';
+      var leaveColor = '#1d4ed8';
+      var leaveBorder = '#bfdbfe';
+      var lType = String(u.leaveType || '').toUpperCase();
+      if (lType.includes('SICK')) {
+        leaveIcon = '🩺';
+        leaveBg = '#f0fdf4';
+        leaveColor = '#15803d';
+        leaveBorder = '#bbf7d0';
+      } else if (lType.includes('ANNUAL') || lType.includes('VACATION')) {
+        leaveIcon = '🌴';
+        leaveBg = '#fefce8';
+        leaveColor = '#a16207';
+        leaveBorder = '#fef08a';
+      } else if (lType.includes('WITHOUT_PAY')) {
+        leaveIcon = '💸';
+        leaveBg = '#fef2f2';
+        leaveColor = '#b91c1c';
+        leaveBorder = '#fecaca';
+      }
+
+      var leaveTypeLabel = u.leaveType || 'ลางาน';
+      var leaveStatusText = u.leaveStatus === 'APPROVED' ? 'อนุมัติแล้ว' : (u.leaveStatus === 'PENDING' ? 'รออนุมัติ' : 'อนุมัติ');
+      var leaveStatusBadge = '<span style="background:' + leaveBg + ';color:' + leaveColor + ';font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid ' + leaveBorder + '">' + leaveIcon + ' ' + esc(leaveTypeLabel) + ' (' + leaveStatusText + ')</span>';
+
+      var certPreviewHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
+      if (u.medicalCertUrl) {
+        certPreviewHtml = '<img src="' + u.medicalCertUrl + '" alt="CERT" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #3b82f6;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + u.medicalCertUrl + '\', \'เอกสาร/ใบรับรองแพทย์: ' + esc(u.name || u.empId) + '\', \'ประเภท: ' + esc(leaveTypeLabel) + ' | ' + (u.leaveDays || 1) + ' วัน\')" title="คลิกดูใบรับรองแพทย์/เอกสารแนบ">';
+      } else {
+        certPreviewHtml = '<div style="width:36px;height:36px;border-radius:8px;background:' + leaveBg + ';border:1px solid ' + leaveBorder + ';color:' + leaveColor + ';display:inline-flex;align-items:center;justify-content:center;font-size:15px" title="' + esc(leaveTypeLabel) + '">' + leaveIcon + '</div>';
+      }
+
+      var nameDisplay = (u.name || '-') + (u.nickname ? ' (' + u.nickname + ')' : '');
+      var branchDisplay = u.branchName || u.branchId || 'สำนักงานใหญ่';
+      var slotText = u.leaveSlot === 'MORNING' ? 'ครึ่งเช้า' : (u.leaveSlot === 'AFTERNOON' ? 'ครึ่งบ่าย' : 'เต็มวัน');
+
+      html += '<tr style="background:#f8fafc;border-left:3px solid #3b82f6">' +
+        '<td class="text-center" style="padding:4px"><span style="color:#cbd5e1;font-size:11px">-</span></td>' +
+        '<td class="text-center font-bold" style="color:#64748b">' + (rowIdx++) + '</td>' +
+        (isIndiv ? dateColHtml : '') +
+        '<td class="text-center" style="padding:4px">' + certPreviewHtml + '</td>' +
+        '<td class="text-center" style="padding:4px"><span style="color:#94a3b8;font-size:11px">-</span></td>' +
+        '<td class="font-bold" style="color:#1d4ed8;cursor:pointer" onclick="openLeaveDetailModal(' + u.leaveId + ', \'' + esc(u.empId) + '\')">' + (u.empId || '-') + '</td>' +
+        '<td>' +
+          '<div style="font-weight:700;color:#0f172a;cursor:pointer;display:inline-block" onclick="openLeaveDetailModal(' + u.leaveId + ', \'' + esc(u.empId) + '\')" title="คลิกเพื่อดูรายละเอียดใบลา">' +
+            esc(nameDisplay) + ' <i class="fa-solid fa-file-lines text-blue" style="font-size:11px;opacity:0.7"></i>' +
+          '</div>' +
+          '<div style="font-size:11px;color:#64748b">' + (u.position || '-') + '</div>' +
+          '<div style="font-size:11px;color:' + leaveColor + ';margin-top:2px;font-weight:600">' +
+            leaveIcon + ' ' + esc(leaveTypeLabel) + ' (' + (u.leaveDays || 1) + ' วัน ' + slotText + ')' +
+            (u.leaveReason ? ' - ' + esc(u.leaveReason) : '') +
+          '</div>' +
+        '</td>' +
+        '<td><span class="period-pill" style="font-size:10.5px">' + (u.dept || '-') + '</span></td>' +
+        '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
+        '<td class="text-center font-bold" style="color:#94a3b8;font-size:11px">-</td>' +
+        '<td class="text-center font-bold" style="color:#94a3b8;font-size:11px">-</td>' +
+        '<td class="text-center" style="font-size:11px;color:' + leaveColor + ';font-weight:700">ลา ' + (u.leaveDays || 1) + ' วัน</td>' +
+        '<td class="text-center">' + leaveStatusBadge + '</td>' +
+        '<td class="text-center" style="padding:4px;white-space:nowrap">' +
+          '<div style="display:inline-flex;gap:4px">' +
+            '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 7px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;border-radius:4px;font-weight:600" onclick="openLeaveDetailModal(' + u.leaveId + ', \'' + esc(u.empId) + '\')" title="ดูรายละเอียดใบลา">' +
+              '<i class="fa-solid fa-file-lines"></i> ดูใบลา' +
+            '</button>' +
+            (canManageLogs ? (
+              '<button type="button" class="btn btn-sm" style="font-size:11px;padding:3px 7px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0;border-radius:4px;font-weight:600" onclick="openAddAttendanceLogForEmp(\'' + esc(u.empId) + '\', \'' + esc(u.name || '') + '\')" title="ลงเวลาทำงานแทน">' +
+                '<i class="fa-solid fa-plus"></i> ลงเวลา' +
+              '</button>'
+            ) : '') +
+          '</div>' +
+        '</td>' +
+      '</tr>';
+
+    } else if (item.kind === 'ABSENT') {
+      var a = item.data;
+      var isAbsentPast = (a.statusType === 'ABSENT' || (!a.hasLeave && filterDateVal < bangkokToday && a.statusType !== 'HOLIDAY' && a.statusType !== 'SUNDAY_OFF'));
+      var isHoliday = (a.statusType === 'HOLIDAY' || a.statusType === 'SUNDAY_OFF');
+
+      var statusBadge = '';
+      if (isHoliday) {
+        statusBadge = '<span style="background:#f1f5f9;color:#475569;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #cbd5e1">⭐ วันหยุด ' + (a.holidayName ? '(' + esc(a.holidayName) + ')' : 'ประจำสัปดาห์') + '</span>';
+      } else if (isAbsentPast) {
+        statusBadge = '<span style="background:#fef2f2;color:#b91c1c;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #fecaca"><i class="fa-solid fa-triangle-exclamation"></i> ขาดงาน</span>';
+      } else {
+        statusBadge = '<span style="background:#fff7ed;color:#c2410c;font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid #fed7aa">⏳ ยังไม่ลงเวลา</span>';
+      }
+
+      var rowBorder = isAbsentPast ? 'border-left:3px solid #ef4444' : (isHoliday ? 'border-left:3px solid #cbd5e1' : 'border-left:3px solid #f97316');
+      var iconHtml = '<div style="width:36px;height:36px;border-radius:8px;background:' + (isAbsentPast ? '#fee2e2' : '#f1f5f9') + ';border:1px solid ' + (isAbsentPast ? '#fecaca' : '#e2e8f0') + ';color:' + (isAbsentPast ? '#dc2626' : '#94a3b8') + ';display:inline-flex;align-items:center;justify-content:center;font-size:14px"><i class="fa-solid fa-user-xmark"></i></div>';
+
+      var nameDisplay = (a.name || '-') + (a.nickname ? ' (' + a.nickname + ')' : '');
+      var branchDisplay = a.branchName || a.branchId || 'สำนักงานใหญ่';
+
+      html += '<tr style="background:' + (isAbsentPast ? '#fff5f5' : '#ffffff') + ';' + rowBorder + '">' +
+        '<td class="text-center" style="padding:4px"><span style="color:#cbd5e1;font-size:11px">-</span></td>' +
+        '<td class="text-center font-bold" style="color:#64748b">' + (rowIdx++) + '</td>' +
+        (isIndiv ? dateColHtml : '') +
+        '<td class="text-center" style="padding:4px">' + iconHtml + '</td>' +
+        '<td class="text-center" style="padding:4px"><span style="color:#94a3b8;font-size:11px">-</span></td>' +
+        '<td class="font-bold" style="' + (isAbsentPast ? 'color:#b91c1c;' : 'color:#64748b;') + '">' + (a.empId || '-') + '</td>' +
+        '<td>' +
+          '<div style="font-weight:700;color:#0f172a">' + esc(nameDisplay) + '</div>' +
+          '<div style="font-size:11px;color:#64748b">' + (a.position || '-') + '</div>' +
+          '<div style="font-size:10.5px;color:' + (isAbsentPast ? '#dc2626' : '#64748b') + ';margin-top:2px">' +
+            (isHoliday ? 'วันหยุด ไม่ต้องลงเวลา' : (isAbsentPast ? '⚠️ ไม่มีบันทึกเวลา และไม่มีใบลาที่อนุมัติ' : 'กะงาน: ' + (a.shiftText || '09:30 - 19:00 น.'))) +
+          '</div>' +
+        '</td>' +
+        '<td><span class="period-pill" style="font-size:10.5px">' + (a.dept || '-') + '</span></td>' +
+        '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
+        '<td class="text-center font-bold" style="color:#94a3b8;font-size:11px">-</td>' +
+        '<td class="text-center font-bold" style="color:#94a3b8;font-size:11px">-</td>' +
+        '<td class="text-center" style="font-size:11px;color:' + (isAbsentPast ? '#b91c1c;font-weight:700' : '#64748b') + '">' + (isAbsentPast ? 'ขาดงาน' : '-') + '</td>' +
+        '<td class="text-center">' + statusBadge + '</td>' +
+        '<td class="text-center" style="padding:4px;white-space:nowrap">' +
+          '<div style="display:inline-flex;gap:4px">' +
+            (canManageLogs ? (
+              '<button type="button" class="btn btn-sm btn-primary" style="font-size:11px;padding:3px 8px;font-weight:600" onclick="openAddAttendanceLogForEmp(\'' + esc(a.empId) + '\', \'' + esc(a.name || '') + '\')" title="ลงเวลาทำงานแทน">' +
+                '<i class="fa-solid fa-plus"></i> ลงเวลาแทน' +
+              '</button>'
+            ) : '') +
+            (a.phone ? (
+              '<a href="tel:' + a.phone + '" class="btn btn-sm btn-slate" style="font-size:11px;padding:3px 7px" title="โทร: ' + a.phone + '">' +
+                '<i class="fa-solid fa-phone text-green"></i>' +
+              '</a>'
+            ) : '') +
+          '</div>' +
+        '</td>' +
+      '</tr>';
+    }
   });
 
   tbody.innerHTML = html;

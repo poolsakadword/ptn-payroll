@@ -2967,7 +2967,8 @@ async function handleAction(db, action, params) {
         advQuery,
         approvedLeavesOnDate,
         pendingCountRow,
-        setRows
+        setRows,
+        targetHolidayRow
       ] = await Promise.all([
         db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] })),
         (reqType === 'ALL' || reqType === 'LEAVE')
@@ -2979,9 +2980,10 @@ async function handleAction(db, action, params) {
         (reqType === 'ALL' || reqType === 'ADVANCE')
           ? db.prepare(`SELECT ar.*, datetime(ar.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM advance_requests ar LEFT JOIN employees e ON ar.emp_id = e.emp_id ${advWhere} ORDER BY ar.created_at DESC LIMIT ${reqLimit}`).bind(...advBinds).all().catch(() => ({ results: [] }))
           : Promise.resolve({ results: [] }),
-        db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) = 'APPROVED' AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] })),
+        db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) IN ('APPROVED', 'PENDING') AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] })),
         db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 })),
-        db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] }))
+        db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] })),
+        db.prepare('SELECT holiday_name, holiday_type FROM company_holidays WHERE date = ?').bind(targetDate).first().catch(() => null)
       ]);
 
       const branches = branchRows.results || [];
@@ -2989,6 +2991,8 @@ async function handleAction(db, action, params) {
       const pendingOts = otsQuery.results || [];
       const pendingAdvances = advQuery.results || [];
       const pendingApprovals = pendingCountRow?.total_pending || 0;
+      const targetHoliday = targetHolidayRow || null;
+      const isSunday = (new Date(targetDate + 'T00:00:00').getDay() === 0);
 
       // 4. Map approved leaves on targetDate and check conflicts
       const leaveOnTargetDateMap = {};
@@ -3077,6 +3081,19 @@ async function handleAction(db, action, params) {
           const shiftEnd = empBranch.work_end_time || '19:00';
           const lr = leaveOnTargetDateMap[emp.emp_id];
 
+          let statusType = 'NOT_CLOCKED_IN';
+          if (lr) {
+            statusType = 'LEAVE';
+          } else if (targetHoliday) {
+            statusType = 'HOLIDAY';
+          } else if (isSunday) {
+            statusType = 'SUNDAY_OFF';
+          } else if (targetDate < today) {
+            statusType = 'ABSENT';
+          } else {
+            statusType = 'NOT_CLOCKED_IN';
+          }
+
           notClockedInList.push({
             empId: emp.emp_id,
             name: emp.full_name || '',
@@ -3091,11 +3108,16 @@ async function handleAction(db, action, params) {
             shiftEnd: shiftEnd,
             shiftText: `${shiftStart} - ${shiftEnd} น.`,
             hasLeave: Boolean(lr),
+            leaveId: lr ? lr.id : null,
+            leaveStatus: lr ? lr.status : null,
             leaveType: lr ? (lr.leave_type || 'ลาหยุด') : null,
             leaveReason: lr ? (lr.reason || '') : null,
             leaveDays: lr ? (lr.days_count || 1) : 0,
+            leaveSlot: lr ? (lr.time_slot || 'FULL') : 'FULL',
             medicalCertUrl: lr ? (lr.medical_cert_url || null) : null,
-            type: lr ? 'LEAVE' : 'NO_EXCUSE'
+            statusType: statusType,
+            holidayName: targetHoliday ? targetHoliday.holiday_name : null,
+            type: lr ? 'LEAVE' : (statusType === 'ABSENT' ? 'ABSENT' : 'NO_EXCUSE')
           });
         }
       }
@@ -3123,6 +3145,8 @@ async function handleAction(db, action, params) {
         clockedIn: clockedInList.length,
         notClockedIn: notClockedInList.length,
         late: lateList.length,
+        onLeave: notClockedInList.filter(x => x.hasLeave).length,
+        absent: notClockedInList.filter(x => x.statusType === 'ABSENT').length,
         pendingApprovals
       };
 
@@ -3196,7 +3220,9 @@ async function handleAction(db, action, params) {
           clockedInList,
           notClockedInList,
           lateList,
-          branchSummary
+          branchSummary,
+          targetHoliday: targetHoliday ? targetHoliday.holiday_name : null,
+          isSunday
         }
       };
     }

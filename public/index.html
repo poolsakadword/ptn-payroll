@@ -761,6 +761,29 @@
                   ยกเลิก
                 </button>
               </div>
+            <!-- DAILY ATTENDANCE FILTER BAR (ALL / PRESENT / LATE / LEAVE / ABSENT) -->
+            <div id="attDailyFilterBar" style="display:none;margin-bottom:12px;padding:8px 12px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap" id="attDailyFilterButtons">
+                <button type="button" class="btn btn-sm" id="btnAttFilter_ALL" onclick="setAttendanceTableFilter('ALL')" style="background:#2563eb;color:#ffffff;border:1px solid #1d4ed8;font-weight:700;font-size:11.5px;padding:4px 11px;border-radius:20px;cursor:pointer;box-shadow:0 1px 2px rgba(37,99,235,0.2)">
+                  👥 ทั้งหมด (<span id="txtAttCountAll">0</span>)
+                </button>
+                <button type="button" class="btn btn-sm btn-slate" id="btnAttFilter_PRESENT" onclick="setAttendanceTableFilter('PRESENT')" style="font-weight:600;font-size:11.5px;padding:4px 11px;border-radius:20px;cursor:pointer">
+                  🟢 มาทำงาน (<span id="txtAttCountPresent">0</span>)
+                </button>
+                <button type="button" class="btn btn-sm btn-slate" id="btnAttFilter_LATE" onclick="setAttendanceTableFilter('LATE')" style="font-weight:600;font-size:11.5px;padding:4px 11px;border-radius:20px;cursor:pointer">
+                  🟠 มาสาย (<span id="txtAttCountLate">0</span>)
+                </button>
+                <button type="button" class="btn btn-sm btn-slate" id="btnAttFilter_LEAVE" onclick="setAttendanceTableFilter('LEAVE')" style="font-weight:600;font-size:11.5px;padding:4px 11px;border-radius:20px;cursor:pointer">
+                  🏖️ ลางาน (<span id="txtAttCountLeave">0</span>)
+                </button>
+                <button type="button" class="btn btn-sm btn-slate" id="btnAttFilter_ABSENT" onclick="setAttendanceTableFilter('ABSENT')" style="font-weight:600;font-size:11.5px;padding:4px 11px;border-radius:20px;cursor:pointer">
+                  🔴 ขาดงาน / ยังไม่เข้า (<span id="txtAttCountAbsent">0</span>)
+                </button>
+              </div>
+              <div style="font-size:11px;color:#64748b;display:flex;align-items:center;gap:6px">
+                <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#10b981"></span>
+                <span id="attDailyFilterSummaryText">แสดงรายชื่อพนักงานประจำวันทั้งหมด (รวมคนลาและขาดงาน)</span>
+              </div>
             </div>
 
             <div class="table-wrapper">
@@ -5776,6 +5799,6 @@
   <div id="payrollSummaryPrintContainer" style="display:none"></div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.47"></script>
+  <script src="js/app.js?v=9.48"></script>
 </body>
 </html>
