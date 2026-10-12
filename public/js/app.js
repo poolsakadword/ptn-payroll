@@ -3356,9 +3356,11 @@ function openAddEmployeeModal() {
   if (document.getElementById('mDiligenceAllowance')) document.getElementById('mDiligenceAllowance').value = '';
   var isAttendanceExemptCheck = document.getElementById('mIsAttendanceExempt');
   if (isAttendanceExemptCheck) isAttendanceExemptCheck.checked = false;
+  if (document.getElementById('mResignDate')) document.getElementById('mResignDate').value = '';
   updateBirthDateThaiHint();
   updateJoinDateThaiHint();
   updateProbEndDateThaiHint();
+  updateResignDateThaiHint();
   openModal('empModal');
 }
 
@@ -3407,10 +3409,12 @@ function openEditEmployeeModal(empId) {
   if (document.getElementById('mStatus')) document.getElementById('mStatus').value = e.status || 'Active';
   if (document.getElementById('mProbationDays')) document.getElementById('mProbationDays').value = e.probationDays || 119;
   if (document.getElementById('mProbationEndDate')) document.getElementById('mProbationEndDate').value = e.probationEndDate || '';
+  if (document.getElementById('mResignDate')) document.getElementById('mResignDate').value = e.resignDate || '';
   onEmployeeStatusChanged();
   updateBirthDateThaiHint();
   updateJoinDateThaiHint();
   updateProbEndDateThaiHint();
+  updateResignDateThaiHint();
   var hasPf = (e.pfRate !== undefined && e.pfRate !== null && Number(e.pfRate) > 0);
   var hasPfCheck = document.getElementById('mHasPf');
   if (hasPfCheck) hasPfCheck.checked = hasPf;
@@ -3481,6 +3485,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
     status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
     probationDays: (document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119),
     probationEndDate: (document.getElementById('mProbationEndDate') ? document.getElementById('mProbationEndDate').value : ''),
+    resignDate: (document.getElementById('mResignDate') ? document.getElementById('mResignDate').value : ''),
     baseSalary: baseSal,
     bankName: document.getElementById('mBankName').value.trim(),
     bankAccount: document.getElementById('mBankAccount').value.trim(),
@@ -5718,8 +5723,15 @@ function onEmployeeStatusChanged() {
   if (sec) {
     sec.style.display = (st === 'Probation') ? 'block' : 'none';
   }
+  var resSec = document.getElementById('resignedConfigSection');
+  if (resSec) {
+    resSec.style.display = (st === 'Resigned') ? 'block' : 'none';
+  }
   if (st === 'Probation') {
     calculateProbationEndDate();
+  }
+  if (st === 'Resigned') {
+    updateResignDateThaiHint();
   }
 }
 
@@ -11999,6 +12011,18 @@ function updateProbEndDateThaiHint() {
   if (el && hint) {
     if (el.value) {
       hint.textContent = '📅 ครบโปร (พ.ศ.): ' + formatDateThaiBE(el.value);
+    } else {
+      hint.textContent = '';
+    }
+  }
+}
+
+function updateResignDateThaiHint() {
+  var el = document.getElementById('mResignDate');
+  var hint = document.getElementById('mResignDateThaiHint');
+  if (el && hint) {
+    if (el.value) {
+      hint.textContent = '📅 วันที่ลาออก (พ.ศ.): ' + formatDateThaiBE(el.value);
     } else {
       hint.textContent = '';
     }

@@ -485,6 +485,7 @@ async function ensureGlobalSchemas(db) {
     // Consolidated Core Migrations (Single run per cold start to eliminate D1 lock contention)
     await db.prepare('ALTER TABLE users ADD COLUMN permissions TEXT').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN status TEXT DEFAULT "Active"').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN resign_date TEXT').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN probation_days INTEGER DEFAULT 119').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN probation_end_date TEXT').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN photo_url TEXT').run().catch(() => {});
@@ -1046,17 +1047,45 @@ function getActualWorkingDaysInCutoff(startDate, endDate, holidayDatesSet = new 
   return count > 0 ? count : 26;
 }
 
-function calculateNewHireProRataRatio(joinDateStr, startDate, endDate, holidayDatesSet = new Set()) {
-  if (!joinDateStr || joinDateStr <= startDate) {
-    return { isMidPeriod: false, notStarted: false, ratio: 1.0, eligibleDays: 0, totalDays: 0 };
-  }
-  if (joinDateStr > endDate) {
-    return { isMidPeriod: false, notStarted: true, ratio: 0, eligibleDays: 0, totalDays: 0 };
-  }
+function calculatePeriodProRataRatio(joinDateStr, resignDateStr, startDate, endDate, holidayDatesSet = new Set()) {
   const totalDays = getActualWorkingDaysInCutoff(startDate, endDate, holidayDatesSet);
-  const eligibleDays = getActualWorkingDaysInCutoff(joinDateStr, endDate, holidayDatesSet);
+  if (totalDays <= 0) return { isMidPeriod: false, notStarted: false, ratio: 1.0, eligibleDays: 26, totalDays: 26 };
+
+  let effStart = startDate;
+  if (joinDateStr && joinDateStr > startDate) {
+    effStart = joinDateStr;
+  }
+
+  let effEnd = endDate;
+  if (resignDateStr && resignDateStr < endDate) {
+    effEnd = resignDateStr;
+  }
+
+  if (joinDateStr && joinDateStr > endDate) {
+    return { isMidPeriod: false, notStarted: true, isExitMidPeriod: false, ratio: 0, eligibleDays: 0, totalDays };
+  }
+  if (resignDateStr && resignDateStr < startDate) {
+    return { isMidPeriod: false, notStarted: false, isAlreadyResigned: true, isExitMidPeriod: true, ratio: 0, eligibleDays: 0, totalDays };
+  }
+  if (effStart > effEnd) {
+    return { isMidPeriod: true, notStarted: false, isExitMidPeriod: Boolean(resignDateStr && resignDateStr < endDate), ratio: 0, eligibleDays: 0, totalDays };
+  }
+
+  const isNewHireMidPeriod = Boolean(joinDateStr && joinDateStr > startDate);
+  const isExitMidPeriod = Boolean(resignDateStr && resignDateStr < endDate);
+  const isMidPeriod = isNewHireMidPeriod || isExitMidPeriod;
+
+  if (!isMidPeriod) {
+    return { isMidPeriod: false, notStarted: false, isNewHireMidPeriod: false, isExitMidPeriod: false, ratio: 1.0, eligibleDays: totalDays, totalDays };
+  }
+
+  const eligibleDays = getActualWorkingDaysInCutoff(effStart, effEnd, holidayDatesSet);
   const ratio = totalDays > 0 ? (eligibleDays / totalDays) : 1.0;
-  return { isMidPeriod: true, notStarted: false, ratio, eligibleDays, totalDays };
+  return { isMidPeriod: true, notStarted: false, isNewHireMidPeriod, isExitMidPeriod, ratio, eligibleDays, totalDays };
+}
+
+function calculateNewHireProRataRatio(joinDateStr, startDate, endDate, holidayDatesSet = new Set()) {
+  return calculatePeriodProRataRatio(joinDateStr, null, startDate, endDate, holidayDatesSet);
 }
 
 async function getCompanyHolidayDatesSet(db, startDate, endDate) {
@@ -1235,6 +1264,7 @@ async function handleAction(db, action, params) {
         probationDays: Number(e.probation_days) || 119,
         probationEndDate: e.probation_end_date || '',
         remark: e.remark || '',
+        resignDate: e.resign_date || '',
         diligenceAllowance: (e.diligence_allowance !== null && e.diligence_allowance !== undefined && !isNaN(Number(e.diligence_allowance))) ? Number(e.diligence_allowance) : null,
         isDeviceBound: !!deviceMap[e.emp_id],
         boundDevice: deviceMap[e.emp_id] || null
@@ -1582,11 +1612,12 @@ async function handleAction(db, action, params) {
       const diligenceAllowanceVal = (emp.diligenceAllowance !== undefined && emp.diligenceAllowance !== null && emp.diligenceAllowance !== '' && !isNaN(Number(emp.diligenceAllowance)))
         ? Number(emp.diligenceAllowance)
         : null;
+      const cleanResignDate = emp.resignDate ? normalizeDateToIso(emp.resignDate) : null;
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -1600,7 +1631,8 @@ async function handleAction(db, action, params) {
         isOtEligibleVal,
         isUndertimeExemptVal,
         diligenceAllowanceVal,
-        isAttendanceExemptVal
+        isAttendanceExemptVal,
+        cleanResignDate
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period and period is not locked
@@ -1986,6 +2018,7 @@ async function handleAction(db, action, params) {
       let earlyDeductMap = {};
       let employeeHasLogs = {};
       let logsByEmpDate = {};
+      let lastClockInDateByEmp = {};
       let timeLogsList = [];
       let empLateMinutes = {};
       let empLateCount = {};
@@ -2005,6 +2038,11 @@ async function handleAction(db, action, params) {
         for (const row of timeLogsList) {
           employeeHasLogs[row.emp_id] = true;
           logsByEmpDate[`${row.emp_id}_${row.date}`] = row;
+          if (row.clock_in) {
+            if (!lastClockInDateByEmp[row.emp_id] || row.date > lastClockInDateByEmp[row.emp_id]) {
+              lastClockInDateByEmp[row.emp_id] = row.date;
+            }
+          }
 
           // Merge any OT logged directly in time_logs if not already in otMap (only if eligible)
           const empForOt = employees.find(e => e.emp_id === row.emp_id);
@@ -2317,7 +2355,7 @@ async function handleAction(db, action, params) {
       }
 
       for (const emp of employees) {
-        if (emp.status === 'Resigned' && !existingMap[emp.emp_id]) {
+        if (emp.status === 'Resigned' && !existingMap[emp.emp_id] && !targetEmpId) {
           continue;
         }
         const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
@@ -2325,12 +2363,23 @@ async function handleAction(db, action, params) {
           continue; // Not started yet
         }
 
+        // Determine resignation date (from employee profile or auto-detect from last clock-in in this period)
+        let resignDateStr = emp.resign_date ? normalizeDateToIso(emp.resign_date) : '';
+        if (!resignDateStr && emp.status === 'Resigned' && lastClockInDateByEmp[emp.emp_id]) {
+          resignDateStr = lastClockInDateByEmp[emp.emp_id];
+        }
+
+        // If resigned prior to this period cutoff, and no manual existing record:
+        if (resignDateStr && resignDateStr < startDate && !existingMap[emp.emp_id]) {
+          continue;
+        }
+
         if (!targetEmpId) {
           nextNo++;
         }
         syncedCount++;
 
-        const proRata = calculateNewHireProRataRatio(joinDateStr, startDate, endDate, holidayDatesSet);
+        const proRata = calculatePeriodProRataRatio(joinDateStr, resignDateStr, startDate, endDate, holidayDatesSet);
         const contractBaseSal = Number(emp.base_salary) || 0;
         const effectiveBaseSal = proRata.isMidPeriod
           ? (Math.round((contractBaseSal * proRata.ratio) * 100) / 100)
@@ -2339,7 +2388,7 @@ async function handleAction(db, action, params) {
         const exist = existingMap[emp.emp_id] || {};
         let baseSal = effectiveBaseSal;
         if (exist.base_salary !== undefined && exist.base_salary !== null && Number(exist.base_salary) > 0) {
-          if (proRata.isMidPeriod && Number(exist.base_salary) === contractBaseSal) {
+          if (proRata.isMidPeriod && (Number(exist.base_salary) === contractBaseSal || emp.status === 'Resigned')) {
             baseSal = effectiveBaseSal;
           } else {
             baseSal = Number(exist.base_salary);
@@ -2495,6 +2544,9 @@ async function handleAction(db, action, params) {
             if (calcEarlyDeduct > 0) {
               const mHrs = Math.round((missingHoursMap[emp.emp_id] || 0) * 100) / 100;
               empDisqualifyReasons.push(`ออกก่อนเวลา/ขาดช่วง ${mHrs} ชม.`);
+            }
+            if (emp.status === 'Resigned' || (proRata && proRata.isExitMidPeriod)) {
+              empDisqualifyReasons.push('พนักงานลาออกระหว่างงวด');
             }
 
             // Check late arrivals in non-Sunday logs
@@ -6043,11 +6095,12 @@ async function calculateAndSavePayroll(db, period, explicitWorkDays) {
 
     const contractBaseSal = Number(emp.base_salary) || 0;
     const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
-    const proRata = calculateNewHireProRataRatio(joinDateStr, dates.startDate, dates.endDate, holidayDatesSet);
+    const resignDateStr = emp.resign_date ? normalizeDateToIso(emp.resign_date) : '';
+    const proRata = calculatePeriodProRataRatio(joinDateStr, resignDateStr, dates.startDate, dates.endDate, holidayDatesSet);
 
     let baseSal = Number(inp.base_salary > 0 ? inp.base_salary : contractBaseSal);
-    // If mid-period new hire and input base salary equals full contract salary, apply pro-rata:
-    if (proRata.isMidPeriod && (baseSal === contractBaseSal || !inp.base_salary)) {
+    // If mid-period (new hire or resigned) and input base salary equals full contract salary, apply pro-rata:
+    if (proRata.isMidPeriod && (baseSal === contractBaseSal || !inp.base_salary || (proRata.isExitMidPeriod && baseSal > (Math.round((contractBaseSal * proRata.ratio) * 100) / 100)))) {
       baseSal = Math.round((contractBaseSal * proRata.ratio) * 100) / 100;
     }
 

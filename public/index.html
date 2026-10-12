@@ -3533,6 +3533,27 @@
                 </div>
               </div>
             </div>
+
+            <!-- Resignation Details Configuration Section -->
+            <div id="resignedConfigSection" style="display:none;background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--radius-md);padding:12px 14px;margin-bottom:12px">
+              <div style="font-weight:700;color:#b91c1c;font-size:12px;margin-bottom:8px">
+                <i class="fa-solid fa-person-walking-arrow-right"></i> ข้อมูลการลาออก (Resignation Details)
+              </div>
+              <div class="form-row-2">
+                <div class="form-group">
+                  <label style="color:#b91c1c;font-weight:700">วันที่ลาออก / วันทำงานสุดท้าย</label>
+                  <input type="date" id="mResignDate" onchange="updateResignDateThaiHint()" style="background:#fff;border-color:#fca5a5;color:#991b1b;font-weight:700">
+                  <div id="mResignDateThaiHint" style="font-size:11px;color:#b91c1c;font-weight:600;margin-top:3px"></div>
+                </div>
+                <div class="form-group">
+                  <label style="color:#64748b">การคิดเงินเดือนงวดที่ลาออก (Auto Pro-rata)</label>
+                  <div style="padding:8px 10px;background:#ffffff;border:1px dashed #f87171;border-radius:var(--radius-md);font-size:11.5px;color:#991b1b;line-height:1.4">
+                    <i class="fa-solid fa-calculator"></i> ระบบจะนำวันที่ลาออกไปเฉลี่ย Pro-rata ตามวันทำงานจริง (แบบที่ 1) ให้อัตโนมัติ
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div id="empModalFinancialSection">
               <div class="form-row-2">
                 <div class="form-group">
@@ -5801,6 +5822,6 @@
   <div id="payrollSummaryPrintContainer" style="display:none"></div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.51"></script>
+  <script src="js/app.js?v=9.53"></script>
 </body>
 </html>
