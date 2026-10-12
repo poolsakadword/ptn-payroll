@@ -3215,9 +3215,17 @@
           <div class="form-grid">
             <!-- 1. Employee Selector & Remark -->
             <div class="form-row-3">
-              <div class="form-group">
-                <label style="font-weight:700;color:#0f172a">รหัสพนักงาน *</label>
-                <select id="miEmpId" onchange="onInputEmpSelectChanged()" required style="font-weight:600"></select>
+              <div class="form-group" style="position:relative">
+                <label style="font-weight:700;color:#0f172a;display:flex;justify-content:space-between;align-items:center">
+                  <span>รหัสพนักงาน *</span>
+                  <span style="font-size:11px;font-weight:normal;color:#0284c7"><i class="fa-solid fa-magnifying-glass"></i> พิมพ์ค้นหาได้</span>
+                </label>
+                <div id="miEmpCombobox" style="position:relative">
+                  <input type="text" id="miEmpSearch" placeholder="🔍 พิมพ์รหัส, ชื่อ หรือชื่อเล่น..." autocomplete="off" oninput="onMiEmpSearchInput(this.value)" onfocus="openMiEmpDropdown()" style="font-weight:600;padding-right:28px">
+                  <span onclick="toggleMiEmpDropdown()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:#64748b;padding:4px"><i class="fa-solid fa-chevron-down" style="font-size:11px"></i></span>
+                  <div id="miEmpDropdownList" style="display:none;position:absolute;top:100%;left:0;right:0;max-height:260px;overflow-y:auto;background:#fff;border:1.5px solid #cbd5e1;border-radius:6px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.15), 0 4px 6px -4px rgba(0,0,0,0.1);z-index:9999;margin-top:3px"></div>
+                </div>
+                <select id="miEmpId" onchange="onInputEmpSelectChanged()" required style="display:none"></select>
               </div>
               <div class="form-group">
                 <label style="font-weight:700;color:#0f172a">ชื่อ-นามสกุล</label>

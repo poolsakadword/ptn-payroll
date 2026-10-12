@@ -1823,18 +1823,33 @@ async function handleAction(db, action, params) {
         if (r.emp_id && Number(r.carried_debt) > 0) prevDebtMap[r.emp_id] = Number(r.carried_debt);
       }
 
+      // Check which employees have time logs in this cutoff window
+      const activeLogsQuery = await db.prepare(`
+        SELECT DISTINCT emp_id FROM time_logs WHERE date BETWEEN ? AND ?
+      `).bind(dates.startDate, dates.endDate).all().catch(() => ({ results: [] }));
+      const activeLogsEmpSet = new Set((activeLogsQuery.results || []).map(r => r.emp_id));
+
       let added = 0;
       let nextNo = 0;
 
       for (const emp of employees) {
-        if (emp.status === 'Resigned') continue;
+        if (emp.status === 'Resigned') {
+          const resignDateStr = emp.resign_date ? normalizeDateToIso(emp.resign_date) : '';
+          const hasResignInPeriod = resignDateStr && resignDateStr >= dates.startDate && resignDateStr <= dates.endDate;
+          const hasLogsInPeriod = activeLogsEmpSet.has(emp.emp_id);
+          const alreadyInPeriod = Boolean(existingMap[emp.emp_id]);
+          if (!hasResignInPeriod && !hasLogsInPeriod && !alreadyInPeriod) {
+            continue; // Skip past resigned employees
+          }
+        }
         const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
         if (joinDateStr && joinDateStr > dates.endDate) continue; // Not started yet
 
         nextNo++;
         added++;
 
-        const proRata = calculateNewHireProRataRatio(joinDateStr, dates.startDate, dates.endDate, holidayDatesSet);
+        let resignDateStr = emp.resign_date ? normalizeDateToIso(emp.resign_date) : '';
+        const proRata = calculatePeriodProRataRatio(joinDateStr, resignDateStr, dates.startDate, dates.endDate, holidayDatesSet);
         const contractBaseSal = Number(emp.base_salary) || 0;
         const effectiveBaseSal = proRata.isMidPeriod
           ? (Math.round((contractBaseSal * proRata.ratio) * 100) / 100)
@@ -1843,7 +1858,7 @@ async function handleAction(db, action, params) {
         const exist = existingMap[emp.emp_id] || {};
         let baseSal = effectiveBaseSal;
         if (exist.base_salary !== undefined && exist.base_salary !== null && Number(exist.base_salary) > 0) {
-          if (proRata.isMidPeriod && Number(exist.base_salary) === contractBaseSal) {
+          if (proRata.isMidPeriod && (Number(exist.base_salary) === contractBaseSal || emp.status === 'Resigned')) {
             baseSal = effectiveBaseSal;
           } else {
             baseSal = Number(exist.base_salary);

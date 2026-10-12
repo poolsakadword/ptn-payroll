@@ -2826,9 +2826,13 @@ function openAddInputModal() {
     showToast('งวด ' + State.period + ' ถูกปิดและล็อคแล้ว ไม่อนุญาตให้เพิ่มข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ', 'error');
     return;
   }
+  refreshAllEmployeeSelects();
   document.getElementById('inputModalTitle').innerHTML = '<i class="fa-solid fa-calendar-plus"></i> บันทึกข้อมูลประจำงวด';
   document.getElementById('inputOrigEmpId').value = '';
   document.getElementById('miEmpId').value = '';
+  if (document.getElementById('miEmpSearch')) document.getElementById('miEmpSearch').value = '';
+  var ddList = document.getElementById('miEmpDropdownList');
+  if (ddList) ddList.style.display = 'none';
   document.getElementById('miEmpName').value = '';
   if (document.getElementById('miEmpRemark')) document.getElementById('miEmpRemark').value = '';
   document.getElementById('miBaseSalary').value = '';
@@ -2863,12 +2867,19 @@ function openEditInputModal(empId) {
   var r = State.inputRecords.find(function(x) { return x.empId === empId; });
   if (!r) return;
 
+  refreshAllEmployeeSelects();
   document.getElementById('inputModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลประจำงวด';
   document.getElementById('inputOrigEmpId').value = r.empId;
   document.getElementById('miEmpId').value = r.empId;
   document.getElementById('miEmpName').value = r.empName || '';
   var empMatch = State.employees.find(function(e) { return e.empId === r.empId; });
   if (document.getElementById('miEmpRemark')) document.getElementById('miEmpRemark').value = (empMatch && empMatch.remark) ? empMatch.remark : '-';
+  if (document.getElementById('miEmpSearch')) {
+    var nickStr = (empMatch && empMatch.nickname) ? ' (' + empMatch.nickname + ')' : '';
+    document.getElementById('miEmpSearch').value = '[' + r.empId + '] ' + (r.empName || (empMatch ? empMatch.fullName : '')) + nickStr;
+  }
+  var ddList = document.getElementById('miEmpDropdownList');
+  if (ddList) ddList.style.display = 'none';
   document.getElementById('miBaseSalary').value = r.baseSalary || '';
   var inpPfRate = (r.pfRate !== null && r.pfRate !== undefined && !isNaN(Number(r.pfRate))) ? Number(r.pfRate) : 0;
   document.getElementById('miPfRate').value = inpPfRate;
@@ -2899,12 +2910,134 @@ function openEditInputModal(empId) {
   openModal('inputModal');
 }
 
+// ==============================================================================
+// MONTHLY INPUT MODAL EMPLOYEE SEARCHABLE COMBOBOX
+// ==============================================================================
+function renderMiEmpDropdown(query) {
+  var listEl = document.getElementById('miEmpDropdownList');
+  if (!listEl) return;
+  var employees = State.employees || [];
+  var q = (query || '').trim().toLowerCase();
+
+  var filtered = employees.filter(function(e) {
+    if (!q) return true;
+    var id = String(e.empId || e.emp_id || '').toLowerCase();
+    var name = String(e.fullName || e.name || '').toLowerCase();
+    var nick = String(e.nickname || '').toLowerCase();
+    var dept = String(e.department || '').toLowerCase();
+    return id.indexOf(q) !== -1 || name.indexOf(q) !== -1 || nick.indexOf(q) !== -1 || dept.indexOf(q) !== -1;
+  }).sort(function(a, b) {
+    var aRes = String(a.status || '').trim().toUpperCase() === 'RESIGNED';
+    var bRes = String(b.status || '').trim().toUpperCase() === 'RESIGNED';
+    if (aRes !== bRes) return aRes ? 1 : -1;
+    return String(a.empId || '').localeCompare(String(b.empId || ''));
+  });
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted, #888); font-size: 13px;">ไม่พบพนักงานที่ค้นหา</div>';
+    listEl.style.display = 'block';
+    return;
+  }
+
+  var curSelected = (document.getElementById('miEmpId') || {}).value || '';
+  var html = '';
+  filtered.forEach(function(e) {
+    var id = e.empId || e.emp_id || '';
+    var name = e.fullName || e.name || '';
+    var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+    var dept = e.department || '-';
+    var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+    var isSel = (id === curSelected);
+    var resignNotice = (isResigned && (e.resignDate || e.resign_date)) ? ' • ออก ' + formatDate(e.resignDate || e.resign_date) : '';
+
+    html += '<div class="combobox-item" onclick="selectMiEmp(\'' + esc(id) + '\')" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color, #f0f0f0); display: flex; align-items: center; justify-content: space-between; ' + (isSel ? 'background: rgba(37,99,235,0.08); font-weight: 600;' : '') + '" onmouseover="this.style.background=\'rgba(0,0,0,0.04)\'" onmouseout="this.style.background=\'' + (isSel ? 'rgba(37,99,235,0.08)' : 'transparent') + '\'">'
+      + '<div>'
+      +   '<div style="display: flex; align-items: center; gap: 8px;">'
+      +     '<span style="font-family: monospace; font-weight: 700; color: var(--primary, #2563eb);">' + esc(id) + '</span>'
+      +     '<span style="color: var(--text, #1e293b);">' + esc(name) + nick + '</span>'
+      +   '</div>'
+      +   '<div style="font-size: 11px; color: var(--text-muted, #64748b); margin-top: 2px;">'
+      +     'แผนก: ' + esc(dept) + resignNotice
+      +   '</div>'
+      + '</div>'
+      + '<div>'
+      +   (isResigned 
+            ? '<span class="badge" style="background: #fee2e2; color: #dc2626; font-size: 10px; padding: 2px 6px; border-radius: 4px;">ลาออก</span>'
+            : '<span class="badge" style="background: #dcfce7; color: #16a34a; font-size: 10px; padding: 2px 6px; border-radius: 4px;">ปกติ</span>')
+      + '</div>'
+      + '</div>';
+  });
+
+  listEl.innerHTML = html;
+  listEl.style.display = 'block';
+}
+
+function selectMiEmp(empId) {
+  var sel = document.getElementById('miEmpId');
+  var searchInput = document.getElementById('miEmpSearch');
+  var listEl = document.getElementById('miEmpDropdownList');
+  if (listEl) listEl.style.display = 'none';
+
+  if (!empId) {
+    if (sel) sel.value = '';
+    if (searchInput) searchInput.value = '';
+    onInputEmpSelectChanged();
+    return;
+  }
+
+  if (sel) {
+    sel.value = empId;
+  }
+  var emp = (State.employees || []).find(function(e) { return (e.empId || e.emp_id) === empId; });
+  if (searchInput && emp) {
+    var nick = emp.nickname ? ' (' + emp.nickname + ')' : '';
+    var isRes = String(emp.status || '').trim().toUpperCase() === 'RESIGNED';
+    searchInput.value = emp.empId + ' - ' + (emp.fullName || emp.name || '') + nick + (isRes ? ' [ลาออก]' : '');
+  }
+  onInputEmpSelectChanged();
+}
+
+function onMiEmpSearchInput(val) {
+  renderMiEmpDropdown(val);
+}
+
+function openMiEmpDropdown() {
+  renderMiEmpDropdown('');
+}
+
+function toggleMiEmpDropdown() {
+  var listEl = document.getElementById('miEmpDropdownList');
+  if (!listEl) return;
+  if (listEl.style.display === 'block') {
+    listEl.style.display = 'none';
+  } else {
+    openMiEmpDropdown();
+  }
+}
+
+// Global click outside listener for miEmpCombobox
+document.addEventListener('click', function(evt) {
+  var combobox = document.getElementById('miEmpCombobox');
+  var listEl = document.getElementById('miEmpDropdownList');
+  if (listEl && listEl.style.display === 'block') {
+    if (combobox && !combobox.contains(evt.target)) {
+      listEl.style.display = 'none';
+    }
+  }
+});
+
 function onInputEmpSelectChanged() {
   var sel = document.getElementById('miEmpId');
   var opt = sel.options[sel.selectedIndex];
   if (opt && opt.value) {
     var empId = opt.value;
     var emp = State.employees.find(function(e) { return e.empId === empId; });
+    var searchInput = document.getElementById('miEmpSearch');
+    if (searchInput && emp) {
+      var nick = emp.nickname ? ' (' + emp.nickname + ')' : '';
+      var isRes = String(emp.status || '').trim().toUpperCase() === 'RESIGNED';
+      searchInput.value = emp.empId + ' - ' + (emp.fullName || emp.name || '') + nick + (isRes ? ' [ลาออก]' : '');
+    }
     document.getElementById('miEmpName').value = opt.getAttribute('data-name') || (emp ? emp.fullName : '');
     var remVal = opt.getAttribute('data-remark') || (emp ? emp.remark : '');
     if (document.getElementById('miEmpRemark')) document.getElementById('miEmpRemark').value = remVal ? remVal : '-';
@@ -2927,6 +3060,8 @@ function onInputEmpSelectChanged() {
     updateModalDailyRate(sal);
   } else {
     document.getElementById('miEmpName').value = '';
+    var searchInput = document.getElementById('miEmpSearch');
+    if (searchInput) searchInput.value = '';
   }
 }
 
@@ -3155,13 +3290,20 @@ function refreshAllEmployeeSelects() {
   if (miSel) {
     var curMiVal = miSel.value;
     var miOpts = '<option value="">-- เลือกรหัสพนักงาน --</option>';
-    workingEmps.forEach(function(e) {
+    var allEmpsSorted = (State.employees || []).slice().sort(function(a, b) {
+      var idA = String(a.empId || a.emp_id || '');
+      var idB = String(b.empId || b.emp_id || '');
+      return idA.localeCompare(idB);
+    });
+    allEmpsSorted.forEach(function(e) {
       var id = e.empId || e.emp_id || '';
       var name = e.fullName || e.full_name || e.name || '';
       var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+      var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      var resTag = isResigned ? ' [ลาออก]' : '';
       var empPf = (e.pfRate !== null && e.pfRate !== undefined && !isNaN(Number(e.pfRate))) ? Number(e.pfRate) : 0;
       var empSso = (e.defaultSso !== null && e.defaultSso !== undefined && !isNaN(Number(e.defaultSso))) ? Number(e.defaultSso) : 0;
-      miOpts += '<option value="' + esc(id) + '" data-name="' + esc(name) + '" data-salary="' + (e.baseSalary || 0) + '" data-pf="' + empPf + '" data-sso="' + empSso + '" data-tax="' + (e.defaultTax || 0) + '" data-remark="' + esc(e.remark || '') + '">' + esc(id) + ' - ' + esc(name) + nick + '</option>';
+      miOpts += '<option value="' + esc(id) + '" data-name="' + esc(name) + '" data-salary="' + (e.baseSalary || 0) + '" data-pf="' + empPf + '" data-sso="' + empSso + '" data-tax="' + (e.defaultTax || 0) + '" data-remark="' + esc(e.remark || '') + '">' + esc(id) + ' - ' + esc(name) + nick + resTag + '</option>';
     });
     miSel.innerHTML = miOpts;
     if (curMiVal) miSel.value = curMiVal;
