@@ -2948,10 +2948,15 @@ function renderMiEmpDropdown(query) {
     var dept = e.department || '-';
     var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
     var isSel = (id === curSelected);
-    var resignNotice = (isResigned && (e.resignDate || e.resign_date)) ? ' • ออก ' + formatDate(e.resignDate || e.resign_date) : '';
+    var rDate = e.resignDate || e.resign_date;
+    var resignNotice = '';
+    if (isResigned && rDate) {
+      var dFormatted = (typeof formatDateThaiBE === 'function') ? formatDateThaiBE(rDate) : rDate;
+      resignNotice = ' • ออก ' + dFormatted;
+    }
 
-    html += '<div class="combobox-item" onclick="selectMiEmp(\'' + esc(id) + '\')" style="padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color, #f0f0f0); display: flex; align-items: center; justify-content: space-between; ' + (isSel ? 'background: rgba(37,99,235,0.08); font-weight: 600;' : '') + '" onmouseover="this.style.background=\'rgba(0,0,0,0.04)\'" onmouseout="this.style.background=\'' + (isSel ? 'rgba(37,99,235,0.08)' : 'transparent') + '\'">'
-      + '<div>'
+    html += '<div class="combobox-item" onmousedown="selectMiEmp(\'' + esc(id) + '\')" onclick="selectMiEmp(\'' + esc(id) + '\')" style="padding: 9px 12px; cursor: pointer; border-bottom: 1px solid var(--border-color, #f1f5f9); display: flex; align-items: center; justify-content: space-between; ' + (isSel ? 'background: rgba(37,99,235,0.08); font-weight: 600;' : '') + '" onmouseover="this.style.background=\'rgba(0,0,0,0.04)\'" onmouseout="this.style.background=\'' + (isSel ? 'rgba(37,99,235,0.08)' : 'transparent') + '\'">'
+      + '<div style="pointer-events: none;">'
       +   '<div style="display: flex; align-items: center; gap: 8px;">'
       +     '<span style="font-family: monospace; font-weight: 700; color: var(--primary, #2563eb);">' + esc(id) + '</span>'
       +     '<span style="color: var(--text, #1e293b);">' + esc(name) + nick + '</span>'
@@ -2960,7 +2965,7 @@ function renderMiEmpDropdown(query) {
       +     'แผนก: ' + esc(dept) + resignNotice
       +   '</div>'
       + '</div>'
-      + '<div>'
+      + '<div style="pointer-events: none;">'
       +   (isResigned 
             ? '<span class="badge" style="background: #fee2e2; color: #dc2626; font-size: 10px; padding: 2px 6px; border-radius: 4px;">ลาออก</span>'
             : '<span class="badge" style="background: #dcfce7; color: #16a34a; font-size: 10px; padding: 2px 6px; border-radius: 4px;">ปกติ</span>')
@@ -3002,15 +3007,23 @@ function onMiEmpSearchInput(val) {
 }
 
 function openMiEmpDropdown() {
-  renderMiEmpDropdown('');
+  var searchInput = document.getElementById('miEmpSearch');
+  var query = searchInput ? searchInput.value : '';
+  if (query && (query.indexOf(' - ') !== -1 || query.charAt(0) === '[')) {
+    query = '';
+  }
+  renderMiEmpDropdown(query);
 }
 
-function toggleMiEmpDropdown() {
+function toggleMiEmpDropdown(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
   var listEl = document.getElementById('miEmpDropdownList');
   if (!listEl) return;
   if (listEl.style.display === 'block') {
     listEl.style.display = 'none';
   } else {
+    var searchInput = document.getElementById('miEmpSearch');
+    if (searchInput) searchInput.focus();
     openMiEmpDropdown();
   }
 }
