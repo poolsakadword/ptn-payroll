@@ -5468,6 +5468,44 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
       };
     }
 
+    // 16.1 REHIRE EMPLOYEE ACTION (Restore resigned employee back to active service)
+    case 'rehireEmployee': {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'edit_emp')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์รับพนักงานกลับเข้าทำงาน' };
+
+      const empId = params.empId;
+      if (!empId) return { success: false, message: 'กรุณาระบุรหัสพนักงาน' };
+
+      const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
+      if (!emp) return { success: false, message: 'ไม่พบข้อมูลพนักงาน' };
+
+      const newJoinDate = normalizeDateToIso(params.joinDate || new Date().toISOString().substring(0, 10));
+      const newStatus = params.status || 'Active';
+      const probationDays = (newStatus === 'Probation') ? (Number(params.probationDays) || 90) : 0;
+      let probationEndDate = '';
+      if (newStatus === 'Probation' && newJoinDate) {
+        const d = new Date(newJoinDate);
+        d.setDate(d.getDate() + probationDays);
+        probationEndDate = d.toISOString().substring(0, 10);
+      }
+      const newBaseSalary = (params.baseSalary !== undefined && params.baseSalary !== null && !isNaN(Number(params.baseSalary))) ? Number(params.baseSalary) : emp.base_salary;
+      const newRemark = params.remark !== undefined ? String(params.remark).trim() : (emp.remark || '');
+
+      await db.prepare(`
+        UPDATE employees 
+        SET status = ?, join_date = ?, resign_date = NULL, probation_days = ?, probation_end_date = ?, base_salary = ?, remark = ?
+        WHERE emp_id = ?
+      `).bind(newStatus, newJoinDate, probationDays, probationEndDate, newBaseSalary, newRemark, empId).run();
+
+      await logSystemActivity(db, callerUser || 'Admin', 'REHIRE_EMPLOYEE', `รับพนักงานกลับเข้าทำงาน: ${empId} (${emp.full_name}) สถานะ: ${newStatus}, เริ่มงานรอบใหม่: ${newJoinDate}`);
+
+      return {
+        success: true,
+        message: `รับพนักงาน [${empId}] ${emp.full_name} กลับเข้าทำงานเรียบร้อยแล้ว`
+      };
+    }
+
     case 'saveCompanyInfo': {
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await isUserSuperAdmin(db, callerUser));

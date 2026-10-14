@@ -1355,13 +1355,46 @@ function switchEmpViewMode(mode) {
   renderEmployeesTable();
 }
 
+var currentEmpSubTab = 'active';
+
+function switchEmpSubTab(tabName) {
+  currentEmpSubTab = tabName || 'active';
+  var btnActive = document.getElementById('btnEmpSubActive');
+  var btnResigned = document.getElementById('btnEmpSubResigned');
+  var activeToolbar = document.getElementById('empSubtabActiveToolbar');
+  var resignedToolbar = document.getElementById('empSubtabResignedToolbar');
+  var activeArea = document.getElementById('empSubtabActiveArea');
+  var resignedArea = document.getElementById('empSubtabResignedArea');
+
+  if (btnActive) {
+    btnActive.className = (currentEmpSubTab === 'active') ? 'btn btn-primary btn-sm' : 'btn btn-slate btn-sm';
+  }
+  if (btnResigned) {
+    btnResigned.className = (currentEmpSubTab === 'resigned') ? 'btn btn-danger btn-sm' : 'btn btn-slate btn-sm';
+  }
+
+  if (activeToolbar) activeToolbar.style.display = (currentEmpSubTab === 'active') ? 'flex' : 'none';
+  if (resignedToolbar) resignedToolbar.style.display = (currentEmpSubTab === 'resigned') ? 'flex' : 'none';
+  if (activeArea) activeArea.style.display = (currentEmpSubTab === 'active') ? 'block' : 'none';
+  if (resignedArea) resignedArea.style.display = (currentEmpSubTab === 'resigned') ? 'block' : 'none';
+
+  if (currentEmpSubTab === 'resigned') {
+    renderResignedEmployeesTable();
+  } else {
+    renderEmployeesTable();
+  }
+}
+
 function setEmpStatusFilter(status) {
+  if (status === 'Resigned') {
+    switchEmpSubTab('resigned');
+    return;
+  }
   currentEmpStatusFilter = status;
   var btns = {
     all: document.getElementById('btnEmpFilterAll'),
     Active: document.getElementById('btnEmpFilterActive'),
-    Probation: document.getElementById('btnEmpFilterProbation'),
-    Resigned: document.getElementById('btnEmpFilterResigned')
+    Probation: document.getElementById('btnEmpFilterProbation')
   };
 
   Object.keys(btns).forEach(function(k) {
@@ -1384,36 +1417,50 @@ function renderEmployeesTable() {
   var canUnlockDevice = hasPermission('unlock_device') || isSuperAdmin();
   var isGeneralUser = !canViewSalary;
 
-  // 1. Calculate and Update Top KPI Metrics
+  // 1. Calculate and Update Top KPI Metrics (Active & Probation staff only)
   var emps = State.employees || [];
-  var totalEmps = emps.length;
   var activeCount = 0;
   var probCount = 0;
   var resignedCount = 0;
-  var totalBaseSalary = 0;
+  var totalActiveBaseSalary = 0;
 
   var deptSet = {};
-  (State.employees || []).forEach(function(e) {
+  emps.forEach(function(e) {
     var st = e.status || 'Active';
-    if (st === 'Active') activeCount++;
-    else if (st === 'Probation') probCount++;
-    else if (st === 'Resigned') resignedCount++;
-    totalBaseSalary += Number(e.baseSalary) || 0;
-    if (e.department) deptSet[e.department] = true;
+    if (st === 'Active') {
+      activeCount++;
+      totalActiveBaseSalary += Number(e.baseSalary) || 0;
+      if (e.department) deptSet[e.department] = true;
+    } else if (st === 'Probation') {
+      probCount++;
+      totalActiveBaseSalary += Number(e.baseSalary) || 0;
+      if (e.department) deptSet[e.department] = true;
+    } else if (st === 'Resigned') {
+      resignedCount++;
+    } else {
+      activeCount++;
+      totalActiveBaseSalary += Number(e.baseSalary) || 0;
+      if (e.department) deptSet[e.department] = true;
+    }
   });
 
-  if (document.getElementById('empKpiTotal')) document.getElementById('empKpiTotal').innerHTML = totalEmps + ' <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span>';
+  var totalWorkingStaff = activeCount + probCount;
+
+  if (document.getElementById('empKpiTotal')) document.getElementById('empKpiTotal').innerHTML = totalWorkingStaff + ' <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span>';
   if (document.getElementById('empKpiActive')) document.getElementById('empKpiActive').innerHTML = activeCount + ' <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span>';
   if (document.getElementById('empKpiProbation')) document.getElementById('empKpiProbation').innerHTML = probCount + ' <span style="font-size:13px;font-weight:400;color:var(--text-muted)">คน</span>';
   if (document.getElementById('empKpiTotalSalary')) {
-    document.getElementById('empKpiTotalSalary').textContent = canViewSalary ? fmt(totalBaseSalary) : '฿***';
+    document.getElementById('empKpiTotalSalary').textContent = canViewSalary ? fmt(totalActiveBaseSalary) : '฿***';
   }
 
-  // Update filter pill counts
-  if (document.getElementById('countFilterAll')) document.getElementById('countFilterAll').textContent = totalEmps;
+  // Update sub-tab counter badges
+  if (document.getElementById('subtabBadgeActiveCount')) document.getElementById('subtabBadgeActiveCount').textContent = totalWorkingStaff;
+  if (document.getElementById('subtabBadgeResignedCount')) document.getElementById('subtabBadgeResignedCount').textContent = resignedCount;
+
+  // Update filter pill counts (Active view only)
+  if (document.getElementById('countFilterAll')) document.getElementById('countFilterAll').textContent = totalWorkingStaff;
   if (document.getElementById('countFilterActive')) document.getElementById('countFilterActive').textContent = activeCount;
   if (document.getElementById('countFilterProbation')) document.getElementById('countFilterProbation').textContent = probCount;
-  if (document.getElementById('countFilterResigned')) document.getElementById('countFilterResigned').textContent = resignedCount;
 
   // Populate department filter dropdown
   var deptSel = document.getElementById('empDeptFilter');
@@ -1427,25 +1474,29 @@ function renderEmployeesTable() {
     deptSel.value = curVal;
   }
 
-  // Populate employee select dropdowns for inputs and history
+  // Populate employee select dropdowns for inputs and history (exclude resigned from daily select where appropriate)
   var sel = '<option value="">-- เลือกรหัสพนักงาน --</option>';
   (State.employees || []).forEach(function(e) {
     var nickDisplay = e.nickname ? ' (' + e.nickname + ')' : '';
     var empPf = (e.pfRate !== null && e.pfRate !== undefined && !isNaN(Number(e.pfRate))) ? Number(e.pfRate) : 0;
     var empSso = (e.defaultSso !== null && e.defaultSso !== undefined && !isNaN(Number(e.defaultSso))) ? Number(e.defaultSso) : 0;
-    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + empPf + '" data-sso="' + empSso + '" data-tax="' + (e.defaultTax || 0) + '" data-remark="' + esc(e.remark || '') + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + '</option>';
+    var resignedSuffix = (e.status === 'Resigned') ? ' [ลาออกแล้ว]' : '';
+    sel += '<option value="' + e.empId + '" data-name="' + esc(e.fullName) + '" data-salary="' + e.baseSalary + '" data-pf="' + empPf + '" data-sso="' + empSso + '" data-tax="' + (e.defaultTax || 0) + '" data-remark="' + esc(e.remark || '') + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nickDisplay + resignedSuffix + '</option>';
   });
   var miSel = document.getElementById('miEmpId');
   if (miSel) miSel.innerHTML = sel;
   var histSel = document.getElementById('histEmpSelect');
   if (histSel) histSel.innerHTML = sel;
 
-  // Filter list by status, department, and search query
+  // Filter list by status, department, and search query (EXCLUDE RESIGNED)
   var q = (document.getElementById('empSearchInput') ? document.getElementById('empSearchInput').value : '').trim().toLowerCase();
   var selectedDept = deptSel ? deptSel.value : '';
 
   var list = emps.filter(function(e) {
     var st = e.status || 'Active';
+    // Exclude Resigned staff from active table & cards view
+    if (st === 'Resigned') return false;
+
     if (currentEmpStatusFilter !== 'all' && st !== currentEmpStatusFilter) return false;
     if (selectedDept && e.department !== selectedDept) return false;
     if (!q) return true;
@@ -1648,6 +1699,272 @@ function renderEmployeesTable() {
 
   tbody.innerHTML = hTable;
   if (cardsDiv) cardsDiv.innerHTML = hCards;
+
+  if (typeof renderResignedEmployeesTable === 'function') {
+    renderResignedEmployeesTable();
+  }
+}
+
+// TENURE CALCULATION (e.g. "1 ปี 4 เดือน 12 วัน")
+function calculateTenureString(startStr, endStr) {
+  if (!startStr) return '-';
+  var startDate = new Date(startStr);
+  if (isNaN(startDate.getTime())) return '-';
+  var endDate = endStr ? new Date(endStr) : new Date();
+  if (isNaN(endDate.getTime())) endDate = new Date();
+  if (endDate < startDate) return '0 วัน';
+
+  var years = endDate.getFullYear() - startDate.getFullYear();
+  var months = endDate.getMonth() - startDate.getMonth();
+  var days = endDate.getDate() - startDate.getDate();
+
+  if (days < 0) {
+    months--;
+    var prevMonthDate = new Date(endDate.getFullYear(), endDate.getMonth(), 0);
+    days += prevMonthDate.getDate();
+  }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  var parts = [];
+  if (years > 0) parts.push(years + ' ปี');
+  if (months > 0) parts.push(months + ' เดือน');
+  if (days > 0 || parts.length === 0) parts.push(days + ' วัน');
+  return parts.join(' ');
+}
+
+// RENDER RESIGNED EMPLOYEES ARCHIVE TABLE
+function renderResignedEmployeesTable() {
+  var tbody = document.getElementById('resignedEmployeesTableBody');
+  if (!tbody) return;
+
+  var canEditEmp = hasPermission('edit_emp') || isSuperAdmin();
+  var canDelEmp = hasPermission('del_emp') || isSuperAdmin();
+
+  var emps = (State.employees || []).filter(function(e) {
+    return (e.status || '') === 'Resigned';
+  });
+
+  // Update badge & header counter
+  if (document.getElementById('resignedListCountDisplay')) {
+    document.getElementById('resignedListCountDisplay').textContent = emps.length;
+  }
+  if (document.getElementById('subtabBadgeResignedCount')) {
+    document.getElementById('subtabBadgeResignedCount').textContent = emps.length;
+  }
+
+  // Populate department filter dropdown for resigned
+  var rDeptSel = document.getElementById('resignedDeptFilter');
+  if (rDeptSel && (!rDeptSel.options || rDeptSel.options.length <= 1)) {
+    var curVal = rDeptSel.value;
+    var dSet = {};
+    emps.forEach(function(e) { if (e.department) dSet[e.department] = true; });
+    var dOpts = '<option value="">ทุกแผนก</option>';
+    Object.keys(dSet).sort().forEach(function(d) {
+      dOpts += '<option value="' + esc(d) + '">' + esc(d) + '</option>';
+    });
+    rDeptSel.innerHTML = dOpts;
+    rDeptSel.value = curVal;
+  }
+
+  var q = (document.getElementById('resignedSearchInput') ? document.getElementById('resignedSearchInput').value : '').trim().toLowerCase();
+  var selectedDept = rDeptSel ? rDeptSel.value : '';
+
+  var list = emps.filter(function(e) {
+    if (selectedDept && e.department !== selectedDept) return false;
+    if (!q) return true;
+    return (e.empId && e.empId.toLowerCase().indexOf(q) >= 0) ||
+           (e.fullName && e.fullName.toLowerCase().indexOf(q) >= 0) ||
+           (e.nickname && e.nickname.toLowerCase().indexOf(q) >= 0) ||
+           (e.phone && e.phone.toLowerCase().indexOf(q) >= 0) ||
+           (e.department && e.department.toLowerCase().indexOf(q) >= 0) ||
+           (e.position && e.position.toLowerCase().indexOf(q) >= 0) ||
+           (e.remark && e.remark.toLowerCase().indexOf(q) >= 0);
+  });
+
+  // Sort by resignDate descending (most recently resigned first)
+  list.sort(function(a, b) {
+    var da = a.resignDate || a.updatedAt || '';
+    var db = b.resignDate || b.updatedAt || '';
+    return db.localeCompare(da);
+  });
+
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:36px"><i class="fa-solid fa-folder-open" style="font-size:24px;margin-bottom:8px;display:block;color:#94a3b8"></i>' + (q ? 'ไม่พบพนักงานพ้นสภาพที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ไม่มีรายชื่อพนักงานพ้นสภาพหรือลาออกในระบบ') + '</td></tr>';
+    return;
+  }
+
+  var html = '';
+  list.forEach(function(e) {
+    var initials = (e.fullName || '').substring(0, 2);
+    var avatarHtml = e.photoUrl
+      ? ('<img src="' + esc(e.photoUrl) + '" alt="' + esc(e.fullName) + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid #cbd5e1;background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:32px;height:32px;border-radius:50%;background:#fee2e2;color:#991b1b;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\\'>' + esc(initials) + '</div>\'">')
+      : ('<div style="width:32px;height:32px;border-radius:50%;background:#fee2e2;color:#991b1b;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>');
+
+    var branchObj = (State.branches || []).find(function(b) { return b.branch_id === e.branchId; });
+    var branchNameDisplay = branchObj ? branchObj.branch_name : (e.branchId === 'B02' ? 'สาขา 2' : (e.branchId === 'B03' ? 'สาขา 3' : (e.branchId === 'B04' ? 'สาขา 4' : 'สำนักงานใหญ่')));
+
+    var tenureStr = calculateTenureString(e.joinDate, e.resignDate);
+    var joinDateDisplay = e.joinDate ? formatDateThaiBE(e.joinDate) : '-';
+    var resignDateDisplay = e.resignDate ? formatDateThaiBE(e.resignDate) : '<span style="color:#dc2626;font-style:italic">ไม่ระบุ</span>';
+
+    html += '<tr style="background:#fff">' +
+      '<td class="font-mono font-bold" style="color:#64748b">' + esc(e.empId) + '</td>' +
+      '<td>' +
+        '<div style="display:flex;align-items:center;gap:10px">' +
+          avatarHtml +
+          '<div>' +
+            '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#64748b;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + '</div>' +
+            '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + esc(e.phone || '-') + '</div>' +
+          '</div>' +
+        '</div>' +
+      '</td>' +
+      '<td>' +
+        '<span class="period-pill" style="background:#f1f5f9;color:#475569">' + esc(e.department || '-') + '</span>' +
+        '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div>' +
+        '<div style="font-size:10.5px;color:#64748b;margin-top:2px"><i class="fa-solid fa-store" style="font-size:9.5px;margin-right:2px"></i> ' + esc(branchNameDisplay) + '</div>' +
+      '</td>' +
+      '<td>' +
+        '<div style="font-size:11.5px;color:#15803d"><i class="fa-solid fa-calendar-check" style="width:14px"></i> เริ่ม: ' + joinDateDisplay + '</div>' +
+        '<div style="font-size:11.5px;color:#b91c1c;font-weight:700;margin-top:2px"><i class="fa-solid fa-person-walking-arrow-right" style="width:14px"></i> ออก: ' + resignDateDisplay + '</div>' +
+      '</td>' +
+      '<td>' +
+        '<span class="period-pill" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-weight:700;font-size:11px">' +
+          '<i class="fa-solid fa-hourglass-half" style="margin-right:3px"></i> ' + esc(tenureStr) +
+        '</span>' +
+      '</td>' +
+      '<td>' +
+        '<div style="font-size:11.5px;color:var(--text-main);max-width:220px;line-height:1.4">' + esc(e.remark || '-') + '</div>' +
+      '</td>' +
+      '<td class="text-center nowrap">' +
+        '<div style="display:flex;align-items:center;justify-content:center;gap:4px">' +
+          (canEditEmp ? '<button type="button" class="btn btn-sm btn-success" style="background:#059669;border-color:#059669;color:#fff;font-size:11px;padding:4px 8px;font-weight:700" onclick="openRehireModal(\'' + esc(e.empId) + '\')" title="รับพนักงานกลับเข้าทำงาน"><i class="fa-solid fa-user-plus"></i> รับกลับ</button> ' : '') +
+          '<button type="button" class="btn btn-sm btn-slate" style="font-size:11px;padding:4px 8px;font-weight:600" onclick="openCertForEmployee(\'' + esc(e.empId) + '\')" title="ออกหนังสือรับรองงาน (A4)"><i class="fa-solid fa-file-signature text-blue"></i> ใบรับรอง</button> ' +
+          (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')" title="ดูหรือแก้ไขข้อมูล"><i class="fa-solid fa-pen"></i></button> ' : '') +
+          (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')" title="ลบข้อมูลถาวร"><i class="fa-solid fa-trash"></i></button>' : '') +
+        '</div>' +
+      '</td>' +
+    '</tr>';
+  });
+
+  tbody.innerHTML = html;
+}
+
+// SHORTCUT TO DOCUMENT HUB FOR RESIGNED EMPLOYEE CERTIFICATE
+function openCertForEmployee(empId) {
+  if (typeof switchTab === 'function') switchTab('tab-documents');
+  if (typeof switchDocCategory === 'function') switchDocCategory('cert');
+  var sel = document.getElementById('docCertEmpSelect');
+  if (sel) {
+    sel.value = empId;
+    if (typeof onDocCertParamChanged === 'function') onDocCertParamChanged();
+  }
+}
+
+// REHIRE EMPLOYEE MODAL CONTROLLERS
+function openRehireModal(empId) {
+  var emp = (State.employees || []).find(function(e) { return e.empId === empId; });
+  if (!emp) {
+    showToast('ไม่พบข้อมูลพนักงาน', 'error');
+    return;
+  }
+  var idInput = document.getElementById('rehireEmpId');
+  if (idInput) idInput.value = emp.empId;
+
+  var nameEl = document.getElementById('rehireEmpName');
+  if (nameEl) nameEl.textContent = (emp.fullName || emp.empId) + (emp.nickname ? (' (' + emp.nickname + ')') : '');
+
+  var detailEl = document.getElementById('rehireEmpDetail');
+  if (detailEl) detailEl.textContent = 'รหัส: ' + emp.empId + ' | แผนก: ' + (emp.department || '-') + ' | ตำแหน่ง: ' + (emp.position || '-');
+
+  var avEl = document.getElementById('rehireAvatarContainer');
+  if (avEl) {
+    if (emp.photoUrl) {
+      avEl.innerHTML = '<img src="' + esc(emp.photoUrl) + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover">';
+    } else {
+      avEl.textContent = (emp.fullName || emp.empId).substring(0, 2);
+    }
+  }
+
+  var todayStr = new Date().toISOString().substring(0, 10);
+  var joinDateInput = document.getElementById('rehireJoinDate');
+  if (joinDateInput) {
+    joinDateInput.value = todayStr;
+    updateRehireJoinDateHint();
+  }
+
+  var statusSel = document.getElementById('rehireStatus');
+  if (statusSel) statusSel.value = 'Active';
+  onRehireStatusChanged();
+
+  var salInput = document.getElementById('rehireBaseSalary');
+  if (salInput) salInput.value = emp.baseSalary || 0;
+
+  var remarkInput = document.getElementById('rehireRemark');
+  if (remarkInput) remarkInput.value = 'รับกลับเข้าทำงาน';
+
+  openModal('rehireModal');
+}
+
+function updateRehireJoinDateHint() {
+  var input = document.getElementById('rehireJoinDate');
+  var hint = document.getElementById('rehireJoinDateHint');
+  if (input && hint && input.value) {
+    hint.textContent = 'วันเริ่มงานรอบใหม่: ' + formatDateThaiBE(input.value);
+  }
+}
+
+function onRehireStatusChanged() {
+  var statusSel = document.getElementById('rehireStatus');
+  var probSec = document.getElementById('rehireProbationSection');
+  if (statusSel && probSec) {
+    probSec.style.display = (statusSel.value === 'Probation') ? 'block' : 'none';
+  }
+}
+
+function submitRehireEmployeeForm(event) {
+  if (event) event.preventDefault();
+  var empId = document.getElementById('rehireEmpId').value;
+  var joinDate = document.getElementById('rehireJoinDate').value;
+  var status = document.getElementById('rehireStatus').value;
+  var probationDays = document.getElementById('rehireProbationDays') ? Number(document.getElementById('rehireProbationDays').value) : 119;
+  var baseSalary = Number(document.getElementById('rehireBaseSalary').value) || 0;
+  var remark = document.getElementById('rehireRemark') ? document.getElementById('rehireRemark').value : '';
+
+  if (!empId || !joinDate) {
+    showToast('กรุณากรอกข้อมูลให้ครบถ้วน', 'warning');
+    return;
+  }
+
+  var statusLabel = (status === 'Active') ? 'พนักงานประจำ' : 'ช่วงทดลองงาน (' + probationDays + ' วัน)';
+  showConfirmDialog(
+    'ยืนยันการรับพนักงานกลับเข้าทำงาน',
+    'คุณต้องการรับพนักงานรหัส <strong>' + esc(empId) + '</strong> กลับเข้าทำงานในสถานะ <strong>' + statusLabel + '</strong> หรือไม่?<br><span style="color:#64748b;font-size:12px">ระบบจะล้างประวัติวันที่ลาออกเดิม และนำชื่อพนักงานกลับเข้าสู่รายชื่อพนักงานปัจจุบันทันที</span>',
+    function() {
+      callApi('rehireEmployee', {
+        empId: empId,
+        joinDate: joinDate,
+        status: status,
+        probationDays: probationDays,
+        baseSalary: baseSalary,
+        remark: remark,
+        username: State.currentUser ? State.currentUser.username : 'Admin'
+      }).then(function(res) {
+        if (res && res.success) {
+          showToast(res.message || 'รับพนักงานกลับเข้าทำงานสำเร็จ', 'success');
+          closeModal('rehireModal');
+          loadAppData();
+          switchEmpSubTab('active');
+        } else {
+          showToast((res && res.message) || 'เกิดข้อผิดพลาดในการรับกลับเข้าทำงาน', 'error');
+        }
+      }).catch(function(err) {
+        showToast(err.message, 'error');
+      });
+    }
+  );
 }
 
 // REMOTE RESET DEVICE (Method 3: Remote Reset from Payroll)
@@ -3886,9 +4203,10 @@ function exportToCSV(type) {
     });
   } else if (type === 'employees') {
     var isUserRole = (State.currentUser && State.currentUser.role === 'User');
+    var activeStaffList = (State.employees || []).filter(function(e) { return (e.status || '') !== 'Resigned'; });
     if (isUserRole) {
       csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,วันเกิด,อายุ,บัตรประชาชน,เบอร์โทร,ที่อยู่,แผนก,ตำแหน่ง,ธนาคาร,เลขบัญชี,วันเริ่มงาน\n';
-      (State.employees || []).forEach(function(e) {
+      activeStaffList.forEach(function(e) {
         csv += [
           e.empId,
           '"' + (e.fullName || '').replace(/"/g, '""') + '"',
@@ -3907,7 +4225,7 @@ function exportToCSV(type) {
       });
     } else {
       csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร,หมายเหตุ\n';
-      (State.employees || []).forEach(function(e) {
+      activeStaffList.forEach(function(e) {
         csv += [
           e.empId,
           '"' + (e.fullName || '').replace(/"/g, '""') + '"',
@@ -3930,6 +4248,25 @@ function exportToCSV(type) {
         ].join(',') + '\n';
       });
     }
+  } else if (type === 'resigned') {
+    filename = 'PTN_resigned_employees_' + (new Date().toISOString().substring(0, 10)) + '.csv';
+    csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,แผนก,ตำแหน่ง,วันเริ่มงาน,วันที่ลาออก,อายุงานรวม,ธนาคาร,เลขบัญชี,เบอร์โทร,สาเหตุ_หมายเหตุ\n';
+    (State.employees || []).filter(function(e) { return (e.status || '') === 'Resigned'; }).forEach(function(e) {
+      csv += [
+        e.empId,
+        '"' + (e.fullName || '').replace(/"/g, '""') + '"',
+        '"' + (e.nickname || '').replace(/"/g, '""') + '"',
+        '"' + (e.department || '').replace(/"/g, '""') + '"',
+        '"' + (e.position || '').replace(/"/g, '""') + '"',
+        e.joinDate || '',
+        e.resignDate || '',
+        '"' + (calculateTenureString(e.joinDate, e.resignDate) || '').replace(/"/g, '""') + '"',
+        '"' + (e.bankName || '').replace(/"/g, '""') + '"',
+        '"' + (e.bankAccount || '').replace(/"/g, '""') + '"',
+        '"' + (e.phone || '').replace(/"/g, '""') + '"',
+        '"' + (e.remark || '').replace(/"/g, '""') + '"'
+      ].join(',') + '\n';
+    });
   }
 
   var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
