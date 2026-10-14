@@ -1852,15 +1852,9 @@ function renderResignedEmployeesTable() {
   tbody.innerHTML = html;
 }
 
-// SHORTCUT TO DOCUMENT HUB FOR RESIGNED EMPLOYEE CERTIFICATE
+// SHORTCUT TO CERTIFICATE MODAL FOR RESIGNED EMPLOYEE
 function openCertForEmployee(empId) {
-  if (typeof switchTab === 'function') switchTab('tab-documents');
-  if (typeof switchDocCategory === 'function') switchDocCategory('cert');
-  var sel = document.getElementById('docCertEmpSelect');
-  if (sel) {
-    sel.value = empId;
-    if (typeof onDocCertParamChanged === 'function') onDocCertParamChanged();
-  }
+  openSalaryCertificateModal(empId);
 }
 
 // REHIRE EMPLOYEE MODAL CONTROLLERS
@@ -2787,6 +2781,8 @@ function renderUsersTable() {
 
 // ACTIONS & MODAL CONTROLLERS
 function switchTab(tabId) {
+  if (!tabId) return;
+  tabId = String(tabId).replace(/^tab-/, '');
   var role = (State.currentUser && State.currentUser.role) ? String(State.currentUser.role).trim() : 'User';
   var isGeneralUser = (role.toLowerCase() === 'user');
 
@@ -3659,12 +3655,14 @@ function refreshAllEmployeeSelects() {
   if (docSel) {
     var curDocVal = docSel.value;
     var docOpts = '';
-    workingEmps.forEach(function(e) {
+    allEmpsSorted.forEach(function(e) {
       var id = e.empId || e.emp_id || '';
       var name = e.fullName || e.full_name || e.name || '';
       var nick = e.nickname ? ' (' + e.nickname + ')' : '';
       var dept = e.department ? ' [' + e.department + ']' : '';
-      docOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + dept + '</option>';
+      var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      var resTag = isResigned ? ' [พ้นสภาพ/ลาออก]' : '';
+      docOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + dept + resTag + '</option>';
     });
     docSel.innerHTML = docOpts || '<option value="">ไม่มีข้อมูลพนักงาน</option>';
     if (curDocVal) docSel.value = curDocVal;
@@ -7589,18 +7587,37 @@ function onDocCertParamChanged() {
 // ------------------------------------------------------------------------------
 // SALARY & EMPLOYMENT CERTIFICATE CONTROLLER
 // ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
+// SALARY & EMPLOYMENT CERTIFICATE CONTROLLER
+// ------------------------------------------------------------------------------
 function openSalaryCertificateModal(targetEmpId) {
-  if (!hasPermission('view_salary') && !hasPermission('all')) {
-    showToast('คุณไม่มีสิทธิ์ออกหนังสือรับรองเงินเดือน', 'warning');
+  if (!hasPermission('view_salary') && !hasPermission('view_documents') && !hasPermission('all') && !isSuperAdmin()) {
+    showToast('คุณไม่มีสิทธิ์ออกหนังสือรับรองเงินเดือนและการทำงาน', 'warning');
     return;
   }
 
   var sel = document.getElementById('docCertEmpSelect');
   if (targetEmpId && sel) {
+    var foundOpt = false;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === targetEmpId) {
+        foundOpt = true;
+        break;
+      }
+    }
+    if (!foundOpt) {
+      var foundEmp = (State.employees || []).find(function(e) { return e.empId === targetEmpId; });
+      if (foundEmp) {
+        var opt = document.createElement('option');
+        opt.value = foundEmp.empId;
+        opt.textContent = foundEmp.empId + ' - ' + foundEmp.fullName + (foundEmp.status === 'Resigned' ? ' [พ้นสภาพ/ลาออก]' : '');
+        sel.appendChild(opt);
+      }
+    }
     sel.value = targetEmpId;
   }
 
-  var empId = sel ? sel.value : (State.employees && State.employees[0] ? State.employees[0].empId : '');
+  var empId = targetEmpId || (sel ? sel.value : (State.employees && State.employees[0] ? State.employees[0].empId : ''));
   if (!empId) {
     showToast('กรุณาเลือกพนักงานที่ต้องการออกหนังสือรับรอง', 'warning');
     return;
@@ -7617,23 +7634,26 @@ function openSalaryCertificateModal(targetEmpId) {
 
   if (signNameInput) signNameInput.value = defSignName;
   if (signTitleInput) signTitleInput.value = defSignTitle;
-  if (dateInput) dateInput.value = curDate;
+  if (dateInput) {
+    var todayThaiStr = formatDateThaiBE(new Date().toISOString().substring(0, 10));
+    dateInput.value = curDate || todayThaiStr;
+  }
 
-  renderCertModalPaper();
+  renderCertModalPaper(empId);
   openModal('salaryCertModal');
 }
 
-function renderCertModalPaper() {
+function renderCertModalPaper(targetEmpId) {
   var paper = document.getElementById('salaryCertPaper');
   if (!paper) return;
 
   var sel = document.getElementById('docCertEmpSelect');
-  var empId = sel ? sel.value : '';
+  var empId = targetEmpId || (sel ? sel.value : '');
   var emp = (State.employees || []).find(function(e) { return e.empId === empId; }) || {};
 
   var purpose = document.getElementById('docCertPurpose') ? document.getElementById('docCertPurpose').value : 'loan';
   var lang = document.getElementById('docCertLang') ? document.getElementById('docCertLang').value : 'TH';
-  var certDate = (document.getElementById('modalCertDate') && document.getElementById('modalCertDate').value) ? document.getElementById('modalCertDate').value : (document.getElementById('docCertDate') ? document.getElementById('docCertDate').value : '');
+  var certDate = (document.getElementById('modalCertDate') && document.getElementById('modalCertDate').value) ? document.getElementById('modalCertDate').value : (document.getElementById('docCertDate') ? document.getElementById('docCertDate').value : formatDateThaiBE(new Date().toISOString().substring(0, 10)));
   var signatoryName = (document.getElementById('modalCertSignName') && document.getElementById('modalCertSignName').value) ? document.getElementById('modalCertSignName').value : (State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง');
   var signatoryTitle = (document.getElementById('modalCertSignTitle') && document.getElementById('modalCertSignTitle').value) ? document.getElementById('modalCertSignTitle').value : (State.company.signatoryTitle || 'ผู้จัดการฝ่ายทรัพยากรบุคคล');
 
@@ -7647,12 +7667,15 @@ function renderCertModalPaper() {
   var regularAllow = 0;
   var totalMonthly = baseSal + regularAllow;
 
+  var isResigned = (String(emp.status || '').trim().toUpperCase() === 'RESIGNED');
+
   // Tenure and Start Date calculation (supports joinDate / join_date / startDate in YYYY-MM-DD or DD/MM/YYYY)
   var startRaw = String(emp.joinDate || emp.startDate || emp.join_date || '').trim();
   var tenureText = '';
   var tenureTextEn = '';
   var startDateDisplay = '-';
   var startDateDisplayEn = '-';
+  var resignDateDisplay = emp.resignDate ? formatDateThaiBE(emp.resignDate) : '';
 
   if (startRaw && startRaw !== '-') {
     var sYear = null, sMonth = null, sDay = null;
@@ -7683,29 +7706,34 @@ function renderCertModalPaper() {
       startDateDisplay = sDay + ' ' + (thaiMonthsFull[mIdx] || '') + ' พ.ศ. ' + beYear;
       startDateDisplayEn = (enMonths[mIdx] || '') + ' ' + sDay + ', ' + ceYear;
 
-      try {
-        var sDate = new Date(ceYear, sMonth - 1, sDay);
-        var now = new Date();
-        var diffYears = now.getFullYear() - sDate.getFullYear();
-        var diffMonths = now.getMonth() - sDate.getMonth();
-        if (now.getDate() < sDate.getDate()) {
-          diffMonths--;
+      if (isResigned && emp.resignDate) {
+        tenureText = calculateTenureString(emp.joinDate, emp.resignDate);
+        tenureTextEn = tenureText.replace(/ปี/g, 'year(s)').replace(/เดือน/g, 'month(s)').replace(/วัน/g, 'day(s)');
+      } else {
+        try {
+          var sDate = new Date(ceYear, sMonth - 1, sDay);
+          var now = new Date();
+          var diffYears = now.getFullYear() - sDate.getFullYear();
+          var diffMonths = now.getMonth() - sDate.getMonth();
+          if (now.getDate() < sDate.getDate()) {
+            diffMonths--;
+          }
+          if (diffMonths < 0) { diffYears--; diffMonths += 12; }
+          if (diffYears > 0 && diffMonths > 0) {
+            tenureText = diffYears + ' ปี ' + diffMonths + ' เดือน';
+            tenureTextEn = diffYears + ' year(s) ' + diffMonths + ' month(s)';
+          } else if (diffYears > 0) {
+            tenureText = diffYears + ' ปี';
+            tenureTextEn = diffYears + ' year(s)';
+          } else {
+            var mOnly = Math.max(1, diffMonths);
+            tenureText = mOnly + ' เดือน';
+            tenureTextEn = mOnly + ' month(s)';
+          }
+        } catch(ex) {
+          tenureText = '';
+          tenureTextEn = '';
         }
-        if (diffMonths < 0) { diffYears--; diffMonths += 12; }
-        if (diffYears > 0 && diffMonths > 0) {
-          tenureText = diffYears + ' ปี ' + diffMonths + ' เดือน';
-          tenureTextEn = diffYears + ' year(s) ' + diffMonths + ' month(s)';
-        } else if (diffYears > 0) {
-          tenureText = diffYears + ' ปี';
-          tenureTextEn = diffYears + ' year(s)';
-        } else {
-          var mOnly = Math.max(1, diffMonths);
-          tenureText = mOnly + ' เดือน';
-          tenureTextEn = mOnly + ' month(s)';
-        }
-      } catch(ex) {
-        tenureText = '';
-        tenureTextEn = '';
       }
     } else {
       startDateDisplay = startRaw;
@@ -7722,24 +7750,28 @@ function renderCertModalPaper() {
     else if (purpose === 'general') purposeStrEn = 'general employment and income verification';
 
     var docNoEn = 'PTN-HR-' + String(new Date().getMonth() + 1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0') + '/' + new Date().getFullYear();
+    var certTitleEn = isResigned ? 'CERTIFICATE OF EMPLOYMENT &amp; SERVICE' : 'SALARY &amp; EMPLOYMENT VERIFICATION LETTER';
 
-    h += '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:22px">' +
-      '<div style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:0.5px">' + esc(compName) + '</div>' +
-      '<div style="font-size:11px;color:#475569;margin-top:4px">Tax Identification No.: ' + esc(compTaxId) + '</div>' +
-      '<div style="font-size:11px;color:#64748b">' + esc(compAddress) + ' | Tel: ' + esc(compPhone) + '</div>' +
-    '</div>' +
-
-    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:22px">' +
-      '<div><strong>Ref No.:</strong> ' + esc(docNoEn) + '</div>' +
-      '<div><strong>Date:</strong> <span id="certPaperDate">' + esc(certDate || new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })) + '</span></div>' +
-    '</div>' +
-
-    '<div style="text-align:center;margin:24px 0 28px">' +
-      '<h2 contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขหัวข้อ" style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:1px;text-transform:uppercase;margin:0">SALARY &amp; EMPLOYMENT VERIFICATION LETTER</h2>' +
-    '</div>' +
-
-    '<div id="certPaperBody" contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขข้อความได้โดยตรง" style="font-size:13.5px;text-align:justify;line-height:2;color:#1e293b">' +
+    var bodyParagraphsEn = '';
+    if (isResigned) {
+      bodyParagraphsEn = '<p style="text-indent:2.5rem;margin-bottom:16px">' +
+        'This letter is officially issued to certify that <strong>' + esc(emp.fullName || '-') + '</strong>, ' +
+        'Identification / Citizen Card No. <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong>, ' +
+        'was formerly employed as a regular employee of <strong>' + esc(compName) + '</strong>, ' +
+        'having served with the company from <strong>' + esc(startDateDisplayEn) + '</strong> ' +
+        (emp.resignDate ? 'to <strong>' + esc(formatDateThaiBE(emp.resignDate)) + '</strong> ' : '') +
+        (tenureTextEn ? '(with continuous service of <strong>' + esc(tenureTextEn) + '</strong>). ' : '') +
+      '</p>' +
       '<p style="text-indent:2.5rem;margin-bottom:16px">' +
+        'During the employment, ' + esc(emp.fullName || '-') + ' held the position of <strong>' + esc(emp.position || '-') + '</strong> ' +
+        'in the <strong>' + esc(emp.department || '-') + ' Department</strong>, ' +
+        'earning a final basic monthly salary of <strong style="font-family:monospace;font-size:14px">THB ' + fmt(baseSal) + '</strong>.' +
+      '</p>' +
+      '<p style="text-indent:2.5rem;margin-bottom:24px">' +
+        'During the tenure, the employee has performed duties satisfactorily and has officially separated from employment. This certificate is issued upon the request of the employee for the purpose of <strong>' + esc(purposeStrEn) + '</strong>.' +
+      '</p>';
+    } else {
+      bodyParagraphsEn = '<p style="text-indent:2.5rem;margin-bottom:16px">' +
         'This letter is officially issued to certify that <strong>' + esc(emp.fullName || '-') + '</strong>, ' +
         'Identification / Citizen Card No. <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong>, ' +
         'is a bona fide permanent employee of <strong>' + esc(compName) + '</strong>, ' +
@@ -7754,7 +7786,26 @@ function renderCertModalPaper() {
       '</p>' +
       '<p style="text-indent:2.5rem;margin-bottom:24px">' +
         'This certificate is issued upon the request of the employee for the sole purpose of <strong>' + esc(purposeStrEn) + '</strong>.' +
-      '</p>' +
+      '</p>';
+    }
+
+    h += '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:22px">' +
+      '<div style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:0.5px">' + esc(compName) + '</div>' +
+      '<div style="font-size:11px;color:#475569;margin-top:4px">Tax Identification No.: ' + esc(compTaxId) + '</div>' +
+      '<div style="font-size:11px;color:#64748b">' + esc(compAddress) + ' | Tel: ' + esc(compPhone) + '</div>' +
+    '</div>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:22px">' +
+      '<div><strong>Ref No.:</strong> ' + esc(docNoEn) + '</div>' +
+      '<div><strong>Date:</strong> <span id="certPaperDate">' + esc(certDate || new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' })) + '</span></div>' +
+    '</div>' +
+
+    '<div style="text-align:center;margin:24px 0 28px">' +
+      '<h2 contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขหัวข้อ" style="font-size:18px;font-weight:800;color:#0f172a;letter-spacing:1px;text-transform:uppercase;margin:0">' + certTitleEn + '</h2>' +
+    '</div>' +
+
+    '<div id="certPaperBody" contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขข้อความได้โดยตรง" style="font-size:13.5px;text-align:justify;line-height:2;color:#1e293b">' +
+      bodyParagraphsEn +
       '<p style="text-indent:2.5rem;margin-bottom:36px">' +
         'Certified true, accurate, and correct.' +
       '</p>' +
@@ -7784,24 +7835,29 @@ function renderCertModalPaper() {
     else if (purpose === 'general') purposeStrTh = 'ใช้เป็นหลักฐานรับรองสถานะการทำงานทั่วไป';
 
     var docNoTh = 'พทน. บค. ' + String(new Date().getMonth() + 1).padStart(2,'0') + String(new Date().getDate()).padStart(2,'0') + '/' + (new Date().getFullYear() + 543);
+    var certTitleTh = isResigned ? 'หนังสือรับรองการทำงาน / ผ่านงาน' : 'หนังสือรับรองเงินเดือนและการทำงาน';
 
-    h += '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:22px">' +
-      '<div style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:0.5px">' + esc(compName) + '</div>' +
-      '<div style="font-size:11px;color:#475569;margin-top:4px">เลขประจำตัวผู้เสียภาษีอากร: <strong style="font-family:monospace">' + esc(compTaxId) + '</strong> | โทรศัพท์: ' + esc(compPhone) + '</div>' +
-      '<div style="font-size:11px;color:#64748b">' + esc(compAddress) + '</div>' +
-    '</div>' +
-
-    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:20px">' +
-      '<div>ที่ ' + esc(docNoTh) + '</div>' +
-      '<div>วันที่ <strong id="certPaperDate">' + esc(certDate) + '</strong></div>' +
-    '</div>' +
-
-    '<div style="text-align:center;margin:24px 0 28px">' +
-      '<h2 contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขหัวข้อ" style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:1px;margin:0">หนังสือรับรองเงินเดือนและการทำงาน</h2>' +
-    '</div>' +
-
-    '<div id="certPaperBody" contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขข้อความได้โดยตรง" style="font-size:14px;text-align:justify;line-height:2.1;color:#1e293b">' +
+    var bodyParagraphsTh = '';
+    if (isResigned) {
+      bodyParagraphsTh = '<p style="text-indent:2.8rem;margin-bottom:16px">' +
+        'หนังสือฉบับนี้ให้ไว้เพื่อรับรองว่า <strong>' + esc(emp.fullName || '-') + '</strong> ' +
+        'เลขประจำตัวประชาชน <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong> ' +
+        'เคยเป็นพนักงานของ <strong>' + esc(compName) + '</strong> จริง ' +
+        'โดยได้เริ่มเข้าปฏิบัติงานตั้งแต่วันที่ <strong>' + esc(startDateDisplay) + '</strong> ' +
+        (resignDateDisplay ? 'จนถึงวันที่ <strong>' + esc(resignDateDisplay) + '</strong> ' : '') +
+        (tenureText ? 'รวมระยะเวลาการปฏิบัติงานทั้งสิ้น <strong>' + esc(tenureText) + '</strong> ' : '') +
+        'ในตำแหน่งสุดท้ายคือ <strong>' + esc(emp.position || '-') + '</strong> ' +
+        'สังกัดฝ่าย/แผนก <strong>' + esc(emp.department || '-') + '</strong>' +
+      '</p>' +
       '<p style="text-indent:2.8rem;margin-bottom:16px">' +
+        'โดยในระหว่างปฏิบัติงานได้รับเงินเดือนอัตราสุดท้ายเดือนละ <strong style="font-family:monospace;font-size:15px">' + fmt(baseSal) + '</strong> บาท ' +
+        '(<strong style="color:#0f172a">' + bahtText(baseSal) + '</strong>)' +
+      '</p>' +
+      '<p style="text-indent:2.8rem;margin-bottom:24px">' +
+        'ตลอดระยะเวลาที่ปฏิบัติงานกับบริษัทฯ พนักงานได้ปฏิบัติหน้าที่ด้วยความตั้งใจ ซื่อสัตย์สุจริต และได้พ้นสภาพการเป็นพนักงานด้วยความเรียบร้อย บริษัทฯ จึงออกหนังสือรับรองฉบับนี้ให้ไว้ตามความประสงค์ของพนักงาน เพื่อใช้เป็นหลักฐานประกอบการ <strong>' + esc(purposeStrTh) + '</strong>' +
+      '</p>';
+    } else {
+      bodyParagraphsTh = '<p style="text-indent:2.8rem;margin-bottom:16px">' +
         'หนังสือฉบับนี้ให้ไว้เพื่อรับรองว่า <strong>' + esc(emp.fullName || '-') + '</strong> ' +
         'เลขประจำตัวประชาชน <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong> ' +
         'เป็นพนักงานประจำของ <strong>' + esc(compName) + '</strong> จริง ' +
@@ -7816,7 +7872,26 @@ function renderCertModalPaper() {
       '</p>' +
       '<p style="text-indent:2.8rem;margin-bottom:24px">' +
         'บริษัทฯ ออกหนังสือรับรองฉบับนี้ให้ไว้ตามความประสงค์ของพนักงาน เพื่อใช้เป็นหลักฐานประกอบการ <strong>' + esc(purposeStrTh) + '</strong> เท่านั้น' +
-      '</p>' +
+      '</p>';
+    }
+
+    h += '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:22px">' +
+      '<div style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:0.5px">' + esc(compName) + '</div>' +
+      '<div style="font-size:11px;color:#475569;margin-top:4px">เลขประจำตัวผู้เสียภาษีอากร: <strong style="font-family:monospace">' + esc(compTaxId) + '</strong> | โทรศัพท์: ' + esc(compPhone) + '</div>' +
+      '<div style="font-size:11px;color:#64748b">' + esc(compAddress) + '</div>' +
+    '</div>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:20px">' +
+      '<div>ที่ ' + esc(docNoTh) + '</div>' +
+      '<div>วันที่ <strong id="certPaperDate">' + esc(certDate) + '</strong></div>' +
+    '</div>' +
+
+    '<div style="text-align:center;margin:24px 0 28px">' +
+      '<h2 contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขหัวข้อ" style="font-size:19px;font-weight:800;color:#0f172a;letter-spacing:1px;margin:0">' + certTitleTh + '</h2>' +
+    '</div>' +
+
+    '<div id="certPaperBody" contenteditable="true" spellcheck="false" title="คลิกเพื่อแก้ไขข้อความได้โดยตรง" style="font-size:14px;text-align:justify;line-height:2.1;color:#1e293b">' +
+      bodyParagraphsTh +
       '<p style="text-indent:2.8rem;margin-bottom:36px">' +
         'ขอรับรองว่าเป็นความจริงทุกประการ' +
       '</p>' +
