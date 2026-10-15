@@ -4611,12 +4611,15 @@ async function handleAction(db, action, params) {
       }
 
       await logSystemActivity(db, callerUser, 'ADD_TIME_LOG', `เพิ่มการลงเวลาให้ [${empId}] ${empRow.full_name} วันที่ ${date} (เข้า: ${clockIn || '-'}, ออก: ${clockOut || '-'}, ชม.งาน: ${finalWorkHours}, OT: ${finalOtHours})`);
+      const outSummary = clockOut
+        ? `ชั่วโมงทำงาน: ${finalWorkHours} ชม.${finalOtHours > 0 ? ' + OT: ' + finalOtHours + ' ชม.' : ''}`
+        : `ลงเวลาเข้า ${clockIn} (รอสแกนออก)`;
       return {
         success: true,
         id: savedId,
         workHours: finalWorkHours,
         otHours: finalOtHours,
-        message: `เพิ่มการลงเวลาให้ ${empRow.full_name} วันที่ ${date} สำเร็จ (ชั่วโมงทำงาน: ${finalWorkHours} ชม.${finalOtHours > 0 ? ' + OT: ' + finalOtHours + ' ชม.' : ''})`
+        message: `เพิ่มการลงเวลาให้ ${empRow.full_name} วันที่ ${date} สำเร็จ (${outSummary})`
       };
     }
 

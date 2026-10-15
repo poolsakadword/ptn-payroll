@@ -13137,14 +13137,16 @@ function onAddAttendanceTimeChanged() {
   var otHrs = 0;
   var lateMin = 0;
 
-  if (inMin !== null && outMin !== null) {
-    var d = new Date(dateStr + 'T00:00:00');
-    var isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
+  var d = new Date(dateStr + 'T00:00:00');
+  var isSunday = (!isNaN(d.getTime()) && d.getDay() === 0);
 
+  if (inMin !== null) {
     if (inMin > startMin) {
       lateMin = inMin - startMin;
     }
+  }
 
+  if (inMin !== null && outMin !== null) {
     var breakMin = 0;
     var bOut = toMin(document.getElementById('addAttBreakOut') ? document.getElementById('addAttBreakOut').value : '');
     var bIn = toMin(document.getElementById('addAttBreakIn') ? document.getElementById('addAttBreakIn').value : '');
@@ -13174,9 +13176,14 @@ function onAddAttendanceTimeChanged() {
 
   var previewEl = document.getElementById('addAttCalcPreviewText');
   if (previewEl) {
-    previewEl.innerHTML = '<span style="color:#15803d">ชั่วโมงทำงาน: <b>' + workHrs + '</b> ชม.</span> | ' +
-                          '<span style="color:' + (lateMin > 0 ? '#b91c1c' : '#475569') + '">สาย: <b>' + lateMin + '</b> นาที</span> | ' +
-                          '<span style="color:' + (otHrs > 0 ? '#ea580c' : '#475569') + '">OT: <b>' + otHrs + '</b> ชม.</span>';
+    if (inMin !== null && outMin === null) {
+      previewEl.innerHTML = '<span style="color:#2563eb"><i class="fa-solid fa-user-clock"></i> ลงเวลาเข้า: <b>' + clockIn + '</b> (รอสแกนออก)</span> | ' +
+                            '<span style="color:' + (lateMin > 0 ? '#b91c1c' : '#059669') + '">' + (lateMin > 0 ? 'สาย: <b>' + lateMin + '</b> นาที' : 'เข้างานตรงเวลา') + '</span>';
+    } else {
+      previewEl.innerHTML = '<span style="color:#15803d">ชั่วโมงทำงาน: <b>' + workHrs + '</b> ชม.</span> | ' +
+                            '<span style="color:' + (lateMin > 0 ? '#b91c1c' : '#475569') + '">สาย: <b>' + lateMin + '</b> นาที</span> | ' +
+                            '<span style="color:' + (otHrs > 0 ? '#ea580c' : '#475569') + '">OT: <b>' + otHrs + '</b> ชม.</span>';
+    }
   }
 
   var statusSel = document.getElementById('addAttStatus');
@@ -13208,7 +13215,7 @@ function submitAddAttendanceLogForm(e) {
 
   if (!empId) { showToast('กรุณาเลือกพนักงาน', 'error'); return; }
   if (!date) { showToast('กรุณาระบุวันที่', 'error'); return; }
-  if (!clockIn || !clockOut) { showToast('กรุณาระบุเวลาเข้าและเวลาออกงาน', 'error'); return; }
+  if (!clockIn) { showToast('กรุณาระบุเวลาเข้างาน', 'error'); return; }
 
   var btn = document.getElementById('btnSubmitAddAttLog');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...'; }
@@ -13218,7 +13225,7 @@ function submitAddAttendanceLogForm(e) {
     date: date,
     branchId: branchId,
     clockIn: clockIn + (clockIn.length === 5 ? ':00' : ''),
-    clockOut: clockOut + (clockOut.length === 5 ? ':00' : ''),
+    clockOut: clockOut ? (clockOut + (clockOut.length === 5 ? ':00' : '')) : '',
     breakOut: breakOut ? (breakOut + (breakOut.length === 5 ? ':00' : '')) : '',
     breakIn: breakIn ? (breakIn + (breakIn.length === 5 ? ':00' : '')) : '',
     status: status,

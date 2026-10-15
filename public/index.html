@@ -5588,13 +5588,14 @@
           </div>
           <div>
             <label style="font-size:12px;font-weight:700;color:#b91c1c;display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-              <span><i class="fa-solid fa-right-from-bracket"></i> เวลาออกงาน *</span>
+              <span><i class="fa-solid fa-right-from-bracket"></i> เวลาออกงาน <span style="font-weight:400;color:#64748b;font-size:11px">(เว้นว่างได้ถ้ายังไม่เลิกงาน)</span></span>
             </label>
-            <input type="time" id="addAttClockOut" required class="form-control" style="font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-family:monospace;font-weight:700;color:#b91c1c" oninput="onAddAttendanceTimeChanged()">
-            <div style="display:flex;gap:4px;margin-top:4px">
+            <input type="time" id="addAttClockOut" class="form-control" style="font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid #cbd5e1;width:100%;font-family:monospace;font-weight:700;color:#b91c1c" oninput="onAddAttendanceTimeChanged()">
+            <div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap">
               <button type="button" class="btn btn-xs" onclick="setAddAttTime('out', '19:00')" style="font-size:10px;padding:2px 6px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">19:00 (ปกติ)</button>
               <button type="button" class="btn btn-xs" onclick="setAddAttTime('out', '18:30')" style="font-size:10px;padding:2px 6px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1">18:30</button>
               <button type="button" class="btn btn-xs" onclick="setAddAttTime('out', '19:30')" style="font-size:10px;padding:2px 6px;background:#f8fafc;color:#475569;border:1px solid #cbd5e1">19:30</button>
+              <button type="button" class="btn btn-xs" onclick="setAddAttTime('out', '')" style="font-size:10px;padding:2px 6px;background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1" title="ยังไม่ลงเวลาออกงาน"><i class="fa-solid fa-eraser"></i> ว่าง (ยังไม่ออก)</button>
             </div>
           </div>
         </div>
