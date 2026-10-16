@@ -1112,6 +1112,7 @@ function renderPayrollTable() {
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.tax) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(row.advanceDeduct) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red">' + (canViewSalary ? fmt(row.otherDeduct) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(row.totalDeductions || 0) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold bg-green-light" style="font-size:13px">' +
         (canViewSalary ? (
           '<span class="text-green">' + fmt(row.netPay) + '</span>' +
