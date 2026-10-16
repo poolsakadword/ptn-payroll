@@ -1241,6 +1241,7 @@ function renderInputTable() {
       '<td class="text-right font-mono font-bold text-blue">' + (canViewSalary ? fmt(pfAmt) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(i.sso !== undefined && i.sso !== null ? i.sso : 0) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(i.tax || 0) : '฿***') + '</td>' +
+      '<td class="text-right font-mono text-red font-bold">' + (canViewSalary ? fmt(Number(i.advanceDeduct) || 0) : '฿***') + '</td>' +
       (function() {
         var oth = Number(i.otherDeduct) || 0;
         var cDebt = Number(i.carriedDebt) || 0;

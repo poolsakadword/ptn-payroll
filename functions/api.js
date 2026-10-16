@@ -1823,6 +1823,23 @@ async function handleAction(db, action, params) {
         if (r.emp_id && Number(r.carried_debt) > 0) prevDebtMap[r.emp_id] = Number(r.carried_debt);
       }
 
+      // Query approved advance requests in this cutoff window
+      let advMap = {};
+      try {
+        const advQuery = await db.prepare(`
+          SELECT emp_id, SUM(amount) as total_amt
+          FROM advance_requests
+          WHERE status = 'APPROVED'
+            AND (request_date BETWEEN ? AND ? OR period = ?)
+          GROUP BY emp_id
+        `).bind(dates.startDate, dates.endDate, period).all().catch(() => ({ results: [] }));
+        for (const row of (advQuery.results || [])) {
+          advMap[row.emp_id] = Number(row.total_amt) || 0;
+        }
+      } catch (e) {
+        console.warn('advance_requests in populate error:', e);
+      }
+
       // Check which employees have time logs in this cutoff window
       const activeLogsQuery = await db.prepare(`
         SELECT DISTINCT emp_id FROM time_logs WHERE date BETWEEN ? AND ?
@@ -1883,7 +1900,9 @@ async function handleAction(db, action, params) {
         const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : fallbackOtRate;
         const allowance = Number(exist.allowance) || 0;
         const bonus = Number(exist.bonus) || 0;
-        const advDed = Number(exist.advance_deduct) || 0;
+        const advDed = (exist.advance_deduct !== undefined && exist.advance_deduct !== null && Number(exist.advance_deduct) > 0)
+          ? Number(exist.advance_deduct)
+          : (advMap[emp.emp_id] || 0);
         const othDed = Number(exist.other_deduct) || 0;
         const carriedDebt = (exist.carried_debt !== undefined && exist.carried_debt !== null && Number(exist.carried_debt) > 0)
           ? Number(exist.carried_debt)
