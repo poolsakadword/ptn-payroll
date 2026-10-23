@@ -2579,6 +2579,9 @@ async function handleAction(db, action, params) {
               const mHrs = Math.round((missingHoursMap[emp.emp_id] || 0) * 100) / 100;
               empDisqualifyReasons.push(`ออกก่อนเวลา/ขาดช่วง ${mHrs} ชม.`);
             }
+            if (proRata && proRata.isNewHireMidPeriod) {
+              empDisqualifyReasons.push('พนักงานเข้าใหม่ระหว่างงวด (ทำงานไม่เต็มงวด)');
+            }
             if (emp.status === 'Resigned' || (proRata && proRata.isExitMidPeriod)) {
               empDisqualifyReasons.push('พนักงานลาออกระหว่างงวด');
             }
@@ -3762,6 +3765,12 @@ async function handleAction(db, action, params) {
         const disqualifyReasons = [];
 
         if (autoDiligenceEnabled) {
+          if (joinDateStr && joinDateStr > startDate) {
+            disqualifyReasons.push('พนักงานเข้าใหม่ระหว่างงวด (ทำงานไม่เต็มงวด)');
+          }
+          if (emp.status === 'Resigned' || (emp.resign_date && normalizeDateToIso(emp.resign_date) < endDate)) {
+            disqualifyReasons.push('พนักงานลาออกระหว่างงวด');
+          }
           if (presentDays === 0) {
             disqualifyReasons.push('ไม่มีประวัติการลงเวลาในงวดนี้');
           }
