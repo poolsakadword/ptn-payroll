@@ -997,6 +997,21 @@ function getPreviousPeriodStr(periodStr) {
   return `${thaiMonths[prevMonth - 1]} ${prevYearBE}`;
 }
 
+function getNextPeriodStr(periodStr) {
+  const thaiMonths = [
+    'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+    'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
+  ];
+  const { yearBE, month } = parsePeriodYearMonth(periodStr);
+  let nextMonth = month + 1;
+  let nextYearBE = yearBE;
+  if (nextMonth > 12) {
+    nextMonth = 1;
+    nextYearBE += 1;
+  }
+  return `${thaiMonths[nextMonth - 1]} ${nextYearBE}`;
+}
+
 async function getCutoffDatesForPeriod(db, periodStr) {
   let cutoffDay = 25;
   if (db) {
@@ -1127,6 +1142,13 @@ async function handleAction(db, action, params) {
   if (!period) {
     const latestRow = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
     period = (latestRow && latestRow.period) ? latestRow.period : getDefaultPeriod();
+    if (latestRow && latestRow.period) {
+      const closedSetting = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(`Period_Status_${latestRow.period}`).first().catch(() => null);
+      if (closedSetting && closedSetting.value && closedSetting.value.startsWith('CLOSED')) {
+        const nextP = getNextPeriodStr(latestRow.period);
+        if (nextP) period = nextP;
+      }
+    }
   }
 
   switch (action) {
@@ -1378,7 +1400,14 @@ async function handleAction(db, action, params) {
       });
 
       const latestRowPeriod = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
-      const latestActivePeriod = (latestRowPeriod && latestRowPeriod.period) ? latestRowPeriod.period : period;
+      let latestActivePeriod = (latestRowPeriod && latestRowPeriod.period) ? latestRowPeriod.period : period;
+      if (latestRowPeriod && latestRowPeriod.period) {
+        const closedRow = (settingsRows.results || []).find(r => r.key === `Period_Status_${latestRowPeriod.period}`);
+        if (closedRow && closedRow.value && closedRow.value.startsWith('CLOSED')) {
+          const nextP = getNextPeriodStr(latestRowPeriod.period);
+          if (nextP) latestActivePeriod = nextP;
+        }
+      }
 
       const getSetNum = (k, def) => {
         const row = (settingsRows.results || []).find(r => r.key === k);
@@ -5592,7 +5621,14 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
       const val = `CLOSED|${timeStr}|${params.username || 'Admin'}`;
       await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').bind(`Period_Status_${period}`, val).run();
       await logSystemActivity(db, params.username || 'Admin', 'PERIOD_CLOSE', `ปิดงวดประจำเดือน ${period}`);
-      return { success: true, period: period, isClosed: true, message: `ปิดงวดประจำเดือน ${period} เรียบร้อยแล้ว (ล็อคผลการคำนวณ)` };
+      const nextP = getNextPeriodStr(period);
+      return {
+        success: true,
+        period: period,
+        isClosed: true,
+        nextPeriod: nextP,
+        message: `ปิดงวดประจำเดือน ${period} เรียบร้อยแล้ว (ล็อคผลการคำนวณ)`
+      };
     }
 
     case 'reopenPeriod': {

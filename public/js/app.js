@@ -611,6 +611,41 @@ function handleLogout() {
   checkAuth();
 }
 
+// PERIOD HELPER FUNCTIONS
+function getNextPeriodStr(periodStr) {
+  var months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  if (!periodStr || periodStr.indexOf(' ') < 0) return '';
+  var parts = String(periodStr).trim().split(' ');
+  var mIdx = months.indexOf(parts[0]);
+  if (mIdx < 0) return '';
+  var y = parseInt(parts[1], 10);
+  if (isNaN(y)) return '';
+  var nextMIdx = mIdx + 1;
+  var nextY = y;
+  if (nextMIdx >= 12) {
+    nextMIdx = 0;
+    nextY += 1;
+  }
+  return months[nextMIdx] + ' ' + nextY;
+}
+
+function getPreviousPeriodStr(periodStr) {
+  var months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  if (!periodStr || periodStr.indexOf(' ') < 0) return '';
+  var parts = String(periodStr).trim().split(' ');
+  var mIdx = months.indexOf(parts[0]);
+  if (mIdx < 0) return '';
+  var y = parseInt(parts[1], 10);
+  if (isNaN(y)) return '';
+  var prevMIdx = mIdx - 1;
+  var prevY = y;
+  if (prevMIdx < 0) {
+    prevMIdx = 11;
+    prevY -= 1;
+  }
+  return months[prevMIdx] + ' ' + prevY;
+}
+
 // PERIOD SELECTION
 function initPeriodDropdowns() {
   var months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
@@ -926,6 +961,17 @@ function loadAppData(isExplicitPeriodChange) {
   return callApi('getAppInitialData', payload)
     .then(function(r) {
       if (!r.success) { showToast(r.message, 'error'); return; }
+
+      // Smart Auto-Advance: If initial load (not an explicit selection in dropdown) and current period is CLOSED,
+      // automatically advance to the next active working period so HR can immediately start work
+      if (!isExplicitPeriodChange && r.isClosed) {
+        var nextP = getNextPeriodStr(r.period);
+        if (nextP && nextP !== r.period) {
+          State.period = nextP;
+          localStorage.setItem('ptn_last_period', State.period);
+          return loadAppData(true);
+        }
+      }
 
       // If initial load or current period has no records, but another latest period has data, auto-switch to it
       if (!isExplicitPeriodChange && (!r.inputRecords || r.inputRecords.length === 0) && r.latestActivePeriod && r.latestActivePeriod !== r.period) {
@@ -4122,11 +4168,21 @@ function confirmClosePeriodAction() {
   var doBackup = document.getElementById('chkClosePeriodAutoBackup') ? document.getElementById('chkClosePeriodAutoBackup').checked : false;
 
   var executeClose = function() {
+    var closedPeriodName = State.period;
+    var nextPeriodName = getNextPeriodStr(closedPeriodName);
     callApi('closePeriod', { username: (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin' })
       .then(function(r) {
         closeModal('modalClosePeriodConfirm');
-        showToast(r.message || 'ปิดงวดประจำเดือนสำเร็จ (ล็อคผลการคำนวณแล้ว)');
-        loadAppData();
+        var targetNextPeriod = r.nextPeriod || nextPeriodName;
+        if (targetNextPeriod) {
+          State.period = targetNextPeriod;
+          localStorage.setItem('ptn_last_period', State.period);
+          showToast('ปิดงวด ' + closedPeriodName + ' สำเร็จ! ระบบได้สลับไปยังงวดใหม่ (' + targetNextPeriod + ') ให้เรียบร้อยแล้ว', 'success');
+          loadAppData(true);
+        } else {
+          showToast(r.message || 'ปิดงวดประจำเดือนสำเร็จ (ล็อคผลการคำนวณแล้ว)', 'success');
+          loadAppData();
+        }
       })
       .catch(function(e) {
         showToast(e.message, 'error');
@@ -4162,7 +4218,7 @@ function reopenPeriod() {
   callApi('reopenPeriod', { username: (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin' })
     .then(function(r) {
       showToast(r.message || 'เปิดงวดสำเร็จ');
-      loadAppData();
+      loadAppData(true);
     })
     .catch(function(e) { showToast(e.message, 'error'); });
 }
