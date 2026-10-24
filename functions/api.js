@@ -2079,6 +2079,9 @@ async function handleAction(db, action, params) {
       // 3. Query time_logs for the cutoff window
       let missingHoursMap = {};
       let earlyDeductMap = {};
+      let empLateDeductAmt = {};
+      let empEarlyDepartureAmt = {};
+      let empEarlyDepartureHours = {};
       let employeeHasLogs = {};
       let logsByEmpDate = {};
       let lastClockInDateByEmp = {};
@@ -2087,7 +2090,7 @@ async function handleAction(db, action, params) {
       let empLateCount = {};
       try {
         let tlSql = `
-          SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark
+          SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, break_minutes, overbreak_minutes, status, branch_id, is_full_pay, remark
           FROM time_logs
           WHERE date BETWEEN ? AND ?
         `;
@@ -2299,7 +2302,9 @@ async function handleAction(db, action, params) {
         const bOutMin = timeStringToMinutes(row.break_out);
         const bInMin = timeStringToMinutes(row.break_in);
         const workHours = Number(row.work_hours) || 0;
-        const lateMins = Number(row.late_minutes) || 0;
+        const morningLateMins = Number(row.late_minutes) || 0;
+        const overBreakMins = Number(row.overbreak_minutes) || 0;
+        const totalDayLateMins = morningLateMins + overBreakMins;
 
         const leaveInfo = getLeaveInfoOnDate(row.emp_id, row.date);
         const approvedLeaveDays = leaveInfo.days;
@@ -2338,15 +2343,20 @@ async function handleAction(db, action, params) {
         }
 
         if (row.clock_in) {
-          // 1. หักตามนาทีสายจริง (Deduct strictly based on actual late minutes)
+          // 1. หักตามนาทีสายจริง (Deduct strictly based on actual late minutes: รวมสายเช้า + เข้าบ่ายสาย/พักเกิน)
           let lateHours = 0;
-          if (lateMins > 0 && !isMorningAbsence && !isAfternoonAbsence) {
-            lateHours = Math.round((lateMins / 60) * 100) / 100;
+          if (totalDayLateMins > 0 && !isMorningAbsence && !isAfternoonAbsence) {
+            lateHours = Math.round((totalDayLateMins / 60) * 100) / 100;
             const lateDeductAmt = lateHours * hourlyRate;
-            empLateMinutes[row.emp_id] = (empLateMinutes[row.emp_id] || 0) + lateMins;
-            empLateCount[row.emp_id] = (empLateCount[row.emp_id] || 0) + 1;
+            let dayLateCount = 0;
+            if (morningLateMins > 0) dayLateCount++;
+            if (overBreakMins > 0) dayLateCount++;
+
+            empLateMinutes[row.emp_id] = (empLateMinutes[row.emp_id] || 0) + totalDayLateMins;
+            empLateCount[row.emp_id] = (empLateCount[row.emp_id] || 0) + dayLateCount;
             missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + lateHours;
             earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + lateDeductAmt;
+            empLateDeductAmt[row.emp_id] = (empLateDeductAmt[row.emp_id] || 0) + lateDeductAmt;
           }
 
           const isBranchEarlyDismissal = (row.is_full_pay === 1 || row.is_full_pay === '1' || (row.remark && row.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน')));
@@ -2362,8 +2372,11 @@ async function handleAction(db, action, params) {
             const earlyGraceHours = 15 / 60; // ผ่อนผัน 15 นาที
             if (workHours < (expectedHours - earlyGraceHours)) {
               const earlyMissing = Math.round((expectedHours - workHours) * 100) / 100;
+              const earlyAmt = earlyMissing * hourlyRate;
               missingHoursMap[row.emp_id] = (missingHoursMap[row.emp_id] || 0) + earlyMissing;
-              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + (earlyMissing * hourlyRate);
+              earlyDeductMap[row.emp_id] = (earlyDeductMap[row.emp_id] || 0) + earlyAmt;
+              empEarlyDepartureAmt[row.emp_id] = (empEarlyDepartureAmt[row.emp_id] || 0) + earlyAmt;
+              empEarlyDepartureHours[row.emp_id] = (empEarlyDepartureHours[row.emp_id] || 0) + earlyMissing;
             }
           }
         }
@@ -2604,9 +2617,10 @@ async function handleAction(db, action, params) {
             if (unpaidSickLeaveDays > 0) {
               empDisqualifyReasons.push(`ลาป่วยไม่มีใบรับรองแพทย์ ${unpaidSickLeaveDays} วัน`);
             }
-            if (calcEarlyDeduct > 0) {
-              const mHrs = Math.round((missingHoursMap[emp.emp_id] || 0) * 100) / 100;
-              empDisqualifyReasons.push(`ออกก่อนเวลา/ขาดช่วง ${mHrs} ชม.`);
+            const earlyDeptAmt = empEarlyDepartureAmt[emp.emp_id] || 0;
+            if (earlyDeptAmt > 0) {
+              const eHrs = Math.round((empEarlyDepartureHours[emp.emp_id] || 0) * 100) / 100;
+              empDisqualifyReasons.push(`ออกก่อนเวลา/ขาดช่วง ${eHrs} ชม.`);
             }
             if (proRata && proRata.isNewHireMidPeriod) {
               empDisqualifyReasons.push('พนักงานเข้าใหม่ระหว่างงวด (ทำงานไม่เต็มงวด)');
@@ -2615,7 +2629,7 @@ async function handleAction(db, action, params) {
               empDisqualifyReasons.push('พนักงานลาออกระหว่างงวด');
             }
 
-            // Check late arrivals in non-Sunday logs
+            // Check late arrivals in non-Sunday logs (including morning late and afternoon overbreak)
             const empLogs = timeLogsList.filter(l => l.emp_id === emp.emp_id);
             let lateOccurrences = 0;
             let excessiveLateDays = [];
@@ -2641,11 +2655,20 @@ async function handleAction(db, action, params) {
                                       ));
               if (isMorningMiss || isAfternoonMiss) continue;
 
-              const lMins = Number(l.late_minutes) || 0;
-              if (lMins > 0) {
+              const morningMins = Number(l.late_minutes) || 0;
+              const overBreakMins = Number(l.overbreak_minutes) || 0;
+
+              if (morningMins > 0) {
                 lateOccurrences++;
-                if (lMins > diligenceLateGraceMins) {
-                  excessiveLateDays.push(`วันที่ ${l.date.substring(8)} (สาย ${lMins} น. > เกณฑ์ ${diligenceLateGraceMins} น.)`);
+                if (morningMins > diligenceLateGraceMins) {
+                  excessiveLateDays.push(`วันที่ ${l.date.substring(8)} (สายเช้า ${morningMins} น. > เกณฑ์ ${diligenceLateGraceMins} น.)`);
+                }
+              }
+
+              if (overBreakMins > 0) {
+                lateOccurrences++;
+                if (overBreakMins > diligenceLateGraceMins) {
+                  excessiveLateDays.push(`วันที่ ${l.date.substring(8)} (เข้าบ่ายสาย/พักเกิน ${overBreakMins} น. > เกณฑ์ ${diligenceLateGraceMins} น.)`);
                 }
               }
             }
@@ -2997,9 +3020,12 @@ async function handleAction(db, action, params) {
           if (l.clock_in) daysWorked++;
           totalWorkHours += Number(l.work_hours || 0);
           totalOtHours += Number(l.ot_hours || 0);
-          if ((Number(l.late_minutes) || 0) > 0) {
-            lateCount++;
-            totalLateMinutes += Number(l.late_minutes || 0);
+          const morningLate = Number(l.late_minutes || 0);
+          const overbreakLate = Number(l.overbreak_minutes || 0);
+          if (morningLate > 0) lateCount++;
+          if (overbreakLate > 0) lateCount++;
+          if (morningLate + overbreakLate > 0) {
+            totalLateMinutes += (morningLate + overbreakLate);
           }
           if (l.clock_in && !l.clock_out && l.date < today) {
             missingClockOutCount++;
@@ -3132,6 +3158,10 @@ async function handleAction(db, action, params) {
           if (!targetLogsMap[log.emp_id]) {
             targetLogsMap[log.emp_id] = log;
           }
+          const morningLate = Number(log.late_minutes || 0);
+          const overbreakLate = Number(log.overbreak_minutes || 0);
+          const totalLateToday = morningLate + overbreakLate;
+
           clockedInList.push({
             id: log.id,
             empId: log.emp_id,
@@ -3146,13 +3176,18 @@ async function handleAction(db, action, params) {
             inPhotoUrl: log.in_photo_url || '',
             outPhotoUrl: log.out_photo_url || '',
             workHours: Number(log.work_hours || 0),
-            lateMinutes: Number(log.late_minutes || 0),
+            lateMinutes: totalLateToday,
+            morningLateMinutes: morningLate,
+            overbreakMinutes: overbreakLate,
             status: log.status || 'NORMAL',
             phone: log.phone || ''
           });
 
-          if ((Number(log.late_minutes) || 0) > 0) {
+          if (totalLateToday > 0) {
             const bInfo = branchMap[log.branch_id || log.emp_branch_id] || {};
+            let lateParts = [];
+            if (morningLate > 0) lateParts.push(`เช้า ${morningLate} น.`);
+            if (overbreakLate > 0) lateParts.push(`บ่าย ${overbreakLate} น.`);
             lateList.push({
               id: log.id,
               empId: log.emp_id,
@@ -3163,7 +3198,10 @@ async function handleAction(db, action, params) {
               branchId: log.branch_id || log.emp_branch_id || '',
               branchName: log.branch_name || bInfo.branch_name || '',
               clockIn: log.clock_in || '',
-              lateMinutes: Number(log.late_minutes || 0),
+              lateMinutes: totalLateToday,
+              morningLateMinutes: morningLate,
+              overbreakMinutes: overbreakLate,
+              lateDetails: lateParts.join(', '),
               shiftStart: bInfo.work_start_time || '09:30',
               phone: log.phone || ''
             });
@@ -3402,7 +3440,7 @@ async function handleAction(db, action, params) {
       const employees = empQuery.results || [];
 
       // Load Time Logs in Cutoff Window
-      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, status, branch_id, is_full_pay, remark FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
+      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, break_minutes, overbreak_minutes, status, branch_id, is_full_pay, remark FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
       const tlQuery = await db.prepare(tlSql).bind(startDate, endDate).all().catch(() => ({ results: [] }));
       const allLogs = tlQuery.results || [];
 
@@ -3507,6 +3545,8 @@ async function handleAction(db, action, params) {
           let isAbsent = false;
           let isHoliday = false;
           let curLateMins = 0;
+          let morningLateMins = 0;
+          let overBreakMins = 0;
           let curOtHrs = 0;
           const holidayInfo = holidayMap[dateStr];
 
@@ -3607,11 +3647,21 @@ async function handleAction(db, action, params) {
             } else {
               isPresent = true;
               presentDays++;
-              curLateMins = Number(log.late_minutes) || 0;
+              morningLateMins = Number(log.late_minutes) || 0;
+              overBreakMins = Number(log.overbreak_minutes) || 0;
+              curLateMins = morningLateMins + overBreakMins;
+
+              let dayLateTimes = 0;
+              if (morningLateMins > 0) dayLateTimes++;
+              if (overBreakMins > 0) dayLateTimes++;
+
               if (curLateMins > 0) {
-                lateTimes++;
+                lateTimes += dayLateTimes;
                 lateMinutes += curLateMins;
-                statusText = `สาย ${curLateMins} น.`;
+                let lateDetails = [];
+                if (morningLateMins > 0) lateDetails.push(`เช้า ${morningLateMins} น.`);
+                if (overBreakMins > 0) lateDetails.push(`บ่าย ${overBreakMins} น.`);
+                statusText = `สาย ${curLateMins} น. (${lateDetails.join(', ')})`;
                 statusColor = '#ea580c';
               } else if (matchingLeave) {
                 isLeave = true;
@@ -3727,6 +3777,8 @@ async function handleAction(db, action, params) {
             dayOfWeek: new Date(dateStr + 'T00:00:00Z').toLocaleDateString('th-TH', { weekday: 'short' }),
             clockIn: (log && log.clock_in) ? log.clock_in : '-',
             clockOut: (log && log.clock_out) ? log.clock_out : '-',
+            morningLateMinutes: morningLateMins,
+            overbreakMinutes: overBreakMins,
             lateMinutes: curLateMins,
             otHours: curOtHrs,
             statusText,
@@ -3820,9 +3872,15 @@ async function handleAction(db, action, params) {
           }
 
           for (const rec of dailyRecords) {
-            if (rec.lateMinutes > graceMins && !rec.isHoliday) {
-              disqualifyReasons.push(`สายเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.lateMinutes} นาที > ${graceMins} นาที)`);
-              break;
+            if (!rec.isHoliday) {
+              if (rec.morningLateMinutes > graceMins) {
+                disqualifyReasons.push(`สายเช้าเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.morningLateMinutes} นาที > ${graceMins} นาที)`);
+                break;
+              }
+              if (rec.overbreakMinutes > graceMins) {
+                disqualifyReasons.push(`เข้าบ่ายสายเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.overbreakMinutes} นาที > ${graceMins} นาที)`);
+                break;
+              }
             }
           }
 
@@ -5265,7 +5323,7 @@ async function handleAction(db, action, params) {
       // Extra Context: Branches & Today PTN Time
       const branchRows = (await db.prepare('SELECT branch_id, branch_name, work_start_time, work_end_time FROM branches').all().catch(() => ({ results: [] }))).results || [];
       const todayDate = new Date().toISOString().substring(0, 10);
-      const todayLogs = (await db.prepare('SELECT status, late_minutes FROM time_logs WHERE date = ?').bind(todayDate).all().catch(() => ({ results: [] }))).results || [];
+      const todayLogs = (await db.prepare('SELECT status, late_minutes, overbreak_minutes FROM time_logs WHERE date = ?').bind(todayDate).all().catch(() => ({ results: [] }))).results || [];
       const pendingRow = await db.prepare(`
         SELECT 
           (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') as pending_leaves,
@@ -5295,7 +5353,7 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
 - ท็อป OT งวดนี้: ${JSON.stringify(topOtList)}
 - พนักงานที่ได้เบี้ยขยัน: ${JSON.stringify(allowanceList.map(a => `${a.empId} ${a.name} (${a.dept})`))}
 - รายการขาดลามาสาย: ${JSON.stringify(leaveList)}
-- สถิติ PTN Time วันนี้ (${todayDate}): เข้างานแล้ว ${todayLogs.length} คน, สาย ${todayLogs.filter(t => (t.late_minutes||0) > 0).length} คน
+- สถิติ PTN Time วันนี้ (${todayDate}): เข้างานแล้ว ${todayLogs.length} คน, สาย ${todayLogs.filter(t => (t.late_minutes||0) > 0 || (t.overbreak_minutes||0) > 0).length} คน
 - คำขอรออนุมัติ: คำขอลา ${pendingRow?.pending_leaves || 0} รายการ, ขอโอที ${pendingRow?.pending_ots || 0} รายการ, ขอเบิกฉุกเฉิน ${pendingRow?.pending_advances || 0} รายการ
 - นโยบายบริษัท: เวลาทำงาน 09:30 - 19:00 น. (พัก 13:00 - 14:00 น.), โอทีปกติ 40 บาท/ชม., เบี้ยขยัน 1,000 บ./เดือน, โควตาลาป่วย 10 วัน/ปี (มีใบรับรองแพทย์), ขาดงานหัก 1.5 เท่า
 
