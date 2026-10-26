@@ -1429,7 +1429,8 @@ async function handleAction(db, action, params) {
         diligenceAllowance: getSetNum('DiligenceAllowance', 1000),
         diligenceLateGraceMins: getSetNum('DiligenceLateGraceMins', 2),
         diligenceLateMaxCount: getSetNum('DiligenceLateMaxCount', 1),
-        autoDiligenceEnabled: getSetBool('AutoDiligenceEnabled', true)
+        autoDiligenceEnabled: getSetBool('AutoDiligenceEnabled', true),
+        countOverbreakAsLate: getSetBool('CountOverbreakAsLate', true)
       };
 
       return {
@@ -1524,6 +1525,7 @@ async function handleAction(db, action, params) {
       if (d.diligenceLateGraceMins !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DiligenceLateGraceMins", ?)').bind(String(d.diligenceLateGraceMins)).run();
       if (d.diligenceLateMaxCount !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DiligenceLateMaxCount", ?)').bind(String(d.diligenceLateMaxCount)).run();
       if (d.autoDiligenceEnabled !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("AutoDiligenceEnabled", ?)').bind(String(d.autoDiligenceEnabled)).run();
+      if (d.countOverbreakAsLate !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CountOverbreakAsLate", ?)').bind(String(d.countOverbreakAsLate)).run();
 
       await calculateAndSavePayroll(db, period);
       await logSystemActivity(db, callerUser || 'Admin', 'SETTINGS_UPDATE', 'อัปเดตค่านโยบายและค่าเริ่มต้นการคำนวณเงินเดือน');
@@ -2077,6 +2079,9 @@ async function handleAction(db, action, params) {
       }
 
       // 3. Query time_logs for the cutoff window
+      const overbreakRow = settingsList.find(r => r.key === 'CountOverbreakAsLate');
+      const countOverbreakAsLate = overbreakRow ? (overbreakRow.value !== 'false' && overbreakRow.value !== '0') : true;
+
       let missingHoursMap = {};
       let earlyDeductMap = {};
       let empLateDeductAmt = {};
@@ -2303,7 +2308,7 @@ async function handleAction(db, action, params) {
         const bInMin = timeStringToMinutes(row.break_in);
         const workHours = Number(row.work_hours) || 0;
         const morningLateMins = Number(row.late_minutes) || 0;
-        const overBreakMins = Number(row.overbreak_minutes) || 0;
+        const overBreakMins = countOverbreakAsLate ? (Number(row.overbreak_minutes) || 0) : 0;
         const totalDayLateMins = morningLateMins + overBreakMins;
 
         const leaveInfo = getLeaveInfoOnDate(row.emp_id, row.date);
@@ -2656,7 +2661,7 @@ async function handleAction(db, action, params) {
               if (isMorningMiss || isAfternoonMiss) continue;
 
               const morningMins = Number(l.late_minutes) || 0;
-              const overBreakMins = Number(l.overbreak_minutes) || 0;
+              const overBreakMins = countOverbreakAsLate ? (Number(l.overbreak_minutes) || 0) : 0;
 
               if (morningMins > 0) {
                 lateOccurrences++;
@@ -3005,6 +3010,8 @@ async function handleAction(db, action, params) {
         }
       }
       const logsToday = logsQuery.results || [];
+      const overbreakSettingRow = await db.prepare('SELECT value FROM settings WHERE key = "CountOverbreakAsLate"').first().catch(() => null);
+      const countOverbreakAsLate = overbreakSettingRow ? (overbreakSettingRow.value !== 'false' && overbreakSettingRow.value !== '0') : true;
 
       // Compute Individual Mini Summary if individual mode
       if (isIndividual) {
@@ -3021,7 +3028,7 @@ async function handleAction(db, action, params) {
           totalWorkHours += Number(l.work_hours || 0);
           totalOtHours += Number(l.ot_hours || 0);
           const morningLate = Number(l.late_minutes || 0);
-          const overbreakLate = Number(l.overbreak_minutes || 0);
+          const overbreakLate = countOverbreakAsLate ? Number(l.overbreak_minutes || 0) : 0;
           if (morningLate > 0) lateCount++;
           if (overbreakLate > 0) lateCount++;
           if (morningLate + overbreakLate > 0) {
@@ -3159,7 +3166,7 @@ async function handleAction(db, action, params) {
             targetLogsMap[log.emp_id] = log;
           }
           const morningLate = Number(log.late_minutes || 0);
-          const overbreakLate = Number(log.overbreak_minutes || 0);
+          const overbreakLate = countOverbreakAsLate ? Number(log.overbreak_minutes || 0) : 0;
           const totalLateToday = morningLate + overbreakLate;
 
           clockedInList.push({
@@ -3455,13 +3462,14 @@ async function handleAction(db, action, params) {
       const allOts = otQuery.results || [];
 
       // Load Settings for Diligence Allowance
-      const setQuery = await db.prepare("SELECT key, value FROM settings WHERE key IN ('DiligenceAllowance', 'DiligenceLateGraceMins', 'DiligenceLateMaxCount', 'AutoDiligenceEnabled')").all().catch(() => ({ results: [] }));
+      const setQuery = await db.prepare("SELECT key, value FROM settings WHERE key IN ('DiligenceAllowance', 'DiligenceLateGraceMins', 'DiligenceLateMaxCount', 'AutoDiligenceEnabled', 'CountOverbreakAsLate')").all().catch(() => ({ results: [] }));
       const setMap = {};
       for (const r of (setQuery.results || [])) setMap[r.key] = r.value;
       const fallbackAllowance = !isNaN(Number(setMap['DiligenceAllowance'])) ? Number(setMap['DiligenceAllowance']) : 1000;
       const graceMins = !isNaN(Number(setMap['DiligenceLateGraceMins'])) ? Number(setMap['DiligenceLateGraceMins']) : 2;
       const maxLateCount = !isNaN(Number(setMap['DiligenceLateMaxCount'])) ? Number(setMap['DiligenceLateMaxCount']) : 1;
       const autoDiligenceEnabled = setMap['AutoDiligenceEnabled'] !== 'false';
+      const countOverbreakAsLate = setMap['CountOverbreakAsLate'] !== undefined ? (setMap['CountOverbreakAsLate'] !== 'false' && setMap['CountOverbreakAsLate'] !== '0') : true;
 
       // Group logs, leaves, and ots by emp_id
       const logsByEmp = {};
@@ -3648,7 +3656,7 @@ async function handleAction(db, action, params) {
               isPresent = true;
               presentDays++;
               morningLateMins = Number(log.late_minutes) || 0;
-              overBreakMins = Number(log.overbreak_minutes) || 0;
+              overBreakMins = countOverbreakAsLate ? (Number(log.overbreak_minutes) || 0) : 0;
               curLateMins = morningLateMins + overBreakMins;
 
               let dayLateTimes = 0;
@@ -3877,7 +3885,7 @@ async function handleAction(db, action, params) {
                 disqualifyReasons.push(`สายเช้าเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.morningLateMinutes} นาที > ${graceMins} นาที)`);
                 break;
               }
-              if (rec.overbreakMinutes > graceMins) {
+              if (countOverbreakAsLate && rec.overbreakMinutes > graceMins) {
                 disqualifyReasons.push(`เข้าบ่ายสายเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.overbreakMinutes} นาที > ${graceMins} นาที)`);
                 break;
               }
@@ -3956,6 +3964,7 @@ async function handleAction(db, action, params) {
           cutoffDay: cutoffInfo.cutoffDay,
           isCurrentActivePeriod
         },
+        countOverbreakAsLate,
         branchId: branchId || 'ALL',
         branches,
         grandTotals,

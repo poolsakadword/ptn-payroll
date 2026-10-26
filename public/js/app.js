@@ -408,7 +408,8 @@ var State = {
     diligenceAllowance: 1000,
     diligenceLateGraceMins: 2,
     diligenceLateMaxCount: 1,
-    autoDiligenceEnabled: true
+    autoDiligenceEnabled: true,
+    countOverbreakAsLate: true
   },
   annualSickMap: {},
   companyHolidays: []
@@ -2681,6 +2682,7 @@ function renderCompanySettings() {
   if (document.getElementById('cfgDiligenceLateGraceMins')) document.getElementById('cfgDiligenceLateGraceMins').value = pd.diligenceLateGraceMins !== undefined ? pd.diligenceLateGraceMins : 2;
   if (document.getElementById('cfgDiligenceLateMaxCount')) document.getElementById('cfgDiligenceLateMaxCount').value = pd.diligenceLateMaxCount !== undefined ? pd.diligenceLateMaxCount : 1;
   if (document.getElementById('cfgAutoDiligenceEnabled')) document.getElementById('cfgAutoDiligenceEnabled').checked = pd.autoDiligenceEnabled !== false;
+  if (document.getElementById('cfgCountOverbreakAsLate')) document.getElementById('cfgCountOverbreakAsLate').checked = pd.countOverbreakAsLate !== false;
 
   // Load PTN Time announcement settings
   loadAppAnnouncementSettings();
@@ -2703,7 +2705,8 @@ function savePayrollDefaults(e) {
     diligenceAllowance: document.getElementById('cfgDiligenceAllowance') ? Number(document.getElementById('cfgDiligenceAllowance').value) : 1000,
     diligenceLateGraceMins: document.getElementById('cfgDiligenceLateGraceMins') ? Number(document.getElementById('cfgDiligenceLateGraceMins').value) : 2,
     diligenceLateMaxCount: document.getElementById('cfgDiligenceLateMaxCount') ? Number(document.getElementById('cfgDiligenceLateMaxCount').value) : 1,
-    autoDiligenceEnabled: document.getElementById('cfgAutoDiligenceEnabled') ? document.getElementById('cfgAutoDiligenceEnabled').checked : true
+    autoDiligenceEnabled: document.getElementById('cfgAutoDiligenceEnabled') ? document.getElementById('cfgAutoDiligenceEnabled').checked : true,
+    countOverbreakAsLate: document.getElementById('cfgCountOverbreakAsLate') ? document.getElementById('cfgCountOverbreakAsLate').checked : true
   };
   callApi('savePayrollDefaults', { defaults: d })
     .then(function(r) {
