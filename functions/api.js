@@ -4412,12 +4412,15 @@ async function handleAction(db, action, params) {
 
       sql += ` ORDER BY l.emp_id ASC, l.date ASC, l.clock_in ASC`;
 
-      const query = await db.prepare(sql).bind(...binds).all().catch(() => ({ results: [] }));
+      const query = await db.prepare(sql).bind(...binds).all().catch(e => ({ error: e.message || String(e), results: [] }));
       const holidaysQuery = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
 
       return {
         success: true,
         logs: query.results || [],
+        queryError: query.error || null,
+        querySql: sql,
+        queryBinds: binds,
         holidays: holidaysQuery.results || [],
         startDate,
         endDate,
