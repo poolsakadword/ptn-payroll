@@ -4395,7 +4395,7 @@ async function handleAction(db, action, params) {
       let sql = `
         SELECT 
           l.id, l.emp_id, l.date, l.clock_in, l.clock_out, l.break_out, l.break_in,
-          l.work_hours, l.ot_hours, l.ot_start, l.ot_end,
+          l.work_hours, l.ot_hours,
           l.late_minutes, l.break_minutes, l.overbreak_minutes,
           l.status, l.remark, l.branch_id, l.is_full_pay,
           l.in_lat, l.in_lng, l.out_lat, l.out_lng,
@@ -4420,12 +4420,13 @@ async function handleAction(db, action, params) {
 
       const query = await db.prepare(sql).bind(...binds).all().catch(e => {
         console.error('getAttendanceLogsRange error:', e);
-        return { results: [] };
+        return { error: e.message || String(e), results: [] };
       });
       const holidaysQuery = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
 
       return {
-        success: true,
+        success: !query.error,
+        error: query.error || undefined,
         logs: query.results || [],
         holidays: holidaysQuery.results || [],
         startDate,
