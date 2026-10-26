@@ -4633,6 +4633,34 @@ async function handleAction(db, action, params) {
       };
     }
 
+    // 5.5.3 SEND CUSTOM EMPLOYEE PUSH ALERT (AI INSPECTOR / HR)
+    case 'sendCustomEmployeePush': {
+      const callerUser = params.username || params.currentUsername || 'Admin';
+      const allowed = (await userHasPermission(db, callerUser, 'approve_attendance')) ||
+                      (await userHasPermission(db, callerUser, 'calc_payroll')) ||
+                      (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอในการส่งแจ้งเตือนพนักงาน' };
+
+      const { empId, title, body } = params;
+      if (!empId) {
+        return { success: false, message: 'กรุณาระบุรหัสพนักงาน' };
+      }
+      const sentCount = await sendPushToEmployee(db, empId, {
+        title: title || '⚠️ แจ้งเตือนการลงเวลา (PTN Time)',
+        body: body || 'กรุณาตรวจสอบบันทึกการลงเวลาและสิทธิ์เบี้ยขยันของคุณในระบบ PTN Time',
+        url: '/?tab=history',
+        tag: 'ptn-ai-alert-' + Date.now()
+      });
+      await logSystemActivity(db, callerUser, 'AI_EMPLOYEE_PUSH', `ส่ง Push Notification ถึง ${empId} (${sentCount} เครื่อง): ${title || ''}`);
+      return {
+        success: true,
+        sentCount,
+        message: sentCount > 0 
+          ? `ส่งการแจ้งเตือนไปยังแอป PTN Time ของพนักงาน ${empId} สำเร็จ (${sentCount} เครื่อง)` 
+          : `ส่งข้อความแล้ว (ยังไม่มีอุปกรณ์ของพนักงาน ${empId} ที่เปิดรับ Push Notification)`
+      };
+    }
+
     // 5.5.9 ADD TIME LOG (MANUAL ENTRY BY ADMIN / HR)
     case 'addAttendanceLog': {
       const callerUser = params.username || 'Admin';

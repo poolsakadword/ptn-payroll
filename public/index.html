@@ -516,6 +516,9 @@
               <button type="button" id="btnAttMasterQr" class="btn" style="background:#f59e0b;color:#78350f;font-weight:700;font-size:12px" onclick="openMasterQrModalFromPayroll()">
                 <i class="fa-solid fa-qrcode"></i> Master QR ปลดล็อกเครื่อง
               </button>
+              <button type="button" id="btnAttLaunchAiInspector" class="btn" style="background:linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);color:#fff;border:1px solid #818cf8;font-weight:700;font-size:12px;box-shadow:0 2px 5px rgba(79,70,229,0.3)" onclick="switchAttendanceSubTab('ai_inspector')">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> 🤖 AI ตรวจจับผิดปกติ
+              </button>
               <button type="button" id="btnAttSyncPeriod" class="btn" style="background:#10b981;color:#fff;font-weight:700;font-size:12px" onclick="syncAttendanceToPayrollPeriod()">
                 <i class="fa-solid fa-cloud-arrow-down"></i> ดึงเวลาเข้างวดนี้
               </button>
@@ -564,14 +567,20 @@
               <span id="attSubTabBadgeApprovals" style="display:none;background:#e11d48;color:#ffffff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px">0</span>
             </button>
 
+            <button type="button" id="attSubTabBtn_ai_inspector" class="btn btn-sm" onclick="switchAttendanceSubTab('ai_inspector')" style="background:#ffffff;color:#4338ca;border:1px solid #c7d2fe;font-weight:700;font-size:12.5px;padding:7px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(99,102,241,0.15)">
+              <i class="fa-solid fa-wand-magic-sparkles" style="color:#6366f1"></i>
+              <span>4. 🤖 AI ตรวจจับผิดปกติ (Inspector)</span>
+              <span id="attSubTabBadgeAi" style="background:linear-gradient(135deg, #6366f1 0%, #a855f7 100%);color:#ffffff;font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px">AI NEW</span>
+            </button>
+
             <button type="button" id="attSubTabBtn_settings" class="btn btn-sm" onclick="switchAttendanceSubTab('settings')" style="background:#ffffff;color:#475569;border:1px solid #cbd5e1;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px">
               <i class="fa-solid fa-sliders text-blue"></i>
-              <span>4. ตั้งค่าระบบ &amp; สิทธิพิเศษ</span>
+              <span>5. ตั้งค่าระบบ &amp; สิทธิพิเศษ</span>
             </button>
 
             <button type="button" id="attSubTabBtn_branches" class="btn btn-sm" onclick="switchAttendanceSubTab('branches')" style="background:#ffffff;color:#475569;border:1px solid #cbd5e1;font-weight:600;font-size:12.5px;padding:7px 14px;border-radius:8px;display:inline-flex;align-items:center;gap:6px">
               <i class="fa-solid fa-store" style="color:#059669"></i>
-              <span>5. จัดการ 4 สาขา &amp; พิกัด GPS</span>
+              <span>6. จัดการ 4 สาขา &amp; พิกัด GPS</span>
             </button>
           </div>
 
@@ -1702,6 +1711,270 @@
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- SUB-TAB PANE 6: AI ATTENDANCE INSPECTOR (COMMAND CENTER) -->
+        <div id="attSubTabPane_ai_inspector" style="display:none">
+          <div class="ai-inspector-container">
+            
+            <!-- HEADER BAR: AI STATUS & LIVE SCAN -->
+            <div class="ai-glass-card" style="padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;border:1px solid #1e293b">
+              <div style="display:flex;align-items:center;gap:14px">
+                <div style="position:relative;width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg, #2563eb, #6366f1, #06b6d4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:22px;box-shadow:0 0 15px rgba(99,102,241,0.4)">
+                  <i class="fa-solid fa-brain"></i>
+                  <span class="ai-radar-ring" style="position:absolute;top:-2px;right:-2px;width:12px;height:12px;background:#10b981;border:2px solid #0b0f19;border-radius:999px"></span>
+                </div>
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <h2 style="font-size:18px;font-weight:800;color:#fff;margin:0">PTN AI Attendance Inspector</h2>
+                    <span style="background:rgba(99,102,241,0.2);color:#818cf8;border:1px solid rgba(99,102,241,0.3);padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700">
+                      ระบบตรวจจับความผิดปกติอัจฉริยะ (Visual V2)
+                    </span>
+                  </div>
+                  <div style="font-size:12px;color:#94a3b8;margin-top:2px">
+                    วิเคราะห์ภาพถ่ายสแกนใบหน้า • GPS Geofence • พักเกินเวลา • คำนวณเบี้ยขยันแม่นยำ
+                  </div>
+                </div>
+              </div>
+
+              <!-- Quick Action & Period Selector -->
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <div style="display:flex;align-items:center;gap:6px;background:rgba(15,23,42,0.9);padding:6px 12px;border-radius:10px;border:1px solid #334155">
+                  <span style="font-size:11.5px;color:#94a3b8">งวดวิเคราะห์:</span>
+                  <select id="aiInspectorPeriodSelect" onchange="loadAiAttendanceInspector()" style="background:#1e293b;color:#f8fafc;border:1px solid #475569;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:700;outline:none">
+                    <!-- Populated by JS -->
+                  </select>
+                </div>
+
+                <button type="button" onclick="runAiScanInspectorLive()" id="btnAiRunScan" class="btn btn-sm" style="background:linear-gradient(135deg, #2563eb, #6366f1);color:#fff;font-weight:700;font-size:12px;padding:8px 14px;border-radius:10px;border:none;box-shadow:0 2px 8px rgba(37,99,235,0.4);display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                  <i class="fa-solid fa-bolt" id="iconAiScanBolt"></i>
+                  <span id="textAiScanBtn">⚡ สแกนวิเคราะห์สด</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- TOP 4 METRIC CARDS WITH VISUAL METERS -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:14px;margin-bottom:20px">
+              
+              <!-- Metric 1: Health Score -->
+              <div class="ai-glass-card" style="padding:16px;border-left:4px solid #10b981">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                  <div>
+                    <span style="font-size:11.5px;color:#94a3b8;font-weight:600">ดัชนีวินัยการลงเวลา (Health)</span>
+                    <div style="font-size:26px;font-weight:800;color:#34d399;font-family:monospace;margin-top:2px" id="aiKpiHealthScore">94.2%</div>
+                  </div>
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);color:#34d399;display:flex;align-items:center;justify-content:center;font-size:16px">
+                    🛡️
+                  </div>
+                </div>
+                <div style="width:100%;background:#1e293b;height:6px;border-radius:999px;margin-top:10px;overflow:hidden">
+                  <div id="aiKpiHealthBar" style="background:linear-gradient(90deg, #10b981, #06b6d4);height:100%;width:94.2%;border-radius:999px;transition:width 0.5s"></div>
+                </div>
+                <div style="font-size:11px;color:#34d399;margin-top:6px;font-weight:600" id="aiKpiHealthSub">↑ สูงกว่าเป้าหมาย 4.2%</div>
+              </div>
+
+              <!-- Metric 2: Face & Spoofing Risk -->
+              <div class="ai-glass-card" style="padding:16px;border-left:4px solid #3b82f6">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                  <div>
+                    <span style="font-size:11.5px;color:#94a3b8;font-weight:600">ตรวจสแกนหน้า/รูปถ่าย</span>
+                    <div style="font-size:26px;font-weight:800;color:#60a5fa;font-family:monospace;margin-top:2px" id="aiKpiFaceScore">100%</div>
+                  </div>
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);color:#60a5fa;display:flex;align-items:center;justify-content:center;font-size:16px">
+                    📸
+                  </div>
+                </div>
+                <div style="width:100%;background:#1e293b;height:6px;border-radius:999px;margin-top:10px;overflow:hidden">
+                  <div style="background:#3b82f6;height:100%;width:100%;border-radius:999px"></div>
+                </div>
+                <div style="font-size:11px;color:#94a3b8;margin-top:6px;font-weight:500">ไม่พบรูปถ่ายซ้ำหรือสแกนจากหน้าจอ</div>
+              </div>
+
+              <!-- Metric 3: Overbreak Alert -->
+              <div class="ai-glass-card" style="padding:16px;border-left:4px solid #f59e0b">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                  <div>
+                    <span style="font-size:11.5px;color:#cbd5e1;font-weight:600">พักเที่ยงเกิน 60 นาที</span>
+                    <div style="font-size:26px;font-weight:800;color:#fbbf24;font-family:monospace;margin-top:2px">
+                      <span id="aiKpiOverbreakCount">2</span> <span style="font-size:13px;font-weight:400;color:#94a3b8">คน</span>
+                    </div>
+                  </div>
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.3);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:16px">
+                    ☕
+                  </div>
+                </div>
+                <div style="width:100%;background:#1e293b;height:6px;border-radius:999px;margin-top:10px;overflow:hidden">
+                  <div id="aiKpiOverbreakBar" style="background:#f59e0b;height:100%;width:15%;border-radius:999px;transition:width 0.5s"></div>
+                </div>
+                <div style="font-size:11px;color:#fbbf24;margin-top:6px;font-weight:600">เกิน 8-19 น. (ตัดชั่วโมงงานแล้ว)</div>
+              </div>
+
+              <!-- Metric 4: Diligence At Risk -->
+              <div class="ai-glass-card" style="padding:16px;border-left:4px solid #f43f5e">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                  <div>
+                    <span style="font-size:11.5px;color:#cbd5e1;font-weight:600">เสี่ยงหลุดสิทธิ์เบี้ยขยัน</span>
+                    <div style="font-size:26px;font-weight:800;color:#fb7185;font-family:monospace;margin-top:2px">
+                      <span id="aiKpiRiskCount">3</span> <span style="font-size:13px;font-weight:400;color:#94a3b8">คน</span>
+                    </div>
+                  </div>
+                  <div style="width:38px;height:38px;border-radius:10px;background:rgba(244,63,94,0.15);border:1px solid rgba(244,63,94,0.3);color:#fb7185;display:flex;align-items:center;justify-content:center;font-size:16px">
+                    ⚠️
+                  </div>
+                </div>
+                <div style="width:100%;background:#1e293b;height:6px;border-radius:999px;margin-top:10px;overflow:hidden">
+                  <div id="aiKpiRiskBar" style="background:#f43f5e;height:100%;width:25%;border-radius:999px;transition:width 0.5s"></div>
+                </div>
+                <div style="font-size:11px;color:#fb7185;margin-top:6px;font-weight:600" id="aiKpiRiskEmpList">EMP010, EMP011, EMP030</div>
+              </div>
+
+            </div>
+
+            <!-- MAIN WORKSPACE: 2 COLUMNS -->
+            <div style="display:grid;grid-template-columns:minmax(0, 7fr) minmax(320px, 5fr);gap:20px;align-items:start">
+              
+              <!-- LEFT COLUMN: ANOMALY CARDS FEED -->
+              <div style="display:flex;flex-direction:column;gap:14px">
+                
+                <!-- Filter Pills -->
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding-bottom:4px">
+                  <div style="display:flex;gap:6px;background:#0f172a;padding:4px;border-radius:10px;border:1px solid #1e293b;flex-wrap:wrap" id="aiFilterGroup">
+                    <button type="button" class="btn btn-sm" onclick="setAiInspectorFilter('ALL_ANOMALY')" id="btnAiFilter_ALL_ANOMALY" style="background:#2563eb;color:#fff;font-weight:700;font-size:11.5px;padding:5px 10px;border-radius:8px">
+                      🚨 ผิดปกติทั้งหมด (<span id="cntAiFilterAll">3</span>)
+                    </button>
+                    <button type="button" class="btn btn-sm" onclick="setAiInspectorFilter('OVERBREAK')" id="btnAiFilter_OVERBREAK" style="background:transparent;color:#94a3b8;font-weight:600;font-size:11.5px;padding:5px 10px;border-radius:8px">
+                      ☕ พักเกิน (<span id="cntAiFilterOverbreak">2</span>)
+                    </button>
+                    <button type="button" class="btn btn-sm" onclick="setAiInspectorFilter('EARLY_OUT')" id="btnAiFilter_EARLY_OUT" style="background:transparent;color:#94a3b8;font-weight:600;font-size:11.5px;padding:5px 10px;border-radius:8px">
+                      ⏳ ออกก่อน/ขาดช่วง (<span id="cntAiFilterEarly">2</span>)
+                    </button>
+                    <button type="button" class="btn btn-sm" onclick="setAiInspectorFilter('PASSED')" id="btnAiFilter_PASSED" style="background:transparent;color:#94a3b8;font-weight:600;font-size:11.5px;padding:5px 10px;border-radius:8px">
+                      ✅ ผ่านเกณฑ์สมบูรณ์ (<span id="cntAiFilterPassed">41</span>)
+                    </button>
+                  </div>
+                  <div style="font-size:11px;color:#94a3b8;display:flex;align-items:center;gap:6px">
+                    <span>ความเข้มงวด:</span>
+                    <span style="background:rgba(16,185,129,0.2);color:#34d399;padding:2px 8px;border-radius:6px;font-family:monospace;font-weight:700">มาตรฐาน (Grace 15m)</span>
+                  </div>
+                </div>
+
+                <!-- CARDS CONTAINER (DYNAMICALLY POPULATED) -->
+                <div id="aiInspectorCardsContainer" style="display:flex;flex-direction:column;gap:14px">
+                  <div style="text-align:center;padding:30px;color:#94a3b8">กำลังเตรียมข้อมูลวิเคราะห์...</div>
+                </div>
+
+              </div>
+
+              <!-- RIGHT COLUMN: VISUAL RADAR & SMART CONTROLS -->
+              <div style="display:flex;flex-direction:column;gap:16px">
+                
+                <!-- CARD 1: VISUAL GEOFENCE RADAR -->
+                <div class="ai-glass-card" style="padding:16px 18px">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <span style="width:10px;height:10px;border-radius:999px;background:#22d3ee;display:inline-block" class="ai-radar-ring"></span>
+                      <h4 style="font-size:13.5px;font-weight:800;color:#fff;margin:0">เรดาร์พิกัดสาขา (Geofence Radar)</h4>
+                    </div>
+                    <span style="font-size:11px;font-family:monospace;color:#22d3ee">Live 100.0903°</span>
+                  </div>
+
+                  <!-- Radar Simulation Graphic -->
+                  <div style="position:relative;width:100%;height:190px;border-radius:12px;background:radial-gradient(circle, #0f172a 0%, #090d16 100%);border:1px solid #1e293b;display:flex;align-items:center;justify-content:center;overflow:hidden">
+                    <div class="ai-radar-ring" style="position:absolute;width:160px;height:160px;border-radius:999px;border:1px solid rgba(34,211,238,0.2)"></div>
+                    <div style="position:absolute;width:110px;height:110px;border-radius:999px;border:1px solid rgba(34,211,238,0.3)"></div>
+                    <div style="position:absolute;width:60px;height:60px;border-radius:999px;border:1px solid rgba(34,211,238,0.4);background:rgba(34,211,238,0.05)"></div>
+
+                    <!-- Center Branch Pin -->
+                    <div style="position:relative;z-index:2;display:flex;flex-direction:column;align-items:center">
+                      <div style="width:30px;height:30px;border-radius:999px;background:#2563eb;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:13px;box-shadow:0 0 12px rgba(37,99,235,0.6)">
+                        🏢
+                      </div>
+                      <span style="font-size:10px;font-weight:700;color:#fff;background:rgba(15,23,42,0.9);padding:2px 6px;border-radius:4px;margin-top:4px;border:1px solid #334155" id="aiRadarBranchLabel">สำนักงานใหญ่ (40m)</span>
+                    </div>
+
+                    <!-- Pins -->
+                    <div style="position:absolute;top:28px;left:45px;display:flex;align-items:center;gap:4px" title="EMP010: ในพิกัด (12m)">
+                      <span style="width:9px;height:9px;border-radius:999px;background:#34d399;border:1.5px solid #0b0f19"></span>
+                      <span style="font-size:9.5px;color:#a7f3d0;font-family:monospace;font-weight:600">จิ๊บ 12m</span>
+                    </div>
+                    <div style="position:absolute;bottom:35px;right:40px;display:flex;align-items:center;gap:4px" title="EMP011: ในพิกัด (8m)">
+                      <span style="width:9px;height:9px;border-radius:999px;background:#34d399;border:1.5px solid #0b0f19"></span>
+                      <span style="font-size:9.5px;color:#a7f3d0;font-family:monospace;font-weight:600">ชา 8m</span>
+                    </div>
+                    <div style="position:absolute;top:40px;right:50px;display:flex;align-items:center;gap:4px" title="EMP030: ในพิกัด (18m)">
+                      <span style="width:9px;height:9px;border-radius:999px;background:#34d399;border:1.5px solid #0b0f19"></span>
+                      <span style="font-size:9.5px;color:#a7f3d0;font-family:monospace;font-weight:600">เคน 18m</span>
+                    </div>
+                  </div>
+
+                  <div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:#94a3b8">
+                    <span>ความแม่นยำ GPS: <strong style="color:#fff">99.8%</strong></span>
+                    <span style="color:#34d399;font-weight:600"><i class="fa-solid fa-circle-check"></i> ทุกสแกนอยู่ในรัศมี</span>
+                  </div>
+                </div>
+
+                <!-- CARD 2: AI POLICY CONTROLS -->
+                <div class="ai-glass-card" style="padding:16px 18px">
+                  <h4 style="font-size:13.5px;font-weight:800;color:#fff;margin:0 0 12px 0;display:flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-sliders" style="color:#818cf8"></i> ตั้งค่านโยบายตรวจจับ AI
+                  </h4>
+
+                  <div style="display:flex;flex-direction:column;gap:10px;font-size:12px">
+                    <!-- Toggle 1: Overbreak rule -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:rgba(15,23,42,0.85);border-radius:10px;border:1px solid #1e293b">
+                      <div>
+                        <div style="font-weight:700;color:#f1f5f9">นับพักเกินเวลาเป็นมาสาย</div>
+                        <div style="font-size:10.5px;color:#94a3b8">คิดสะสมนาทีสายและมีผลต่อเบี้ยขยัน</div>
+                      </div>
+                      <label style="position:relative;display:inline-block;width:38px;height:20px;cursor:pointer">
+                        <input type="checkbox" id="aiToggleOverbreakRule" onchange="toggleAiInspectorOverbreak(this)" style="opacity:0;width:0;height:0">
+                        <span class="ai-slider"></span>
+                      </label>
+                    </div>
+
+                    <!-- Toggle 2: Face & Spoofing -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:rgba(15,23,42,0.85);border-radius:10px;border:1px solid #1e293b">
+                      <div>
+                        <div style="font-weight:700;color:#f1f5f9">สแกนใบหน้าป้องกันรูปปลอม</div>
+                        <div style="font-size:10.5px;color:#94a3b8">ตรวจจับการถ่ายจากจอมือถือเครื่องอื่น</div>
+                      </div>
+                      <label style="position:relative;display:inline-block;width:38px;height:20px;cursor:pointer">
+                        <input type="checkbox" checked onchange="showToast('เปิดใช้งานระบบตรวจจับ Face Spoofing ตลอดเวลา', 'info')" style="opacity:0;width:0;height:0">
+                        <span class="ai-slider"></span>
+                      </label>
+                    </div>
+
+                    <!-- Toggle 3: Instant Push -->
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:rgba(15,23,42,0.85);border-radius:10px;border:1px solid #1e293b">
+                      <div>
+                        <div style="font-weight:700;color:#f1f5f9">แจ้งเตือน Web Push ทันที</div>
+                        <div style="font-size:10.5px;color:#94a3b8">เตือนเข้ามือถือเมื่อพักเกินหรือออกก่อน</div>
+                      </div>
+                      <label style="position:relative;display:inline-block;width:38px;height:20px;cursor:pointer">
+                        <input type="checkbox" checked id="aiToggleInstantPush" style="opacity:0;width:0;height:0">
+                        <span class="ai-slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- CARD 3: AI DIAGNOSTIC INSIGHTS SUMMARY -->
+                <div class="ai-glass-card" style="padding:16px 18px;background:linear-gradient(135deg, rgba(30,27,75,0.7) 0%, rgba(15,23,42,0.9) 100%)">
+                  <h4 style="font-size:13px;font-weight:800;color:#c7d2fe;margin:0 0 10px 0;display:flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-lightbulb" style="color:#fbbf24"></i> ข้อแนะนำสรุปโดย AI
+                  </h4>
+                  <ul style="margin:0;padding-left:18px;font-size:11.5px;color:#e0e7ff;line-height:1.6;display:flex;flex-direction:column;gap:6px">
+                    <li><strong>EMP011 (ชา):</strong> เข้างานเช้าตรงเวลา 100% ไม่มียอดหักเงิน สามารถกด <em>"คืนสิทธิ์เบี้ยขยันทันที"</em> ได้ทันที</li>
+                    <li><strong>EMP010 (จิ๊บ):</strong> พักเกิน 19 นาที + สแกนออกก่อน 5 นาที (หมายเหตุ: ลืมมือถือ) หากหัวหน้างานรับรองแล้ว สามารถกด <em>"อนุโลมเบี้ยขยัน"</em></li>
+                    <li><strong>EMP030 (เคน):</strong> สแกนออกก่อน 7.5 นาที + พักเกิน 8 นาที ยอดหักขาดช่วง 13.12฿ สามารถปรับเป็นจ่ายเต็มวันหรือตักเตือนได้</li>
+                  </ul>
+                </div>
+
+              </div>
+
+            </div>
+
           </div>
         </div>
 

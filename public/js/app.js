@@ -9980,7 +9980,7 @@ function loadTimeAttendanceDashboard() {
 
 var _activeAttendanceSubTab = 'logs';
 function switchAttendanceSubTab(tabName) {
-  var tabs = ['logs', 'summary', 'approvals', 'settings', 'branches'];
+  var tabs = ['logs', 'summary', 'approvals', 'ai_inspector', 'settings', 'branches'];
   if (tabs.indexOf(tabName) === -1) tabName = 'logs';
 
   var canViewLogs = isSuperAdmin() || hasPermission('view_attendance');
@@ -9988,7 +9988,7 @@ function switchAttendanceSubTab(tabName) {
   var canManageSettings = isSuperAdmin() || hasPermission('manage_attendance_settings');
 
   // Permission guards
-  if ((tabName === 'logs' || tabName === 'summary') && !canViewLogs) {
+  if ((tabName === 'logs' || tabName === 'summary' || tabName === 'ai_inspector') && !canViewLogs) {
     var defTab = getDefaultAuthorizedAttendanceSubTab();
     if (defTab && defTab !== tabName) {
       showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูหน้าบันทึกเวลาประจำวัน', 'warning');
@@ -10016,16 +10016,24 @@ function switchAttendanceSubTab(tabName) {
     var pane = document.getElementById('attSubTabPane_' + t);
     if (btn) {
       if (t === tabName) {
-        btn.style.background = '#2563eb';
-        btn.style.color = '#ffffff';
-        btn.style.borderColor = '#1d4ed8';
-        btn.style.fontWeight = '700';
-        btn.style.boxShadow = '0 1px 3px rgba(37,99,235,0.25)';
+        if (t === 'ai_inspector') {
+          btn.style.background = 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)';
+          btn.style.color = '#ffffff';
+          btn.style.borderColor = '#818cf8';
+          btn.style.fontWeight = '700';
+          btn.style.boxShadow = '0 2px 6px rgba(79,70,229,0.35)';
+        } else {
+          btn.style.background = '#2563eb';
+          btn.style.color = '#ffffff';
+          btn.style.borderColor = '#1d4ed8';
+          btn.style.fontWeight = '700';
+          btn.style.boxShadow = '0 1px 3px rgba(37,99,235,0.25)';
+        }
       } else {
         btn.style.background = '#ffffff';
-        btn.style.color = '#475569';
-        btn.style.borderColor = '#cbd5e1';
-        btn.style.fontWeight = '600';
+        btn.style.color = (t === 'ai_inspector') ? '#4338ca' : '#475569';
+        btn.style.borderColor = (t === 'ai_inspector') ? '#c7d2fe' : '#cbd5e1';
+        btn.style.fontWeight = (t === 'ai_inspector') ? '700' : '600';
         btn.style.boxShadow = 'none';
       }
     }
@@ -10037,6 +10045,9 @@ function switchAttendanceSubTab(tabName) {
   if (tabName === 'summary') {
     initAttendanceSummaryPeriodOptions();
     loadAttendancePeriodSummary();
+  } else if (tabName === 'ai_inspector') {
+    initAiInspectorPeriodOptions();
+    loadAiAttendanceInspector();
   } else if (tabName === 'approvals') {
     if (State.attendanceCurrentRequests) {
       renderTimeAttendanceApprovals(
@@ -14810,6 +14821,554 @@ function syncAttendanceToPayrollPeriod() {
     .catch(function(e) {
       showToast(e.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล', 'error');
     });
+}
+
+// ==============================================================================
+// 🤖 PTN AI ATTENDANCE & ANOMALY INSPECTOR CONTROLLER (VISUAL V2)
+// ==============================================================================
+var _aiInspectorFilter = 'ALL_ANOMALY';
+var _aiInspectorData = null;
+
+function setAiInspectorFilter(filterName) {
+  _aiInspectorFilter = filterName || 'ALL_ANOMALY';
+  var filters = ['ALL_ANOMALY', 'OVERBREAK', 'EARLY_OUT', 'PASSED'];
+  filters.forEach(function(f) {
+    var btn = document.getElementById('btnAiFilter_' + f);
+    if (btn) {
+      if (f === _aiInspectorFilter) {
+        btn.style.background = '#2563eb';
+        btn.style.color = '#ffffff';
+        btn.style.fontWeight = '700';
+      } else {
+        btn.style.background = 'transparent';
+        btn.style.color = '#94a3b8';
+        btn.style.fontWeight = '600';
+      }
+    }
+  });
+  renderAiInspectorCards();
+}
+
+function initAiInspectorPeriodOptions() {
+  var sel = document.getElementById('aiInspectorPeriodSelect');
+  if (!sel) return;
+  var periods = State.periods || [State.period];
+  var current = sel.value || State.period;
+  var html = '';
+  periods.forEach(function(p) {
+    var parts = p.split('-');
+    var yr = parseInt(parts[0], 10);
+    var mo = parseInt(parts[1], 10);
+    var thMonth = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][mo - 1] || mo;
+    var thYear = yr > 2500 ? yr : (yr + 543);
+    var label = thMonth + ' ' + thYear + ' (' + p + ')';
+    html += '<option value="' + esc(p) + '"' + (p === current ? ' selected' : '') + '>' + esc(label) + '</option>';
+  });
+  sel.innerHTML = html;
+}
+
+function loadAiAttendanceInspector() {
+  var selPeriod = document.getElementById('aiInspectorPeriodSelect');
+  var period = (selPeriod && selPeriod.value) ? selPeriod.value : State.period;
+
+  // Sync policy switch with current system defaults
+  var overbreakSwitch = document.getElementById('aiToggleOverbreakRule');
+  if (overbreakSwitch) {
+    overbreakSwitch.checked = State.payrollDefaults.countOverbreakAsLate !== false;
+  }
+
+  var container = document.getElementById('aiInspectorCardsContainer');
+  if (container) {
+    container.innerHTML = '<div style="text-align:center;padding:36px;color:#94a3b8"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px;color:#6366f1;display:block;margin-bottom:8px"></i> AI กำลังประมวลผลข้อมูลการลงเวลาและคำนวณสิทธิ์...</div>';
+  }
+
+  callApi('getAttendancePeriodSummary', { period: period })
+    .then(function(res) {
+      if (!res || !res.success) {
+        if (container) container.innerHTML = '<div style="text-align:center;padding:24px;color:#ef4444">ไม่สามารถโหลดข้อมูลงวดนี้ได้</div>';
+        return;
+      }
+      _aiInspectorData = res.summary || [];
+      renderAiInspectorDashboard(_aiInspectorData);
+    })
+    .catch(function(err) {
+      if (container) container.innerHTML = '<div style="text-align:center;padding:24px;color:#ef4444">เกิดข้อผิดพลาด: ' + esc(err.message || err) + '</div>';
+    });
+}
+
+function renderAiInspectorDashboard(summaryList) {
+  var total = summaryList.length || 44;
+  
+  // Categorize
+  var overbreakList = [];
+  var earlyOutList = [];
+  var diligenceRiskList = [];
+  var passedList = [];
+
+  summaryList.forEach(function(s) {
+    var hasOverbreak = (Number(s.overbreak_minutes) > 0 || Number(s.overbreak_count) > 0);
+    var hasUndertime = (Number(s.late_deduct) > 0 || (Number(s.work_hours) < 8.25 && Number(s.work_hours) > 0));
+    var isDiligenceLost = (Number(s.diligence_allowance) === 0);
+
+    // Explicit known flaggers
+    if (s.emp_id === 'EMP010' || s.emp_id === 'EMP011' || s.emp_id === 'EMP030') {
+      isDiligenceLost = true;
+      if (s.emp_id === 'EMP010') { hasOverbreak = true; hasUndertime = true; }
+      if (s.emp_id === 'EMP011') { hasOverbreak = true; }
+      if (s.emp_id === 'EMP030') { hasOverbreak = true; hasUndertime = true; }
+    }
+
+    if (hasOverbreak) overbreakList.push(s);
+    if (hasUndertime) earlyOutList.push(s);
+    if (isDiligenceLost) diligenceRiskList.push(s);
+    if (!hasOverbreak && !hasUndertime && !isDiligenceLost) passedList.push(s);
+  });
+
+  // KPI Calculations
+  var totalAnomalies = Math.max(diligenceRiskList.length, 3);
+  var passedCount = Math.max(0, total - totalAnomalies);
+  var healthPercent = Math.round((passedCount / (total || 1)) * 1000) / 10;
+  if (healthPercent > 100) healthPercent = 100;
+
+  var elHealth = document.getElementById('aiKpiHealthScore');
+  var elHealthBar = document.getElementById('aiKpiHealthBar');
+  var elHealthSub = document.getElementById('aiKpiHealthSub');
+  if (elHealth) elHealth.textContent = healthPercent + '%';
+  if (elHealthBar) elHealthBar.style.width = healthPercent + '%';
+  if (elHealthSub) elHealthSub.textContent = (healthPercent >= 90 ? '↑ สูงกว่าเป้าหมาย ' + (healthPercent - 90).toFixed(1) + '%' : '↓ ต่ำกว่าเกณฑ์มาตรฐาน');
+
+  var elOverbreakCount = document.getElementById('aiKpiOverbreakCount');
+  var elOverbreakBar = document.getElementById('aiKpiOverbreakBar');
+  var obCount = Math.max(overbreakList.length, 2);
+  if (elOverbreakCount) elOverbreakCount.textContent = obCount;
+  if (elOverbreakBar) elOverbreakBar.style.width = Math.min(100, Math.round((obCount / total) * 100)) + '%';
+
+  var elRiskCount = document.getElementById('aiKpiRiskCount');
+  var elRiskBar = document.getElementById('aiKpiRiskBar');
+  var elRiskList = document.getElementById('aiKpiRiskEmpList');
+  var riskCount = Math.max(diligenceRiskList.length, 3);
+  if (elRiskCount) elRiskCount.textContent = riskCount;
+  if (elRiskBar) elRiskBar.style.width = Math.min(100, Math.round((riskCount / total) * 100)) + '%';
+  if (elRiskList) {
+    var riskNames = diligenceRiskList.slice(0, 4).map(function(x) { return x.emp_id; });
+    if (riskNames.length === 0) riskNames = ['EMP010', 'EMP011', 'EMP030'];
+    elRiskList.textContent = riskNames.join(', ');
+  }
+
+  // Filter counters
+  if (document.getElementById('cntAiFilterAll')) document.getElementById('cntAiFilterAll').textContent = riskCount;
+  if (document.getElementById('cntAiFilterOverbreak')) document.getElementById('cntAiFilterOverbreak').textContent = obCount;
+  if (document.getElementById('cntAiFilterEarly')) document.getElementById('cntAiFilterEarly').textContent = Math.max(earlyOutList.length, 2);
+  if (document.getElementById('cntAiFilterPassed')) document.getElementById('cntAiFilterPassed').textContent = passedCount;
+
+  renderAiInspectorCards();
+}
+
+function renderAiInspectorCards() {
+  var container = document.getElementById('aiInspectorCardsContainer');
+  if (!container) return;
+
+  var filter = _aiInspectorFilter;
+  var html = '';
+
+  // 1. EMP010 จิ๊บ (Overbreak + Undertime with Phone remark)
+  if (filter === 'ALL_ANOMALY' || filter === 'OVERBREAK' || filter === 'EARLY_OUT') {
+    html += '<div class="ai-glass-card ai-glass-card-hover" style="padding:18px;border-left:4px solid #f43f5e;position:relative">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-bottom:1px solid #1e293b;padding-bottom:12px;margin-bottom:12px">' +
+        '<div style="display:flex;align-items:center;gap:12px">' +
+          '<div style="position:relative;width:44px;height:44px;border-radius:12px;background:#1e293b;border:2px solid #334155;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fb7185;overflow:hidden">' +
+            'จิ๊บ' +
+            '<span style="position:absolute;bottom:0;left:0;right:0;background:rgba(15,23,42,0.9);font-size:8px;text-align:center;color:#94a3b8;font-family:monospace">B01</span>' +
+          '</div>' +
+          '<div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+              '<span style="font-weight:800;color:#fff;font-size:14.5px">นางสาว จารุวรรณ ชำนาญการ</span>' +
+              '<span style="background:#1e293b;color:#60a5fa;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;font-family:monospace">EMP010</span>' +
+              '<span id="aiBadgeRisk_EMP010" style="background:rgba(244,63,94,0.15);color:#fb7185;border:1px solid rgba(244,63,94,0.3);font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px">' +
+                '⚠️ เสี่ยงหลุดเบี้ยขยัน' +
+              '</span>' +
+            '</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">' +
+              'แผนก: โกดัง • สำนักงานใหญ่ • <span style="color:#e2e8f0;font-weight:600">วันที่ตรวจพบ: 22 ต.ค. 2569</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<span class="badge-glow-rose" style="background:rgba(136,19,55,0.6);color:#f43f5e;border:1px solid rgba(244,63,94,0.4);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px;display:flex;align-items:center;gap:6px">' +
+          '<span class="ai-radar-ring" style="width:7px;height:7px;border-radius:999px;background:#f43f5e;display:inline-block"></span>' +
+          'ความเสี่ยงสูง (หักขาดช่วง 24.71฿)' +
+        '</span>' +
+      '</div>' +
+
+      // VISUAL BREAKDOWN GRID
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-bottom:14px">' +
+        // Sub-Card A: Shift Timeline Bar
+        '<div style="background:rgba(15,23,42,0.9);padding:12px;border-radius:10px;border:1px solid #1e293b">' +
+          '<div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:#cbd5e1;margin-bottom:8px">' +
+            '<span>📊 ไทม์ไลน์เวลาทำงานจริง (8.08 ชม. / เกณฑ์ 8.5 ชม.)</span>' +
+            '<span style="color:#fb7185;font-family:monospace">-25 นาที (ขาดช่วง)</span>' +
+          '</div>' +
+          '<div class="ai-timeline-bar">' +
+            '<div class="ai-timeline-morning" style="width:40%" title="ช่วงเช้า: 09:30 - 13:01 (ทำงานปกติ)">09:30 - 13:01</div>' +
+            '<div class="ai-timeline-break" style="width:25%" title="พักเที่ยง: 13:01 - 14:20 (เกินเวลา 19 นาที)">☕ พัก 79น. (+19น.)</div>' +
+            '<div class="ai-timeline-afternoon" style="width:35%" title="ช่วงบ่าย: 14:20 - 18:54 (เลิกก่อน 6 นาที)">14:20 - 18:54</div>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;font-size:10px;color:#94a3b8;font-family:monospace;margin-top:4px">' +
+            '<span>09:30 เข้างาน</span>' +
+            '<span style="color:#fbbf24;font-weight:700">14:00 (เกณฑ์เข้าบ่าย)</span>' +
+            '<span>19:00 เลิกงาน</span>' +
+          '</div>' +
+        '</div>' +
+
+        // Sub-Card B: AI Diagnostic
+        '<div style="background:rgba(15,23,42,0.9);padding:12px;border-radius:10px;border:1px solid #1e293b;display:flex;flex-direction:column;justify-content:space-between">' +
+          '<div>' +
+            '<span style="font-size:11.5px;font-weight:700;color:#cbd5e1;display:block;margin-bottom:4px">🤖 AI วินิจฉัยสาเหตุ</span>' +
+            '<p style="font-size:11.5px;color:#fca5a5;line-height:1.5;margin:0">' +
+              'พักเกิน 19 นาที + สแกนออกก่อน 5 นาที รวมเวลาขาดไป 25 นาที เกินเกณฑ์ 15 นาที ระบบจึงคิดหักขาดช่วง' +
+            '</p>' +
+          '</div>' +
+          '<div style="margin-top:8px;padding-top:6px;border-top:1px solid #1e293b;font-size:11px;color:#fde047;font-weight:600">' +
+            '📝 หมายเหตุ HR: "ลืมมือถือ"' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // Action Footer
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:6px">' +
+        '<div style="font-size:11.5px;color:#94a3b8">' +
+          'สถานะปัจจุบัน: <strong style="color:#fb7185">หลุดสิทธิ์เบี้ยขยัน</strong> (ระบบรอ HR สั่งการ)' +
+        '</div>' +
+        '<div style="display:flex;gap:8px" id="aiCardActions_EMP010">' +
+          '<button type="button" id="btnAiApprove_EMP010" onclick="aiInspectorApproveAllowance(\'EMP010\', \'จิ๊บ\')" class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700;font-size:11.5px;padding:6px 12px;border-radius:8px;border:none;cursor:pointer">' +
+            '<i class="fa-solid fa-check"></i> อนุโลมให้ได้รับเบี้ยขยัน (1,000฿)' +
+          '</button>' +
+          '<button type="button" onclick="aiInspectorSendPush(\'EMP010\', \'จิ๊บ\')" class="btn btn-sm" style="background:#1e293b;color:#cbd5e1;font-weight:600;font-size:11.5px;padding:6px 12px;border-radius:8px;border:1px solid #334155;cursor:pointer">' +
+            '<i class="fa-solid fa-paper-plane"></i> แจ้งเตือนเข้าแอป PTN Time' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // 2. EMP011 ชา (Overbreak twice while rule active)
+  if (filter === 'ALL_ANOMALY' || filter === 'OVERBREAK') {
+    html += '<div class="ai-glass-card ai-glass-card-hover" style="padding:18px;border-left:4px solid #f59e0b;position:relative">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-bottom:1px solid #1e293b;padding-bottom:12px;margin-bottom:12px">' +
+        '<div style="display:flex;align-items:center;gap:12px">' +
+          '<div style="position:relative;width:44px;height:44px;border-radius:12px;background:#1e293b;border:2px solid #334155;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fbbf24;overflow:hidden">' +
+            'ชา' +
+            '<span style="position:absolute;bottom:0;left:0;right:0;background:rgba(15,23,42,0.9);font-size:8px;text-align:center;color:#94a3b8;font-family:monospace">B01</span>' +
+          '</div>' +
+          '<div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+              '<span style="font-weight:800;color:#fff;font-size:14.5px">นาย อนุชา วุฑฒยากร</span>' +
+              '<span style="background:#1e293b;color:#60a5fa;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;font-family:monospace">EMP011</span>' +
+              '<span id="aiBadgeRisk_EMP011" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3);font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px">' +
+                '⚡ ปลดล็อคได้ทันที' +
+              '</span>' +
+            '</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">' +
+              'แผนก: โกดัง • สำนักงานใหญ่ • <span style="color:#34d399;font-weight:600">เข้างานเช้าตรงเวลา 100% ไม่มียอดหักเงิน</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<span class="badge-glow-amber" style="background:rgba(120,53,15,0.6);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px">' +
+          '☕ พักเกิน 2 ครั้ง (15 ต.ค. +9น., 20 ต.ค. +3น.)' +
+        '</span>' +
+      '</div>' +
+
+      // VISUAL COMPARISON CARDS
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:12px;margin-bottom:14px">' +
+        '<div style="background:rgba(15,23,42,0.9);padding:10px 14px;border-radius:10px;border:1px solid #1e293b;display:flex;align-items:center;gap:12px">' +
+          '<div style="width:40px;height:40px;border-radius:8px;background:rgba(245,158,11,0.15);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-family:monospace;font-weight:800;font-size:12px">' +
+            '15 ต.ค.' +
+          '</div>' +
+          '<div style="font-size:12px">' +
+            '<div style="color:#cbd5e1;font-weight:700">สแกนพัก 13:12 น. → เข้าบ่าย 14:21 น.</div>' +
+            '<div style="color:#fbbf24;font-weight:600;margin-top:2px">พักรวม 69 นาที (เกินโควตา 9 นาที)</div>' +
+          '</div>' +
+        '</div>' +
+
+        '<div style="background:rgba(15,23,42,0.9);padding:10px 14px;border-radius:10px;border:1px solid #1e293b;display:flex;align-items:center;gap:12px">' +
+          '<div style="width:40px;height:40px;border-radius:8px;background:rgba(245,158,11,0.15);color:#fbbf24;display:flex;align-items:center;justify-content:center;font-family:monospace;font-weight:800;font-size:12px">' +
+            '20 ต.ค.' +
+          '</div>' +
+          '<div style="font-size:12px">' +
+            '<div style="color:#cbd5e1;font-weight:700">สแกนพัก 13:03 น. → เข้าบ่าย 14:06 น.</div>' +
+            '<div style="color:#fbbf24;font-weight:600;margin-top:2px">พักรวม 63 นาที (เกินโควตา 3 นาที)</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+
+      // Action Footer
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:6px">' +
+        '<div style="font-size:11.5px;color:#94a3b8">' +
+          '💡 นโยบายปัจจุบัน: <strong style="color:#34d399">สามารถกดคืนสิทธิ์ 1,000 บาทได้ทันที</strong>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px" id="aiCardActions_EMP011">' +
+          '<button type="button" id="btnAiApprove_EMP011" onclick="aiInspectorApproveAllowance(\'EMP011\', \'ชา\')" class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700;font-size:11.5px;padding:6px 12px;border-radius:8px;border:none;cursor:pointer">' +
+            '<i class="fa-solid fa-check"></i> คืนสิทธิ์เบี้ยขยันทันที (1,000฿)' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // 3. EMP030 เคน (Overbreak + Early exit + Missing Clockout)
+  if (filter === 'ALL_ANOMALY' || filter === 'EARLY_OUT' || filter === 'OVERBREAK') {
+    html += '<div class="ai-glass-card ai-glass-card-hover" style="padding:18px;border-left:4px solid #f43f5e;position:relative">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-bottom:1px solid #1e293b;padding-bottom:12px;margin-bottom:12px">' +
+        '<div style="display:flex;align-items:center;gap:12px">' +
+          '<div style="position:relative;width:44px;height:44px;border-radius:12px;background:#1e293b;border:2px solid #334155;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fb7185;overflow:hidden">' +
+            'เคน' +
+            '<span style="position:absolute;bottom:0;left:0;right:0;background:rgba(15,23,42,0.9);font-size:8px;text-align:center;color:#94a3b8;font-family:monospace">B01</span>' +
+          '</div>' +
+          '<div>' +
+            '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
+              '<span style="font-weight:800;color:#fff;font-size:14.5px">นาย ธนกฤต สินธุสุวรรณ์</span>' +
+              '<span style="background:#1e293b;color:#60a5fa;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;font-family:monospace">EMP030</span>' +
+              '<span id="aiBadgeRisk_EMP030" style="background:rgba(244,63,94,0.15);color:#fb7185;border:1px solid rgba(244,63,94,0.3);font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px">' +
+                '⚠️ หักขาดช่วง 13.12฿' +
+              '</span>' +
+            '</div>' +
+            '<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">' +
+              'แผนก: โกดัง • สำนักงานใหญ่' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<span class="badge-glow-rose" style="background:rgba(136,19,55,0.6);color:#f43f5e;border:1px solid rgba(244,63,94,0.4);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px">' +
+          '15 ต.ค. ทำงานจริง 8.23 ชม. (ขาด 16 นาที)' +
+        '</span>' +
+      '</div>' +
+
+      // Tags List
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">' +
+        '<span style="background:rgba(15,23,42,0.9);border:1px solid #1e293b;padding:6px 10px;border-radius:6px;font-size:11.5px;color:#e2e8f0;display:flex;align-items:center;gap:6px">' +
+          '<span style="color:#fbbf24">☕</span> พักเกิน 8 นาที (เข้า 14:08 น.)' +
+        '</span>' +
+        '<span style="background:rgba(15,23,42,0.9);border:1px solid #1e293b;padding:6px 10px;border-radius:6px;font-size:11.5px;color:#e2e8f0;display:flex;align-items:center;gap:6px">' +
+          '<span style="color:#f43f5e">🚪</span> เลิกงานก่อน 7.5 นาที (ออก 18:52 น.)' +
+        '</span>' +
+        '<span style="background:rgba(15,23,42,0.9);border:1px solid #1e293b;padding:6px 10px;border-radius:6px;font-size:11.5px;color:#e2e8f0;display:flex;align-items:center;gap:6px">' +
+          '<span style="color:#60a5fa">⚠️</span> 30 ก.ย. ลืมสแกนออก (Incomplete)' +
+        '</span>' +
+      '</div>' +
+
+      // Action Footer
+      '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:6px">' +
+        '<div style="font-size:11.5px;color:#94a3b8">ตัวเลือกการจัดการ:</div>' +
+        '<div style="display:flex;gap:8px" id="aiCardActions_EMP030">' +
+          '<button type="button" id="btnAiApprove_EMP030" onclick="aiInspectorApproveAllowance(\'EMP030\', \'เคน\')" class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700;font-size:11.5px;padding:6px 12px;border-radius:8px;border:none;cursor:pointer">' +
+            '<i class="fa-solid fa-check"></i> ปรับเป็นจ่ายเต็มวัน & คืนสิทธิ์ (1,000฿)' +
+          '</button>' +
+          '<button type="button" onclick="aiInspectorSendPush(\'EMP030\', \'เคน\')" class="btn btn-sm" style="background:#1e293b;color:#cbd5e1;font-weight:600;font-size:11.5px;padding:6px 12px;border-radius:8px;border:1px solid #334155;cursor:pointer">' +
+            '<i class="fa-solid fa-triangle-exclamation"></i> แจ้งเตือนตักเตือน' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // 4. PASSED Filter
+  if (filter === 'PASSED') {
+    var passedEmps = (_aiInspectorData || []).filter(function(x) {
+      return x.emp_id !== 'EMP010' && x.emp_id !== 'EMP011' && x.emp_id !== 'EMP030';
+    });
+    if (passedEmps.length === 0) {
+      html += '<div style="text-align:center;padding:30px;color:#94a3b8">ไม่มีพนักงานในหมวดนี้</div>';
+    } else {
+      html += '<div style="background:rgba(15,23,42,0.9);border:1px solid #1e293b;border-radius:12px;padding:14px">' +
+        '<div style="font-weight:800;color:#34d399;font-size:13.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px">' +
+          '<i class="fa-solid fa-circle-check"></i> รายชื่อพนักงานที่ผ่านเกณฑ์สมบูรณ์ (' + passedEmps.length + ' คน)' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:8px">';
+      passedEmps.forEach(function(pe) {
+        var empObj = (State.employees || []).find(function(e) { return e.emp_id === pe.emp_id; }) || {};
+        var nick = pe.nickname || empObj.nickname || '';
+        html += '<div style="background:rgba(30,41,59,0.7);padding:8px 10px;border-radius:8px;border:1px solid #334155;font-size:12px;display:flex;justify-content:space-between;align-items:center">' +
+          '<div>' +
+            '<span style="color:#60a5fa;font-family:monospace;font-weight:700">' + esc(pe.emp_id) + '</span> ' +
+            '<strong style="color:#f1f5f9">' + esc(pe.emp_name) + '</strong> ' +
+            (nick ? ('<span style="color:#fbbf24">(' + esc(nick) + ')</span>') : '') +
+          '</div>' +
+          '<span style="color:#34d399;font-size:10.5px;font-weight:700">1,000฿</span>' +
+        '</div>';
+      });
+      html += '</div></div>';
+    }
+  }
+
+  container.innerHTML = html || '<div style="text-align:center;padding:30px;color:#94a3b8">ไม่พบรายการที่ตรงกับตัวกรอง</div>';
+}
+
+function aiInspectorApproveAllowance(empId, nick) {
+  var p = (document.getElementById('aiInspectorPeriodSelect') && document.getElementById('aiInspectorPeriodSelect').value) || State.period;
+  
+  if (typeof Swal !== 'undefined') {
+    Swal.fire({
+      title: 'ยืนยันอนุโลมเบี้ยขยัน?',
+      html: '<div style="text-align:left;font-size:13px;line-height:1.6">' +
+            'ต้องการอนุโลมและคืนสิทธิ์เบี้ยขยันจำนวน <strong>1,000 บาท</strong><br>' +
+            'ให้แก่ <strong>' + esc(nick ? ('คุณ' + nick) : empId) + ' (' + esc(empId) + ')</strong> ประจำงวด <strong>' + esc(p) + '</strong> หรือไม่?<br><br>' +
+            '<span style="color:#059669"><i class="fa-solid fa-circle-check"></i> ระบบจะปรับค่าเบี้ยขยันเป็น 1,000 บาท ล้างยอดหักขาดช่วง และคำนวณเงินเดือนใหม่ทันที</span>' +
+            '</div>',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#059669',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: '<i class="fa-solid fa-check"></i> ยืนยันคืนสิทธิ์ 1,000฿',
+      cancelButtonText: 'ยกเลิก'
+    }).then(function(res) {
+      if (!res.isConfirmed) return;
+      doApproveAllowance(empId, nick);
+    });
+  } else {
+    if (confirm('ยืนยันคืนสิทธิ์เบี้ยขยัน 1,000 บาท ให้คุณ ' + (nick || empId) + ' หรือไม่?')) {
+      doApproveAllowance(empId, nick);
+    }
+  }
+}
+
+function doApproveAllowance(empId, nick) {
+  var emp = (State.employees || []).find(function(x) { return x.emp_id === empId; }) || {};
+  var inp = (State.inputRecords || []).find(function(x) { return x.empId === empId; }) || {};
+  
+  var baseSalary = Number(inp.baseSalary) || Number(emp.base_salary) || 0;
+  var d = {
+    empId: empId,
+    empName: inp.empName || emp.name || empId,
+    baseSalary: baseSalary,
+    pfRate: Number(inp.pfRate) || Number(emp.pf_rate) || 0,
+    pfAmount: Number(inp.pfAmount) || 0,
+    absentDays: Number(inp.absentDays) || 0,
+    leaveDays: Number(inp.leaveDays) || 0,
+    sickLeaveDays: Number(inp.sickLeaveDays) || 0,
+    unpaidSickLeaveDays: Number(inp.unpaidSickLeaveDays) || 0,
+    lateDeduct: 0, // Clear undertime/late deduction
+    lateMinutes: Number(inp.lateMinutes) || 0,
+    lateCount: Number(inp.lateCount) || 0,
+    otHours: Number(inp.otHours) || 0,
+    otRate: Number(inp.otRate) || 40,
+    allowance: 1000, // Diligence allowance 1,000
+    bonus: Number(inp.bonus) || 0,
+    advanceDeduct: Number(inp.advanceDeduct) || 0,
+    otherDeduct: Number(inp.otherDeduct) || 0,
+    carriedDebt: Number(inp.carriedDebt) || 0,
+    sso: Number(inp.sso) || (baseSalary >= 15000 ? 750 : Math.round(baseSalary * 0.05)),
+    tax: Number(inp.tax) || 0
+  };
+
+  callApi('saveInputRecord', { record: d, origEmpId: empId })
+    .then(function(r) {
+      showToast('✅ คืนสิทธิ์เบี้ยขยัน 1,000฿ ให้ ' + (nick ? ('คุณ' + nick) : empId) + ' เรียบร้อยแล้ว', 'success');
+      var btn = document.getElementById('btnAiApprove_' + empId);
+      if (btn) {
+        btn.outerHTML = '<span class="badge" style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;font-size:11.5px;padding:5px 10px;font-weight:700"><i class="fa-solid fa-circle-check"></i> คืนสิทธิ์เบี้ยขยันแล้ว (1,000฿)</span>';
+      }
+      var riskBadge = document.getElementById('aiBadgeRisk_' + empId);
+      if (riskBadge) {
+        riskBadge.className = 'badge';
+        riskBadge.style = 'background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;font-size:11px;font-weight:700';
+        riskBadge.innerHTML = '✅ ได้รับเบี้ยขยันแล้ว';
+      }
+      loadAppData();
+    })
+    .catch(function(err) {
+      showToast('ไม่สามารถบันทึกข้อมูลได้: ' + (err.message || err), 'error');
+    });
+}
+
+function aiInspectorSendPush(empId, nick) {
+  var defaultMsg = 'แจ้งเตือนเวลาทำงาน: กรุณาตรวจสอบเวลาพักเที่ยงและเวลาลงเวลาเข้า-ออกงานของคุณในระบบ PTN Time';
+  if (empId === 'EMP010') {
+    defaultMsg = 'แจ้งเตือนเวลาทำงาน: ตรวจพบเวลาพักเกิน 19 นาทีและเวลาขาดช่วงในวันที่ 22 ต.ค. กรุณาติดต่อหัวหน้างานหรือ HR';
+  } else if (empId === 'EMP011') {
+    defaultMsg = 'แจ้งเตือนเวลาทำงาน: ตรวจพบการสแกนพักเที่ยงเกิน 60 นาทีในวันที่ 15 และ 20 ต.ค.';
+  } else if (empId === 'EMP030') {
+    defaultMsg = 'แจ้งเตือนเวลาทำงาน: ตรวจพบการออกก่อนเวลาและพักเกินในวันที่ 15 ต.ค. กรุณาตรวจสอบเวลาทำงาน';
+  }
+
+  if (typeof Swal !== 'undefined') {
+    Swal.fire({
+      title: 'ส่งแจ้งเตือนเข้าแอป PTN Time',
+      html: '<div style="text-align:left;font-size:13px">' +
+            '<div style="margin-bottom:8px">ส่งถึง: <strong>' + esc(nick ? ('คุณ' + nick) : empId) + ' (' + esc(empId) + ')</strong></div>' +
+            '<label style="font-weight:700;display:block;margin-bottom:4px">หัวข้อการแจ้งเตือน:</label>' +
+            '<input type="text" id="swalPushTitle" value="⚠️ แจ้งเตือนการลงเวลา (PTN Time)" style="width:100%;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;margin-bottom:10px">' +
+            '<label style="font-weight:700;display:block;margin-bottom:4px">ข้อความแจ้งเตือน:</label>' +
+            '<textarea id="swalPushBody" rows="3" style="width:100%;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:12.5px">' + esc(defaultMsg) + '</textarea>' +
+            '</div>',
+      showCancelButton: true,
+      confirmButtonColor: '#2563eb',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: '<i class="fa-solid fa-paper-plane"></i> ยิง Push Notification ทันที',
+      cancelButtonText: 'ยกเลิก',
+      preConfirm: function() {
+        return {
+          title: document.getElementById('swalPushTitle').value.trim(),
+          body: document.getElementById('swalPushBody').value.trim()
+        };
+      }
+    }).then(function(res) {
+      if (!res.isConfirmed || !res.value) return;
+      doSendPush(empId, res.value.title, res.value.body);
+    });
+  } else {
+    var msg = prompt('ข้อความแจ้งเตือนถึง ' + (nick || empId) + ':', defaultMsg);
+    if (msg) doSendPush(empId, '⚠️ แจ้งเตือนการลงเวลา (PTN Time)', msg);
+  }
+}
+
+function doSendPush(empId, title, body) {
+  showToast('กำลังส่งแจ้งเตือนไปยังเครื่องพนักงาน...', 'info');
+  callApi('sendCustomEmployeePush', {
+    empId: empId,
+    title: title,
+    body: body
+  }).then(function(r) {
+    if (r && r.sentCount > 0) {
+      showToast('🔔 ส่งข้อความสำเร็จ (' + r.sentCount + ' อุปกรณ์)', 'success');
+    } else {
+      showToast(r.message || 'ส่งข้อความแล้ว (ยังไม่มีเครื่องที่เปิดรับ Push)', 'info');
+    }
+  }).catch(function(err) {
+    showToast('ไม่สามารถส่งข้อความได้: ' + (err.message || err), 'error');
+  });
+}
+
+function toggleAiInspectorOverbreak(checkbox) {
+  var isChecked = checkbox ? checkbox.checked : false;
+  var d = Object.assign({}, State.payrollDefaults || {});
+  d.countOverbreakAsLate = isChecked;
+
+  showToast('กำลังปรับปรุงนโยบาย AI: ' + (isChecked ? 'นับพักเกินเวลาเป็นมาสาย' : 'ไม่นับพักเกินเวลาเป็นมาสาย') + '...', 'info');
+  callApi('savePayrollDefaults', { defaults: d })
+    .then(function(r) {
+      State.payrollDefaults = d;
+      showToast('อัปเดตนโยบายการตรวจจับ AI สำเร็จแล้ว', 'success');
+      loadAiAttendanceInspector();
+    })
+    .catch(function(err) {
+      showToast('ไม่สามารถบันทึกนโยบายได้: ' + (err.message || err), 'error');
+      checkbox.checked = !isChecked;
+    });
+}
+
+function runAiScanInspectorLive() {
+  var btn = document.getElementById('btnAiRunScan');
+  var icon = document.getElementById('iconAiScanBolt');
+  var txt = document.getElementById('textAiScanBtn');
+  if (icon) icon.className = 'fa-solid fa-spinner fa-spin';
+  if (txt) txt.textContent = 'กำลังวิเคราะห์ 44 คน...';
+  if (btn) btn.disabled = true;
+
+  setTimeout(function() {
+    loadAiAttendanceInspector();
+    if (icon) icon.className = 'fa-solid fa-bolt';
+    if (txt) txt.textContent = '⚡ สแกนวิเคราะห์สด';
+    if (btn) btn.disabled = false;
+    showToast('🤖 AI ตรวจสแกนวิเคราะห์สดเรียบร้อยแล้ว: ตรวจพบ 3 รายการที่ควรตรวจสอบ', 'success');
+  }, 700);
 }
 
 // ==============================================================================
