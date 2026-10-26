@@ -14852,19 +14852,88 @@ function setAiInspectorFilter(filterName) {
 function initAiInspectorPeriodOptions() {
   var sel = document.getElementById('aiInspectorPeriodSelect');
   if (!sel) return;
-  var periods = State.periods || [State.period];
-  var current = sel.value || State.period;
-  var html = '';
-  periods.forEach(function(p) {
-    var parts = p.split('-');
-    var yr = parseInt(parts[0], 10);
-    var mo = parseInt(parts[1], 10);
-    var thMonth = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][mo - 1] || mo;
-    var thYear = yr > 2500 ? yr : (yr + 543);
-    var label = thMonth + ' ' + thYear + ' (' + p + ')';
-    html += '<option value="' + esc(p) + '"' + (p === current ? ' selected' : '') + '>' + esc(label) + '</option>';
-  });
-  sel.innerHTML = html;
+
+  var fullThaiMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var shortThaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+  // 1. If attSumPeriodSelect already has valid options, sync directly from it
+  var sumSel = document.getElementById('attSumPeriodSelect');
+  if (sumSel && sumSel.options.length > 1) {
+    var curVal = sel.value || sumSel.value;
+    sel.innerHTML = '';
+    for (var j = 0; j < sumSel.options.length; j++) {
+      var optSrc = sumSel.options[j];
+      var optNew = document.createElement('option');
+      optNew.value = optSrc.value;
+      optNew.textContent = optSrc.textContent;
+      if (optSrc.value === curVal || (!curVal && j === 0)) {
+        optNew.selected = true;
+      }
+      sel.appendChild(optNew);
+    }
+    return;
+  }
+
+  // 2. Otherwise calculate the 8 recent periods
+  var nowUtc = new Date();
+  var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+  var curY = bkk.getFullYear();
+  var curM = bkk.getMonth() + 1;
+  var curD = bkk.getDate();
+  if (curD > 25) {
+    curM += 1;
+    if (curM > 12) {
+      curM = 1;
+      curY += 1;
+    }
+  }
+
+  // Find month/year from State.period if set (e.g. "ตุลาคม 2569" or "2026-10")
+  var activePeriodYm = '';
+  if (State.period) {
+    if (State.period.indexOf('-') !== -1) {
+      activePeriodYm = State.period;
+    } else {
+      for (var tm = 0; tm < fullThaiMonths.length; tm++) {
+        if (State.period.indexOf(fullThaiMonths[tm]) !== -1) {
+          var yMatch = State.period.match(/\d{4}/);
+          var yVal = yMatch ? parseInt(yMatch[0], 10) : curY;
+          if (yVal > 2500) yVal -= 543;
+          activePeriodYm = yVal + '-' + String(tm + 1).padStart(2, '0');
+          break;
+        }
+      }
+    }
+  }
+
+  sel.innerHTML = '';
+  for (var i = 0; i < 8; i++) {
+    var y = curY;
+    var m = curM - i;
+    while (m < 1) {
+      m += 12;
+      y -= 1;
+    }
+    var ymStr = y + '-' + String(m).padStart(2, '0');
+    var thYear = y + 543;
+    var prevM = m - 1;
+    var prevY = y;
+    if (prevM < 1) {
+      prevM = 12;
+      prevY -= 1;
+    }
+
+    var label = 'งวด ' + fullThaiMonths[m - 1] + ' ' + thYear + ' (' + ymStr + ')';
+    var opt = document.createElement('option');
+    opt.value = ymStr;
+    opt.textContent = label;
+    if (activePeriodYm && ymStr === activePeriodYm) {
+      opt.selected = true;
+    } else if (!activePeriodYm && i === 0) {
+      opt.selected = true;
+    }
+    sel.appendChild(opt);
+  }
 }
 
 function loadAiAttendanceInspector() {
