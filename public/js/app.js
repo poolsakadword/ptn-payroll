@@ -4075,7 +4075,9 @@ function populatePayslipModal(row) {
   document.getElementById('psCompTax').textContent = (compTax ? 'เลขประจำตัวผู้เสียภาษี: ' + compTax + ' ' : '') + (compPhone ? 'โทร: ' + compPhone : '');
   document.getElementById('psPeriod').textContent = row.period || State.period;
   document.getElementById('psEmpId').textContent = row.empId;
-  document.getElementById('psEmpName').textContent = row.name;
+  var empRowMatch = State.employees.find(function(e) { return e.empId === row.empId; });
+  var psNick = row.nickname || (empRowMatch && empRowMatch.nickname) || getEmpNickname(row.empId);
+  document.getElementById('psEmpName').textContent = row.name + (psNick ? ' (' + psNick + ')' : '');
   document.getElementById('psDeptPos').textContent = (row.department || '-') + ' / ' + (row.position || '-');
   document.getElementById('psBankAcc').textContent = (row.bankName || '-') + ' ' + (row.bankAccount || '-');
 
@@ -6015,12 +6017,14 @@ function openMonthlyPayrollSummaryModal() {
     sumGross += grs; sumSso += sso; sumPf += pf; sumTax += tax; sumOtherDed += othDed; sumTotDed += totDed; sumNet += net;
 
     var emp = State.employees.find(function(e) { return e.empId === r.empId; }) || {};
+    var empNick = r.nickname || emp.nickname || getEmpNickname(r.empId);
+    var nickHtml = empNick ? (' <span style="font-weight:600;color:#1e40af">(' + esc(empNick) + ')</span>') : '';
     var bankInfo = (r.bankName || emp.bankName || '-') + ' ' + (r.bankAccount || emp.bankAccount || '-');
 
     h += '<tr style="border-bottom:1px solid #e2e8f0">' +
       '<td style="padding:4px 3px;text-align:center">' + (idx + 1) + '</td>' +
       '<td style="padding:4px 3px;font-family:monospace;font-weight:700">' + esc(r.empId) + '</td>' +
-      '<td style="padding:4px 3px;font-weight:700">' + esc(r.name) + '</td>' +
+      '<td style="padding:4px 3px;font-weight:700">' + esc(r.name) + nickHtml + '</td>' +
       '<td style="padding:4px 3px">' + esc(r.department || '-') + '</td>' +
       '<td style="padding:4px 3px;text-align:right;font-family:monospace">' + fmt(base) + '</td>' +
       '<td style="padding:4px 3px;text-align:right;font-family:monospace">' + fmt(ot) + '</td>' +
