@@ -2436,23 +2436,29 @@ async function handleAction(db, action, params) {
       }
 
       for (const emp of employees) {
-        if (emp.status === 'Resigned' && !existingMap[emp.emp_id] && !targetEmpId) {
-          continue;
-        }
-        const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
-        if (joinDateStr && joinDateStr > endDate && !existingMap[emp.emp_id]) {
-          continue; // Not started yet
-        }
-
         // Determine resignation date (from employee profile or auto-detect from last clock-in in this period)
         let resignDateStr = emp.resign_date ? normalizeDateToIso(emp.resign_date) : '';
         if (!resignDateStr && emp.status === 'Resigned' && lastClockInDateByEmp[emp.emp_id]) {
           resignDateStr = lastClockInDateByEmp[emp.emp_id];
         }
 
-        // If resigned prior to this period cutoff, and no manual existing record:
-        if (resignDateStr && resignDateStr < startDate && !existingMap[emp.emp_id]) {
-          continue;
+        if (emp.status === 'Resigned') {
+          const hasResignInPeriod = resignDateStr && resignDateStr >= startDate && resignDateStr <= endDate;
+          const hasLogsInPeriod = Boolean(employeeHasLogs[emp.emp_id]) || Boolean(lastClockInDateByEmp[emp.emp_id]);
+          const alreadyInPeriod = Boolean(existingMap[emp.emp_id]);
+
+          // Skip past resigned employees who did NOT resign in this period and have NO logs in this period
+          if (!hasResignInPeriod && !hasLogsInPeriod && !alreadyInPeriod && !targetEmpId) {
+            continue;
+          }
+          if (resignDateStr && resignDateStr < startDate && !hasLogsInPeriod && !alreadyInPeriod && !targetEmpId) {
+            continue;
+          }
+        }
+
+        const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : '';
+        if (joinDateStr && joinDateStr > endDate && !existingMap[emp.emp_id]) {
+          continue; // Not started yet
         }
 
         if (!targetEmpId) {
@@ -2503,12 +2509,13 @@ async function handleAction(db, action, params) {
         // Any past/present working day (excluding Sundays & company holidays) with no clock-in and no approved leave
         let autoAbsentDays = 0;
         const isAttendanceExempt = (emp && (emp.is_attendance_exempt === 'true' || emp.is_attendance_exempt === true || emp.is_attendance_exempt === 1 || emp.is_attendance_exempt === '1'));
-        if (emp.status !== 'Resigned' && !isAttendanceExempt) {
+        if (!isAttendanceExempt) {
           const joinDateStr = emp.join_date ? normalizeDateToIso(emp.join_date) : null;
           for (const dStr of periodWorkingDates) {
             if (dStr > todayStr) continue; // Skip future dates in active/current period
             if (holidayDatesSet.has(dStr)) continue; // Skip company holidays
             if (joinDateStr && dStr < joinDateStr) continue; // Skip days before hire date
+            if (resignDateStr && dStr > resignDateStr) continue; // Skip days after resignation date
 
             const tl = logsByEmpDate[`${emp.emp_id}_${dStr}`] || logsByEmpDate[`${empKey}_${dStr}`];
             const leaveInfo = getLeaveInfoOnDate(emp.emp_id, dStr);
@@ -3431,8 +3438,8 @@ async function handleAction(db, action, params) {
       const branchMap = {};
       for (const b of branches) branchMap[b.branch_id] = b;
 
-      // Load Employees (Include all active working staff: Active, Probation, etc.)
-      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status, join_date FROM employees WHERE (status IS NULL OR UPPER(TRIM(status)) != 'RESIGNED')";
+      // Load Employees (Include all active working staff: Active, Probation, and mid-period Resigned)
+      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status, join_date, resign_date FROM employees WHERE 1=1";
       const empBinds = [];
       if (branchId && branchId !== 'ALL') {
         empSql += " AND branch_id = ?";
@@ -3530,6 +3537,16 @@ async function handleAction(db, action, params) {
         let lateTimes = 0;
         let lateMinutes = 0;
         let otHours = 0;
+
+        // Check if resigned before this period with no logs
+        const resignDateStr = emp.resign_date ? normalizeDateToIso(emp.resign_date) : '';
+        if (emp.status === 'Resigned') {
+          const hasResignInPeriod = resignDateStr && resignDateStr >= startDate;
+          const hasLogsInPeriod = (allLogs || []).some(l => l.emp_id === emp.emp_id);
+          if (!hasResignInPeriod && !hasLogsInPeriod) {
+            continue; // Resigned in past period with no attendance
+          }
+        }
 
         // Sum approved OT requests
         const isOtEligible = !(emp.is_ot_eligible === 'false' || emp.is_ot_eligible === false);
@@ -3756,6 +3773,13 @@ async function handleAction(db, action, params) {
               }
             } else if (joinDateStr && dateStr < joinDateStr) {
               statusText = 'ยังไม่เริ่มงาน';
+              statusColor = '#94a3b8';
+              if (currentlyAbsentSequence) {
+                absentTimes++;
+                currentlyAbsentSequence = false;
+              }
+            } else if (resignDateStr && dateStr > resignDateStr) {
+              statusText = 'ลาออกแล้ว';
               statusColor = '#94a3b8';
               if (currentlyAbsentSequence) {
                 absentTimes++;
