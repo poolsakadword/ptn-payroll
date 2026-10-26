@@ -4393,7 +4393,13 @@ async function handleAction(db, action, params) {
       const empFilter = String(params.empId || params.emp_id || '').trim();
 
       let sql = `
-        SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
+        SELECT 
+          l.id, l.emp_id, l.date, l.clock_in, l.clock_out, l.break_out, l.break_in,
+          l.work_hours, l.ot_hours, l.ot_start, l.ot_end,
+          l.late_minutes, l.break_minutes, l.overbreak_minutes,
+          l.status, l.remark, l.branch_id, l.is_full_pay,
+          l.in_lat, l.in_lng, l.out_lat, l.out_lng,
+          e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
         FROM time_logs l
         LEFT JOIN employees e ON l.emp_id = e.emp_id
         WHERE l.date >= ? AND l.date <= ?
@@ -4412,15 +4418,15 @@ async function handleAction(db, action, params) {
 
       sql += ` ORDER BY l.emp_id ASC, l.date ASC, l.clock_in ASC`;
 
-      const query = await db.prepare(sql).bind(...binds).all().catch(e => ({ error: e.message || String(e), results: [] }));
+      const query = await db.prepare(sql).bind(...binds).all().catch(e => {
+        console.error('getAttendanceLogsRange error:', e);
+        return { results: [] };
+      });
       const holidaysQuery = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
 
       return {
         success: true,
         logs: query.results || [],
-        queryError: query.error || null,
-        querySql: sql,
-        queryBinds: binds,
         holidays: holidaysQuery.results || [],
         startDate,
         endDate,

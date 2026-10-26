@@ -5041,7 +5041,10 @@
             <label style="font-size:11px;font-weight:700;color:#334155;display:block;margin-bottom:6px">⚡ เลือกช่วงเวลาด่วน:</label>
             <div style="display:flex;flex-wrap:wrap;gap:6px">
               <button type="button" class="btn btn-slate btn-sm" onclick="setExportAttendancePreset('cutoff')" style="font-size:11px;padding:4px 8px;font-weight:600">
-                <i class="fa-solid fa-calendar-check text-blue"></i> รอบตัดวิกงวดปัจจุบัน
+                <i class="fa-solid fa-calendar-check text-blue"></i> รอบตัดวิกงวดปัจจุบัน (<span id="expAttPeriodLabel">รอบงวด</span>)
+              </button>
+              <button type="button" class="btn btn-slate btn-sm" onclick="setExportAttendancePreset('last_cutoff')" style="font-size:11px;padding:4px 8px;font-weight:600">
+                <i class="fa-solid fa-clock-rotate-left text-amber"></i> รอบตัดวิกงวดก่อนหน้า
               </button>
               <button type="button" class="btn btn-slate btn-sm" onclick="setExportAttendancePreset('this_month')" style="font-size:11px;padding:4px 8px;font-weight:600">
                 เดือนนี้ (1-สิ้นเดือน)

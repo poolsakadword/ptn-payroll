@@ -14949,6 +14949,11 @@ function openTimeCardExportModal() {
 }
 
 function openExportAttendanceModal() {
+  var periodLbl = document.getElementById('expAttPeriodLabel');
+  if (periodLbl) {
+    periodLbl.textContent = State.period || 'งวดปัจจุบัน';
+  }
+
   // Populate employee select
   var empSel = document.getElementById('expAttEmployee');
   if (empSel) {
@@ -14962,16 +14967,17 @@ function openExportAttendanceModal() {
 
     sortedEmps.forEach(function(e) {
       var st = String(e.status || 'Active').toUpperCase();
-      if (st === 'RESIGNED' || e.is_active === 0) return;
       var id = getEmpId(e);
       if (!id) return;
       var fullName = getEmpFullName(e);
       var nick = getEmpNickname(e);
       var nickStr = nick ? (' (' + nick + ')') : '';
+      var isResigned = (st === 'RESIGNED' || e.is_active === 0);
+      var statusTag = isResigned ? ' [ลาออก]' : '';
 
       var opt = document.createElement('option');
       opt.value = id;
-      opt.textContent = id + ' - ' + (fullName || id) + nickStr;
+      opt.textContent = id + ' - ' + (fullName || id) + nickStr + statusTag;
       if (activeFilterEmp && activeFilterEmp !== 'ALL' && (id === activeFilterEmp)) {
         opt.selected = true;
       }
@@ -15035,34 +15041,28 @@ function setExportAttendancePreset(preset) {
   var currentDate = now.getDate();
 
   if (preset === 'cutoff') {
-    var startYear, startMonth, startDayNum;
-    var endYear, endMonth, endDayNum;
-
-    if (currentDate > cutDay) {
-      startYear = currentYear;
-      startMonth = currentMonth;
-      startDayNum = cutDay + 1;
-
-      endMonth = currentMonth + 1;
-      endYear = currentYear;
-      if (endMonth > 12) {
-        endMonth = 1;
-        endYear += 1;
+    // 1. If State.period is set, calculate cutoff dates matching the active period
+    if (State.period && typeof getAttendanceCutoffDatesClient === 'function') {
+      var periodDates = getAttendanceCutoffDatesClient(State.period, cutDay);
+      if (periodDates && periodDates.startDate && periodDates.endDate) {
+        startInput.value = periodDates.startDate;
+        endInput.value = periodDates.endDate;
+        return;
       }
-      endDayNum = cutDay;
-    } else {
-      endYear = currentYear;
-      endMonth = currentMonth;
-      endDayNum = cutDay;
-
-      startMonth = currentMonth - 1;
-      startYear = currentYear;
-      if (startMonth < 1) {
-        startMonth = 12;
-        startYear -= 1;
-      }
-      startDayNum = cutDay + 1;
     }
+
+    // 2. Fallback to calendar calculation
+    var endYear = currentYear;
+    var endMonth = currentMonth;
+    var endDayNum = cutDay;
+
+    var startMonth = currentMonth - 1;
+    var startYear = currentYear;
+    if (startMonth < 1) {
+      startMonth = 12;
+      startYear -= 1;
+    }
+    var startDayNum = cutDay + 1;
 
     var maxDaysStart = new Date(startYear, startMonth, 0).getDate();
     if (startDayNum > maxDaysStart) startDayNum = 1;
@@ -15072,6 +15072,48 @@ function setExportAttendancePreset(preset) {
 
     startInput.value = startYear + '-' + String(startMonth).padStart(2, '0') + '-' + String(startDayNum).padStart(2, '0');
     endInput.value = endYear + '-' + String(endMonth).padStart(2, '0') + '-' + String(endDayNum).padStart(2, '0');
+  } else if (preset === 'last_cutoff') {
+    // Previous cutoff period
+    var targetMonth = currentMonth - 1;
+    var targetYear = currentYear;
+    if (targetMonth < 1) {
+      targetMonth = 12;
+      targetYear -= 1;
+    }
+    if (State.period && typeof getAttendanceCutoffDatesClient === 'function') {
+      var curDates = getAttendanceCutoffDatesClient(State.period, cutDay);
+      if (curDates && curDates.endDate) {
+        var eM = parseInt(curDates.endDate.split('-')[1], 10);
+        var eY = parseInt(curDates.endDate.split('-')[0], 10);
+        targetMonth = eM - 1;
+        targetYear = eY;
+        if (targetMonth < 1) {
+          targetMonth = 12;
+          targetYear -= 1;
+        }
+      }
+    }
+
+    var pEndYear = targetYear;
+    var pEndMonth = targetMonth;
+    var pEndDay = cutDay;
+
+    var pStartMonth = targetMonth - 1;
+    var pStartYear = targetYear;
+    if (pStartMonth < 1) {
+      pStartMonth = 12;
+      pStartYear -= 1;
+    }
+    var pStartDay = cutDay + 1;
+
+    var maxDaysPStart = new Date(pStartYear, pStartMonth, 0).getDate();
+    if (pStartDay > maxDaysPStart) pStartDay = 1;
+
+    var maxDaysPEnd = new Date(pEndYear, pEndMonth, 0).getDate();
+    if (pEndDay > maxDaysPEnd) pEndDay = maxDaysPEnd;
+
+    startInput.value = pStartYear + '-' + String(pStartMonth).padStart(2, '0') + '-' + String(pStartDay).padStart(2, '0');
+    endInput.value = pEndYear + '-' + String(pEndMonth).padStart(2, '0') + '-' + String(pEndDay).padStart(2, '0');
   } else if (preset === 'this_month') {
     var lastDay = new Date(currentYear, currentMonth, 0).getDate();
     startInput.value = currentYear + '-' + String(currentMonth).padStart(2, '0') + '-01';
@@ -15427,12 +15469,17 @@ function submitPrintTimeCards() {
         if (branchId && branchId !== 'ALL') {
           employeesToPrint = allEmps.filter(function(e) {
             var st = String(e.status || 'Active').toUpperCase();
-            return (getEmpBranchId(e) === branchId) && st !== 'RESIGNED' && e.is_active !== 0;
+            var id = getEmpId(e);
+            var isResigned = (st === 'RESIGNED' || e.is_active === 0);
+            if (getEmpBranchId(e) !== branchId) return false;
+            return !isResigned || (empLogsMap[id] && Object.keys(empLogsMap[id]).length > 0);
           });
         } else {
           employeesToPrint = allEmps.filter(function(e) {
             var st = String(e.status || 'Active').toUpperCase();
-            return st !== 'RESIGNED' && e.is_active !== 0;
+            var id = getEmpId(e);
+            var isResigned = (st === 'RESIGNED' || e.is_active === 0);
+            return !isResigned || (empLogsMap[id] && Object.keys(empLogsMap[id]).length > 0);
           });
         }
       }
@@ -15593,12 +15640,17 @@ function submitExportTimeCardExcel() {
         if (branchId && branchId !== 'ALL') {
           employeesToPrint = allEmps.filter(function(e) {
             var st = String(e.status || 'Active').toUpperCase();
-            return (getEmpBranchId(e) === branchId) && st !== 'RESIGNED' && e.is_active !== 0;
+            var id = getEmpId(e);
+            var isResigned = (st === 'RESIGNED' || e.is_active === 0);
+            if (getEmpBranchId(e) !== branchId) return false;
+            return !isResigned || (empLogsMap[id] && Object.keys(empLogsMap[id]).length > 0);
           });
         } else {
           employeesToPrint = allEmps.filter(function(e) {
             var st = String(e.status || 'Active').toUpperCase();
-            return st !== 'RESIGNED' && e.is_active !== 0;
+            var id = getEmpId(e);
+            var isResigned = (st === 'RESIGNED' || e.is_active === 0);
+            return !isResigned || (empLogsMap[id] && Object.keys(empLogsMap[id]).length > 0);
           });
         }
       }
