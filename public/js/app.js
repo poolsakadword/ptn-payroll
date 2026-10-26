@@ -1118,8 +1118,10 @@ function renderPayrollTable() {
   var q = (document.getElementById('payrollSearchInput') ? document.getElementById('payrollSearchInput').value : '').trim().toLowerCase();
   var list = State.payrollList.filter(function(r) {
     if (!q) return true;
+    var nick = (r.nickname || getEmpNickname(r.empId) || '').toLowerCase();
     return (r.empId && r.empId.toLowerCase().indexOf(q) >= 0) ||
            (r.name && r.name.toLowerCase().indexOf(q) >= 0) ||
+           (nick && nick.indexOf(q) >= 0) ||
            (r.department && r.department.toLowerCase().indexOf(q) >= 0) ||
            (r.position && r.position.toLowerCase().indexOf(q) >= 0);
   });
@@ -1141,9 +1143,12 @@ function renderPayrollTable() {
     var baseSal = Number(row.baseSalary) || 0;
     var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
 
+    var empNick = row.nickname || getEmpNickname(row.empId);
+    var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
+
     h += '<tr>' +
       '<td class="font-mono font-bold">' + esc(row.empId) + '</td>' +
-      '<td class="font-bold">' + esc(row.name) + '</td>' +
+      '<td class="font-bold">' + esc(row.name) + nickHtml + '</td>' +
       '<td><span class="period-pill">' + esc(row.department || '-') + '</span> ' + esc(row.position || '') + '</td>' +
       '<td class="text-muted" style="font-size:11px">' + esc(row.bankName || '-') + '<br>' + esc(row.bankAccount || '-') + '</td>' +
       '<td class="text-right font-mono font-bold">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
@@ -1229,8 +1234,10 @@ function renderInputTable() {
   var q = (document.getElementById('inputSearchInput') ? document.getElementById('inputSearchInput').value : '').trim().toLowerCase();
   var list = State.inputRecords.filter(function(i) {
     if (!q) return true;
+    var nick = (i.nickname || getEmpNickname(i.empId) || '').toLowerCase();
     return (i.empId && i.empId.toLowerCase().indexOf(q) >= 0) ||
-           (i.empName && i.empName.toLowerCase().indexOf(q) >= 0);
+           (i.empName && i.empName.toLowerCase().indexOf(q) >= 0) ||
+           (nick && nick.indexOf(q) >= 0);
   });
 
   if (list.length === 0) {
@@ -1263,8 +1270,10 @@ function renderInputTable() {
       '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
       (function() {
       var emp = State.employees.find(function(e) { return e.empId === i.empId; });
+      var empNick = (emp && emp.nickname) ? emp.nickname : (i.nickname || getEmpNickname(i.empId));
+      var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
       var remBadge = (emp && emp.remark) ? '<br><span style="font-size:11px;font-weight:normal;color:#d97706;background:#fffbeb;border:1px solid #fef3c7;padding:1px 6px;border-radius:4px;display:inline-block;margin-top:2px"><i class="fa-solid fa-note-sticky"></i> ' + esc(emp.remark) + '</span>' : '';
-      return '<td class="font-bold">' + esc(i.empName || '-') + remBadge + '</td>';
+      return '<td class="font-bold">' + esc(i.empName || '-') + nickHtml + remBadge + '</td>';
     })() +
       '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
@@ -4249,16 +4258,18 @@ function exportToCSV(type) {
   var filename = 'PTN_' + type + '_' + State.period.replace(/\s+/g, '_') + '.csv';
 
   if (type === 'payroll') {
-    csv += 'รหัส,ชื่อ-นามสกุล,แผนก,ตำแหน่ง,ธนาคาร,เลขบัญชี,เงินเดือนฐาน,ค่าจ้างต่อวัน,OTชม,เงินOT,เบี้ยขยัน,โบนัส,หักขาดลาสาย,Gross,ประกันสังคม,กองทุนPF,ภาษี,หักเงินเบิก,หักอื่นๆ,รวมหัก,สุทธิNet\n';
+    csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,แผนก,ตำแหน่ง,ธนาคาร,เลขบัญชี,เงินเดือนฐาน,ค่าจ้างต่อวัน,OTชม,เงินOT,เบี้ยขยัน,โบนัส,หักขาดลาสาย,Gross,ประกันสังคม,กองทุนPF,ภาษี,หักเงินเบิก,หักอื่นๆ,รวมหัก,สุทธิNet\n';
     var workDays = State.workingDays > 0 ? State.workingDays : 30;
     State.payrollList.forEach(function(r) {
       var dRate = workDays > 0 ? Math.round(Number(r.baseSalary) / workDays * 100) / 100 : 0;
-      csv += [r.empId, '"' + r.name + '"', '"' + r.department + '"', '"' + r.position + '"', '"' + r.bankName + '"', '"' + r.bankAccount + '"', r.baseSalary, dRate, r.otHours, r.otPay, r.allowance, r.bonus, r.leaveDeduction, r.grossPay, r.sso, r.pf, r.tax, r.advanceDeduct, r.otherDeduct, r.totalDeductions, r.netPay].join(',') + '\n';
+      var nick = r.nickname || getEmpNickname(r.empId) || '';
+      csv += [r.empId, '"' + (r.name || '').replace(/"/g, '""') + '"', '"' + nick.replace(/"/g, '""') + '"', '"' + r.department + '"', '"' + r.position + '"', '"' + r.bankName + '"', '"' + r.bankAccount + '"', r.baseSalary, dRate, r.otHours, r.otPay, r.allowance, r.bonus, r.leaveDeduction, r.grossPay, r.sso, r.pf, r.tax, r.advanceDeduct, r.otherDeduct, r.totalDeductions, r.netPay].join(',') + '\n';
     });
   } else if (type === 'input') {
-    csv += 'ลำดับ,รหัส,ชื่อ-นามสกุล,เงินเดือนฐาน,ขาดงานวัน,ลากิจวัน,ลาป่วยวัน,หักสายบาท,OTชม,อัตราOT,เบี้ยขยัน,โบนัส,กองทุนPF,ประกันสังคม,ภาษี,หักเงินเบิก,หักอื่นๆ\n';
+    csv += 'ลำดับ,รหัส,ชื่อ-นามสกุล,ชื่อเล่น,เงินเดือนฐาน,ขาดงานวัน,ลากิจวัน,ลาป่วยวัน,หักสายบาท,OTชม,อัตราOT,เบี้ยขยัน,โบนัส,กองทุนPF,ประกันสังคม,ภาษี,หักเงินเบิก,หักอื่นๆ\n';
     State.inputRecords.forEach(function(i) {
-      csv += [i.no, i.empId, '"' + i.empName + '"', i.baseSalary, i.absentDays, i.leaveDays, i.sickLeaveDays, i.lateDeduct, i.otHours, i.otRate, i.allowance, i.bonus, i.pfAmount, i.sso, i.tax, i.advanceDeduct, i.otherDeduct].join(',') + '\n';
+      var nick = i.nickname || getEmpNickname(i.empId) || '';
+      csv += [i.no, i.empId, '"' + (i.empName || '').replace(/"/g, '""') + '"', '"' + nick.replace(/"/g, '""') + '"', i.baseSalary, i.absentDays, i.leaveDays, i.sickLeaveDays, i.lateDeduct, i.otHours, i.otRate, i.allowance, i.bonus, i.pfAmount, i.sso, i.tax, i.advanceDeduct, i.otherDeduct].join(',') + '\n';
     });
   } else if (type === 'employees') {
     var isUserRole = (State.currentUser && State.currentUser.role === 'User');

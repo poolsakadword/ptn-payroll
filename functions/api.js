@@ -1292,6 +1292,12 @@ async function handleAction(db, action, params) {
         boundDevice: deviceMap[e.emp_id] || null
       }));
 
+      // Employee nickname lookup map
+      const empNickMap = {};
+      for (const e of employees) {
+        if (e.empId && e.nickname) empNickMap[e.empId] = e.nickname;
+      }
+
       // Monthly Inputs
       const inputQuery = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ? ORDER BY no ASC, emp_id ASC').bind(period).all();
       let rawInputs = inputQuery.results || [];
@@ -1310,6 +1316,7 @@ async function handleAction(db, action, params) {
         no: Number(i.no) || (idx + 1),
         empId: i.emp_id,
         empName: i.emp_name || '',
+        nickname: empNickMap[i.emp_id] || '',
         baseSalary: Number(i.base_salary) || 0,
         pfRate: (i.pf_rate !== null && i.pf_rate !== undefined && !isNaN(Number(i.pf_rate))) ? Number(i.pf_rate) : 0.05,
         pfAmount: Number(i.pf_amount) || 0,
@@ -1358,6 +1365,7 @@ async function handleAction(db, action, params) {
             period: c.period,
             empId: c.emp_id,
             name: c.full_name || '',
+            nickname: empNickMap[c.emp_id] || '',
             department: c.department || '',
             position: c.position || '',
             bankName: c.bank_name || '',
