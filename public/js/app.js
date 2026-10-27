@@ -549,10 +549,11 @@ function checkAuth() {
       State.currentUser = JSON.parse(savedUser);
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appShell').classList.add('active');
-      applyRolePermissions();
-      navigateToAuthorizedTab();
-      loadAppData();
+      try { applyRolePermissions(); } catch(err) { console.error('applyRolePermissions error:', err); }
+      try { navigateToAuthorizedTab(); } catch(err) { console.error('navigateToAuthorizedTab error:', err); }
+      try { loadAppData(); } catch(err) { console.error('loadAppData error:', err); }
     } catch(e) {
+      console.warn('Invalid saved auth token, logging out:', e);
       handleLogout();
     }
   } else {
@@ -563,13 +564,24 @@ function checkAuth() {
 
 function handleLogin(e) {
   if (e) e.preventDefault();
-  var u = document.getElementById('loginUsername').value.trim();
-  var p = document.getElementById('loginPassword').value.trim();
+  var u = (document.getElementById('loginUsername') ? document.getElementById('loginUsername').value : '').trim();
+  var p = (document.getElementById('loginPassword') ? document.getElementById('loginPassword').value : '').trim();
   if (!u || !p) { showToast('กรุณากรอกชื่อผู้ใช้และรหัสผ่าน', 'error'); return; }
+
+  var btn = document.getElementById('btnLoginSubmit') || (e && e.target ? e.target.querySelector('button[type="submit"]') : null);
+  var origBtnHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังเข้าสู่ระบบ...';
+  }
 
   callApi('checkLogin', { username: u, password: p })
     .then(function(r) {
-      if (r.success) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origBtnHtml;
+      }
+      if (r && r.success) {
         State.currentUser = {
           username: r.username,
           role: r.role,
@@ -582,15 +594,37 @@ function handleLogin(e) {
 
         document.getElementById('loginScreen').style.display = 'none';
         document.getElementById('appShell').classList.add('active');
-        applyRolePermissions();
-        navigateToAuthorizedTab();
-        loadAppData();
+        try { applyRolePermissions(); } catch(err) { console.error('applyRolePermissions error:', err); }
+        try { navigateToAuthorizedTab(); } catch(err) { console.error('navigateToAuthorizedTab error:', err); }
+        try { loadAppData(); } catch(err) { console.error('loadAppData error:', err); }
       } else {
-        showToast(r.message || 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'error');
+        var msg = (r && r.message) ? r.message : 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';
+        showToast(msg, 'error');
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'error',
+            title: 'เข้าสู่ระบบไม่สำเร็จ',
+            text: msg,
+            confirmButtonColor: '#e11d48'
+          });
+        }
       }
     })
     .catch(function(err) {
-      showToast('ไม่สามารถเชื่อมต่อฐานข้อมูลได้: ' + err.message, 'error');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origBtnHtml;
+      }
+      var errMsg = err ? (err.message || String(err)) : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้';
+      showToast('ไม่สามารถเชื่อมต่อฐานข้อมูลได้: ' + errMsg, 'error');
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'error',
+          title: 'ข้อผิดพลาดในการเชื่อมต่อ',
+          text: 'ไม่สามารถติดต่อเซิร์ฟเวอร์ได้: ' + errMsg,
+          confirmButtonColor: '#e11d48'
+        });
+      }
     });
 }
 
@@ -15969,7 +16003,8 @@ function getEmpFullName(e) {
 
 
 function getEmpBranchId(e) {
-  return String((e && (e.branchId || e.branch_id || '')) || '').trim();
+  var b = String((e && (e.branchId || e.branch_id || '')) || '').trim();
+  return b || 'B01';
 }
 
 function getEmpBranchName(e) {
@@ -16897,6 +16932,19 @@ var AdminNotifState = {
 };
 
 function initAdminNotificationCenter() {
+  if (typeof AdminNotifState === 'undefined' || !AdminNotifState) {
+    try {
+      AdminNotifState = {
+        soundEnabled: localStorage.getItem('ptn_admin_notif_sound') !== 'false',
+        unreadCount: 0,
+        seenItemIds: new Set(JSON.parse(localStorage.getItem('ptn_admin_seen_items') || '[]')),
+        lastData: null,
+        pollerInterval: null
+      };
+    } catch(e) {
+      AdminNotifState = { soundEnabled: true, unreadCount: 0, seenItemIds: new Set(), lastData: null, pollerInterval: null };
+    }
+  }
   updateSoundIcon();
   // Close dropdown when clicking outside
   document.addEventListener('click', function(e) {
@@ -17171,7 +17219,8 @@ function toggleSoundAlert() {
 function updateSoundIcon() {
   var icon = document.getElementById('iconSoundToggle');
   if (!icon) return;
-  if (AdminNotifState.soundEnabled) {
+  var isSoundOn = (typeof AdminNotifState !== 'undefined' && AdminNotifState && AdminNotifState.soundEnabled);
+  if (isSoundOn) {
     icon.className = 'fa-solid fa-volume-high';
     icon.style.color = '#2563eb';
   } else {
