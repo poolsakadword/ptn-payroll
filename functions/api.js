@@ -2955,14 +2955,25 @@ async function handleAction(db, action, params) {
         cutoffInfo = await getCutoffDatesForPeriod(db, filterPeriod);
       }
 
-      // 1.0 Employees list for search & selector
+      // 1.0 Employees list for search & selector (include resigned employees so history & period logs can be inspected)
       const empRows = await db.prepare(`
-        SELECT emp_id, full_name, nickname, department, position, branch_id, phone
+        SELECT emp_id, full_name, nickname, department, position, branch_id, phone, status, resign_date, is_attendance_exempt
         FROM employees
-        WHERE status != 'Resigned'
         ORDER BY emp_id ASC
       `).all().catch(() => ({ results: [] }));
-      const employeeList = empRows.results || [];
+      const allEmployees = empRows.results || [];
+      const employeeList = allEmployees.map(e => ({
+        emp_id: e.emp_id,
+        name: e.full_name,
+        full_name: e.full_name,
+        nickname: e.nickname,
+        department: e.department,
+        position: e.position,
+        branch_id: e.branch_id,
+        phone: e.phone,
+        status: e.status || 'Active',
+        resign_date: e.resign_date || ''
+      }));
 
       const isIndividual = Boolean(empFilter && empFilter !== 'ALL');
       let selectedEmp = null;
@@ -3166,9 +3177,10 @@ async function handleAction(db, action, params) {
       const branchMap = {};
       for (const b of branches) branchMap[b.branch_id] = b;
 
+      // Active employees on targetDate for daily attendance KPI & breakdown (exclude employees who resigned before targetDate)
       const activeEmps = (branchFilter && branchFilter !== 'ALL')
-        ? employeeList.filter(e => e.branch_id === branchFilter)
-        : employeeList;
+        ? allEmployees.filter(e => e.branch_id === branchFilter && (e.status !== 'Resigned' || (e.resign_date && e.resign_date >= targetDate)))
+        : allEmployees.filter(e => e.status !== 'Resigned' || (e.resign_date && e.resign_date >= targetDate));
 
       // Map logs on targetDate
       const targetLogsMap = {};
@@ -3284,7 +3296,7 @@ async function handleAction(db, action, params) {
 
       // Branch staffing summary
       const branchSummary = branches.map(b => {
-        const bEmps = employeeList.filter(e => e.branch_id === b.branch_id);
+        const bEmps = activeEmps.filter(e => e.branch_id === b.branch_id);
         const bIn = clockedInList.filter(c => (c.branchId === b.branch_id));
         const bNot = notClockedInList.filter(n => (n.branchId === b.branch_id));
         const bLate = lateList.filter(l => (l.branchId === b.branch_id));
@@ -3938,6 +3950,8 @@ async function handleAction(db, action, params) {
           branchName: branch.branch_name || '-',
           position: emp.position || '-',
           department: emp.department || '-',
+          status: emp.status || 'Active',
+          resignDate: emp.resign_date || '',
           baseSalary: Number(emp.base_salary) || 0,
           expectedWorkDays: totalExpectedWorkDays,
           presentDays: Math.round(presentDays * 100) / 100,

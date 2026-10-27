@@ -3662,13 +3662,14 @@ function populateBranchSelects() {
 // ==============================================================================
 function refreshAllEmployeeSelects() {
   var employees = State.employees || [];
-  var workingEmps = employees.filter(function(e) {
-    var st = String(e.status || 'Active').trim().toUpperCase();
-    return st !== 'RESIGNED';
-  }).sort(function(a, b) {
+  var allEmpsSorted = employees.slice().sort(function(a, b) {
     var idA = String(a.empId || a.emp_id || '');
     var idB = String(b.empId || b.emp_id || '');
     return idA.localeCompare(idB);
+  });
+  var workingEmps = allEmpsSorted.filter(function(e) {
+    var st = String(e.status || 'Active').trim().toUpperCase();
+    return st !== 'RESIGNED';
   });
 
   // 1. miEmpId (Payroll Monthly Input Modal)
@@ -3676,11 +3677,6 @@ function refreshAllEmployeeSelects() {
   if (miSel) {
     var curMiVal = miSel.value;
     var miOpts = '<option value="">-- เลือกรหัสพนักงาน --</option>';
-    var allEmpsSorted = (State.employees || []).slice().sort(function(a, b) {
-      var idA = String(a.empId || a.emp_id || '');
-      var idB = String(b.empId || b.emp_id || '');
-      return idA.localeCompare(idB);
-    });
     allEmpsSorted.forEach(function(e) {
       var id = e.empId || e.emp_id || '';
       var name = e.fullName || e.full_name || e.name || '';
@@ -3700,11 +3696,13 @@ function refreshAllEmployeeSelects() {
   if (histSel) {
     var curHistVal = histSel.value;
     var histOpts = '<option value="">-- เลือกรหัสพนักงาน --</option>';
-    workingEmps.forEach(function(e) {
+    allEmpsSorted.forEach(function(e) {
       var id = e.empId || e.emp_id || '';
       var name = e.fullName || e.full_name || e.name || '';
       var nick = e.nickname ? ' (' + e.nickname + ')' : '';
-      histOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + '</option>';
+      var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      var resTag = isResigned ? ' [ลาออก]' : '';
+      histOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + resTag + '</option>';
     });
     histSel.innerHTML = histOpts;
     if (curHistVal) histSel.value = curHistVal;
@@ -3733,12 +3731,14 @@ function refreshAllEmployeeSelects() {
   if (addAttSel) {
     var curAddAttVal = addAttSel.value;
     var addAttOpts = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
-    workingEmps.forEach(function(e) {
+    allEmpsSorted.forEach(function(e) {
       var id = e.empId || e.emp_id || '';
       var name = e.fullName || e.full_name || e.name || '';
       var nick = e.nickname ? ' (' + e.nickname + ')' : '';
       var dept = e.department ? ' - ' + e.department : '';
-      addAttOpts += '<option value="' + esc(id) + '">[' + esc(id) + '] ' + esc(name) + nick + dept + '</option>';
+      var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      var resTag = isResigned ? ' [ลาออก]' : '';
+      addAttOpts += '<option value="' + esc(id) + '">[' + esc(id) + '] ' + esc(name) + nick + dept + resTag + '</option>';
     });
     addAttSel.innerHTML = addAttOpts;
     if (curAddAttVal) addAttSel.value = curAddAttVal;
@@ -3749,12 +3749,14 @@ function refreshAllEmployeeSelects() {
   if (adminReqSel) {
     var curAdminReqVal = adminReqSel.value;
     var adminReqOpts = '<option value="">-- กรุณาเลือกพนักงาน --</option>';
-    workingEmps.forEach(function(e) {
+    allEmpsSorted.forEach(function(e) {
       var id = e.empId || e.emp_id || '';
       var name = e.fullName || e.full_name || e.name || '';
       var nick = e.nickname ? ' (' + e.nickname + ')' : '';
       var dept = e.department ? ' - ' + e.department : '';
-      adminReqOpts += '<option value="' + esc(id) + '">[' + esc(id) + '] ' + esc(name) + nick + dept + '</option>';
+      var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      var resTag = isResigned ? ' [ลาออก]' : '';
+      adminReqOpts += '<option value="' + esc(id) + '">[' + esc(id) + '] ' + esc(name) + nick + dept + resTag + '</option>';
     });
     adminReqSel.innerHTML = adminReqOpts;
     if (curAdminReqVal) adminReqSel.value = curAdminReqVal;
@@ -3765,11 +3767,13 @@ function refreshAllEmployeeSelects() {
   if (expAttSel) {
     var curExpVal = expAttSel.value || 'ALL';
     var expOpts = '<option value="ALL">👥 พนักงานทุกคน (All Employees - คนละ 1 แผ่น A4)</option>';
-    workingEmps.forEach(function(e) {
+    allEmpsSorted.forEach(function(e) {
       var id = e.empId || e.emp_id || '';
       var name = e.fullName || e.full_name || e.name || '';
       var nick = e.nickname ? ' (' + e.nickname + ')' : '';
-      expOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + '</option>';
+      var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      var resTag = isResigned ? ' [ลาออก]' : '';
+      expOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + resTag + '</option>';
     });
     expAttSel.innerHTML = expOpts;
     if (curExpVal) expAttSel.value = curExpVal;
@@ -3780,19 +3784,21 @@ function refreshAllEmployeeSelects() {
   if (attSumSingleSel) {
     var curAttSumVal = attSumSingleSel.value || State.activeAttendanceSummarySingleEmpId;
     var attSumOpts = '';
-    workingEmps.forEach(function(e) {
+    allEmpsSorted.forEach(function(e) {
       var id = e.empId || e.emp_id || '';
       var name = e.fullName || e.full_name || e.name || '';
       var nick = e.nickname && e.nickname !== '-' ? ' (' + e.nickname + ')' : '';
-      attSumOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + '</option>';
+      var isResigned = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      var resTag = isResigned ? ' [ลาออก]' : '';
+      attSumOpts += '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + resTag + '</option>';
     });
     if (attSumOpts) {
       attSumSingleSel.innerHTML = attSumOpts;
-      if (curAttSumVal && workingEmps.some(function(x) { return (x.empId || x.emp_id) === curAttSumVal; })) {
+      if (curAttSumVal && allEmpsSorted.some(function(x) { return (x.empId || x.emp_id) === curAttSumVal; })) {
         attSumSingleSel.value = curAttSumVal;
         State.activeAttendanceSummarySingleEmpId = curAttSumVal;
-      } else if (workingEmps.length) {
-        var firstId = workingEmps[0].empId || workingEmps[0].emp_id;
+      } else if (allEmpsSorted.length) {
+        var firstId = allEmpsSorted[0].empId || allEmpsSorted[0].emp_id;
         attSumSingleSel.value = firstId;
         State.activeAttendanceSummarySingleEmpId = firstId;
       }
@@ -3801,7 +3807,7 @@ function refreshAllEmployeeSelects() {
 
   // 8. Attendance Filters (attFilterEmp & attReqEmpFilter)
   if (typeof populateAttendanceEmployeeSelects === 'function') {
-    populateAttendanceEmployeeSelects(workingEmps.map(function(e) {
+    populateAttendanceEmployeeSelects(allEmpsSorted.map(function(e) {
       return {
         emp_id: e.empId || e.emp_id,
         name: e.fullName || e.full_name || e.name,
@@ -3810,7 +3816,9 @@ function refreshAllEmployeeSelects() {
         department: e.department,
         position: e.position,
         branch_id: e.branchId || e.branch_id,
-        photo_url: e.photoUrl || e.photo_url
+        photo_url: e.photoUrl || e.photo_url,
+        status: e.status || 'Active',
+        resign_date: e.resignDate || e.resign_date || ''
       };
     }));
   }
@@ -9014,7 +9022,9 @@ function filterAttendanceEmpDropdown(query) {
     var nameMatch = (e.name || e.full_name || '').toLowerCase().includes(q);
     var nickMatch = (e.nickname || '').toLowerCase().includes(q);
     var deptMatch = (e.department || '').toLowerCase().includes(q);
-    return idMatch || nameMatch || nickMatch || deptMatch;
+    var isResigned = (e.status === 'Resigned' || String(e.status).toUpperCase() === 'RESIGNED');
+    var statusMatch = (q === 'ลาออก' || q === 'resigned') && isResigned;
+    return idMatch || nameMatch || nickMatch || deptMatch || statusMatch;
   });
 
   var html = '';
@@ -9035,12 +9045,16 @@ function filterAttendanceEmpDropdown(query) {
     html += '<div style="height:1px;background:#e2e8f0;margin:3px 0"></div>';
     filtered.forEach(function(e) {
       var isSelected = (_currentAttendanceEmpId === e.emp_id);
+      var isResigned = (e.status === 'Resigned' || String(e.status).toUpperCase() === 'RESIGNED');
       var displayName = (e.name || e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '');
-      var displayFull = e.emp_id + ' - ' + displayName;
+      var displayFull = e.emp_id + ' - ' + displayName + (isResigned ? ' [ลาออก]' : '');
 
       html += '<div class="att-emp-item ' + (isSelected ? 'selected' : '') + '" onclick="selectAttendanceEmp(\'' + esc(e.emp_id) + '\', \'' + esc(displayFull) + '\')" style="padding:6px 10px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;background:' + (isSelected ? '#eff6ff' : 'transparent') + ';color:' + (isSelected ? '#1d4ed8' : '#0f172a') + ';font-size:12px;margin-bottom:1px;transition:background 0.15s" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'' + (isSelected ? '#eff6ff' : 'transparent') + '\'">' +
         '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-          '<div style="font-weight:' + (isSelected ? '700' : '600') + ';overflow:hidden;text-overflow:ellipsis">' + esc(displayName) + '</div>' +
+          '<div style="font-weight:' + (isSelected ? '700' : '600') + ';overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px">' +
+            '<span>' + esc(displayName) + '</span>' +
+            (isResigned ? '<span style="background:#fee2e2;color:#b91c1c;padding:0px 5px;border-radius:4px;font-size:10px;font-weight:700">ลาออกแล้ว</span>' : '') +
+          '</div>' +
           '<div style="font-size:10.5px;color:#64748b;display:flex;gap:4px;align-items:center;margin-top:1px">' +
             '<span style="background:#e0f2fe;color:#0369a1;padding:0 4px;border-radius:3px;font-weight:600">' + esc(e.emp_id) + '</span>' +
             (e.department ? '<span style="color:#64748b">• ' + esc(e.department) + '</span>' : '') +
@@ -9134,7 +9148,9 @@ function populateAttendanceEmployeeSelects(empList) {
     var currVal = selMain.value || _currentAttendanceEmpId || 'ALL';
     var opts = '<option value="ALL">👥 พนักงานทุกคน (All)</option>';
     empList.forEach(function(e) {
-      var display = e.emp_id + ' - ' + (e.name || e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '');
+      var isResigned = (e.status === 'Resigned' || String(e.status).toUpperCase() === 'RESIGNED');
+      var resTag = isResigned ? ' [ลาออก]' : '';
+      var display = e.emp_id + ' - ' + (e.name || e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '') + resTag;
       opts += '<option value="' + esc(e.emp_id) + '">' + esc(display) + '</option>';
     });
     selMain.innerHTML = opts;
@@ -9153,7 +9169,9 @@ function populateAttendanceEmployeeSelects(empList) {
     if (_currentAttendanceEmpId && _currentAttendanceEmpId !== 'ALL') {
       var found = empList.find(function(x) { return x.emp_id === _currentAttendanceEmpId; });
       if (found) {
-        searchInput.value = found.emp_id + ' - ' + (found.name || found.full_name || '') + (found.nickname ? ' (' + found.nickname + ')' : '');
+        var isResigned = (found.status === 'Resigned' || String(found.status).toUpperCase() === 'RESIGNED');
+        var resTag = isResigned ? ' [ลาออก]' : '';
+        searchInput.value = found.emp_id + ' - ' + (found.name || found.full_name || '') + (found.nickname ? ' (' + found.nickname + ')' : '') + resTag;
       }
       if (clearBtn) clearBtn.style.display = 'block';
       if (chevronIcon) chevronIcon.style.display = 'none';
@@ -9169,7 +9187,9 @@ function populateAttendanceEmployeeSelects(empList) {
     var currReqVal = selReq.value || _currentAttendanceRequestEmpId || 'ALL';
     var reqOpts = '<option value="ALL">👥 ทุกคน</option>';
     empList.forEach(function(e) {
-      var display = e.emp_id + ' - ' + (e.name || e.full_name || '');
+      var isResigned = (e.status === 'Resigned' || String(e.status).toUpperCase() === 'RESIGNED');
+      var resTag = isResigned ? ' [ลาออก]' : '';
+      var display = e.emp_id + ' - ' + (e.name || e.full_name || '') + resTag;
       reqOpts += '<option value="' + esc(e.emp_id) + '">' + esc(display) + '</option>';
     });
     selReq.innerHTML = reqOpts;
@@ -9188,7 +9208,9 @@ function populateAttendanceEmployeeSelects(empList) {
     if (_currentAttendanceRequestEmpId && _currentAttendanceRequestEmpId !== 'ALL') {
       var foundReq = empList.find(function(x) { return x.emp_id === _currentAttendanceRequestEmpId; });
       if (foundReq) {
-        reqSearchInput.value = foundReq.emp_id + ' - ' + (foundReq.name || foundReq.full_name || '') + (foundReq.nickname ? ' (' + foundReq.nickname + ')' : '');
+        var isResigned = (foundReq.status === 'Resigned' || String(foundReq.status).toUpperCase() === 'RESIGNED');
+        var resTag = isResigned ? ' [ลาออก]' : '';
+        reqSearchInput.value = foundReq.emp_id + ' - ' + (foundReq.name || foundReq.full_name || '') + (foundReq.nickname ? ' (' + foundReq.nickname + ')' : '') + resTag;
       }
       if (reqClearBtn) reqClearBtn.style.display = 'block';
       if (reqChevronIcon) reqChevronIcon.style.display = 'none';
@@ -9280,7 +9302,9 @@ function filterAttendanceReqEmpDropdown(query) {
     var nameMatch = (e.name || e.full_name || '').toLowerCase().includes(q);
     var nickMatch = (e.nickname || '').toLowerCase().includes(q);
     var deptMatch = (e.department || '').toLowerCase().includes(q);
-    return idMatch || nameMatch || nickMatch || deptMatch;
+    var isResigned = (e.status === 'Resigned' || String(e.status).toUpperCase() === 'RESIGNED');
+    var statusMatch = (q === 'ลาออก' || q === 'resigned') && isResigned;
+    return idMatch || nameMatch || nickMatch || deptMatch || statusMatch;
   });
 
   var html = '';
@@ -9300,12 +9324,16 @@ function filterAttendanceReqEmpDropdown(query) {
     html += '<div style="height:1px;background:#e2e8f0;margin:3px 0"></div>';
     filtered.forEach(function(e) {
       var isSelected = (_currentAttendanceRequestEmpId === e.emp_id);
+      var isResigned = (e.status === 'Resigned' || String(e.status).toUpperCase() === 'RESIGNED');
       var displayName = (e.name || e.full_name || '') + (e.nickname ? ' (' + e.nickname + ')' : '');
-      var displayFull = e.emp_id + ' - ' + displayName;
+      var displayFull = e.emp_id + ' - ' + displayName + (isResigned ? ' [ลาออก]' : '');
 
       html += '<div class="att-req-emp-item ' + (isSelected ? 'selected' : '') + '" onclick="selectAttendanceReqEmp(\'' + esc(e.emp_id) + '\', \'' + esc(displayFull) + '\')" style="padding:5px 8px;border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px;background:' + (isSelected ? '#eff6ff' : 'transparent') + ';color:' + (isSelected ? '#1d4ed8' : '#0f172a') + ';font-size:11.5px;margin-bottom:1px;transition:background 0.15s" onmouseover="this.style.background=\'#f1f5f9\'" onmouseout="this.style.background=\'' + (isSelected ? '#eff6ff' : 'transparent') + '\'">' +
         '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
-          '<div style="font-weight:' + (isSelected ? '700' : '600') + ';overflow:hidden;text-overflow:ellipsis">' + esc(displayName) + '</div>' +
+          '<div style="font-weight:' + (isSelected ? '700' : '600') + ';overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px">' +
+            '<span>' + esc(displayName) + '</span>' +
+            (isResigned ? '<span style="background:#fee2e2;color:#b91c1c;padding:0px 4px;border-radius:3px;font-size:9.5px;font-weight:700">ลาออก</span>' : '') +
+          '</div>' +
           '<div style="font-size:10px;color:#64748b;display:flex;gap:4px;align-items:center;margin-top:1px">' +
             '<span style="background:#e0f2fe;color:#0369a1;padding:0 3px;border-radius:3px;font-weight:600">' + esc(e.emp_id) + '</span>' +
             (e.department ? '<span style="color:#64748b">• ' + esc(e.department) + '</span>' : '') +
@@ -10261,7 +10289,9 @@ function loadAttendancePeriodSummary() {
       res.summaryList.forEach(function(e) {
         var opt = document.createElement('option');
         opt.value = e.empId;
-        opt.textContent = e.empId + ' - ' + e.fullName + (e.nickname && e.nickname !== '-' ? ' (' + e.nickname + ')' : '');
+        var isResigned = (e.status === 'Resigned' || String(e.status).toUpperCase() === 'RESIGNED' || (State.employees || []).some(function(x) { return (x.empId || x.emp_id) === e.empId && String(x.status).toUpperCase() === 'RESIGNED'; }));
+        var resTag = isResigned ? ' [ลาออก]' : '';
+        opt.textContent = e.empId + ' - ' + e.fullName + (e.nickname && e.nickname !== '-' ? ' (' + e.nickname + ')' : '') + resTag;
         empSel.appendChild(opt);
       });
       if (prevVal && res.summaryList.some(function(x) { return x.empId === prevVal; })) {
@@ -10334,10 +10364,13 @@ function renderAttendancePeriodSummary(data) {
         var sncDays = Math.round((Number(r.sickNoCertDays) || 0) * 100) / 100;
         var bDays = Math.round((Number(r.businessLeaveDays) || 0) * 100) / 100;
 
+        var isResigned = (r.status === 'Resigned' || String(r.status).toUpperCase() === 'RESIGNED' || (State.employees || []).some(function(x) { return (x.empId || x.emp_id) === r.empId && String(x.status).toUpperCase() === 'RESIGNED'; }));
+        var resBadge = isResigned ? ' <span style="background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">ลาออก</span>' : '';
+
         html += '<tr style="border-bottom:1px solid #e2e8f0;text-align:center;font-size:12px;height:38px">';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;color:#64748b">' + r.no + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;font-family:monospace;font-weight:700;color:#1e40af">' + esc(r.empId) + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px 8px;text-align:left"><strong style="color:#0f172a;cursor:pointer" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')">' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' <span style="color:#64748b">(' + esc(r.nickname) + ')</span>' : '') + '</td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px 8px;text-align:left"><strong style="color:#0f172a;cursor:pointer" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')">' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' <span style="color:#64748b">(' + esc(r.nickname) + ')</span>' : '') + resBadge + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;text-align:left;color:#334155;white-space:nowrap">' + esc(r.branchName) + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#eff6ff;color:#1e40af;font-weight:800">' + pDays + ' / ' + r.expectedWorkDays + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fef2f2;color:' + (aDays > 0 ? '#b91c1c;font-weight:700' : '#64748b') + '">' + (aDays > 0 ? (aDays + ' วัน (' + r.absentTimes + ' ครั้ง)') : '-') + '</td>';
@@ -10402,8 +10435,11 @@ function renderIndividualAttendanceSheet(empId) {
   var branchEl = document.getElementById('attSingleBranch');
   var signEmpEl = document.getElementById('attSingleSignEmpName');
 
+  var isResigned = (emp.status === 'Resigned' || String(emp.status).toUpperCase() === 'RESIGNED' || (State.employees || []).some(function(x) { return (x.empId || x.emp_id) === emp.empId && String(x.status).toUpperCase() === 'RESIGNED'; }));
+  var resBadge = isResigned ? ' <span style="background:#fee2e2;color:#b91c1c;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;margin-left:6px">พ้นสภาพ/ลาออกแล้ว</span>' : '';
+
   if (idEl) idEl.textContent = emp.empId;
-  if (nameEl) nameEl.textContent = emp.fullName;
+  if (nameEl) nameEl.innerHTML = esc(emp.fullName) + resBadge;
   if (nickEl) nickEl.textContent = emp.nickname || '-';
   if (branchEl) branchEl.textContent = emp.branchName + ' (' + emp.branchId + ')';
   if (signEmpEl) signEmpEl.textContent = emp.fullName;
