@@ -1231,44 +1231,73 @@ function toggleFilterOnlyChanged() {
   renderPayrollTable();
 }
 
+function normalizeDateToIso(str) {
+  if (!str) return '';
+  var s = String(str).trim();
+  var dmyMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmyMatch) {
+    var d = String(dmyMatch[1]).padStart(2, '0');
+    var m = String(dmyMatch[2]).padStart(2, '0');
+    var y = parseInt(dmyMatch[3], 10);
+    if (y > 2400) y -= 543;
+    return y + '-' + m + '-' + d;
+  }
+  var ymdMatch = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymdMatch) {
+    var y = parseInt(ymdMatch[1], 10);
+    if (y > 2400) y -= 543;
+    var m = String(ymdMatch[2]).padStart(2, '0');
+    var d = String(ymdMatch[3]).padStart(2, '0');
+    return y + '-' + m + '-' + d;
+  }
+  return s.substring(0, 10);
+}
+
 // CONFLICT & ANOMALY DETECTOR FOR AN EMPLOYEE ROW
 function getEmployeeConflictInfo(empId, record) {
-  var emp = (State.employees || []).find(function(e) { return e.empId === empId; });
   var badges = [];
   var hasWarning = false;
   var hasDanger = false;
 
-  if (emp) {
-    var st = emp.status || 'Active';
-    var absentDays = record ? Number(record.absentDays || 0) : 0;
-    var lateMins = record ? Number(record.lateMinutes || 0) : 0;
-    var lateCnt = record ? Number(record.lateCount || 0) : 0;
+  try {
+    var emp = (State.employees || []).find(function(e) { return e.empId === empId; });
 
-    // 1. Resigned employee conflict check (similar to EMP032)
-    if (st === 'Resigned') {
-      if (absentDays > 0) {
-        badges.push('<span class="conflict-tag-danger" title="พนักงานมีสถานะลาออก แต่มีวันขาดงานในงวด กรุณาตรวจเช็กวันลาออกจริง"><i class="fa-solid fa-triangle-exclamation"></i> ลาออกแต่มีขาดงาน ' + absentDays + ' วัน</span>');
+    if (emp) {
+      var st = emp.status || 'Active';
+      var absentDays = record ? Number(record.absentDays || 0) : 0;
+      var lateMins = record ? Number(record.lateMinutes || 0) : 0;
+      var lateCnt = record ? Number(record.lateCount || 0) : 0;
+
+      // 1. Resigned employee conflict check (similar to EMP032)
+      if (st === 'Resigned') {
+        if (absentDays > 0) {
+          badges.push('<span class="conflict-tag-danger" title="พนักงานมีสถานะลาออก แต่มีวันขาดงานในงวด กรุณาตรวจเช็กวันลาออกจริง"><i class="fa-solid fa-triangle-exclamation"></i> ลาออกแต่มีขาดงาน ' + absentDays + ' วัน</span>');
+          hasDanger = true;
+        } else {
+          var rDate = emp.resignDate || emp.resign_date;
+          badges.push('<span class="conflict-tag-warning"><i class="fa-solid fa-user-slash"></i> ลาออกแล้ว' + (rDate && typeof formatDateThaiBE === 'function' ? ' (' + formatDateThaiBE(rDate) + ')' : '') + '</span>');
+          hasWarning = true;
+        }
+      }
+
+      // 2. New hire mid-period check (similar to EMP043)
+      var jDateRaw = emp.joinDate || emp.join_date;
+      if (jDateRaw) {
+        var jDate = normalizeDateToIso(jDateRaw);
+        var dates = (typeof getAttendanceCutoffDatesClient === 'function') ? getAttendanceCutoffDatesClient(State.period) : null;
+        if (dates && dates.startDate && dates.endDate && jDate >= dates.startDate && jDate <= dates.endDate) {
+          badges.push('<span class="conflict-tag-info"><i class="fa-solid fa-seedling"></i> เข้าใหม่กลางงวด (' + (typeof formatDateThaiBE === 'function' ? formatDateThaiBE(jDateRaw) : jDateRaw) + ')</span>');
+        }
+      }
+
+      // 3. High late arrivals check
+      if (lateCnt >= 3 || lateMins >= 60) {
+        badges.push('<span class="conflict-tag-danger" title="มาสายสะสมเกินเกณฑ์"><i class="fa-solid fa-clock"></i> สายสะสม ' + lateMins + ' นาที (' + lateCnt + ' ครั้ง)</span>');
         hasDanger = true;
-      } else {
-        badges.push('<span class="conflict-tag-warning"><i class="fa-solid fa-user-slash"></i> ลาออกแล้ว' + (emp.resignDate ? ' (' + formatDateThaiBE(emp.resignDate) + ')' : '') + '</span>');
-        hasWarning = true;
       }
     }
-
-    // 2. New hire mid-period check (similar to EMP043)
-    if (emp.joinDate) {
-      var jDate = normalizeDateToIso(emp.joinDate);
-      var dates = (typeof getAttendanceCutoffDatesClient === 'function') ? getAttendanceCutoffDatesClient(State.period) : null;
-      if (dates && dates.startDate && dates.endDate && jDate >= dates.startDate && jDate <= dates.endDate) {
-        badges.push('<span class="conflict-tag-info"><i class="fa-solid fa-seedling"></i> เข้าใหม่กลางงวด (' + formatDateThaiBE(emp.joinDate) + ')</span>');
-      }
-    }
-
-    // 3. High late arrivals check
-    if (lateCnt >= 3 || lateMins >= 60) {
-      badges.push('<span class="conflict-tag-danger" title="มาสายสะสมเกินเกณฑ์"><i class="fa-solid fa-clock"></i> สายสะสม ' + lateMins + ' นาที (' + lateCnt + ' ครั้ง)</span>');
-      hasDanger = true;
-    }
+  } catch(err) {
+    console.error('getEmployeeConflictInfo error:', err);
   }
 
   return {
