@@ -2806,3 +2806,90 @@ table.data-table tbody tr.clickable-row:hover td.sticky-col {
   color: #0f172a;
 }
 
+/* Fast-Edit Drawer Form Styling (Monthly Input) */
+.ife-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ife-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.ife-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ife-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.ife-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ife-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+}
+.ife-input {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-family: inherit;
+  background: #ffffff;
+  color: #0f172a;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+.ife-input:focus {
+  border-color: #2563eb;
+  outline: none;
+  background: #f8fafc;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+.ife-input.font-mono {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  text-align: right;
+}
+.ife-live-calc-box {
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ife-calc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #166534;
+}
+.ife-calc-row.total {
+  padding-top: 6px;
+  border-top: 1px dashed #86efac;
+  font-size: 14px;
+  font-weight: 800;
+  color: #15803d;
+}
+

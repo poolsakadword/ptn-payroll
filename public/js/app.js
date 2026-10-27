@@ -1764,20 +1764,379 @@ function openInspector(empId) {
   drawer.classList.add('open');
 }
 
-function closeInspector() {
-  var drawer = document.getElementById('inspectorDrawer');
-  var backdrop = document.getElementById('inspectorBackdrop');
-  if (drawer) drawer.classList.remove('open');
-  if (backdrop) backdrop.classList.remove('show');
+function closeAllDrawers() {
+  closeInspector();
+  closeInputFastEditDrawer();
 }
 
-// Global keyboard escape listener for Inspector Drawer
+function closeInspector() {
+  var drawer = document.getElementById('inspectorDrawer');
+  if (drawer) drawer.classList.remove('open');
+  var otherDrawer = document.getElementById('inputFastEditDrawer');
+  if (!otherDrawer || !otherDrawer.classList.contains('open')) {
+    var backdrop = document.getElementById('inspectorBackdrop');
+    if (backdrop) backdrop.classList.remove('show');
+  }
+}
+
+function closeInputFastEditDrawer() {
+  var drawer = document.getElementById('inputFastEditDrawer');
+  if (drawer) drawer.classList.remove('open');
+  var otherDrawer = document.getElementById('inspectorDrawer');
+  if (!otherDrawer || !otherDrawer.classList.contains('open')) {
+    var backdrop = document.getElementById('inspectorBackdrop');
+    if (backdrop) backdrop.classList.remove('show');
+  }
+}
+
+// Global keyboard escape listener for Inspector & Fast-Edit Drawers
 if (typeof window !== 'undefined') {
   window.addEventListener('keydown', function(e) {
     if (e.key === 'Escape' || e.keyCode === 27) {
-      closeInspector();
+      closeAllDrawers();
     }
   });
+}
+
+// ==============================================================================
+// MONTHLY INPUT FAST-EDIT & AUDIT DRAWER (PHASE 3)
+// ==============================================================================
+function openInputFastEditDrawer(empId) {
+  var drawer = document.getElementById('inputFastEditDrawer');
+  var backdrop = document.getElementById('inspectorBackdrop');
+  if (!drawer || !backdrop) return;
+
+  var q = (document.getElementById('inputSearchInput') ? document.getElementById('inputSearchInput').value : '').trim().toLowerCase();
+  var bFilter = State.inputBranchFilter || 'ALL';
+
+  var visibleList = (State.inputRecords || []).filter(function(i) {
+    if (State.filterOnlyChanged && (!State.syncDeltaMap || !State.syncDeltaMap[i.empId])) return false;
+    if (bFilter !== 'ALL') {
+      var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
+      var empBranch = emp ? getEmpBranchId(emp) : 'B01';
+      if (empBranch !== bFilter) return false;
+    }
+    if (!q) return true;
+    var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; }) || {};
+    var nick = (i.nickname || emp.nickname || getEmpNickname(i.empId) || '').toLowerCase();
+    return (i.empId && i.empId.toLowerCase().indexOf(q) >= 0) ||
+           (i.empName && i.empName.toLowerCase().indexOf(q) >= 0) ||
+           (nick && nick.indexOf(q) >= 0);
+  });
+
+  var curIndex = visibleList.findIndex(function(x) { return x.empId === empId; });
+  if (curIndex === -1) {
+    curIndex = (State.inputRecords || []).findIndex(function(x) { return x.empId === empId; });
+    visibleList = State.inputRecords || [];
+  }
+  if (curIndex === -1) return;
+
+  var rec = visibleList[curIndex];
+  var emp = (State.employees || []).find(function(e) { return e.empId === empId; }) || {};
+  var nick = rec.nickname || emp.nickname || getEmpNickname(empId) || '';
+  var fullName = rec.empName || emp.fullName || empId;
+  var bName = getEmpBranchName(emp);
+  var initial = nick ? nick.substring(0, 1) : fullName.substring(0, 1);
+
+  // Header
+  var ifeAvatar = document.getElementById('ifeAvatar');
+  var ifeTitle = document.getElementById('ifeTitle');
+  var ifeSub = document.getElementById('ifeSub');
+  var ifeContent = document.getElementById('ifeContent');
+  var ifeFooter = document.getElementById('ifeFooter');
+
+  if (ifeAvatar) ifeAvatar.textContent = initial;
+  if (ifeTitle) ifeTitle.innerHTML = esc(fullName) + (nick ? ' <span style="font-size:12px;font-weight:700;color:#15803d;background:#dcfce7;border:1px solid #86efac;padding:1px 6px;border-radius:4px">(' + esc(nick) + ')</span>' : '');
+  if (ifeSub) ifeSub.textContent = empId + ' • ' + (emp.position || 'พนักงาน') + ' • ' + bName;
+
+  var conflictInfo = getEmployeeConflictInfo(empId, rec);
+
+  var workDays = State.workingDays > 0 ? State.workingDays : 30;
+  var absDays = Number(rec.absentDays || 0);
+  var leaveDays = Number(rec.leaveDays || 0);
+  var sickDays = Number(rec.sickLeaveDays || 0);
+  var lateMins = Number(rec.lateMinutes || 0);
+  var lateCnt = Number(rec.lateCount || 0);
+  var actualWorkDays = Math.max(0, workDays - absDays - leaveDays);
+
+  var baseSal = Number(rec.baseSalary) || 0;
+  var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
+  var pfRate = (rec.pfRate !== null && rec.pfRate !== undefined && !isNaN(Number(rec.pfRate))) ? Number(rec.pfRate) : 0;
+
+  var canEdit = !State.isClosed && (hasPermission('edit_inputs') || isSuperAdmin());
+  var canSync = !State.isClosed && (hasPermission('sync_ptn_time') || isSuperAdmin());
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+
+  var html = '';
+
+  // 1. Attendance & PTN Time Status Card
+  html += '<div class="ife-section" style="background:#f8fafc">' +
+    '<div class="ife-section-title" style="color:#0284c7"><i class="fa-solid fa-clock-rotate-left"></i> สรุปเวลาจาก PTN Time ประจำงวด ' + esc(State.period) + '</div>' +
+    (conflictInfo.badgeHtml ? '<div style="margin-bottom:6px">' + conflictInfo.badgeHtml + '</div>' : '') +
+    '<div class="ife-grid-3">' +
+      '<div class="ife-field"><label>วันทำงานจริง</label><div class="font-mono font-bold" style="color:#15803d;font-size:13px">' + actualWorkDays + ' วัน</div></div>' +
+      '<div class="ife-field"><label>ขาดงาน</label><div class="font-mono font-bold" style="color:' + (absDays > 0 ? '#dc2626' : '#64748b') + ';font-size:13px">' + absDays + ' วัน</div></div>' +
+      '<div class="ife-field"><label>ลากิจ/ป่วย</label><div class="font-mono" style="font-size:13px">' + leaveDays + ' / ' + sickDays + ' วัน</div></div>' +
+    '</div>' +
+    '<div class="ife-grid-2" style="margin-top:6px">' +
+      '<div class="ife-field"><label>มาสายสะสม</label><div class="font-mono font-bold" style="color:' + (lateMins > 0 ? '#d97706' : '#64748b') + ';font-size:13px">' + lateMins + ' นาที (' + lateCnt + ' ครั้ง)</div></div>' +
+      '<div class="ife-field"><label>ชั่วโมง OT</label><div class="font-mono font-bold" style="color:' + ((Number(rec.otHours) || 0) > 0 ? '#0284c7' : '#64748b') + ';font-size:13px">' + (rec.otHours || 0) + ' ชม.</div></div>' +
+    '</div>' +
+    (canSync ? (
+      '<button type="button" class="btn btn-outline btn-xs" style="margin-top:8px;border-color:#38bdf8;color:#0284c7;background:#f0f9ff;font-size:11.5px;padding:5px 8px;border-radius:6px" onclick="syncFromPtnTimeForEmp(\'' + esc(empId) + '\', \'' + esc(fullName) + '\').then(function(){ openInputFastEditDrawer(\'' + esc(empId) + '\'); })">' +
+        '<i class="fa-solid fa-rotate"></i> ดึงเวลาคนนี้ใหม่จาก PTN Time (1-Click)' +
+      '</button>'
+    ) : '') +
+  '</div>';
+
+  // 2. Interactive Edit Inputs
+  html += '<form id="ifeForm" onsubmit="event.preventDefault();saveInputFastEditDrawer(\'' + esc(empId) + '\')">' +
+    '<input type="hidden" id="ifeEmpId" value="' + esc(empId) + '">' +
+    '<input type="hidden" id="ifeEmpName" value="' + esc(fullName) + '">' +
+
+    '<div class="ife-section">' +
+      '<div class="ife-section-title" style="color:#1e40af"><i class="fa-solid fa-sack-dollar"></i> ฐานเงินเดือน & ข้อมูลสัญญา</div>' +
+      '<div class="ife-grid-2">' +
+        '<div class="ife-field">' +
+          '<label>เงินเดือนฐาน (บาท)</label>' +
+          '<input type="number" step="any" id="ifeBaseSalary" class="ife-input font-mono" value="' + baseSal + '" oninput="updateIfeLiveCalculation()" ' + (canEdit && canViewSalary ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>ค่าจ้างเฉลี่ย / วัน (บาท)</label>' +
+          '<input type="text" id="ifeDailyRateDisplay" class="ife-input font-mono" value="' + fmt(dailyRate) + '" readonly style="background:#f8fafc;color:#1e40af">' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="ife-section" style="margin-top:12px">' +
+      '<div class="ife-section-title" style="color:#b45309"><i class="fa-solid fa-calendar-check"></i> เวลาทำงาน ขาด/ลา/มาสาย & OT</div>' +
+      '<div class="ife-grid-3">' +
+        '<div class="ife-field">' +
+          '<label>ขาดงาน (วัน)</label>' +
+          '<input type="number" step="any" id="ifeAbsentDays" class="ife-input font-mono" value="' + absDays + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>ลากิจ (วัน)</label>' +
+          '<input type="number" step="any" id="ifeLeaveDays" class="ife-input font-mono" value="' + leaveDays + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>ลาป่วย (วัน)</label>' +
+          '<input type="number" step="any" id="ifeSickLeaveDays" class="ife-input font-mono" value="' + sickDays + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ife-grid-3" style="margin-top:8px">' +
+        '<div class="ife-field">' +
+          '<label>หักเงินสาย (บาท)</label>' +
+          '<input type="number" step="any" id="ifeLateDeduct" class="ife-input font-mono" value="' + (Number(rec.lateDeduct) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>OT (ชั่วโมง)</label>' +
+          '<input type="number" step="any" id="ifeOtHours" class="ife-input font-mono" value="' + (Number(rec.otHours) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>อัตรา OT (฿/ชม.)</label>' +
+          '<input type="number" step="any" id="ifeOtRate" class="ife-input font-mono" value="' + (Number(rec.otRate) || 40) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="ife-section" style="margin-top:12px">' +
+      '<div class="ife-section-title" style="color:#15803d"><i class="fa-solid fa-gift"></i> เงินได้อื่นๆ & เบี้ยเลี้ยง</div>' +
+      '<div class="ife-grid-2">' +
+        '<div class="ife-field">' +
+          '<label>เบี้ยเลี้ยง / เงินเพิ่มพิเศษ (บาท)</label>' +
+          '<input type="number" step="any" id="ifeAllowance" class="ife-input font-mono" value="' + (Number(rec.allowance) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>โบนัสประจำงวด (บาท)</label>' +
+          '<input type="number" step="any" id="ifeBonus" class="ife-input font-mono" value="' + (Number(rec.bonus) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="ife-section" style="margin-top:12px">' +
+      '<div class="ife-section-title" style="color:#dc2626"><i class="fa-solid fa-file-invoice"></i> รายการหัก & หนี้ยกยอด</div>' +
+      '<div class="ife-grid-2">' +
+        '<div class="ife-field">' +
+          '<label>หักเบิกล่วงหน้า (บาท)</label>' +
+          '<input type="number" step="any" id="ifeAdvanceDeduct" class="ife-input font-mono" value="' + (Number(rec.advanceDeduct) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>หักอื่นๆ (บาท)</label>' +
+          '<input type="number" step="any" id="ifeOtherDeduct" class="ife-input font-mono" value="' + (Number(rec.otherDeduct) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ife-grid-3" style="margin-top:8px">' +
+        '<div class="ife-field">' +
+          '<label>ประกันสังคม (บาท)</label>' +
+          '<input type="number" step="any" id="ifeSso" class="ife-input font-mono" value="' + (rec.sso !== undefined && rec.sso !== null ? rec.sso : 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>กองทุน PF (%)</label>' +
+          '<input type="number" step="0.01" id="ifePfRate" class="ife-input font-mono" value="' + pfRate + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label>ภาษี หัก ณ ที่จ่าย (บาท)</label>' +
+          '<input type="number" step="any" id="ifeTax" class="ife-input font-mono" value="' + (Number(rec.tax) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+        '</div>' +
+      '</div>' +
+      '<div class="ife-field" style="margin-top:8px">' +
+        '<label>หนี้ค้างยกยอดมาจากงวดก่อน (บาท)</label>' +
+        '<input type="number" step="any" id="ifeCarriedDebt" class="ife-input font-mono" value="' + (Number(rec.carriedDebt) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+      '</div>' +
+    '</div>' +
+  '</form>';
+
+  // 3. Live Preview Calculation Box
+  html += '<div class="ife-live-calc-box" id="ifeCalcBox" style="margin-top:12px">' +
+    '<div style="font-size:12px;font-weight:700;color:#15803d;display:flex;align-items:center;justify-content:space-between">' +
+      '<span><i class="fa-solid fa-calculator"></i> ประมาณการยอดสุทธิ (Realtime)</span>' +
+      '<span style="font-size:11px;font-weight:normal;color:#166534">คำนวณอัตโนมัติขณะพิมพ์</span>' +
+    '</div>' +
+    '<div class="ife-calc-row"><span>รวมรายได้ (Gross):</span><span class="font-mono font-bold" id="ifePreviewGross">฿0.00</span></div>' +
+    '<div class="ife-calc-row"><span>รวมรายการหัก (Deductions):</span><span class="font-mono font-bold" id="ifePreviewDeduct" style="color:#dc2626">-฿0.00</span></div>' +
+    '<div class="ife-calc-row total">' +
+      '<span>ยอดรับสุทธิโดยประมาณ:</span>' +
+      '<span class="font-mono" id="ifePreviewNet" style="font-size:18px">฿0.00</span>' +
+    '</div>' +
+  '</div>';
+
+  if (ifeContent) ifeContent.innerHTML = html;
+
+  // Footer Actions: Prev, Save, Next
+  var prevEmpId = curIndex > 0 ? visibleList[curIndex - 1].empId : null;
+  var nextEmpId = curIndex < visibleList.length - 1 ? visibleList[curIndex + 1].empId : null;
+
+  var footerHtml = '<div style="display:flex;align-items:center;gap:6px">' +
+    '<button type="button" class="btn btn-slate btn-sm" ' + (prevEmpId ? 'onclick="openInputFastEditDrawer(\'' + esc(prevEmpId) + '\')"' : 'disabled style="opacity:0.4;cursor:not-allowed"') + ' title="ดูคนก่อนหน้า">' +
+      '<i class="fa-solid fa-chevron-left"></i> คนก่อนหน้า' +
+    '</button>' +
+    '<span style="font-size:11px;color:#64748b;font-weight:600;padding:0 4px">' + (curIndex + 1) + '/' + visibleList.length + '</span>' +
+    '<button type="button" class="btn btn-slate btn-sm" ' + (nextEmpId ? 'onclick="openInputFastEditDrawer(\'' + esc(nextEmpId) + '\')"' : 'disabled style="opacity:0.4;cursor:not-allowed"') + ' title="ดูคนถัดไป">' +
+      'คนถัดไป <i class="fa-solid fa-chevron-right"></i>' +
+    '</button>' +
+  '</div>' +
+  '<div style="display:flex;align-items:center;gap:6px">' +
+    (canEdit ? (
+      '<button type="button" id="ifeBtnSave" class="btn btn-success btn-sm" style="background:#15803d;border-color:#15803d;font-weight:700;padding:6px 14px" onclick="saveInputFastEditDrawer(\'' + esc(empId) + '\')">' +
+        '<i class="fa-solid fa-floppy-disk"></i> บันทึกข้อมูล' +
+      '</button>'
+    ) : '') +
+  '</div>';
+
+  if (ifeFooter) ifeFooter.innerHTML = footerHtml;
+
+  // Initial calculation preview
+  updateIfeLiveCalculation();
+
+  backdrop.classList.add('show');
+  drawer.classList.add('open');
+}
+
+function updateIfeLiveCalculation() {
+  var baseSal = Number(document.getElementById('ifeBaseSalary') ? document.getElementById('ifeBaseSalary').value : 0) || 0;
+  var workDays = State.workingDays > 0 ? State.workingDays : 30;
+  var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
+
+  var rateDisp = document.getElementById('ifeDailyRateDisplay');
+  if (rateDisp) rateDisp.value = fmt(dailyRate);
+
+  var otHours = Number(document.getElementById('ifeOtHours') ? document.getElementById('ifeOtHours').value : 0) || 0;
+  var otRate = Number(document.getElementById('ifeOtRate') ? document.getElementById('ifeOtRate').value : 40) || 40;
+  var otPay = Math.round(otHours * otRate * 100) / 100;
+
+  var allowance = Number(document.getElementById('ifeAllowance') ? document.getElementById('ifeAllowance').value : 0) || 0;
+  var bonus = Number(document.getElementById('ifeBonus') ? document.getElementById('ifeBonus').value : 0) || 0;
+
+  var absentDays = Number(document.getElementById('ifeAbsentDays') ? document.getElementById('ifeAbsentDays').value : 0) || 0;
+  var leaveDeduct = Math.round(absentDays * dailyRate * 100) / 100;
+  var lateDeduct = Number(document.getElementById('ifeLateDeduct') ? document.getElementById('ifeLateDeduct').value : 0) || 0;
+
+  var sso = Number(document.getElementById('ifeSso') ? document.getElementById('ifeSso').value : 0) || 0;
+  var pfRate = Number(document.getElementById('ifePfRate') ? document.getElementById('ifePfRate').value : 0) || 0;
+  var pf = pfRate > 0 ? Math.round(baseSal * pfRate * 100) / 100 : 0;
+  var tax = Number(document.getElementById('ifeTax') ? document.getElementById('ifeTax').value : 0) || 0;
+  var advance = Number(document.getElementById('ifeAdvanceDeduct') ? document.getElementById('ifeAdvanceDeduct').value : 0) || 0;
+  var other = Number(document.getElementById('ifeOtherDeduct') ? document.getElementById('ifeOtherDeduct').value : 0) || 0;
+
+  var gross = baseSal + otPay + allowance + bonus;
+  var totalDeduct = leaveDeduct + lateDeduct + sso + pf + tax + advance + other;
+  var net = Math.max(0, gross - totalDeduct);
+
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+  var grossEl = document.getElementById('ifePreviewGross');
+  var deductEl = document.getElementById('ifePreviewDeduct');
+  var netEl = document.getElementById('ifePreviewNet');
+
+  if (grossEl) grossEl.textContent = canViewSalary ? fmt(gross) : '฿***';
+  if (deductEl) deductEl.textContent = canViewSalary ? ('-' + fmt(totalDeduct)) : '฿***';
+  if (netEl) netEl.textContent = canViewSalary ? fmt(net) : '฿***';
+}
+
+function saveInputFastEditDrawer(empId, callback) {
+  if (State.isClosed) {
+    showToast('งวดนี้ปิดแล้ว ไม่อนุญาตให้แก้ไขข้อมูล', 'error');
+    return;
+  }
+  var baseSal = Number(document.getElementById('ifeBaseSalary').value) || 0;
+  var pfRate = Number(document.getElementById('ifePfRate').value) || 0;
+  var pfAmt = pfRate > 0 ? Math.round(baseSal * pfRate * 100) / 100 : 0;
+
+  var origRec = (State.inputRecords || []).find(function(x) { return x.empId === empId; }) || {};
+
+  var d = {
+    empId: empId,
+    empName: document.getElementById('ifeEmpName') ? document.getElementById('ifeEmpName').value.trim() : (origRec.empName || ''),
+    baseSalary: baseSal,
+    pfRate: pfRate,
+    pfAmount: pfAmt,
+    absentDays: Number(document.getElementById('ifeAbsentDays').value) || 0,
+    leaveDays: Number(document.getElementById('ifeLeaveDays').value) || 0,
+    sickLeaveDays: Number(document.getElementById('ifeSickLeaveDays').value) || 0,
+    unpaidSickLeaveDays: Number(origRec.unpaidSickLeaveDays || 0),
+    lateDeduct: Number(document.getElementById('ifeLateDeduct').value) || 0,
+    lateMinutes: Number(origRec.lateMinutes || 0),
+    lateCount: Number(origRec.lateCount || 0),
+    otHours: Number(document.getElementById('ifeOtHours').value) || 0,
+    otRate: Number(document.getElementById('ifeOtRate').value) || 40,
+    allowance: Number(document.getElementById('ifeAllowance').value) || 0,
+    bonus: Number(document.getElementById('ifeBonus').value) || 0,
+    advanceDeduct: Number(document.getElementById('ifeAdvanceDeduct').value) || 0,
+    otherDeduct: Number(document.getElementById('ifeOtherDeduct').value) || 0,
+    carriedDebt: Number(document.getElementById('ifeCarriedDebt').value) || 0,
+    sso: Number(document.getElementById('ifeSso').value) || 0,
+    tax: Number(document.getElementById('ifeTax').value) || 0
+  };
+
+  var btn = document.getElementById('ifeBtnSave');
+  var origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> กำลังบันทึก...';
+  }
+
+  callApi('saveInputRecord', { record: d, origEmpId: empId })
+    .then(function(r) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+      showToast(r.message || 'บันทึกข้อมูลสำเร็จ');
+      loadAppData().then(function() {
+        if (typeof callback === 'function') {
+          callback();
+        } else {
+          openInputFastEditDrawer(empId);
+        }
+      });
+    })
+    .catch(function(err) {
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = origHtml;
+      }
+      showToast('เกิดข้อผิดพลาดในการบันทึก: ' + (err.message || String(err)), 'error');
+    });
 }
 
 // // 3. MONTHLY INPUT TABLE RENDERER (19 COLUMNS)
@@ -1894,8 +2253,9 @@ function renderInputTable() {
     var advClass = advDelta ? 'text-right font-mono text-red font-bold cell-delta-updated' : 'text-right font-mono text-red font-bold';
     var advTag = advDelta ? ' <span class="delta-tag" title="เดิม: ' + advDelta.before + ' -> ใหม่: ' + advDelta.after + '">ใหม่</span>' : '';
 
-    h += '<tr' + rowClass + '>' +
-      '<td class="text-center sticky-col" style="left:0;width:40px;min-width:40px;max-width:40px">' +
+    var rowClass = 'clickable-row' + (delta ? ' row-delta-updated' : '');
+    h += '<tr class="' + rowClass + '" onclick="openInputFastEditDrawer(\'' + esc(i.empId) + '\')" title="คลิกเพื่อเปิดแผงตรวจเวลาและแก้ไขข้อมูลประจำงวด">' +
+      '<td class="text-center sticky-col" style="left:0;width:40px;min-width:40px;max-width:40px" onclick="event.stopPropagation()">' +
         (State.isClosed ? '<span class="text-muted" title="งวดนี้ปิดแล้ว"><i class="fa-solid fa-lock" style="font-size:11px;color:#cbd5e1"></i></span>' :
           (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>')) +
       '</td>' +
@@ -1941,7 +2301,7 @@ function renderInputTable() {
         var debtBadge = cDebt > 0 ? '<div style="font-size:10px;color:#dc2626;font-weight:700;line-height:1.2;margin-top:2px" title="หนี้ค้างยกยอดมาจากงวดก่อน"><i class="fa-solid fa-triangle-exclamation"></i> หนี้ ' + fmt(cDebt) + '</div>' : '';
         return '<td class="text-right font-mono text-red">' + fmt(oth) + debtBadge + '</td>';
       })() +
-      '<td class="text-center">' +
+      '<td class="text-center" onclick="event.stopPropagation()">' +
         (State.isClosed ? '<span class="status-badge" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-size:11px;padding:2px 8px;font-weight:600"><i class="fa-solid fa-lock"></i> ล็อคงวดแล้ว</span>' :
           ((canSyncPtnTime ? '<button type="button" class="btn-icon" style="color:#0284c7;background:#e0f2fe;border:1px solid #bae6fd;padding:2px 6px;border-radius:4px;font-size:11px;margin-right:4px;font-weight:600" onclick="syncFromPtnTimeForEmp(\'' + esc(i.empId) + '\', \'' + esc(i.empName || '') + '\')" title="ดึงข้อมูล OT, วันลา และยอดเบิกเงินของ ' + esc(i.empName || i.empId) + ' จาก PTN Time"><i class="fa-solid fa-rotate"></i> ดึงเฉพาะคนนี้</button> ' : '') +
           (canEditInputs ?
