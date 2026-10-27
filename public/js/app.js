@@ -397,6 +397,8 @@ var State = {
   stats: { totalEmployees: 0, totalGross: 0, totalDeductions: 0, totalNet: 0 },
   users: [],
   currentUser: { username: 'Admin', role: 'Admin / HR' },
+  payrollBranchFilter: 'ALL',
+  inputBranchFilter: 'ALL',
   payrollDefaults: {
     defaultOtRate: 40,
     defaultWorkDays: 30,
@@ -1117,15 +1119,110 @@ function renderDashboard() {
   tbody.innerHTML = h;
 }
 
+// ==============================================================================
+// BRANCH FILTER CHIPS CONTROLLER (PHASE 1 UX/UI)
+// ==============================================================================
+function renderPayrollBranchChips() {
+  var container = document.getElementById('payrollBranchChips');
+  if (!container) return;
+  var bList = State.branches || [];
+  if (!bList.length) {
+    bList = [
+      { branch_id: 'B01', branch_name: 'สำนักงานใหญ่' },
+      { branch_id: 'B02', branch_name: 'สาขาที่ 2 (หน้าร้าน A)' },
+      { branch_id: 'B03', branch_name: 'สาขาที่ 3 (หน้าร้าน B)' },
+      { branch_id: 'B04', branch_name: 'สาขาที่ 4 (คลังสินค้า/สำรอง)' }
+    ];
+  }
+
+  // Count employees in current payrollList per branch
+  var counts = { ALL: (State.payrollList || []).length };
+  bList.forEach(function(b) { counts[b.branch_id] = 0; });
+  (State.payrollList || []).forEach(function(r) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; });
+    var bId = emp ? getEmpBranchId(emp) : 'B01';
+    if (!counts[bId]) counts[bId] = 0;
+    counts[bId]++;
+  });
+
+  var cur = State.payrollBranchFilter || 'ALL';
+  var html = '<button type="button" class="branch-chip-btn' + (cur === 'ALL' ? ' active' : '') + '" onclick="filterPayrollBranch(\'ALL\')">' +
+    '<span>🏢 ทุกสาขา</span> <span class="badge-count">' + (counts.ALL || 0) + '</span></button>';
+
+  bList.forEach(function(b) {
+    var cnt = counts[b.branch_id] || 0;
+    html += '<button type="button" class="branch-chip-btn' + (cur === b.branch_id ? ' active' : '') + '" onclick="filterPayrollBranch(\'' + esc(b.branch_id) + '\')">' +
+      '<span>' + esc(b.branch_name) + '</span> <span class="badge-count">' + cnt + '</span></button>';
+  });
+  container.innerHTML = html;
+}
+
+function filterPayrollBranch(bId) {
+  State.payrollBranchFilter = bId;
+  renderPayrollBranchChips();
+  renderPayrollTable();
+}
+
+function renderInputBranchChips() {
+  var container = document.getElementById('inputBranchChips');
+  if (!container) return;
+  var bList = State.branches || [];
+  if (!bList.length) {
+    bList = [
+      { branch_id: 'B01', branch_name: 'สำนักงานใหญ่' },
+      { branch_id: 'B02', branch_name: 'สาขาที่ 2 (หน้าร้าน A)' },
+      { branch_id: 'B03', branch_name: 'สาขาที่ 3 (หน้าร้าน B)' },
+      { branch_id: 'B04', branch_name: 'สาขาที่ 4 (คลังสินค้า/สำรอง)' }
+    ];
+  }
+
+  // Count employees in current inputRecords per branch
+  var counts = { ALL: (State.inputRecords || []).length };
+  bList.forEach(function(b) { counts[b.branch_id] = 0; });
+  (State.inputRecords || []).forEach(function(i) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
+    var bId = emp ? getEmpBranchId(emp) : 'B01';
+    if (!counts[bId]) counts[bId] = 0;
+    counts[bId]++;
+  });
+
+  var cur = State.inputBranchFilter || 'ALL';
+  var html = '<button type="button" class="branch-chip-btn' + (cur === 'ALL' ? ' active' : '') + '" onclick="filterInputBranch(\'ALL\')">' +
+    '<span>🏢 ทุกสาขา</span> <span class="badge-count">' + (counts.ALL || 0) + '</span></button>';
+
+  bList.forEach(function(b) {
+    var cnt = counts[b.branch_id] || 0;
+    html += '<button type="button" class="branch-chip-btn' + (cur === b.branch_id ? ' active' : '') + '" onclick="filterInputBranch(\'' + esc(b.branch_id) + '\')">' +
+      '<span>' + esc(b.branch_name) + '</span> <span class="badge-count">' + cnt + '</span></button>';
+  });
+  container.innerHTML = html;
+}
+
+function filterInputBranch(bId) {
+  State.inputBranchFilter = bId;
+  renderInputBranchChips();
+  renderInputTable();
+}
+
 // 2. PAYROLL TABLE RENDERER (20 COLUMNS)
 function renderPayrollTable() {
   var tbody = document.getElementById('payrollTableBody');
   if (!tbody) return;
 
+  renderPayrollBranchChips();
+
   var q = (document.getElementById('payrollSearchInput') ? document.getElementById('payrollSearchInput').value : '').trim().toLowerCase();
+  var bFilter = State.payrollBranchFilter || 'ALL';
+
   var list = State.payrollList.filter(function(r) {
+    if (bFilter !== 'ALL') {
+      var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; });
+      var empBranch = emp ? getEmpBranchId(emp) : 'B01';
+      if (empBranch !== bFilter) return false;
+    }
     if (!q) return true;
-    var nick = (r.nickname || getEmpNickname(r.empId) || '').toLowerCase();
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; }) || {};
+    var nick = (r.nickname || emp.nickname || getEmpNickname(r.empId) || '').toLowerCase();
     return (r.empId && r.empId.toLowerCase().indexOf(q) >= 0) ||
            (r.name && r.name.toLowerCase().indexOf(q) >= 0) ||
            (nick && nick.indexOf(q) >= 0) ||
@@ -1135,7 +1232,7 @@ function renderPayrollTable() {
 
   if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:36px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ' + (q ? 'ไม่พบข้อมูลที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period)) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ' + (q || bFilter !== 'ALL' ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กรุณาไปที่แท็บ <strong>"บันทึกข้อมูลประจำงวด"</strong> แล้วกดปุ่ม <strong>"ดึงพนักงานทุกคนเข้างวดนี้"</strong> หรือบันทึกข้อมูลรายคน</div>' +
     '</td></tr>';
     return;
@@ -1150,12 +1247,13 @@ function renderPayrollTable() {
     var baseSal = Number(row.baseSalary) || 0;
     var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
 
-    var empNick = row.nickname || getEmpNickname(row.empId);
+    var emp = (State.employees || []).find(function(e) { return e.empId === row.empId; });
+    var empNick = (emp && emp.nickname) ? emp.nickname : (row.nickname || getEmpNickname(row.empId));
     var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
 
     h += '<tr>' +
-      '<td class="font-mono font-bold">' + esc(row.empId) + '</td>' +
-      '<td class="font-bold">' + esc(row.name) + nickHtml + '</td>' +
+      '<td class="font-mono font-bold sticky-col" style="left:0;width:80px;min-width:80px;max-width:80px">' + esc(row.empId) + '</td>' +
+      '<td class="font-bold sticky-col sticky-col-divider" style="left:80px;min-width:180px">' + esc(row.name) + nickHtml + '</td>' +
       '<td><span class="period-pill">' + esc(row.department || '-') + '</span> ' + esc(row.position || '') + '</td>' +
       '<td class="text-muted" style="font-size:11px">' + esc(row.bankName || '-') + '<br>' + esc(row.bankAccount || '-') + '</td>' +
       '<td class="text-right font-mono font-bold">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
@@ -1238,10 +1336,20 @@ function renderInputTable() {
     if (State.isClosed) selAll.checked = false;
   }
 
+  renderInputBranchChips();
+
   var q = (document.getElementById('inputSearchInput') ? document.getElementById('inputSearchInput').value : '').trim().toLowerCase();
+  var bFilter = State.inputBranchFilter || 'ALL';
+
   var list = State.inputRecords.filter(function(i) {
+    if (bFilter !== 'ALL') {
+      var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
+      var empBranch = emp ? getEmpBranchId(emp) : 'B01';
+      if (empBranch !== bFilter) return false;
+    }
     if (!q) return true;
-    var nick = (i.nickname || getEmpNickname(i.empId) || '').toLowerCase();
+    var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; }) || {};
+    var nick = (i.nickname || emp.nickname || getEmpNickname(i.empId) || '').toLowerCase();
     return (i.empId && i.empId.toLowerCase().indexOf(q) >= 0) ||
            (i.empName && i.empName.toLowerCase().indexOf(q) >= 0) ||
            (nick && nick.indexOf(q) >= 0);
@@ -1249,7 +1357,7 @@ function renderInputTable() {
 
   if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:32px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> ' + (q ? 'ไม่พบข้อมูลที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ยังไม่มีข้อมูลในงวด ' + esc(State.period)) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> ' + (q || bFilter !== 'ALL' ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กดปุ่มสีเหลือง <strong>"👥 ดึงพนักงานทุกคนเข้างวดนี้"</strong> ด้านบนเพื่อนำเข้าข้อมูลอัตโนมัติ</div>' +
     '</td></tr>';
     updateInputBatchToolbar();
@@ -1269,18 +1377,18 @@ function renderInputTable() {
     var canSyncPtnTime = !State.isClosed && (hasPermission('sync_ptn_time') || isSuperAdmin());
 
     h += '<tr>' +
-      '<td class="text-center" style="width:40px">' +
+      '<td class="text-center sticky-col" style="left:0;width:40px;min-width:40px;max-width:40px">' +
         (State.isClosed ? '<span class="text-muted" title="งวดนี้ปิดแล้ว"><i class="fa-solid fa-lock" style="font-size:11px;color:#cbd5e1"></i></span>' :
           (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>')) +
       '</td>' +
-      '<td class="text-center font-mono">' + (idx + 1) + '</td>' +
-      '<td class="font-mono font-bold">' + esc(i.empId) + '</td>' +
+      '<td class="text-center font-mono sticky-col" style="left:40px;width:50px;min-width:50px;max-width:50px">' + (idx + 1) + '</td>' +
+      '<td class="font-mono font-bold sticky-col" style="left:90px;width:80px;min-width:80px;max-width:80px">' + esc(i.empId) + '</td>' +
       (function() {
       var emp = State.employees.find(function(e) { return e.empId === i.empId; });
       var empNick = (emp && emp.nickname) ? emp.nickname : (i.nickname || getEmpNickname(i.empId));
       var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
       var remBadge = (emp && emp.remark) ? '<br><span style="font-size:11px;font-weight:normal;color:#d97706;background:#fffbeb;border:1px solid #fef3c7;padding:1px 6px;border-radius:4px;display:inline-block;margin-top:2px"><i class="fa-solid fa-note-sticky"></i> ' + esc(emp.remark) + '</span>' : '';
-      return '<td class="font-bold">' + esc(i.empName || '-') + nickHtml + remBadge + '</td>';
+      return '<td class="font-bold sticky-col sticky-col-divider" style="left:170px;min-width:180px">' + esc(i.empName || '-') + nickHtml + remBadge + '</td>';
     })() +
       '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
@@ -1577,8 +1685,8 @@ function renderEmployeesTable() {
   if (thead) {
     if (isGeneralUser || !canViewSalary) {
       thead.innerHTML = '<tr>' +
-        '<th style="width:85px">รหัส</th>' +
-        '<th>พนักงาน</th>' +
+        '<th class="sticky-col" style="left:0;width:85px;min-width:85px;max-width:85px">รหัส</th>' +
+        '<th class="sticky-col sticky-col-divider" style="left:85px;min-width:180px">พนักงาน</th>' +
         '<th>แผนก / ตำแหน่ง</th>' +
         '<th class="text-center" style="width:130px">สถานะ</th>' +
         '<th>วันเกิด / อายุ</th>' +
@@ -1589,8 +1697,8 @@ function renderEmployeesTable() {
       '</tr>';
     } else {
       thead.innerHTML = '<tr>' +
-        '<th style="width:85px">รหัส</th>' +
-        '<th>พนักงาน</th>' +
+        '<th class="sticky-col" style="left:0;width:85px;min-width:85px;max-width:85px">รหัส</th>' +
+        '<th class="sticky-col sticky-col-divider" style="left:85px;min-width:180px">พนักงาน</th>' +
         '<th>แผนก / ตำแหน่ง</th>' +
         '<th class="text-center" style="width:130px">สถานะ</th>' +
         '<th class="text-right" style="width:105px">เงินเดือนฐาน</th>' +
@@ -1661,8 +1769,8 @@ function renderEmployeesTable() {
     // 1. Render Table Row
     if (isGeneralUser || !canViewSalary) {
       hTable += '<tr>' +
-        '<td class="font-mono font-bold text-blue">' + esc(e.empId) + '</td>' +
-        '<td>' +
+        '<td class="font-mono font-bold text-blue sticky-col" style="left:0;width:85px;min-width:85px;max-width:85px">' + esc(e.empId) + '</td>' +
+        '<td class="sticky-col sticky-col-divider" style="left:85px;min-width:180px">' +
           '<div style="display:flex;align-items:center;gap:8px">' +
             avatarTableHtml +
             '<div>' +
@@ -1684,8 +1792,8 @@ function renderEmployeesTable() {
       '</tr>';
     } else {
       hTable += '<tr>' +
-        '<td class="font-mono font-bold text-blue">' + esc(e.empId) + '</td>' +
-        '<td>' +
+        '<td class="font-mono font-bold text-blue sticky-col" style="left:0;width:85px;min-width:85px;max-width:85px">' + esc(e.empId) + '</td>' +
+        '<td class="sticky-col sticky-col-divider" style="left:85px;min-width:180px">' +
           '<div style="display:flex;align-items:center;gap:8px">' +
             avatarTableHtml +
             '<div>' +
@@ -10375,9 +10483,9 @@ function renderAttendancePeriodSummary(data) {
         var resBadge = isResigned ? ' <span style="background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">ลาออก</span>' : '';
 
         html += '<tr style="border-bottom:1px solid #e2e8f0;text-align:center;font-size:12px;height:38px">';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;color:#64748b">' + r.no + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;font-family:monospace;font-weight:700;color:#1e40af">' + esc(r.empId) + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px 8px;text-align:left"><strong style="color:#0f172a;cursor:pointer" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')">' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' <span style="color:#64748b">(' + esc(r.nickname) + ')</span>' : '') + resBadge + '</td>';
+        html += '<td class="sticky-col" style="border:1px solid #cbd5e1;padding:6px;color:#64748b;left:0;width:40px;min-width:40px;max-width:40px">' + r.no + '</td>';
+        html += '<td class="sticky-col" style="border:1px solid #cbd5e1;padding:6px;font-family:monospace;font-weight:700;color:#1e40af;left:40px;width:65px;min-width:65px;max-width:65px">' + esc(r.empId) + '</td>';
+        html += '<td class="sticky-col sticky-col-divider" style="border:1px solid #cbd5e1;padding:6px 8px;text-align:left;left:105px;min-width:160px"><strong style="color:#0f172a;cursor:pointer" onclick="viewSingleEmpAttendance(\'' + esc(r.empId) + '\')">' + esc(r.fullName) + '</strong>' + (r.nickname && r.nickname !== '-' ? ' <span style="color:#64748b">(' + esc(r.nickname) + ')</span>' : '') + resBadge + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;text-align:left;color:#334155;white-space:nowrap">' + esc(r.branchName) + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#eff6ff;color:#1e40af;font-weight:800">' + pDays + ' / ' + r.expectedWorkDays + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fef2f2;color:' + (aDays > 0 ? '#b91c1c;font-weight:700' : '#64748b') + '">' + (aDays > 0 ? (aDays + ' วัน (' + r.absentTimes + ' ครั้ง)') : '-') + '</td>';

@@ -261,7 +261,7 @@
             <div class="toolbar" style="flex-wrap:wrap;gap:8px">
               <div class="search-box">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="payrollSearchInput" placeholder="ค้นหาเงินเดือน (รหัส, ชื่อ, แผนก)..." oninput="renderPayrollTable()">
+                <input type="text" id="payrollSearchInput" placeholder="ค้นหาเงินเดือน (รหัส, ชื่อจริง, ชื่อเล่น, แผนก)..." oninput="renderPayrollTable()">
               </div>
               <button type="button" class="btn btn-slate" onclick="exportToCSV('payroll')">
                 <i class="fa-solid fa-file-csv"></i> Export CSV
@@ -284,12 +284,19 @@
               </button>
             </div>
           </div>
-                    <div class="table-wrapper">
+          <!-- FAST BRANCH FILTER SEGMENT -->
+          <div class="branch-filter-bar" id="payrollBranchFilterBar">
+            <span class="branch-filter-label"><i class="fa-solid fa-store" style="color:#2563eb"></i> กรองสาขา:</span>
+            <div class="branch-filter-chips" id="payrollBranchChips">
+              <!-- Rendered dynamically by JS -->
+            </div>
+          </div>
+          <div class="table-wrapper">
             <table class="data-table">
               <thead id="payrollTableHead">
                 <tr>
-                  <th style="width:80px">รหัส</th>
-                  <th style="min-width:160px">ชื่อ-นามสกุล</th>
+                  <th class="sticky-col" style="left:0;width:80px;min-width:80px;max-width:80px">รหัส</th>
+                  <th class="sticky-col sticky-col-divider" style="left:80px;min-width:180px">ชื่อ-นามสกุล</th>
                   <th>แผนก / ตำแหน่ง</th>
                   <th>ธนาคาร / เลขบัญชี</th>
                   <th class="text-right" style="width:105px">เงินเดือนฐาน</th>
@@ -331,7 +338,7 @@
             <div class="toolbar" style="flex-wrap:wrap;gap:8px">
               <div class="search-box">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="inputSearchInput" placeholder="ค้นหาบันทึกงวด (รหัส, ชื่อ)..." oninput="renderInputTable()">
+                <input type="text" id="inputSearchInput" placeholder="ค้นหาบันทึกงวด (รหัส, ชื่อจริง, ชื่อเล่น)..." oninput="renderInputTable()">
               </div>
               <button type="button" id="btnBatchPopulate" class="btn btn-yellow" onclick="batchPopulateEmployees()">
                 <i class="fa-solid fa-users-gear"></i> ดึงพนักงานทุกคนเข้างวดนี้
@@ -369,16 +376,23 @@
               </div>
             </div>
           </div>
+          <!-- FAST BRANCH FILTER SEGMENT -->
+          <div class="branch-filter-bar" id="inputBranchFilterBar">
+            <span class="branch-filter-label"><i class="fa-solid fa-store" style="color:#2563eb"></i> กรองสาขา:</span>
+            <div class="branch-filter-chips" id="inputBranchChips">
+              <!-- Rendered dynamically by JS -->
+            </div>
+          </div>
           <div class="table-wrapper">
             <table class="data-table">
               <thead id="inputTableHead">
                 <tr>
-                  <th class="text-center" style="width:40px">
+                  <th class="text-center sticky-col" style="left:0;width:40px;min-width:40px;max-width:40px">
                     <input type="checkbox" id="inputSelectAll" onchange="toggleSelectAllInputs(this)" title="เลือกทั้งหมด" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">
                   </th>
-                  <th class="text-center" style="width:50px">ลำดับ</th>
-                  <th style="width:80px">รหัส</th>
-                  <th style="min-width:160px">ชื่อ-นามสกุล</th>
+                  <th class="text-center sticky-col" style="left:40px;width:50px;min-width:50px;max-width:50px">ลำดับ</th>
+                  <th class="sticky-col" style="left:90px;width:80px;min-width:80px;max-width:80px">รหัส</th>
+                  <th class="sticky-col sticky-col-divider" style="left:170px;min-width:180px">ชื่อ-นามสกุล</th>
                   <th class="text-right" style="width:105px">เงินเดือนฐาน</th>
                   <th class="text-right text-blue bg-blue-light" style="width:85px">ค่าจ้าง/วัน</th>
                   <th class="text-right text-red" style="width:70px">ขาด (วัน)</th>
@@ -928,9 +942,9 @@
               <table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left">
                 <thead>
                   <tr style="background:#f8fafc;color:#1e293b;border-bottom:2px solid #cbd5e1;font-weight:700;text-align:center">
-                    <th style="padding:9px 6px;border:1px solid #cbd5e1;width:40px">ลำดับ</th>
-                    <th style="padding:9px 6px;border:1px solid #cbd5e1;width:65px">รหัส</th>
-                    <th style="padding:9px 8px;border:1px solid #cbd5e1;text-align:left;min-width:140px">ชื่อ-นามสกุล (ชื่อเล่น)</th>
+                    <th class="sticky-col" style="padding:9px 6px;border:1px solid #cbd5e1;width:40px;min-width:40px;max-width:40px;left:0">ลำดับ</th>
+                    <th class="sticky-col" style="padding:9px 6px;border:1px solid #cbd5e1;width:65px;min-width:65px;max-width:65px;left:40px">รหัส</th>
+                    <th class="sticky-col sticky-col-divider" style="padding:9px 8px;border:1px solid #cbd5e1;text-align:left;min-width:160px;left:105px">ชื่อ-นามสกุล (ชื่อเล่น)</th>
                     <th style="padding:9px 6px;border:1px solid #cbd5e1;text-align:left;width:100px">สาขา</th>
                     <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#eff6ff;color:#1e40af;font-weight:800;width:70px">มาทำงาน<br>(วัน)</th>
                     <th style="padding:9px 6px;border:1px solid #cbd5e1;background:#fef2f2;color:#991b1b;width:85px">ขาดงาน<br>(วัน/ครั้ง)</th>
