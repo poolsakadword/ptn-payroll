@@ -399,6 +399,8 @@ var State = {
   currentUser: { username: 'Admin', role: 'Admin / HR' },
   payrollBranchFilter: 'ALL',
   inputBranchFilter: 'ALL',
+  syncDeltaMap: {},
+  filterOnlyChanged: false,
   payrollDefaults: {
     defaultOtRate: 40,
     defaultWorkDays: 30,
@@ -1120,6 +1122,164 @@ function renderDashboard() {
 }
 
 // ==============================================================================
+// PHASE 2: POST-SYNC DELTA TRACKER & CONFLICT DETECTOR
+// ==============================================================================
+function captureInputRecordsSnapshot() {
+  var snapshot = {};
+  (State.inputRecords || []).forEach(function(r) {
+    snapshot[r.empId] = {
+      baseSalary: Number(r.baseSalary) || 0,
+      absentDays: Number(r.absentDays) || 0,
+      leaveDays: Number(r.leaveDays) || 0,
+      sickLeaveDays: Number(r.sickLeaveDays) || 0,
+      lateMinutes: Number(r.lateMinutes) || 0,
+      lateDeduct: Number(r.lateDeduct) || 0,
+      otHours: Number(r.otHours) || 0,
+      allowance: Number(r.allowance) || 0,
+      advanceDeduct: Number(r.advanceDeduct) || 0,
+      bonus: Number(r.bonus) || 0,
+      otherDeduct: Number(r.otherDeduct) || 0
+    };
+  });
+  return snapshot;
+}
+
+function computeSyncDelta(beforeSnapshot) {
+  if (!beforeSnapshot) return;
+  State.syncDeltaMap = {};
+  var changedEmps = 0;
+
+  (State.inputRecords || []).forEach(function(after) {
+    var before = beforeSnapshot[after.empId];
+    var changedFields = {};
+    var isNew = !before;
+
+    var fieldsToCheck = ['absentDays', 'leaveDays', 'sickLeaveDays', 'lateMinutes', 'lateDeduct', 'otHours', 'allowance', 'advanceDeduct'];
+    fieldsToCheck.forEach(function(f) {
+      var bVal = before ? (Number(before[f]) || 0) : 0;
+      var aVal = Number(after[f]) || 0;
+      if (Math.abs(bVal - aVal) > 0.001) {
+        changedFields[f] = { before: bVal, after: aVal };
+      }
+    });
+
+    if (isNew || Object.keys(changedFields).length > 0) {
+      State.syncDeltaMap[after.empId] = {
+        isNew: isNew,
+        changedFields: changedFields
+      };
+      changedEmps++;
+    }
+  });
+
+  renderSyncDeltaBanners(changedEmps);
+  renderInputTable();
+  renderPayrollTable();
+}
+
+function renderSyncDeltaBanners(count) {
+  var pBanner = document.getElementById('payrollSyncDeltaBanner');
+  var iBanner = document.getElementById('inputSyncDeltaBanner');
+  if (count <= 0) {
+    if (pBanner) pBanner.style.display = 'none';
+    if (iBanner) iBanner.style.display = 'none';
+    return;
+  }
+
+  var curOnlyChanged = Boolean(State.filterOnlyChanged);
+  var html = '<div class="sync-banner">' +
+    '<div style="display:flex;align-items:center;gap:10px">' +
+      '<i class="fa-solid fa-circle-check" style="color:#16a34a;font-size:20px"></i>' +
+      '<div>' +
+        '<div style="font-size:13px;font-weight:700;color:#15803d"><i class="fa-solid fa-bolt"></i> ดึงข้อมูลจาก PTN Time สำเร็จ!</div>' +
+        '<div style="font-size:11.5px;color:#166534;margin-top:2px">' +
+          'ตรวจพบพนักงานที่มีข้อมูลอัปเดต <strong style="font-size:13px;color:#047857">' + count + ' ท่าน</strong> ' +
+          '(มีไฮไลท์สีเขียวที่แถวและเซลล์ที่ตัวเลขเปลี่ยนแปลง)' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:8px">' +
+      '<button type="button" class="btn btn-sm" onclick="toggleFilterOnlyChanged()" style="background:' + (curOnlyChanged ? '#047857' : '#16a34a') + ';color:#ffffff;border:none;font-weight:700;font-size:12px;padding:5px 12px;border-radius:6px;box-shadow:0 1px 2px rgba(0,0,0,0.1)">' +
+        (curOnlyChanged ? '<i class="fa-solid fa-users"></i> แสดงทุกคน' : '<i class="fa-solid fa-filter"></i> กรองดูเฉพาะคนที่อัปเดต (' + count + ')') +
+      '</button>' +
+      '<button type="button" class="btn btn-slate btn-sm" onclick="clearSyncDeltaHighlight()" style="font-size:12px;padding:5px 10px;border-radius:6px">' +
+        '<i class="fa-solid fa-xmark"></i> ซ่อนไฮไลท์' +
+      '</button>' +
+    '</div>' +
+  '</div>';
+
+  if (pBanner) { pBanner.innerHTML = html; pBanner.style.display = 'block'; }
+  if (iBanner) { iBanner.innerHTML = html; iBanner.style.display = 'block'; }
+}
+
+function clearSyncDeltaHighlight() {
+  State.syncDeltaMap = {};
+  State.filterOnlyChanged = false;
+  var pBanner = document.getElementById('payrollSyncDeltaBanner');
+  var iBanner = document.getElementById('inputSyncDeltaBanner');
+  if (pBanner) pBanner.style.display = 'none';
+  if (iBanner) iBanner.style.display = 'none';
+  renderInputTable();
+  renderPayrollTable();
+}
+
+function toggleFilterOnlyChanged() {
+  State.filterOnlyChanged = !State.filterOnlyChanged;
+  var count = Object.keys(State.syncDeltaMap || {}).length;
+  renderSyncDeltaBanners(count);
+  renderInputTable();
+  renderPayrollTable();
+}
+
+// CONFLICT & ANOMALY DETECTOR FOR AN EMPLOYEE ROW
+function getEmployeeConflictInfo(empId, record) {
+  var emp = (State.employees || []).find(function(e) { return e.empId === empId; });
+  var badges = [];
+  var hasWarning = false;
+  var hasDanger = false;
+
+  if (emp) {
+    var st = emp.status || 'Active';
+    var absentDays = record ? Number(record.absentDays || 0) : 0;
+    var lateMins = record ? Number(record.lateMinutes || 0) : 0;
+    var lateCnt = record ? Number(record.lateCount || 0) : 0;
+
+    // 1. Resigned employee conflict check (similar to EMP032)
+    if (st === 'Resigned') {
+      if (absentDays > 0) {
+        badges.push('<span class="conflict-tag-danger" title="พนักงานมีสถานะลาออก แต่มีวันขาดงานในงวด กรุณาตรวจเช็กวันลาออกจริง"><i class="fa-solid fa-triangle-exclamation"></i> ลาออกแต่มีขาดงาน ' + absentDays + ' วัน</span>');
+        hasDanger = true;
+      } else {
+        badges.push('<span class="conflict-tag-warning"><i class="fa-solid fa-user-slash"></i> ลาออกแล้ว' + (emp.resignDate ? ' (' + formatDateThaiBE(emp.resignDate) + ')' : '') + '</span>');
+        hasWarning = true;
+      }
+    }
+
+    // 2. New hire mid-period check (similar to EMP043)
+    if (emp.joinDate) {
+      var jDate = normalizeDateToIso(emp.joinDate);
+      var dates = (typeof getAttendanceCutoffDatesClient === 'function') ? getAttendanceCutoffDatesClient(State.period) : null;
+      if (dates && dates.startDate && dates.endDate && jDate >= dates.startDate && jDate <= dates.endDate) {
+        badges.push('<span class="conflict-tag-info"><i class="fa-solid fa-seedling"></i> เข้าใหม่กลางงวด (' + formatDateThaiBE(emp.joinDate) + ')</span>');
+      }
+    }
+
+    // 3. High late arrivals check
+    if (lateCnt >= 3 || lateMins >= 60) {
+      badges.push('<span class="conflict-tag-danger" title="มาสายสะสมเกินเกณฑ์"><i class="fa-solid fa-clock"></i> สายสะสม ' + lateMins + ' นาที (' + lateCnt + ' ครั้ง)</span>');
+      hasDanger = true;
+    }
+  }
+
+  return {
+    hasConflict: hasDanger || hasWarning,
+    hasDanger: hasDanger,
+    hasWarning: hasWarning,
+    badgeHtml: badges.join(' ')
+  };
+}
+
+// ==============================================================================
 // BRANCH FILTER CHIPS CONTROLLER (PHASE 1 UX/UI)
 // ==============================================================================
 function renderPayrollBranchChips() {
@@ -1146,19 +1306,27 @@ function renderPayrollBranchChips() {
   });
 
   var cur = State.payrollBranchFilter || 'ALL';
-  var html = '<button type="button" class="branch-chip-btn' + (cur === 'ALL' ? ' active' : '') + '" onclick="filterPayrollBranch(\'ALL\')">' +
+  var html = '<button type="button" class="branch-chip-btn' + (cur === 'ALL' && !State.filterOnlyChanged ? ' active' : '') + '" onclick="filterPayrollBranch(\'ALL\')">' +
     '<span>🏢 ทุกสาขา</span> <span class="badge-count">' + (counts.ALL || 0) + '</span></button>';
 
   bList.forEach(function(b) {
     var cnt = counts[b.branch_id] || 0;
-    html += '<button type="button" class="branch-chip-btn' + (cur === b.branch_id ? ' active' : '') + '" onclick="filterPayrollBranch(\'' + esc(b.branch_id) + '\')">' +
+    html += '<button type="button" class="branch-chip-btn' + (cur === b.branch_id && !State.filterOnlyChanged ? ' active' : '') + '" onclick="filterPayrollBranch(\'' + esc(b.branch_id) + '\')">' +
       '<span>' + esc(b.branch_name) + '</span> <span class="badge-count">' + cnt + '</span></button>';
   });
+
+  var deltaCount = Object.keys(State.syncDeltaMap || {}).length;
+  if (deltaCount > 0) {
+    html += '<button type="button" class="branch-chip-btn' + (State.filterOnlyChanged ? ' active' : '') + '" style="background:' + (State.filterOnlyChanged ? '#15803d' : '#dcfce7') + ';color:' + (State.filterOnlyChanged ? '#ffffff' : '#166534') + ';border-color:#86efac" onclick="toggleFilterOnlyChanged()">' +
+      '<i class="fa-solid fa-bolt"></i> มีข้อมูลเปลี่ยน <span class="badge-count">' + deltaCount + '</span></button>';
+  }
+
   container.innerHTML = html;
 }
 
 function filterPayrollBranch(bId) {
   State.payrollBranchFilter = bId;
+  State.filterOnlyChanged = false;
   renderPayrollBranchChips();
   renderPayrollTable();
 }
@@ -1187,19 +1355,27 @@ function renderInputBranchChips() {
   });
 
   var cur = State.inputBranchFilter || 'ALL';
-  var html = '<button type="button" class="branch-chip-btn' + (cur === 'ALL' ? ' active' : '') + '" onclick="filterInputBranch(\'ALL\')">' +
+  var html = '<button type="button" class="branch-chip-btn' + (cur === 'ALL' && !State.filterOnlyChanged ? ' active' : '') + '" onclick="filterInputBranch(\'ALL\')">' +
     '<span>🏢 ทุกสาขา</span> <span class="badge-count">' + (counts.ALL || 0) + '</span></button>';
 
   bList.forEach(function(b) {
     var cnt = counts[b.branch_id] || 0;
-    html += '<button type="button" class="branch-chip-btn' + (cur === b.branch_id ? ' active' : '') + '" onclick="filterInputBranch(\'' + esc(b.branch_id) + '\')">' +
+    html += '<button type="button" class="branch-chip-btn' + (cur === b.branch_id && !State.filterOnlyChanged ? ' active' : '') + '" onclick="filterInputBranch(\'' + esc(b.branch_id) + '\')">' +
       '<span>' + esc(b.branch_name) + '</span> <span class="badge-count">' + cnt + '</span></button>';
   });
+
+  var deltaCount = Object.keys(State.syncDeltaMap || {}).length;
+  if (deltaCount > 0) {
+    html += '<button type="button" class="branch-chip-btn' + (State.filterOnlyChanged ? ' active' : '') + '" style="background:' + (State.filterOnlyChanged ? '#15803d' : '#dcfce7') + ';color:' + (State.filterOnlyChanged ? '#ffffff' : '#166534') + ';border-color:#86efac" onclick="toggleFilterOnlyChanged()">' +
+      '<i class="fa-solid fa-bolt"></i> มีข้อมูลเปลี่ยน <span class="badge-count">' + deltaCount + '</span></button>';
+  }
+
   container.innerHTML = html;
 }
 
 function filterInputBranch(bId) {
   State.inputBranchFilter = bId;
+  State.filterOnlyChanged = false;
   renderInputBranchChips();
   renderInputTable();
 }
@@ -1215,6 +1391,7 @@ function renderPayrollTable() {
   var bFilter = State.payrollBranchFilter || 'ALL';
 
   var list = State.payrollList.filter(function(r) {
+    if (State.filterOnlyChanged && (!State.syncDeltaMap || !State.syncDeltaMap[r.empId])) return false;
     if (bFilter !== 'ALL') {
       var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; });
       var empBranch = emp ? getEmpBranchId(emp) : 'B01';
@@ -1232,7 +1409,7 @@ function renderPayrollTable() {
 
   if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:36px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ' + (q || bFilter !== 'ALL' ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period)) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ' + (q || bFilter !== 'ALL' || State.filterOnlyChanged ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กรุณาไปที่แท็บ <strong>"บันทึกข้อมูลประจำงวด"</strong> แล้วกดปุ่ม <strong>"ดึงพนักงานทุกคนเข้างวดนี้"</strong> หรือบันทึกข้อมูลรายคน</div>' +
     '</td></tr>';
     return;
@@ -1251,15 +1428,24 @@ function renderPayrollTable() {
     var empNick = (emp && emp.nickname) ? emp.nickname : (row.nickname || getEmpNickname(row.empId));
     var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
 
-    h += '<tr>' +
+    var delta = State.syncDeltaMap && State.syncDeltaMap[row.empId];
+    var rowClass = delta ? ' class="row-delta-updated"' : '';
+    var conflictInfo = getEmployeeConflictInfo(row.empId, row);
+    var conflictHtml = conflictInfo.badgeHtml ? (' ' + conflictInfo.badgeHtml) : '';
+
+    var otDelta = delta && delta.changedFields && delta.changedFields.otHours;
+    var otClass = otDelta ? 'text-right font-mono text-blue font-bold cell-delta-updated' : 'text-right font-mono text-blue font-bold';
+    var otTag = otDelta ? ' <span class="delta-tag" title="เดิม: ' + otDelta.before + ' -> ใหม่: ' + otDelta.after + '">ใหม่</span>' : '';
+
+    h += '<tr' + rowClass + '>' +
       '<td class="font-mono font-bold sticky-col" style="left:0;width:80px;min-width:80px;max-width:80px">' + esc(row.empId) + '</td>' +
-      '<td class="font-bold sticky-col sticky-col-divider" style="left:80px;min-width:180px">' + esc(row.name) + nickHtml + '</td>' +
+      '<td class="font-bold sticky-col sticky-col-divider" style="left:80px;min-width:180px">' + esc(row.name) + nickHtml + conflictHtml + '</td>' +
       '<td><span class="period-pill">' + esc(row.department || '-') + '</span> ' + esc(row.position || '') + '</td>' +
       '<td class="text-muted" style="font-size:11px">' + esc(row.bankName || '-') + '<br>' + esc(row.bankAccount || '-') + '</td>' +
       '<td class="text-right font-mono font-bold">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (row.otHours || 0) + '</td>' +
-      '<td class="text-right font-mono text-blue font-bold">' + (canViewSalary ? fmt(row.otPay) : '฿***') + '</td>' +
+      '<td class="' + otClass + '">' + (canViewSalary ? fmt(row.otPay) : '฿***') + otTag + '</td>' +
       '<td class="text-right font-mono text-green font-bold">' + (canViewSalary ? fmt(row.allowance) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.bonus) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + (canViewSalary ? fmt(row.leaveDeduction) : '฿***') + '</td>' +
@@ -1342,6 +1528,7 @@ function renderInputTable() {
   var bFilter = State.inputBranchFilter || 'ALL';
 
   var list = State.inputRecords.filter(function(i) {
+    if (State.filterOnlyChanged && (!State.syncDeltaMap || !State.syncDeltaMap[i.empId])) return false;
     if (bFilter !== 'ALL') {
       var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
       var empBranch = emp ? getEmpBranchId(emp) : 'B01';
@@ -1357,7 +1544,7 @@ function renderInputTable() {
 
   if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:32px">' +
-      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> ' + (q || bFilter !== 'ALL' ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลในงวด ' + esc(State.period)) + '</div>' +
+      '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> ' + (q || bFilter !== 'ALL' || State.filterOnlyChanged ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กดปุ่มสีเหลือง <strong>"👥 ดึงพนักงานทุกคนเข้างวดนี้"</strong> ด้านบนเพื่อนำเข้าข้อมูลอัตโนมัติ</div>' +
     '</td></tr>';
     updateInputBatchToolbar();
@@ -1376,7 +1563,28 @@ function renderInputTable() {
     var canEditInputs = !State.isClosed && (hasPermission('edit_inputs') || isSuperAdmin());
     var canSyncPtnTime = !State.isClosed && (hasPermission('sync_ptn_time') || isSuperAdmin());
 
-    h += '<tr>' +
+    var delta = State.syncDeltaMap && State.syncDeltaMap[i.empId];
+    var rowClass = delta ? ' class="row-delta-updated"' : '';
+    var conflictInfo = getEmployeeConflictInfo(i.empId, i);
+    var conflictHtml = conflictInfo.badgeHtml ? (' ' + conflictInfo.badgeHtml) : '';
+
+    var absDelta = delta && delta.changedFields && delta.changedFields.absentDays;
+    var absClass = absDelta ? 'text-right font-mono text-red font-bold cell-delta-updated' : 'text-right font-mono text-red font-bold';
+    var absTag = absDelta ? ' <span class="delta-tag" title="เดิม: ' + absDelta.before + ' -> ใหม่: ' + absDelta.after + '">ใหม่</span>' : '';
+
+    var sickDelta = delta && delta.changedFields && delta.changedFields.sickLeaveDays;
+    var sickClass = sickDelta ? 'text-right font-mono text-red cell-delta-updated' : 'text-right font-mono text-red';
+    var sickTag = sickDelta ? ' <span class="delta-tag" title="เดิม: ' + sickDelta.before + ' -> ใหม่: ' + sickDelta.after + '">ใหม่</span>' : '';
+
+    var otDelta = delta && delta.changedFields && delta.changedFields.otHours;
+    var otClass = otDelta ? 'text-right font-mono cell-delta-updated' : 'text-right font-mono';
+    var otTag = otDelta ? ' <span class="delta-tag" title="เดิม: ' + otDelta.before + ' -> ใหม่: ' + otDelta.after + '">ใหม่</span>' : '';
+
+    var advDelta = delta && delta.changedFields && delta.changedFields.advanceDeduct;
+    var advClass = advDelta ? 'text-right font-mono text-red font-bold cell-delta-updated' : 'text-right font-mono text-red font-bold';
+    var advTag = advDelta ? ' <span class="delta-tag" title="เดิม: ' + advDelta.before + ' -> ใหม่: ' + advDelta.after + '">ใหม่</span>' : '';
+
+    h += '<tr' + rowClass + '>' +
       '<td class="text-center sticky-col" style="left:0;width:40px;min-width:40px;max-width:40px">' +
         (State.isClosed ? '<span class="text-muted" title="งวดนี้ปิดแล้ว"><i class="fa-solid fa-lock" style="font-size:11px;color:#cbd5e1"></i></span>' :
           (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>')) +
@@ -1388,13 +1596,13 @@ function renderInputTable() {
       var empNick = (emp && emp.nickname) ? emp.nickname : (i.nickname || getEmpNickname(i.empId));
       var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
       var remBadge = (emp && emp.remark) ? '<br><span style="font-size:11px;font-weight:normal;color:#d97706;background:#fffbeb;border:1px solid #fef3c7;padding:1px 6px;border-radius:4px;display:inline-block;margin-top:2px"><i class="fa-solid fa-note-sticky"></i> ' + esc(emp.remark) + '</span>' : '';
-      return '<td class="font-bold sticky-col sticky-col-divider" style="left:170px;min-width:180px">' + esc(i.empName || '-') + nickHtml + remBadge + '</td>';
+      return '<td class="font-bold sticky-col sticky-col-divider" style="left:170px;min-width:180px">' + esc(i.empName || '-') + nickHtml + remBadge + conflictHtml + '</td>';
     })() +
       '<td class="text-right font-mono font-bold" style="color:#1e3a8a">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + (Math.round((Number(i.absentDays) || 0) * 100) / 100) + '</td>' +
+      '<td class="' + absClass + '">' + (Math.round((Number(i.absentDays) || 0) * 100) / 100) + absTag + '</td>' +
       '<td class="text-right font-mono">' + (Math.round((Number(i.leaveDays) || 0) * 100) / 100) + '</td>' +
-      '<td class="text-right font-mono text-red">' + (Math.round((Number(i.sickLeaveDays) || 0) * 100) / 100) + '</td>' +
+      '<td class="' + sickClass + '">' + (Math.round((Number(i.sickLeaveDays) || 0) * 100) / 100) + sickTag + '</td>' +
       (function() {
         var lateDed = Number(i.lateDeduct) || 0;
         var lateMins = Number(i.lateMinutes) || 0;
@@ -1404,16 +1612,19 @@ function renderInputTable() {
           badge = '<div style="font-size:10.5px;color:#dc2626;font-weight:600;line-height:1.2;margin-top:2px">' +
                   lateMins + ' นาที' + (lateCnt > 0 ? ' (' + lateCnt + ' ครั้ง)' : '') + '</div>';
         }
-        return '<td class="text-right font-mono text-red font-bold">' + fmt(lateDed) + badge + '</td>';
+        var lateDelta = delta && delta.changedFields && (delta.changedFields.lateDeduct || delta.changedFields.lateMinutes);
+        var lateCellClass = lateDelta ? 'text-right font-mono text-red font-bold cell-delta-updated' : 'text-right font-mono text-red font-bold';
+        var lateTag = lateDelta ? ' <span class="delta-tag">ใหม่</span>' : '';
+        return '<td class="' + lateCellClass + '">' + fmt(lateDed) + lateTag + badge + '</td>';
       })() +
-      '<td class="text-right font-mono">' + (i.otHours || 0) + '</td>' +
+      '<td class="' + otClass + '">' + (i.otHours || 0) + otTag + '</td>' +
       '<td class="text-right font-mono">' + fmt(i.otRate || 40) + '</td>' +
       '<td class="text-right font-mono text-green font-bold">' + fmt(i.allowance || 0) + '</td>' +
       '<td class="text-right font-mono">' + fmt(i.bonus || 0) + '</td>' +
       '<td class="text-right font-mono font-bold text-blue">' + (canViewSalary ? fmt(pfAmt) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(i.sso !== undefined && i.sso !== null ? i.sso : 0) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(i.tax || 0) : '฿***') + '</td>' +
-      '<td class="text-right font-mono text-red font-bold">' + (canViewSalary ? fmt(Number(i.advanceDeduct) || 0) : '฿***') + '</td>' +
+      '<td class="' + advClass + '">' + (canViewSalary ? fmt(Number(i.advanceDeduct) || 0) : '฿***') + advTag + '</td>' +
       (function() {
         var oth = Number(i.otherDeduct) || 0;
         var cDebt = Number(i.carriedDebt) || 0;
@@ -3154,13 +3365,16 @@ function syncFromPtnTime() {
   
   if (!confirm(msg)) return;
 
+  var beforeSnapshot = captureInputRecordsSnapshot();
+
   showToast('กำลังดึงข้อมูลจากระบบ PTN Time (' + cutRangeText + ')...');
   callApi('syncFromPtnTime', { period: State.period })
     .then(function(r) {
       if (r.success) {
-        alert('✅ ' + r.message);
         showToast(r.message);
-        loadAppData();
+        loadAppData().then(function() {
+          computeSyncDelta(beforeSnapshot);
+        });
       } else {
         alert('เกิดข้อผิดพลาด: ' + (r.message || 'ไม่สามารถดึงข้อมูลได้'));
         showToast(r.message, 'error');
@@ -3188,6 +3402,8 @@ function syncFromPtnTimeForEmp(empId, empName) {
     return Promise.resolve(null);
   }
 
+  var beforeSnapshot = captureInputRecordsSnapshot();
+
   showToast('กำลังดึงข้อมูลของ ' + empId + ' จาก PTN Time...', 'info');
   return callApi('syncFromPtnTime', {
     period: State.period,
@@ -3197,7 +3413,9 @@ function syncFromPtnTimeForEmp(empId, empName) {
     .then(function(r) {
       if (r && r.success) {
         showToast(r.message || 'ดึงข้อมูลสำเร็จ');
-        loadAppData();
+        loadAppData().then(function() {
+          computeSyncDelta(beforeSnapshot);
+        });
         return r;
       } else {
         alert('เกิดข้อผิดพลาด: ' + (r ? r.message : 'ไม่สามารถดึงข้อมูลได้'));

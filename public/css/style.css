@@ -532,6 +532,102 @@ table.data-table tbody tr.bg-blue-light td.sticky-col {
   color: #ffffff;
 }
 
+/* ==============================================================================
+   PHASE 2: POST-SYNC DELTA HIGHLIGHT & DATA CONFLICT BADGES
+   ============================================================================== */
+@keyframes deltaPulseGlow {
+  0% { background-color: #dcfce7; }
+  50% { background-color: #bbf7d0; }
+  100% { background-color: #f0fdf4; }
+}
+
+table.data-table tbody tr.row-delta-updated {
+  background-color: #f0fdf4 !important;
+}
+table.data-table tbody tr.row-delta-updated td.sticky-col {
+  background-color: #f0fdf4 !important;
+}
+
+table.data-table td.cell-delta-updated {
+  background-color: #dcfce7 !important;
+  color: #15803d !important;
+  font-weight: 800 !important;
+  position: relative;
+  animation: deltaPulseGlow 2.5s ease-out;
+}
+
+.delta-tag {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #16a34a;
+  color: #ffffff;
+  margin-left: 4px;
+  vertical-align: middle;
+  line-height: 1.2;
+}
+
+.conflict-tag-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.conflict-tag-danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.conflict-tag-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.sync-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  gap: 12px;
+  flex-wrap: wrap;
+  box-shadow: 0 1px 3px rgba(22, 163, 74, 0.1);
+}
+
 /* INDIVIDUAL ATTENDANCE TIMESHEET STYLES */
 #attSumSingleContainer {
   color: #0f172a;
