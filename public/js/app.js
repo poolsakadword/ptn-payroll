@@ -1075,8 +1075,11 @@ function renderDashboard() {
   var q = (document.getElementById('dashSearchInput') ? document.getElementById('dashSearchInput').value : '').trim().toLowerCase();
   var list = State.payrollList.filter(function(r) {
     if (!q) return true;
+    var emp = State.employees.find(function(e) { return e.empId === r.empId; }) || {};
+    var nick = (r.nickname || emp.nickname || getEmpNickname(r.empId) || '').toLowerCase();
     return (r.empId && r.empId.toLowerCase().indexOf(q) >= 0) ||
            (r.name && r.name.toLowerCase().indexOf(q) >= 0) ||
+           (nick && nick.indexOf(q) >= 0) ||
            (r.department && r.department.toLowerCase().indexOf(q) >= 0) ||
            (r.position && r.position.toLowerCase().indexOf(q) >= 0);
   });
@@ -1091,10 +1094,14 @@ function renderDashboard() {
 
   var h = '';
   list.forEach(function(row) {
+    var emp = State.employees.find(function(e) { return e.empId === row.empId; }) || {};
+    var empNick = row.nickname || emp.nickname || getEmpNickname(row.empId);
+    var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
+
     h += '<tr>' +
       '<td class="text-blue font-bold">' + esc(row.period) + '</td>' +
       '<td class="font-mono font-bold">' + esc(row.empId) + '</td>' +
-      '<td class="font-bold">' + esc(row.name) + '</td>' +
+      '<td class="font-bold">' + esc(row.name) + nickHtml + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.baseSalary) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + (canViewSalary ? fmt(row.grossPay) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(row.totalDeductions || 0) : '฿***') + '</td>' +

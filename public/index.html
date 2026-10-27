@@ -223,7 +223,7 @@
             <div class="toolbar">
               <div class="search-box">
                 <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="dashSearchInput" placeholder="ค้นหา (รหัส, ชื่อ, แผนก)..." oninput="renderDashboard()">
+                <input type="text" id="dashSearchInput" placeholder="ค้นหา (รหัส, ชื่อ, ชื่อเล่น, แผนก)..." oninput="renderDashboard()">
               </div>
               <button type="button" class="btn btn-slate" onclick="loadAppData()">
                 <i class="fa-solid fa-rotate-right"></i> รีเฟรชข้อมูล
@@ -236,7 +236,7 @@
                 <tr>
                   <th style="width:110px">งวด</th>
                   <th style="width:90px">รหัส</th>
-                  <th>ชื่อ-นามสกุล</th>
+                  <th style="min-width:160px">ชื่อ-นามสกุล</th>
                   <th class="text-right" style="width:120px">เงินเดือนฐาน</th>
                   <th class="text-right text-blue bg-blue-light" style="width:130px">เงินได้รวม (Gross)</th>
                   <th class="text-right text-red bg-red-light" style="width:120px">ยอดหัก</th>
@@ -6239,6 +6239,6 @@
   <div id="payrollSummaryPrintContainer" style="display:none"></div>
 
   <script src="js/config.js?v=8.1"></script>
-  <script src="js/app.js?v=9.56"></script>
+  <script src="js/app.js?v=9.57"></script>
 </body>
 </html>
