@@ -399,6 +399,8 @@ var State = {
   currentUser: { username: 'Admin', role: 'Admin / HR' },
   payrollBranchFilter: 'ALL',
   inputBranchFilter: 'ALL',
+  payrollQuickFilter: 'ALL',
+  inputQuickFilter: 'ALL',
   payrollViewMode: localStorage.getItem('ptn_payroll_view_mode') || 'TABLE',
   syncDeltaMap: {},
   filterOnlyChanged: false,
@@ -1344,6 +1346,228 @@ function getEmployeeConflictInfo(empId, record) {
 }
 
 // ==============================================================================
+// MINI KPI DASHBOARD TILES & SMART QUICK-FILTERS (PHASE 2 UX/UI)
+// ==============================================================================
+function isEmployeeChanges(row, record, emp) {
+  var empId = (row && row.empId) || (record && record.empId);
+  if (!emp && empId) {
+    emp = (State.employees || []).find(function(e) { return e.empId === empId; });
+  }
+  if (!record && empId) {
+    record = (State.inputRecords || []).find(function(i) { return i.empId === empId; });
+  }
+  if (!row && empId) {
+    row = (State.payrollList || []).find(function(p) { return p.empId === empId; });
+  }
+
+  var standardDays = State.workingDays > 0 ? State.workingDays : 30;
+  if (row && Number(row.workDays) > 0 && Number(row.workDays) < standardDays) return true;
+  if (record && Number(record.workDays) > 0 && Number(record.workDays) < standardDays) return true;
+
+  if (emp) {
+    var st = (emp.status || '').toLowerCase();
+    if (st === 'resigned' || st === 'ลาออก') return true;
+
+    var cutoff = (typeof getAttendanceCutoffDatesClient === 'function') ? getAttendanceCutoffDatesClient(State.period) : null;
+    if (cutoff && cutoff.startDate && cutoff.endDate) {
+      var jDateRaw = emp.joinDate || emp.join_date;
+      if (jDateRaw) {
+        var jDate = normalizeDateToIso(jDateRaw);
+        if (jDate >= cutoff.startDate && jDate <= cutoff.endDate) return true;
+      }
+      var rDateRaw = emp.resignDate || emp.resign_date;
+      if (rDateRaw) {
+        var rDate = normalizeDateToIso(rDateRaw);
+        if (rDate >= cutoff.startDate && rDate <= cutoff.endDate) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function setPayrollQuickFilter(type) {
+  if (State.payrollQuickFilter === type && type !== 'ALL') {
+    State.payrollQuickFilter = 'ALL';
+  } else {
+    State.payrollQuickFilter = type;
+  }
+  renderPayrollTable();
+}
+
+function setInputQuickFilter(type) {
+  if (State.inputQuickFilter === type && type !== 'ALL') {
+    State.inputQuickFilter = 'ALL';
+  } else {
+    State.inputQuickFilter = type;
+  }
+  renderInputTable();
+}
+
+function updatePayrollKpiDeck(branchList) {
+  var countAll = (branchList || []).length;
+  var sumNet = 0;
+  var countOt = 0;
+  var sumOtHours = 0;
+  var sumOtPay = 0;
+  var countDeduct = 0;
+  var sumLeaveDeduct = 0;
+  var countAdvance = 0;
+  var sumAdvance = 0;
+  var countChanges = 0;
+
+  (branchList || []).forEach(function(r) {
+    var net = Number(r.netPay) || 0;
+    var otH = Number(r.otHours) || 0;
+    var otP = Number(r.otPay) || 0;
+    var lDed = Number(r.leaveDeduction) || 0;
+    var ltDed = Number(r.lateDeduct) || 0;
+    var adv = Number(r.advanceDeduct) || 0;
+
+    sumNet += net;
+
+    if (otH > 0 || otP > 0) {
+      countOt++;
+      sumOtHours += otH;
+      sumOtPay += otP;
+    }
+
+    if (lDed > 0 || ltDed > 0 || (Number(r.absentDays) || 0) > 0 || (Number(r.leaveDays) || 0) > 0 || (Number(r.sickLeaveDays) || 0) > 0) {
+      countDeduct++;
+      sumLeaveDeduct += (lDed + ltDed);
+    }
+
+    if (adv > 0) {
+      countAdvance++;
+      sumAdvance += adv;
+    }
+
+    var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; });
+    if (isEmployeeChanges(r, null, emp)) {
+      countChanges++;
+    }
+  });
+
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+
+  var elAllCount = document.getElementById('payroll-kpi-all-count');
+  var elAllSub = document.getElementById('payroll-kpi-all-sub');
+  if (elAllCount) elAllCount.textContent = countAll + ' คน';
+  if (elAllSub) elAllSub.textContent = 'ยอดจ่ายสุทธิ ' + (canViewSalary ? fmt(sumNet) : '฿***');
+
+  var elOtCount = document.getElementById('payroll-kpi-ot-count');
+  var elOtSub = document.getElementById('payroll-kpi-ot-sub');
+  if (elOtCount) elOtCount.textContent = countOt + ' คน';
+  if (elOtSub) elOtSub.textContent = 'รวม ' + (Math.round(sumOtHours * 10) / 10) + ' ชม. (' + (canViewSalary ? fmt(sumOtPay) : '฿***') + ')';
+
+  var elDeductCount = document.getElementById('payroll-kpi-deduct-count');
+  var elDeductSub = document.getElementById('payroll-kpi-deduct-sub');
+  if (elDeductCount) elDeductCount.textContent = countDeduct + ' คน';
+  if (elDeductSub) elDeductSub.textContent = 'หักเวลาทำงานรวม ' + (canViewSalary ? fmt(sumLeaveDeduct) : '฿***');
+
+  var elAdvCount = document.getElementById('payroll-kpi-advance-count');
+  var elAdvSub = document.getElementById('payroll-kpi-advance-sub');
+  if (elAdvCount) elAdvCount.textContent = countAdvance + ' คน';
+  if (elAdvSub) elAdvSub.textContent = 'ยอดเบิกทั้งสิ้น ' + (canViewSalary ? fmt(sumAdvance) : '฿***');
+
+  var elChangesCount = document.getElementById('payroll-kpi-changes-count');
+  var elChangesSub = document.getElementById('payroll-kpi-changes-sub');
+  if (elChangesCount) elChangesCount.textContent = countChanges + ' คน';
+  if (elChangesSub) elChangesSub.textContent = 'คิดตามสัดส่วน (Pro-rata)';
+
+  var qFilter = State.payrollQuickFilter || 'ALL';
+  ['all', 'ot', 'deduct', 'advance', 'changes'].forEach(function(k) {
+    var tile = document.getElementById('payroll-kpi-' + k);
+    if (tile) {
+      tile.classList.toggle('active', qFilter === k.toUpperCase());
+    }
+  });
+}
+
+function updateInputKpiDeck(branchList) {
+  var countAll = (branchList || []).length;
+  var sumBaseSal = 0;
+  var countOt = 0;
+  var sumOtHours = 0;
+  var sumOtPay = 0;
+  var countDeduct = 0;
+  var sumLateMinutes = 0;
+  var countAdvance = 0;
+  var sumAdvance = 0;
+  var countChanges = 0;
+
+  (branchList || []).forEach(function(i) {
+    var base = Number(i.baseSalary) || 0;
+    var otH = Number(i.otHours) || 0;
+    var otR = Number(i.otRate) || 40;
+    var otP = otH * otR;
+    var absD = Number(i.absentDays) || 0;
+    var lvD = Number(i.leaveDays) || 0;
+    var skD = Number(i.sickLeaveDays) || 0;
+    var ltM = Number(i.lateMinutes) || 0;
+    var ltDed = Number(i.lateDeduct) || 0;
+    var adv = Number(i.advanceDeduct) || 0;
+
+    sumBaseSal += base;
+
+    if (otH > 0) {
+      countOt++;
+      sumOtHours += otH;
+      sumOtPay += otP;
+    }
+
+    if (absD > 0 || lvD > 0 || skD > 0 || ltM > 0 || ltDed > 0) {
+      countDeduct++;
+      sumLateMinutes += ltM;
+    }
+
+    if (adv > 0) {
+      countAdvance++;
+      sumAdvance += adv;
+    }
+
+    var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
+    if (isEmployeeChanges(null, i, emp)) {
+      countChanges++;
+    }
+  });
+
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+
+  var elAllCount = document.getElementById('input-kpi-all-count');
+  var elAllSub = document.getElementById('input-kpi-all-sub');
+  if (elAllCount) elAllCount.textContent = countAll + ' คน';
+  if (elAllSub) elAllSub.textContent = 'ฐานเงินเดือนรวม ' + (canViewSalary ? fmt(sumBaseSal) : '฿***');
+
+  var elOtCount = document.getElementById('input-kpi-ot-count');
+  var elOtSub = document.getElementById('input-kpi-ot-sub');
+  if (elOtCount) elOtCount.textContent = countOt + ' คน';
+  if (elOtSub) elOtSub.textContent = 'รวม ' + (Math.round(sumOtHours * 10) / 10) + ' ชม. (' + (canViewSalary ? fmt(sumOtPay) : '฿***') + ')';
+
+  var elDeductCount = document.getElementById('input-kpi-deduct-count');
+  var elDeductSub = document.getElementById('input-kpi-deduct-sub');
+  if (elDeductCount) elDeductCount.textContent = countDeduct + ' คน';
+  if (elDeductSub) elDeductSub.textContent = sumLateMinutes > 0 ? ('สายสะสม ' + sumLateMinutes + ' นาที') : 'มีรายการขาด/ลา/สาย';
+
+  var elAdvCount = document.getElementById('input-kpi-advance-count');
+  var elAdvSub = document.getElementById('input-kpi-advance-sub');
+  if (elAdvCount) elAdvCount.textContent = countAdvance + ' คน';
+  if (elAdvSub) elAdvSub.textContent = 'ยอดเบิกทั้งสิ้น ' + (canViewSalary ? fmt(sumAdvance) : '฿***');
+
+  var elChangesCount = document.getElementById('input-kpi-changes-count');
+  var elChangesSub = document.getElementById('input-kpi-changes-sub');
+  if (elChangesCount) elChangesCount.textContent = countChanges + ' คน';
+  if (elChangesSub) elChangesSub.textContent = 'วันทำงานไม่เต็มเดือน';
+
+  var qFilter = State.inputQuickFilter || 'ALL';
+  ['all', 'ot', 'deduct', 'advance', 'changes'].forEach(function(k) {
+    var tile = document.getElementById('input-kpi-' + k);
+    if (tile) {
+      tile.classList.toggle('active', qFilter === k.toUpperCase());
+    }
+  });
+}
+
+// ==============================================================================
 // BRANCH FILTER CHIPS CONTROLLER (PHASE 1 UX/UI)
 // ==============================================================================
 function renderPayrollBranchChips() {
@@ -1472,7 +1696,7 @@ function renderPayrollTable() {
   var q = (document.getElementById('payrollSearchInput') ? document.getElementById('payrollSearchInput').value : '').trim().toLowerCase();
   var bFilter = State.payrollBranchFilter || 'ALL';
 
-  var list = (State.payrollList || []).filter(function(r) {
+  var branchList = (State.payrollList || []).filter(function(r) {
     if (State.filterOnlyChanged && (!State.syncDeltaMap || !State.syncDeltaMap[r.empId])) return false;
     if (bFilter !== 'ALL') {
       var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; });
@@ -1487,6 +1711,21 @@ function renderPayrollTable() {
            (nick && nick.indexOf(q) >= 0) ||
            (r.department && r.department.toLowerCase().indexOf(q) >= 0) ||
            (r.position && r.position.toLowerCase().indexOf(q) >= 0);
+  });
+
+  updatePayrollKpiDeck(branchList);
+
+  var qFilter = State.payrollQuickFilter || 'ALL';
+  var list = branchList.filter(function(r) {
+    if (qFilter === 'ALL') return true;
+    if (qFilter === 'OT') return (Number(r.otHours) || 0) > 0 || (Number(r.otPay) || 0) > 0;
+    if (qFilter === 'DEDUCT') return (Number(r.leaveDeduction) || 0) > 0 || (Number(r.lateDeduct) || 0) > 0 || (Number(r.absentDays) || 0) > 0 || (Number(r.leaveDays) || 0) > 0 || (Number(r.sickLeaveDays) || 0) > 0;
+    if (qFilter === 'ADVANCE') return (Number(r.advanceDeduct) || 0) > 0;
+    if (qFilter === 'CHANGES') {
+      var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; });
+      return isEmployeeChanges(r, null, emp);
+    }
+    return true;
   });
 
   if (mode === 'CARD') {
@@ -1808,6 +2047,7 @@ function openInputFastEditDrawer(empId) {
 
   var q = (document.getElementById('inputSearchInput') ? document.getElementById('inputSearchInput').value : '').trim().toLowerCase();
   var bFilter = State.inputBranchFilter || 'ALL';
+  var qFilter = State.inputQuickFilter || 'ALL';
 
   var visibleList = (State.inputRecords || []).filter(function(i) {
     if (State.filterOnlyChanged && (!State.syncDeltaMap || !State.syncDeltaMap[i.empId])) return false;
@@ -1815,6 +2055,13 @@ function openInputFastEditDrawer(empId) {
       var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
       var empBranch = emp ? getEmpBranchId(emp) : 'B01';
       if (empBranch !== bFilter) return false;
+    }
+    if (qFilter === 'OT' && !((Number(i.otHours) || 0) > 0)) return false;
+    if (qFilter === 'DEDUCT' && !((Number(i.absentDays) || 0) > 0 || (Number(i.leaveDays) || 0) > 0 || (Number(i.sickLeaveDays) || 0) > 0 || (Number(i.lateMinutes) || 0) > 0 || (Number(i.lateDeduct) || 0) > 0)) return false;
+    if (qFilter === 'ADVANCE' && !((Number(i.advanceDeduct) || 0) > 0)) return false;
+    if (qFilter === 'CHANGES') {
+      var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
+      if (!isEmployeeChanges(null, i, emp)) return false;
     }
     if (!q) return true;
     var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; }) || {};
@@ -2196,7 +2443,7 @@ function renderInputTable() {
   var q = (document.getElementById('inputSearchInput') ? document.getElementById('inputSearchInput').value : '').trim().toLowerCase();
   var bFilter = State.inputBranchFilter || 'ALL';
 
-  var list = State.inputRecords.filter(function(i) {
+  var branchList = (State.inputRecords || []).filter(function(i) {
     if (State.filterOnlyChanged && (!State.syncDeltaMap || !State.syncDeltaMap[i.empId])) return false;
     if (bFilter !== 'ALL') {
       var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
@@ -2209,6 +2456,21 @@ function renderInputTable() {
     return (i.empId && i.empId.toLowerCase().indexOf(q) >= 0) ||
            (i.empName && i.empName.toLowerCase().indexOf(q) >= 0) ||
            (nick && nick.indexOf(q) >= 0);
+  });
+
+  updateInputKpiDeck(branchList);
+
+  var qFilter = State.inputQuickFilter || 'ALL';
+  var list = branchList.filter(function(i) {
+    if (qFilter === 'ALL') return true;
+    if (qFilter === 'OT') return (Number(i.otHours) || 0) > 0;
+    if (qFilter === 'DEDUCT') return (Number(i.absentDays) || 0) > 0 || (Number(i.leaveDays) || 0) > 0 || (Number(i.sickLeaveDays) || 0) > 0 || (Number(i.lateMinutes) || 0) > 0 || (Number(i.lateDeduct) || 0) > 0;
+    if (qFilter === 'ADVANCE') return (Number(i.advanceDeduct) || 0) > 0;
+    if (qFilter === 'CHANGES') {
+      var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
+      return isEmployeeChanges(null, i, emp);
+    }
+    return true;
   });
 
   if (list.length === 0) {

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=9.80">
+  <link rel="stylesheet" href="css/style.css?v=9.90">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -252,6 +252,50 @@
 
       <!-- 2. PAYROLL TAB (20 COLUMNS) -->
       <div class="tab-content" id="tab-payroll">
+        <!-- MINI KPI DASHBOARD TILES & SMART FILTERS -->
+        <section class="kpi-filter-deck" id="payrollKpiDeck" style="margin-bottom:14px">
+          <div class="kpi-tile active" id="payroll-kpi-all" onclick="setPayrollQuickFilter('ALL')">
+            <div class="kpi-icon" style="background:#eff6ff;color:#1d4ed8;"><i class="fa-solid fa-users"></i></div>
+            <div>
+              <div class="kpi-tile-label">พนักงานทั้งหมด</div>
+              <div class="kpi-tile-value" id="payroll-kpi-all-count">0 คน</div>
+              <div class="kpi-tile-sub" id="payroll-kpi-all-sub">ยอดจ่ายสุทธิ ฿0.00</div>
+            </div>
+          </div>
+          <div class="kpi-tile" id="payroll-kpi-ot" onclick="setPayrollQuickFilter('OT')">
+            <div class="kpi-icon" style="background:#f0f9ff;color:#0284c7;"><i class="fa-solid fa-stopwatch"></i></div>
+            <div>
+              <div class="kpi-tile-label">มีค่าล่วงเวลา (OT)</div>
+              <div class="kpi-tile-value" id="payroll-kpi-ot-count">0 คน</div>
+              <div class="kpi-tile-sub" id="payroll-kpi-ot-sub">รวม 0 ชม. (฿0)</div>
+            </div>
+          </div>
+          <div class="kpi-tile" id="payroll-kpi-deduct" onclick="setPayrollQuickFilter('DEDUCT')">
+            <div class="kpi-icon" style="background:#fef2f2;color:#dc2626;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div>
+              <div class="kpi-tile-label">มีหักขาด/ลา/สาย</div>
+              <div class="kpi-tile-value" id="payroll-kpi-deduct-count">0 คน</div>
+              <div class="kpi-tile-sub" id="payroll-kpi-deduct-sub">หักเวลาทำงานรวม ฿0</div>
+            </div>
+          </div>
+          <div class="kpi-tile" id="payroll-kpi-advance" onclick="setPayrollQuickFilter('ADVANCE')">
+            <div class="kpi-icon" style="background:#faf5ff;color:#7c3aed;"><i class="fa-solid fa-money-bill-transfer"></i></div>
+            <div>
+              <div class="kpi-tile-label">หักเบิกล่วงหน้า</div>
+              <div class="kpi-tile-value" id="payroll-kpi-advance-count">0 คน</div>
+              <div class="kpi-tile-sub" id="payroll-kpi-advance-sub">ยอดเบิกทั้งสิ้น ฿0</div>
+            </div>
+          </div>
+          <div class="kpi-tile" id="payroll-kpi-changes" onclick="setPayrollQuickFilter('CHANGES')">
+            <div class="kpi-icon" style="background:#fffbeb;color:#d97706;"><i class="fa-solid fa-user-tag"></i></div>
+            <div>
+              <div class="kpi-tile-label">เข้าใหม่ / ลาออกงวดนี้</div>
+              <div class="kpi-tile-value" id="payroll-kpi-changes-count">0 คน</div>
+              <div class="kpi-tile-sub" id="payroll-kpi-changes-sub">คิดตามสัดส่วน (Pro-rata)</div>
+            </div>
+          </div>
+        </section>
+
         <div class="card">
           <div class="card-header">
             <div>
@@ -341,6 +385,50 @@
 
       <!-- 3. MONTHLY INPUT TAB (19 COLUMNS) -->
       <div class="tab-content" id="tab-input">
+        <!-- MINI KPI DASHBOARD TILES & SMART FILTERS -->
+        <section class="kpi-filter-deck" id="inputKpiDeck" style="margin-bottom:14px">
+          <div class="kpi-tile active" id="input-kpi-all" onclick="setInputQuickFilter('ALL')">
+            <div class="kpi-icon" style="background:#eff6ff;color:#1d4ed8;"><i class="fa-solid fa-users"></i></div>
+            <div>
+              <div class="kpi-tile-label">พนักงานในงวด</div>
+              <div class="kpi-tile-value" id="input-kpi-all-count">0 คน</div>
+              <div class="kpi-tile-sub" id="input-kpi-all-sub">ฐานเงินเดือนรวม ฿0.00</div>
+            </div>
+          </div>
+          <div class="kpi-tile" id="input-kpi-ot" onclick="setInputQuickFilter('OT')">
+            <div class="kpi-icon" style="background:#f0f9ff;color:#0284c7;"><i class="fa-solid fa-stopwatch"></i></div>
+            <div>
+              <div class="kpi-tile-label">มีค่าล่วงเวลา (OT)</div>
+              <div class="kpi-tile-value" id="input-kpi-ot-count">0 คน</div>
+              <div class="kpi-tile-sub" id="input-kpi-ot-sub">รวม 0 ชม. (฿0)</div>
+            </div>
+          </div>
+          <div class="kpi-tile" id="input-kpi-deduct" onclick="setInputQuickFilter('DEDUCT')">
+            <div class="kpi-icon" style="background:#fef2f2;color:#dc2626;"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div>
+              <div class="kpi-tile-label">มีหักขาด/ลา/สาย</div>
+              <div class="kpi-tile-value" id="input-kpi-deduct-count">0 คน</div>
+              <div class="kpi-tile-sub" id="input-kpi-deduct-sub">มีรายการขาด/ลา/สาย</div>
+            </div>
+          </div>
+          <div class="kpi-tile" id="input-kpi-advance" onclick="setInputQuickFilter('ADVANCE')">
+            <div class="kpi-icon" style="background:#faf5ff;color:#7c3aed;"><i class="fa-solid fa-money-bill-transfer"></i></div>
+            <div>
+              <div class="kpi-tile-label">หักเบิกล่วงหน้า</div>
+              <div class="kpi-tile-value" id="input-kpi-advance-count">0 คน</div>
+              <div class="kpi-tile-sub" id="input-kpi-advance-sub">ยอดเบิกทั้งสิ้น ฿0</div>
+            </div>
+          </div>
+          <div class="kpi-tile" id="input-kpi-changes" onclick="setInputQuickFilter('CHANGES')">
+            <div class="kpi-icon" style="background:#fffbeb;color:#d97706;"><i class="fa-solid fa-user-tag"></i></div>
+            <div>
+              <div class="kpi-tile-label">เข้าใหม่ / ลาออกงวดนี้</div>
+              <div class="kpi-tile-value" id="input-kpi-changes-count">0 คน</div>
+              <div class="kpi-tile-sub" id="input-kpi-changes-sub">วันทำงานไม่เต็มเดือน</div>
+            </div>
+          </div>
+        </section>
+
         <!-- PERIOD LOCKED ALERT BANNER -->
         <div id="inputPeriodLockedBanner" style="display:none;margin-bottom:14px;padding:12px 18px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--radius-md);color:#991b1b;align-items:center;justify-content:space-between;gap:12px">
         </div>
@@ -6308,7 +6396,7 @@
     <div class="ins-actions-footer" id="ifeFooter" style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:#f8fafc;border-top:1px solid #e2e8f0"></div>
   </aside>
 
-  <script src="js/config.js?v=9.80"></script>
-  <script src="js/app.js?v=9.80"></script>
+  <script src="js/config.js?v=9.90"></script>
+  <script src="js/app.js?v=9.90"></script>
 </body>
 </html>
