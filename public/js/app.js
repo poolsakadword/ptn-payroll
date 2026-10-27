@@ -399,6 +399,7 @@ var State = {
   currentUser: { username: 'Admin', role: 'Admin / HR' },
   payrollBranchFilter: 'ALL',
   inputBranchFilter: 'ALL',
+  payrollViewMode: localStorage.getItem('ptn_payroll_view_mode') || 'TABLE',
   syncDeltaMap: {},
   filterOnlyChanged: false,
   payrollDefaults: {
@@ -1443,17 +1444,35 @@ function filterInputBranch(bId) {
   renderInputTable();
 }
 
-// 2. PAYROLL TABLE RENDERER (20 COLUMNS)
+function setPayrollViewMode(mode) {
+  State.payrollViewMode = mode;
+  try { localStorage.setItem('ptn_payroll_view_mode', mode); } catch(e) {}
+  var btnTable = document.getElementById('btnViewTable');
+  var btnCards = document.getElementById('btnViewCards');
+  if (btnTable) btnTable.classList.toggle('active', mode === 'TABLE');
+  if (btnCards) btnCards.classList.toggle('active', mode === 'CARD');
+  renderPayrollTable();
+}
+
+// 2. PAYROLL TABLE & CARDS RENDERER (PHASE 3 MULTI-VIEW)
 function renderPayrollTable() {
   var tbody = document.getElementById('payrollTableBody');
-  if (!tbody) return;
+  var cardsWrapper = document.getElementById('payrollCardsView');
+  var tblWrapper = document.getElementById('payrollTableViewWrapper');
+  if (!tbody && !cardsWrapper) return;
 
   renderPayrollBranchChips();
+
+  var mode = State.payrollViewMode || 'TABLE';
+  var btnTable = document.getElementById('btnViewTable');
+  var btnCards = document.getElementById('btnViewCards');
+  if (btnTable) btnTable.classList.toggle('active', mode === 'TABLE');
+  if (btnCards) btnCards.classList.toggle('active', mode === 'CARD');
 
   var q = (document.getElementById('payrollSearchInput') ? document.getElementById('payrollSearchInput').value : '').trim().toLowerCase();
   var bFilter = State.payrollBranchFilter || 'ALL';
 
-  var list = State.payrollList.filter(function(r) {
+  var list = (State.payrollList || []).filter(function(r) {
     if (State.filterOnlyChanged && (!State.syncDeltaMap || !State.syncDeltaMap[r.empId])) return false;
     if (bFilter !== 'ALL') {
       var emp = (State.employees || []).find(function(e) { return e.empId === r.empId; });
@@ -1469,6 +1488,19 @@ function renderPayrollTable() {
            (r.department && r.department.toLowerCase().indexOf(q) >= 0) ||
            (r.position && r.position.toLowerCase().indexOf(q) >= 0);
   });
+
+  if (mode === 'CARD') {
+    if (tblWrapper) tblWrapper.style.display = 'none';
+    if (cardsWrapper) {
+      cardsWrapper.style.display = 'grid';
+      renderPayrollCardsView(list, cardsWrapper, q, bFilter);
+    }
+    return;
+  }
+
+  // TABLE VIEW
+  if (tblWrapper) tblWrapper.style.display = 'block';
+  if (cardsWrapper) cardsWrapper.style.display = 'none';
 
   if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:36px">' +
@@ -1492,7 +1524,7 @@ function renderPayrollTable() {
     var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
 
     var delta = State.syncDeltaMap && State.syncDeltaMap[row.empId];
-    var rowClass = delta ? ' class="row-delta-updated"' : '';
+    var rowClass = 'clickable-row' + (delta ? ' row-delta-updated' : '');
     var conflictInfo = getEmployeeConflictInfo(row.empId, row);
     var conflictHtml = conflictInfo.badgeHtml ? (' ' + conflictInfo.badgeHtml) : '';
 
@@ -1500,7 +1532,7 @@ function renderPayrollTable() {
     var otClass = otDelta ? 'text-right font-mono text-blue font-bold cell-delta-updated' : 'text-right font-mono text-blue font-bold';
     var otTag = otDelta ? ' <span class="delta-tag" title="เดิม: ' + otDelta.before + ' -> ใหม่: ' + otDelta.after + '">ใหม่</span>' : '';
 
-    h += '<tr' + rowClass + '>' +
+    h += '<tr class="' + rowClass + '" onclick="openInspector(\'' + esc(row.empId) + '\')" title="คลิกเพื่อดูสรุปรายได้-รายการหักอย่างละเอียด">' +
       '<td class="font-mono font-bold sticky-col" style="left:0;width:80px;min-width:80px;max-width:80px">' + esc(row.empId) + '</td>' +
       '<td class="font-bold sticky-col sticky-col-divider" style="left:80px;min-width:180px">' + esc(row.name) + nickHtml + conflictHtml + '</td>' +
       '<td><span class="period-pill">' + esc(row.department || '-') + '</span> ' + esc(row.position || '') + '</td>' +
@@ -1526,11 +1558,226 @@ function renderPayrollTable() {
         ) : '฿***') +
       '</td>' +
       '<td class="text-center">' +
-        (canViewPayslip ? '<button type="button" class="btn btn-primary btn-sm" onclick="viewPayslip(\'' + esc(row.empId) + '\')"><i class="fa-solid fa-print"></i> สลิป</button>' : '<span class="text-muted">-</span>') +
+        (canViewPayslip ? '<button type="button" class="btn btn-primary btn-sm" onclick="event.stopPropagation();viewPayslip(\'' + esc(row.empId) + '\')"><i class="fa-solid fa-print"></i> สลิป</button>' : '<span class="text-muted">-</span>') +
       '</td>' +
     '</tr>';
   });
   tbody.innerHTML = h;
+}
+
+// RENDER PAYROLL CARDS VIEW (PHASE 3)
+function renderPayrollCardsView(list, container, q, bFilter) {
+  if (!container) return;
+
+  if (!list || list.length === 0) {
+    container.innerHTML = '<div style="grid-column: 1 / -1; text-align: center; padding: 48px 16px; color: #64748b;">' +
+      '<div style="font-size: 16px; font-weight: 700; margin-bottom: 6px;"><i class="fa-solid fa-users-slash"></i> ' + (q || bFilter !== 'ALL' || State.filterOnlyChanged ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period)) + '</div>' +
+      '<div style="font-size: 12.5px; color: #94a3b8;">กรุณาไปที่แท็บ "บันทึกข้อมูลประจำงวด" เพื่อดึงข้อมูลพนักงาน</div>' +
+    '</div>';
+    return;
+  }
+
+  var canViewSalary = hasPermission('view_salary');
+  var html = '';
+
+  list.forEach(function(row) {
+    var emp = (State.employees || []).find(function(e) { return e.empId === row.empId; }) || {};
+    var empNick = emp.nickname || row.nickname || getEmpNickname(row.empId) || '';
+    var initial = empNick ? empNick.substring(0, 1) : (row.name ? row.name.substring(0, 1) : '?');
+    var bName = getEmpBranchName(emp);
+
+    var delta = State.syncDeltaMap && State.syncDeltaMap[row.empId];
+    var deltaClass = delta ? ' row-delta-updated' : '';
+    var conflictInfo = getEmployeeConflictInfo(row.empId, row);
+    var conflictBadges = conflictInfo.badgeHtml ? ('<div style="margin-top:4px">' + conflictInfo.badgeHtml + '</div>') : '';
+
+    var baseSal = Number(row.baseSalary) || 0;
+    var otHours = Number(row.otHours) || 0;
+    var otPay = Number(row.otPay) || 0;
+    var totalDeduct = Number(row.totalDeductions) || 0;
+    var netPay = Number(row.netPay) || 0;
+
+    html += '<div class="emp-payroll-card' + deltaClass + '" onclick="openInspector(\'' + esc(row.empId) + '\')">' +
+      '<div class="emp-card-header">' +
+        '<div class="emp-card-info">' +
+          '<div class="emp-card-avatar">' + esc(initial) + '</div>' +
+          '<div>' +
+            '<div class="emp-card-name">' + esc(row.name) + (empNick ? ' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 5px;border-radius:4px">(' + esc(empNick) + ')</span>' : '') + '</div>' +
+            '<div class="emp-card-sub"><strong style="color:#1e40af;font-family:var(--font-mono, monospace)">' + esc(row.empId) + '</strong> • ' + esc(row.position || '-') + ' • ' + esc(bName) + '</div>' +
+          '</div>' +
+        '</div>' +
+        (delta ? '<span class="delta-tag" title="มีข้อมูลอัปเดตใหม่">ใหม่</span>' : '') +
+      '</div>' +
+      conflictBadges +
+      '<div class="emp-card-metrics">' +
+        '<div class="emp-card-metric-item">' +
+          '<span class="emp-card-metric-label">เงินเดือนฐาน:</span>' +
+          '<span class="emp-card-metric-value">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</span>' +
+        '</div>' +
+        '<div class="emp-card-metric-item">' +
+          '<span class="emp-card-metric-label">OT (' + otHours + 'h):</span>' +
+          '<span class="emp-card-metric-value" style="color:' + (otHours > 0 ? '#0284c7' : '#64748b') + '">' + (canViewSalary ? (otHours > 0 ? fmt(otPay) : '-') : '฿***') + '</span>' +
+        '</div>' +
+        '<div class="emp-card-metric-item">' +
+          '<span class="emp-card-metric-label">เบี้ยขยัน/อื่นๆ:</span>' +
+          '<span class="emp-card-metric-value" style="color:#15803d">' + (canViewSalary ? fmt((Number(row.allowance) || 0) + (Number(row.bonus) || 0)) : '฿***') + '</span>' +
+        '</div>' +
+        '<div class="emp-card-metric-item">' +
+          '<span class="emp-card-metric-label">รวมหัก:</span>' +
+          '<span class="emp-card-metric-value" style="color:#dc2626">' + (canViewSalary ? '-' + fmt(totalDeduct) : '฿***') + '</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="emp-card-footer">' +
+        '<div>' +
+          '<div class="emp-card-net-label">สุทธิ (Net Pay)</div>' +
+          '<div style="font-size:10px;color:#94a3b8"><i class="fa-solid fa-credit-card"></i> ' + esc(row.bankName || 'TTB') + '</div>' +
+        '</div>' +
+        '<div class="text-right">' +
+          '<div class="emp-card-net-val">' + (canViewSalary ? fmt(netPay) : '฿***') + '</div>' +
+          '<button type="button" class="btn btn-outline btn-xs" style="margin-top:3px;font-size:11px;padding:2px 8px" onclick="event.stopPropagation();viewPayslip(\'' + esc(row.empId) + '\')">' +
+            '<i class="fa-solid fa-file-invoice-dollar text-blue"></i> สลิป' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+// ==============================================================================
+// PHASE 3: SLIDE-OVER INSPECTOR DRAWER CONTROLLER
+// ==============================================================================
+function openInspector(empId) {
+  var emp = (State.employees || []).find(function(e) { return e.empId === empId; }) || {};
+  var payroll = (State.payrollList || []).find(function(p) { return p.empId === empId; }) || {};
+  var input = (State.inputRecords || []).find(function(i) { return i.empId === empId; }) || {};
+
+  var drawer = document.getElementById('inspectorDrawer');
+  var backdrop = document.getElementById('inspectorBackdrop');
+  if (!drawer || !backdrop) return;
+
+  var nick = emp.nickname || payroll.nickname || input.nickname || getEmpNickname(empId) || '';
+  var fullName = emp.fullName || payroll.name || input.empName || empId;
+  var bName = getEmpBranchName(emp);
+  var initial = nick ? nick.substring(0, 1) : fullName.substring(0, 1);
+
+  var insAvatar = document.getElementById('insAvatar');
+  var insTitle = document.getElementById('insTitle');
+  var insSub = document.getElementById('insSub');
+  var insContent = document.getElementById('insContent');
+
+  if (insAvatar) insAvatar.textContent = initial;
+  if (insTitle) insTitle.innerHTML = esc(fullName) + (nick ? ' <span style="font-size:12px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px">(' + esc(nick) + ')</span>' : '');
+  if (insSub) insSub.textContent = empId + ' • ' + (emp.position || payroll.position || 'พนักงาน') + ' • ' + bName;
+
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+  var baseSal = Number(payroll.baseSalary || input.baseSalary || emp.baseSalary || 0);
+  var otHours = Number(payroll.otHours || input.otHours || 0);
+  var otPay = Number(payroll.otPay || (otHours * (Number(input.otRate) || 40)));
+  var allowance = Number(payroll.allowance || input.allowance || 0);
+  var bonus = Number(payroll.bonus || input.bonus || 0);
+  var grossPay = Number(payroll.grossPay || 0);
+
+  var leaveDeduct = Number(payroll.leaveDeduction || 0);
+  var sso = Number(payroll.sso || input.sso || 0);
+  var pf = Number(payroll.pf || 0);
+  var tax = Number(payroll.tax || input.tax || 0);
+  var advanceDeduct = Number(payroll.advanceDeduct || input.advanceDeduct || 0);
+  var otherDeduct = Number(payroll.otherDeduct || input.otherDeduct || 0);
+  var carriedDebt = Number(payroll.carriedDebt || input.carriedDebt || 0);
+  var totalDeduct = Number(payroll.totalDeductions || (leaveDeduct + sso + pf + tax + advanceDeduct + otherDeduct));
+  var netPay = Number(payroll.netPay || (grossPay - totalDeduct));
+
+  var conflictInfo = getEmployeeConflictInfo(empId, input);
+
+  var html = '';
+
+  // 1. Net Pay Banner
+  html += '<div class="inspector-net-banner">' +
+    '<div class="ins-net-title"><i class="fa-solid fa-wallet"></i> ยอดเงินรับสุทธิ (Net Pay) ประจำงวด ' + esc(State.period) + '</div>' +
+    '<div class="ins-net-amount">' + (canViewSalary ? fmt(netPay) : '฿***') + '</div>' +
+    '<div class="ins-net-bank"><i class="fa-solid fa-building-columns"></i> ธนาคาร: ' + esc(emp.bankName || payroll.bankName || 'TTB') + ' ' + esc(emp.bankAccount || payroll.bankAccount || '-') + '</div>' +
+  '</div>';
+
+  // 2. Conflict / Anomaly Badges if any
+  if (conflictInfo.badgeHtml) {
+    html += '<div style="background:#fffbeb;border:1px solid #fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;display:flex;flex-direction:column;gap:4px">' +
+      '<div style="font-weight:700;color:#b45309"><i class="fa-solid fa-triangle-exclamation"></i> ข้อสังเกตประจำงวด:</div>' +
+      '<div>' + conflictInfo.badgeHtml + '</div>' +
+    '</div>';
+  }
+
+  // 3. Earnings Breakdown
+  html += '<div class="calc-breakdown-card">' +
+    '<div class="calc-breakdown-title" style="color:#1e40af"><i class="fa-solid fa-circle-plus"></i> รายได้ (Earnings)</div>' +
+    '<div class="calc-row"><span>เงินเดือนฐาน (Base Salary)</span><span class="val">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</span></div>' +
+    '<div class="calc-row"><span>ค่าล่วงเวลา OT (' + otHours + ' ชม.)</span><span class="val" style="color:' + (otHours > 0 ? '#0284c7' : 'inherit') + '">' + (canViewSalary ? fmt(otPay) : '฿***') + '</span></div>' +
+    '<div class="calc-row"><span>เบี้ยขยัน / ค่าเบี้ยเลี้ยง</span><span class="val" style="color:#15803d">' + (canViewSalary ? fmt(allowance) : '฿***') + '</span></div>' +
+    (bonus > 0 ? '<div class="calc-row"><span>เงินโบนัส / พิเศษ</span><span class="val" style="color:#15803d">' + (canViewSalary ? fmt(bonus) : '฿***') + '</span></div>' : '') +
+    '<div class="calc-row total"><span>รวมรายได้ (Gross Earnings)</span><span class="val" style="color:#1e40af">' + (canViewSalary ? fmt(grossPay) : '฿***') + '</span></div>' +
+  '</div>';
+
+  // 4. Deductions Breakdown
+  html += '<div class="calc-breakdown-card">' +
+    '<div class="calc-breakdown-title" style="color:#dc2626"><i class="fa-solid fa-circle-minus"></i> รายการหัก (Deductions)</div>' +
+    '<div class="calc-row"><span>หักขาด/ลา/มาสาย</span><span class="val" style="color:' + (leaveDeduct > 0 ? '#dc2626' : 'inherit') + '">' + (canViewSalary ? fmt(leaveDeduct) : '฿***') + '</span></div>' +
+    '<div class="calc-row"><span>ประกันสังคม (SSO)</span><span class="val">' + (canViewSalary ? fmt(sso) : '฿***') + '</span></div>' +
+    (pf > 0 ? '<div class="calc-row"><span>กองทุนสำรองเลี้ยงชีพ (PF)</span><span class="val">' + (canViewSalary ? fmt(pf) : '฿***') + '</span></div>' : '') +
+    (tax > 0 ? '<div class="calc-row"><span>ภาษีหัก ณ ที่จ่าย (WHT)</span><span class="val">' + (canViewSalary ? fmt(tax) : '฿***') + '</span></div>' : '') +
+    (advanceDeduct > 0 ? '<div class="calc-row"><span>หักเบิกล่วงหน้า (Advance)</span><span class="val" style="color:#dc2626">' + (canViewSalary ? fmt(advanceDeduct) : '฿***') + '</span></div>' : '') +
+    (otherDeduct > 0 ? '<div class="calc-row"><span>หักอื่นๆ</span><span class="val" style="color:#dc2626">' + (canViewSalary ? fmt(otherDeduct) : '฿***') + '</span></div>' : '') +
+    (carriedDebt > 0 ? '<div class="calc-row"><span>หนี้คงค้างยกยอด</span><span class="val" style="color:#dc2626">' + (canViewSalary ? fmt(carriedDebt) : '฿***') + '</span></div>' : '') +
+    '<div class="calc-row total"><span>รวมรายการหัก (Total Deductions)</span><span class="val" style="color:#dc2626">' + (canViewSalary ? '-' + fmt(totalDeduct) : '฿***') + '</span></div>' +
+  '</div>';
+
+  // 5. Time & Attendance Summary
+  var workDays = State.workingDays > 0 ? State.workingDays : 30;
+  var absDays = Number(input.absentDays || 0);
+  var leaveDays = Number(input.leaveDays || 0);
+  var sickDays = Number(input.sickLeaveDays || 0);
+  var lateMins = Number(input.lateMinutes || 0);
+  var lateCnt = Number(input.lateCount || 0);
+  var actualWorkDays = Math.max(0, workDays - absDays - leaveDays);
+
+  html += '<div class="calc-breakdown-card">' +
+    '<div class="calc-breakdown-title" style="color:#0f172a"><i class="fa-solid fa-clock-rotate-left"></i> สรุปเวลาทำงานงวดนี้ (PTN Time)</div>' +
+    '<div class="calc-row"><span>วันทำงานจริง (จาก ' + workDays + ' วัน)</span><span class="val font-bold" style="color:#15803d">' + actualWorkDays + ' วัน</span></div>' +
+    '<div class="calc-row"><span>ขาดงาน</span><span class="val" style="color:' + (absDays > 0 ? '#dc2626' : 'inherit') + '">' + absDays + ' วัน</span></div>' +
+    '<div class="calc-row"><span>ลากิจ / ลาป่วย</span><span class="val">' + leaveDays + ' วัน / ' + sickDays + ' วัน</span></div>' +
+    '<div class="calc-row"><span>มาสายสะสม</span><span class="val" style="color:' + (lateMins > 0 ? '#d97706' : 'inherit') + '">' + lateMins + ' นาที (' + lateCnt + ' ครั้ง)</span></div>' +
+  '</div>';
+
+  // 6. Action Footer
+  html += '<div style="display:flex;gap:8px;margin-top:6px">' +
+    '<button type="button" class="btn btn-primary btn-sm" style="flex:1" onclick="viewPayslip(\'' + esc(empId) + '\')">' +
+      '<i class="fa-solid fa-file-invoice-dollar"></i> พิมพ์สลิปเงินเดือน' +
+    '</button>' +
+    '<button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="closeInspector();switchTab(\'input\');setTimeout(function(){openEditInputModal(\'' + esc(empId) + '\');},200)">' +
+      '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลประจำงวด' +
+    '</button>' +
+  '</div>';
+
+  if (insContent) insContent.innerHTML = html;
+
+  backdrop.classList.add('show');
+  drawer.classList.add('open');
+}
+
+function closeInspector() {
+  var drawer = document.getElementById('inspectorDrawer');
+  var backdrop = document.getElementById('inspectorBackdrop');
+  if (drawer) drawer.classList.remove('open');
+  if (backdrop) backdrop.classList.remove('show');
+}
+
+// Global keyboard escape listener for Inspector Drawer
+if (typeof window !== 'undefined') {
+  window.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' || e.keyCode === 27) {
+      closeInspector();
+    }
+  });
 }
 
 // // 3. MONTHLY INPUT TABLE RENDERER (19 COLUMNS)

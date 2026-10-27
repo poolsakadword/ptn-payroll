@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=9.60">
+  <link rel="stylesheet" href="css/style.css?v=9.70">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -286,14 +286,26 @@
           </div>
           <!-- SYNC DELTA & ANOMALY BANNER -->
           <div id="payrollSyncDeltaBanner" style="display:none;margin-bottom:10px"></div>
-          <!-- FAST BRANCH FILTER SEGMENT -->
-          <div class="branch-filter-bar" id="payrollBranchFilterBar">
-            <span class="branch-filter-label"><i class="fa-solid fa-store" style="color:#2563eb"></i> กรองสาขา:</span>
-            <div class="branch-filter-chips" id="payrollBranchChips">
-              <!-- Rendered dynamically by JS -->
+          <!-- FAST BRANCH FILTER SEGMENT & VIEW SWITCHER -->
+          <div class="branch-filter-bar" id="payrollBranchFilterBar" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span class="branch-filter-label"><i class="fa-solid fa-store" style="color:#2563eb"></i> กรองสาขา:</span>
+              <div class="branch-filter-chips" id="payrollBranchChips">
+                <!-- Rendered dynamically by JS -->
+              </div>
+            </div>
+            <!-- VIEW SWITCHER: TABLE vs CARDS -->
+            <div class="view-switch-btn-group" id="payrollViewSwitcher">
+              <button type="button" class="view-switch-btn active" id="btnViewTable" onclick="setPayrollViewMode('TABLE')" title="มุมมองตารางตรึงคอลัมน์">
+                <i class="fa-solid fa-table-list"></i> ตาราง
+              </button>
+              <button type="button" class="view-switch-btn" id="btnViewCards" onclick="setPayrollViewMode('CARD')" title="มุมมองการ์ดพนักงาน">
+                <i class="fa-solid fa-grip"></i> การ์ด
+              </button>
             </div>
           </div>
-          <div class="table-wrapper">
+          <!-- TABLE VIEW WRAPPER -->
+          <div class="table-wrapper" id="payrollTableViewWrapper">
             <table class="data-table">
               <thead id="payrollTableHead">
                 <tr>
@@ -322,6 +334,8 @@
               <tbody id="payrollTableBody"></tbody>
             </table>
           </div>
+          <!-- CARDS VIEW WRAPPER -->
+          <div class="payroll-cards-grid" id="payrollCardsView" style="display:none"></div>
         </div>
       </div>
 
@@ -6256,7 +6270,25 @@
   <!-- Hidden Monthly Payroll Summary Print Container -->
   <div id="payrollSummaryPrintContainer" style="display:none"></div>
 
-  <script src="js/config.js?v=9.60"></script>
-  <script src="js/app.js?v=9.60"></script>
+  <!-- PHASE 3: SLIDE-OVER INSPECTOR DRAWER & BACKDROP -->
+  <div class="inspector-backdrop" id="inspectorBackdrop" onclick="closeInspector()"></div>
+  <aside class="inspector-drawer" id="inspectorDrawer">
+    <div class="inspector-header">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="ins-avatar" id="insAvatar">ก</div>
+        <div>
+          <div style="font-weight:800;font-size:14px;color:#0f172a;" id="insTitle">ชื่อพนักงาน</div>
+          <div style="font-size:11.5px;color:#64748b;" id="insSub">EMP001 • ตำแหน่ง • สาขา</div>
+        </div>
+      </div>
+      <button type="button" class="ins-close-btn" onclick="closeInspector()" title="ปิดหน้าต่าง (Esc)">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+    <div class="inspector-body" id="insContent"></div>
+  </aside>
+
+  <script src="js/config.js?v=9.70"></script>
+  <script src="js/app.js?v=9.70"></script>
 </body>
 </html>
