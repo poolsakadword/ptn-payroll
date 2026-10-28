@@ -1169,6 +1169,7 @@ function captureInputRecordsSnapshot() {
       absentDays: Number(r.absentDays) || 0,
       leaveDays: Number(r.leaveDays) || 0,
       sickLeaveDays: Number(r.sickLeaveDays) || 0,
+      unpaidSickLeaveDays: Number(r.unpaidSickLeaveDays) || 0,
       lateMinutes: Number(r.lateMinutes) || 0,
       lateDeduct: Number(r.lateDeduct) || 0,
       otHours: Number(r.otHours) || 0,
@@ -1191,7 +1192,7 @@ function computeSyncDelta(beforeSnapshot) {
     var changedFields = {};
     var isNew = !before;
 
-    var fieldsToCheck = ['absentDays', 'leaveDays', 'sickLeaveDays', 'lateMinutes', 'lateDeduct', 'otHours', 'allowance', 'advanceDeduct'];
+    var fieldsToCheck = ['absentDays', 'leaveDays', 'sickLeaveDays', 'unpaidSickLeaveDays', 'lateMinutes', 'lateDeduct', 'otHours', 'allowance', 'advanceDeduct'];
     fieldsToCheck.forEach(function(f) {
       var bVal = before ? (Number(before[f]) || 0) : 0;
       var aVal = Number(after[f]) || 0;
@@ -1503,6 +1504,7 @@ function updateInputKpiDeck(branchList) {
     var absD = Number(i.absentDays) || 0;
     var lvD = Number(i.leaveDays) || 0;
     var skD = Number(i.sickLeaveDays) || 0;
+    var unpSkD = Number(i.unpaidSickLeaveDays) || 0;
     var ltM = Number(i.lateMinutes) || 0;
     var ltDed = Number(i.lateDeduct) || 0;
     var adv = Number(i.advanceDeduct) || 0;
@@ -1515,7 +1517,7 @@ function updateInputKpiDeck(branchList) {
       sumOtPay += otP;
     }
 
-    if (absD > 0 || lvD > 0 || skD > 0 || ltM > 0 || ltDed > 0) {
+    if (absD > 0 || lvD > 0 || skD > 0 || unpSkD > 0 || ltM > 0 || ltDed > 0) {
       countDeduct++;
       sumLateMinutes += ltM;
     }
@@ -1975,15 +1977,26 @@ function openInspector(empId) {
   var absDays = Number(input.absentDays || 0);
   var leaveDays = Number(input.leaveDays || 0);
   var sickDays = Number(input.sickLeaveDays || 0);
+  var unpaidSickDays = Number(input.unpaidSickLeaveDays || 0);
   var lateMins = Number(input.lateMinutes || 0);
   var lateCnt = Number(input.lateCount || 0);
-  var actualWorkDays = Math.max(0, workDays - absDays - leaveDays);
+  var actualWorkDays = Math.max(0, workDays - absDays - leaveDays - unpaidSickDays);
+
+  var sickText = sickDays + ' วัน';
+  if (unpaidSickDays > 0) {
+    if (sickDays > 0) {
+      sickText = sickDays + ' วัน <span style="color:#dc2626;font-weight:700">(+ไม่มีใบ ' + unpaidSickDays + ' วัน)</span>';
+    } else {
+      sickText = unpaidSickDays + ' วัน <span style="color:#dc2626;font-weight:700">(ไม่มีใบแพทย์)</span>';
+    }
+  }
 
   html += '<div class="calc-breakdown-card">' +
     '<div class="calc-breakdown-title" style="color:#0f172a"><i class="fa-solid fa-clock-rotate-left"></i> สรุปเวลาทำงานงวดนี้ (PTN Time)</div>' +
     '<div class="calc-row"><span>วันทำงานจริง (จาก ' + workDays + ' วัน)</span><span class="val font-bold" style="color:#15803d">' + actualWorkDays + ' วัน</span></div>' +
     '<div class="calc-row"><span>ขาดงาน</span><span class="val" style="color:' + (absDays > 0 ? '#dc2626' : 'inherit') + '">' + absDays + ' วัน</span></div>' +
-    '<div class="calc-row"><span>ลากิจ / ลาป่วย</span><span class="val">' + leaveDays + ' วัน / ' + sickDays + ' วัน</span></div>' +
+    '<div class="calc-row"><span>ลากิจ / พักร้อน</span><span class="val">' + leaveDays + ' วัน</span></div>' +
+    '<div class="calc-row"><span>ลาป่วย</span><span class="val">' + sickText + '</span></div>' +
     '<div class="calc-row"><span>มาสายสะสม</span><span class="val" style="color:' + (lateMins > 0 ? '#d97706' : 'inherit') + '">' + lateMins + ' นาที (' + lateCnt + ' ครั้ง)</span></div>' +
   '</div>';
 
@@ -2057,7 +2070,7 @@ function openInputFastEditDrawer(empId) {
       if (empBranch !== bFilter) return false;
     }
     if (qFilter === 'OT' && !((Number(i.otHours) || 0) > 0)) return false;
-    if (qFilter === 'DEDUCT' && !((Number(i.absentDays) || 0) > 0 || (Number(i.leaveDays) || 0) > 0 || (Number(i.sickLeaveDays) || 0) > 0 || (Number(i.lateMinutes) || 0) > 0 || (Number(i.lateDeduct) || 0) > 0)) return false;
+    if (qFilter === 'DEDUCT' && !((Number(i.absentDays) || 0) > 0 || (Number(i.leaveDays) || 0) > 0 || (Number(i.sickLeaveDays) || 0) > 0 || (Number(i.unpaidSickLeaveDays) || 0) > 0 || (Number(i.lateMinutes) || 0) > 0 || (Number(i.lateDeduct) || 0) > 0)) return false;
     if (qFilter === 'ADVANCE' && !((Number(i.advanceDeduct) || 0) > 0)) return false;
     if (qFilter === 'CHANGES') {
       var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
@@ -2102,9 +2115,10 @@ function openInputFastEditDrawer(empId) {
   var absDays = Number(rec.absentDays || 0);
   var leaveDays = Number(rec.leaveDays || 0);
   var sickDays = Number(rec.sickLeaveDays || 0);
+  var unpaidSickDays = Number(rec.unpaidSickLeaveDays || 0);
   var lateMins = Number(rec.lateMinutes || 0);
   var lateCnt = Number(rec.lateCount || 0);
-  var actualWorkDays = Math.max(0, workDays - absDays - leaveDays);
+  var actualWorkDays = Math.max(0, workDays - absDays - leaveDays - unpaidSickDays);
 
   var baseSal = Number(rec.baseSalary) || 0;
   var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
@@ -2123,7 +2137,7 @@ function openInputFastEditDrawer(empId) {
     '<div class="ife-grid-3">' +
       '<div class="ife-field"><label>วันทำงานจริง</label><div class="font-mono font-bold" style="color:#15803d;font-size:13px">' + actualWorkDays + ' วัน</div></div>' +
       '<div class="ife-field"><label>ขาดงาน</label><div class="font-mono font-bold" style="color:' + (absDays > 0 ? '#dc2626' : '#64748b') + ';font-size:13px">' + absDays + ' วัน</div></div>' +
-      '<div class="ife-field"><label>ลากิจ/ป่วย</label><div class="font-mono" style="font-size:13px">' + leaveDays + ' / ' + sickDays + ' วัน</div></div>' +
+      '<div class="ife-field"><label>ลากิจ/ป่วย</label><div class="font-mono" style="font-size:12px">' + leaveDays + ' / ' + sickDays + (unpaidSickDays > 0 ? (' <span style="color:#dc2626;font-weight:700">(ไม่มีใบ ' + unpaidSickDays + ' วัน)</span>') : '') + ' วัน</div></div>' +
     '</div>' +
     '<div class="ife-grid-2" style="margin-top:6px">' +
       '<div class="ife-field"><label>มาสายสะสม</label><div class="font-mono font-bold" style="color:' + (lateMins > 0 ? '#d97706' : '#64748b') + ';font-size:13px">' + lateMins + ' นาที (' + lateCnt + ' ครั้ง)</div></div>' +
@@ -2157,18 +2171,24 @@ function openInputFastEditDrawer(empId) {
 
     '<div class="ife-section" style="margin-top:12px">' +
       '<div class="ife-section-title" style="color:#b45309"><i class="fa-solid fa-calendar-check"></i> เวลาทำงาน ขาด/ลา/มาสาย & OT</div>' +
-      '<div class="ife-grid-3">' +
+      '<div class="ife-grid-2">' +
         '<div class="ife-field">' +
           '<label>ขาดงาน (วัน)</label>' +
           '<input type="number" step="any" id="ifeAbsentDays" class="ife-input font-mono" value="' + absDays + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
         '</div>' +
         '<div class="ife-field">' +
-          '<label>ลากิจ (วัน)</label>' +
+          '<label>ลากิจ / พักร้อน (วัน)</label>' +
           '<input type="number" step="any" id="ifeLeaveDays" class="ife-input font-mono" value="' + leaveDays + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
         '</div>' +
+      '</div>' +
+      '<div class="ife-grid-2" style="margin-top:8px">' +
         '<div class="ife-field">' +
-          '<label>ลาป่วย (วัน)</label>' +
-          '<input type="number" step="any" id="ifeSickLeaveDays" class="ife-input font-mono" value="' + sickDays + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
+          '<label style="color:#15803d;font-weight:700"><i class="fa-solid fa-file-medical"></i> ป่วย (มีใบแพทย์)</label>' +
+          '<input type="number" step="any" id="ifeSickLeaveDays" class="ife-input font-mono" value="' + sickDays + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + ' title="สิทธิ์ฟรีตามโควตา 10 วันต่อปี">' +
+        '</div>' +
+        '<div class="ife-field">' +
+          '<label style="color:#dc2626;font-weight:700"><i class="fa-solid fa-bed"></i> ป่วย (ไม่มีใบแพทย์)</label>' +
+          '<input type="number" step="any" id="ifeUnpaidSickLeaveDays" class="ife-input font-mono" value="' + unpaidSickDays + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + ' style="border-color:#fca5a5;background:#fff5f5" title="หักเงินเดือนตามจริง (1.0x เท่าค่าจ้างรายวัน)">' +
         '</div>' +
       '</div>' +
       '<div class="ife-grid-3" style="margin-top:8px">' +
@@ -2296,7 +2316,14 @@ function updateIfeLiveCalculation() {
   var bonus = Number(document.getElementById('ifeBonus') ? document.getElementById('ifeBonus').value : 0) || 0;
 
   var absentDays = Number(document.getElementById('ifeAbsentDays') ? document.getElementById('ifeAbsentDays').value : 0) || 0;
-  var leaveDeduct = Math.round(absentDays * dailyRate * 100) / 100;
+  var leaveDays = Number(document.getElementById('ifeLeaveDays') ? document.getElementById('ifeLeaveDays').value : 0) || 0;
+  var sickLeaveDays = Number(document.getElementById('ifeSickLeaveDays') ? document.getElementById('ifeSickLeaveDays').value : 0) || 0;
+  var unpaidSickDays = Number(document.getElementById('ifeUnpaidSickLeaveDays') ? document.getElementById('ifeUnpaidSickLeaveDays').value : 0) || 0;
+
+  var absentDeduct = Math.round(absentDays * dailyRate * 1.5 * 100) / 100;
+  var businessLeaveDeduct = Math.round(leaveDays * dailyRate * 100) / 100;
+  var unpaidSickDeduct = Math.round(unpaidSickDays * dailyRate * 100) / 100;
+  var leaveDeduct = absentDeduct + businessLeaveDeduct + unpaidSickDeduct;
   var lateDeduct = Number(document.getElementById('ifeLateDeduct') ? document.getElementById('ifeLateDeduct').value : 0) || 0;
 
   var sso = Number(document.getElementById('ifeSso') ? document.getElementById('ifeSso').value : 0) || 0;
@@ -2340,7 +2367,7 @@ function saveInputFastEditDrawer(empId, callback) {
     absentDays: Number(document.getElementById('ifeAbsentDays').value) || 0,
     leaveDays: Number(document.getElementById('ifeLeaveDays').value) || 0,
     sickLeaveDays: Number(document.getElementById('ifeSickLeaveDays').value) || 0,
-    unpaidSickLeaveDays: Number(origRec.unpaidSickLeaveDays || 0),
+    unpaidSickLeaveDays: Number(document.getElementById('ifeUnpaidSickLeaveDays') ? document.getElementById('ifeUnpaidSickLeaveDays').value : (origRec.unpaidSickLeaveDays || 0)) || 0,
     lateDeduct: Number(document.getElementById('ifeLateDeduct').value) || 0,
     lateMinutes: Number(origRec.lateMinutes || 0),
     lateCount: Number(origRec.lateCount || 0),
@@ -2464,7 +2491,7 @@ function renderInputTable() {
   var list = branchList.filter(function(i) {
     if (qFilter === 'ALL') return true;
     if (qFilter === 'OT') return (Number(i.otHours) || 0) > 0;
-    if (qFilter === 'DEDUCT') return (Number(i.absentDays) || 0) > 0 || (Number(i.leaveDays) || 0) > 0 || (Number(i.sickLeaveDays) || 0) > 0 || (Number(i.lateMinutes) || 0) > 0 || (Number(i.lateDeduct) || 0) > 0;
+    if (qFilter === 'DEDUCT') return (Number(i.absentDays) || 0) > 0 || (Number(i.leaveDays) || 0) > 0 || (Number(i.sickLeaveDays) || 0) > 0 || (Number(i.unpaidSickLeaveDays) || 0) > 0 || (Number(i.lateMinutes) || 0) > 0 || (Number(i.lateDeduct) || 0) > 0;
     if (qFilter === 'ADVANCE') return (Number(i.advanceDeduct) || 0) > 0;
     if (qFilter === 'CHANGES') {
       var emp = (State.employees || []).find(function(e) { return e.empId === i.empId; });
@@ -2503,9 +2530,22 @@ function renderInputTable() {
     var absClass = absDelta ? 'text-right font-mono text-red font-bold cell-delta-updated' : 'text-right font-mono text-red font-bold';
     var absTag = absDelta ? ' <span class="delta-tag" title="เดิม: ' + absDelta.before + ' -> ใหม่: ' + absDelta.after + '">ใหม่</span>' : '';
 
-    var sickDelta = delta && delta.changedFields && delta.changedFields.sickLeaveDays;
+    var sickDelta = delta && delta.changedFields && (delta.changedFields.sickLeaveDays || delta.changedFields.unpaidSickLeaveDays);
     var sickClass = sickDelta ? 'text-right font-mono text-red cell-delta-updated' : 'text-right font-mono text-red';
-    var sickTag = sickDelta ? ' <span class="delta-tag" title="เดิม: ' + sickDelta.before + ' -> ใหม่: ' + sickDelta.after + '">ใหม่</span>' : '';
+    var sickTag = sickDelta ? ' <span class="delta-tag">ใหม่</span>' : '';
+
+    var sickWithCert = Number(i.sickLeaveDays) || 0;
+    var sickNoCert = Number(i.unpaidSickLeaveDays) || 0;
+    var sickDisplayHtml = '';
+    if (sickNoCert > 0) {
+      if (sickWithCert > 0) {
+        sickDisplayHtml = (Math.round(sickWithCert * 100) / 100) + ' <span style="font-size:10px;color:#dc2626;font-weight:700;background:#fef2f2;border:1px solid #fecaca;padding:0px 4px;border-radius:3px;display:inline-block;white-space:nowrap;margin-top:2px" title="มีใบแพทย์ ' + sickWithCert + ' วัน + ไม่มีใบแพทย์ ' + sickNoCert + ' วัน (หักเงิน)">+' + sickNoCert + ' (ไม่มีใบ)</span>';
+      } else {
+        sickDisplayHtml = (Math.round(sickNoCert * 100) / 100) + ' <span style="font-size:10px;color:#dc2626;font-weight:700;background:#fef2f2;border:1px solid #fecaca;padding:0px 4px;border-radius:3px;display:inline-block;white-space:nowrap;margin-top:2px" title="ลาป่วยไม่มีใบรับรองแพทย์ ' + sickNoCert + ' วัน (หักเงินตามจริง)">ไม่มีใบแพทย์</span>';
+      }
+    } else {
+      sickDisplayHtml = String(Math.round(sickWithCert * 100) / 100);
+    }
 
     var otDelta = delta && delta.changedFields && delta.changedFields.otHours;
     var otClass = otDelta ? 'text-right font-mono cell-delta-updated' : 'text-right font-mono';
@@ -2534,7 +2574,7 @@ function renderInputTable() {
       '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
       '<td class="' + absClass + '">' + (Math.round((Number(i.absentDays) || 0) * 100) / 100) + absTag + '</td>' +
       '<td class="text-right font-mono">' + (Math.round((Number(i.leaveDays) || 0) * 100) / 100) + '</td>' +
-      '<td class="' + sickClass + '">' + (Math.round((Number(i.sickLeaveDays) || 0) * 100) / 100) + sickTag + '</td>' +
+      '<td class="' + sickClass + '">' + sickDisplayHtml + sickTag + '</td>' +
       (function() {
         var lateDed = Number(i.lateDeduct) || 0;
         var lateMins = Number(i.lateMinutes) || 0;
