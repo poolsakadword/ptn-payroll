@@ -3634,6 +3634,7 @@ async function handleAction(db, action, params) {
           let morningLateMins = 0;
           let overBreakMins = 0;
           let curOtHrs = 0;
+          let isMissingBreak = false;
           const holidayInfo = holidayMap[dateStr];
 
           // Check approved leaves first
@@ -3761,7 +3762,6 @@ async function handleAction(db, action, params) {
                 statusColor = '#16a34a';
               }
 
-              let isMissingBreak = false;
               if (!isBreakExempt && log && log.clock_in && log.clock_out && !log.break_out) {
                 isMissingBreak = true;
                 missingBreakOccurrences++;
@@ -4509,10 +4509,42 @@ async function handleAction(db, action, params) {
       });
       const holidaysQuery = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
 
+      // Query approved leave requests in date range
+      let lvSql = `
+        SELECT 
+          lr.id, lr.emp_id, lr.leave_type, lr.start_date, lr.end_date,
+          COALESCE(lr.days_count, 1) as days_count,
+          COALESCE(lr.time_slot, 'FULL') as time_slot,
+          lr.reason, lr.status, lr.medical_cert_url,
+          e.full_name, e.nickname, e.department, e.position
+        FROM leave_requests lr
+        LEFT JOIN employees e ON lr.emp_id = e.emp_id
+        WHERE UPPER(TRIM(lr.status)) = 'APPROVED'
+          AND ((substr(lr.start_date, 1, 10) BETWEEN ? AND ?) 
+            OR (substr(lr.end_date, 1, 10) BETWEEN ? AND ?) 
+            OR (substr(lr.start_date, 1, 10) <= ? AND substr(lr.end_date, 1, 10) >= ?))
+      `;
+      const lvBinds = [startDate, endDate, startDate, endDate, startDate, endDate];
+      if (branchFilter && branchFilter !== 'ALL') {
+        lvSql += ` AND (e.branch_id = ?)`;
+        lvBinds.push(branchFilter);
+      }
+      if (empFilter && empFilter !== 'ALL') {
+        lvSql += ` AND lr.emp_id = ?`;
+        lvBinds.push(empFilter);
+      }
+      lvSql += ` ORDER BY lr.emp_id ASC, lr.start_date ASC`;
+
+      const leavesQuery = await db.prepare(lvSql).bind(...lvBinds).all().catch(e => {
+        console.error('getAttendanceLogsRange leaves error:', e);
+        return { results: [] };
+      });
+
       return {
         success: !query.error,
         error: query.error || undefined,
         logs: query.results || [],
+        leaves: leavesQuery.results || [],
         holidays: holidaysQuery.results || [],
         startDate,
         endDate,
