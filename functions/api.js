@@ -157,6 +157,7 @@ async function ensureBranchTables(db) {
     await db.prepare("ALTER TABLE employees ADD COLUMN branch_id TEXT DEFAULT 'B01'").run().catch(() => {});
     await db.prepare("ALTER TABLE employees ADD COLUMN allow_all_branches TEXT DEFAULT 'false'").run().catch(() => {});
     await db.prepare("ALTER TABLE employees ADD COLUMN diligence_allowance REAL").run().catch(() => {});
+    await db.prepare("ALTER TABLE employees ADD COLUMN is_break_exempt TEXT DEFAULT 'false'").run().catch(() => {});
     await db.prepare("ALTER TABLE time_logs ADD COLUMN branch_id TEXT").run().catch(() => {});
     await db.prepare("ALTER TABLE time_logs ADD COLUMN branch_name TEXT").run().catch(() => {});
     await db.prepare("UPDATE employees SET branch_id = 'B01' WHERE branch_id IS NULL OR branch_id = ''").run().catch(() => {});
@@ -492,6 +493,7 @@ async function ensureGlobalSchemas(db) {
     await db.prepare('ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT "true"').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT "false"').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN is_attendance_exempt TEXT DEFAULT "false"').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN is_break_exempt TEXT DEFAULT "false"').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN diligence_allowance REAL').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN late_minutes INTEGER DEFAULT 0').run().catch(() => {});
@@ -1273,6 +1275,7 @@ async function handleAction(db, action, params) {
         isOtEligible: (e.is_ot_eligible !== 'false' && e.is_ot_eligible !== false),
         isUndertimeExempt: (e.is_undertime_exempt === 'true' || e.is_undertime_exempt === true || e.is_undertime_exempt === 1 || e.is_undertime_exempt === '1'),
         isAttendanceExempt: (e.is_attendance_exempt === 'true' || e.is_attendance_exempt === true || e.is_attendance_exempt === 1 || e.is_attendance_exempt === '1'),
+        isBreakExempt: (e.is_break_exempt === 'true' || e.is_break_exempt === true || e.is_break_exempt === 1 || e.is_break_exempt === '1'),
         baseSalary: Number(e.base_salary) || 0,
         bankName: e.bank_name || '',
         bankAccount: e.bank_account || '',
@@ -1425,6 +1428,10 @@ async function handleAction(db, action, params) {
         const row = (settingsRows.results || []).find(r => r.key === k);
         return row ? (row.value !== 'false') : def;
       };
+      const getSetStr = (k, def) => {
+        const row = (settingsRows.results || []).find(r => r.key === k);
+        return (row && row.value !== undefined && row.value !== null && row.value !== '') ? String(row.value) : def;
+      };
 
       const payrollDefaults = {
         defaultOtRate: getSetNum('DefaultOtRate', 40),
@@ -1438,7 +1445,8 @@ async function handleAction(db, action, params) {
         diligenceLateGraceMins: getSetNum('DiligenceLateGraceMins', 2),
         diligenceLateMaxCount: getSetNum('DiligenceLateMaxCount', 1),
         autoDiligenceEnabled: getSetBool('AutoDiligenceEnabled', true),
-        countOverbreakAsLate: getSetBool('CountOverbreakAsLate', true)
+        countOverbreakAsLate: getSetBool('CountOverbreakAsLate', true),
+        missingBreakPenaltyMode: getSetStr('MissingBreakPenaltyMode', 'ALERT_ONLY')
       };
 
       return {
@@ -1534,6 +1542,7 @@ async function handleAction(db, action, params) {
       if (d.diligenceLateMaxCount !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("DiligenceLateMaxCount", ?)').bind(String(d.diligenceLateMaxCount)).run();
       if (d.autoDiligenceEnabled !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("AutoDiligenceEnabled", ?)').bind(String(d.autoDiligenceEnabled)).run();
       if (d.countOverbreakAsLate !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("CountOverbreakAsLate", ?)').bind(String(d.countOverbreakAsLate)).run();
+      if (d.missingBreakPenaltyMode !== undefined) await db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES ("MissingBreakPenaltyMode", ?)').bind(String(d.missingBreakPenaltyMode)).run();
 
       await calculateAndSavePayroll(db, period);
       await logSystemActivity(db, callerUser || 'Admin', 'SETTINGS_UPDATE', 'อัปเดตค่านโยบายและค่าเริ่มต้นการคำนวณเงินเดือน');
@@ -1648,6 +1657,7 @@ async function handleAction(db, action, params) {
       const isOtEligibleVal = (emp.isOtEligible === false || emp.isOtEligible === 'false') ? 'false' : 'true';
       const isUndertimeExemptVal = (emp.isUndertimeExempt === true || emp.isUndertimeExempt === 'true' || emp.isUndertimeExempt === 1 || emp.isUndertimeExempt === '1') ? 'true' : 'false';
       const isAttendanceExemptVal = (emp.isAttendanceExempt === true || emp.isAttendanceExempt === 'true' || emp.isAttendanceExempt === 1 || emp.isAttendanceExempt === '1') ? 'true' : 'false';
+      const isBreakExemptVal = (emp.isBreakExempt === true || emp.isBreakExempt === 'true' || emp.isBreakExempt === 1 || emp.isBreakExempt === '1') ? 'true' : 'false';
       const diligenceAllowanceVal = (emp.diligenceAllowance !== undefined && emp.diligenceAllowance !== null && emp.diligenceAllowance !== '' && !isNaN(Number(emp.diligenceAllowance)))
         ? Number(emp.diligenceAllowance)
         : null;
@@ -1655,8 +1665,8 @@ async function handleAction(db, action, params) {
 
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -1671,7 +1681,8 @@ async function handleAction(db, action, params) {
         isUndertimeExemptVal,
         diligenceAllowanceVal,
         isAttendanceExemptVal,
-        cleanResignDate
+        cleanResignDate,
+        isBreakExemptVal
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period and period is not locked
@@ -2400,12 +2411,17 @@ async function handleAction(db, action, params) {
         const row = settingsList.find(r => r.key === k);
         return (row && row.value !== undefined && row.value !== null && !isNaN(Number(row.value))) ? Number(row.value) : def;
       };
+      const getSetValStr = (k, def) => {
+        const row = settingsList.find(r => r.key === k);
+        return (row && row.value !== undefined && row.value !== null && row.value !== '') ? String(row.value) : def;
+      };
       const fallbackOtRate = getSetVal('DefaultOtRate', 40);
       const diligenceAllowance = getSetVal('DiligenceAllowance', 1000);
       const diligenceLateGraceMins = getSetVal('DiligenceLateGraceMins', 2);
       const diligenceLateMaxCount = getSetVal('DiligenceLateMaxCount', 1);
       const autoDiligenceRow = settingsList.find(r => r.key === 'AutoDiligenceEnabled');
       const autoDiligenceEnabled = autoDiligenceRow ? (autoDiligenceRow.value !== 'false') : true;
+      const missingBreakPenaltyMode = getSetValStr('MissingBreakPenaltyMode', 'ALERT_ONLY');
 
       let syncedCount = 0;
       let nextNo = 0;
@@ -2698,6 +2714,27 @@ async function handleAction(db, action, params) {
             } else if (lateOccurrences > diligenceLateMaxCount) {
               empDisqualifyReasons.push(`มาสาย ${lateOccurrences} ครั้ง (เกินโควตา ${diligenceLateMaxCount} ครั้ง)`);
             }
+
+            // Check missing break scans for non-exempt staff
+            const isEmpBreakExempt = (emp.is_break_exempt === 'true' || emp.is_break_exempt === true || emp.is_break_exempt === 1 || emp.is_break_exempt === '1') ||
+                                    (emp.is_attendance_exempt === 'true' || emp.is_attendance_exempt === true || emp.is_attendance_exempt === 1 || emp.is_attendance_exempt === '1');
+            let empMissingBreakCount = 0;
+            if (!isEmpBreakExempt) {
+              for (const l of empLogs) {
+                const logDate = new Date(l.date + 'T00:00:00Z');
+                if (logDate.getUTCDay() === 0 || holidayDatesSet.has(l.date)) continue;
+                if (l.clock_in && l.clock_out && !l.break_out) {
+                  empMissingBreakCount++;
+                }
+              }
+            }
+
+            if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY' && empMissingBreakCount > 0) {
+              empDisqualifyReasons.push(`ไม่สแกนออกพัก ${empMissingBreakCount} ครั้ง`);
+            } else if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY_EXCEED' && empMissingBreakCount > 1) {
+              empDisqualifyReasons.push(`ไม่สแกนออกพัก ${empMissingBreakCount} ครั้ง (เกินเกณฑ์ 1 ครั้ง)`);
+            }
+            // In 'ALERT_ONLY' mode (Option 1): alert only, diligence allowance is NOT disqualified
           }
 
           const targetAllowance = (emp.diligence_allowance !== null && emp.diligence_allowance !== undefined && !isNaN(Number(emp.diligence_allowance)) && Number(emp.diligence_allowance) > 0)
@@ -3459,7 +3496,7 @@ async function handleAction(db, action, params) {
       for (const b of branches) branchMap[b.branch_id] = b;
 
       // Load Employees (Include all active working staff: Active, Probation, and mid-period Resigned)
-      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status, join_date, resign_date FROM employees WHERE 1=1";
+      let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status, join_date, resign_date, is_attendance_exempt, is_break_exempt FROM employees WHERE 1=1";
       const empBinds = [];
       if (branchId && branchId !== 'ALL') {
         empSql += " AND branch_id = ?";
@@ -3489,7 +3526,7 @@ async function handleAction(db, action, params) {
       const allOts = otQuery.results || [];
 
       // Load Settings for Diligence Allowance
-      const setQuery = await db.prepare("SELECT key, value FROM settings WHERE key IN ('DiligenceAllowance', 'DiligenceLateGraceMins', 'DiligenceLateMaxCount', 'AutoDiligenceEnabled', 'CountOverbreakAsLate')").all().catch(() => ({ results: [] }));
+      const setQuery = await db.prepare("SELECT key, value FROM settings WHERE key IN ('DiligenceAllowance', 'DiligenceLateGraceMins', 'DiligenceLateMaxCount', 'AutoDiligenceEnabled', 'CountOverbreakAsLate', 'MissingBreakPenaltyMode')").all().catch(() => ({ results: [] }));
       const setMap = {};
       for (const r of (setQuery.results || [])) setMap[r.key] = r.value;
       const fallbackAllowance = !isNaN(Number(setMap['DiligenceAllowance'])) ? Number(setMap['DiligenceAllowance']) : 1000;
@@ -3497,6 +3534,7 @@ async function handleAction(db, action, params) {
       const maxLateCount = !isNaN(Number(setMap['DiligenceLateMaxCount'])) ? Number(setMap['DiligenceLateMaxCount']) : 1;
       const autoDiligenceEnabled = setMap['AutoDiligenceEnabled'] !== 'false';
       const countOverbreakAsLate = setMap['CountOverbreakAsLate'] !== undefined ? (setMap['CountOverbreakAsLate'] !== 'false' && setMap['CountOverbreakAsLate'] !== '0') : true;
+      const missingBreakPenaltyMode = setMap['MissingBreakPenaltyMode'] || 'ALERT_ONLY';
 
       // Group logs, leaves, and ots by emp_id
       const logsByEmp = {};
@@ -3580,6 +3618,9 @@ async function handleAction(db, action, params) {
         let absentDays = 0;
         let absentTimes = 0;
         let currentlyAbsentSequence = false;
+        let missingBreakOccurrences = 0;
+        const isBreakExempt = (emp && (emp.is_break_exempt === 'true' || emp.is_break_exempt === true || emp.is_break_exempt === 1 || emp.is_break_exempt === '1')) ||
+                              (emp && (emp.is_attendance_exempt === 'true' || emp.is_attendance_exempt === true || emp.is_attendance_exempt === 1 || emp.is_attendance_exempt === '1'));
 
         for (const dateStr of workingDates) {
           const log = empLogs[dateStr];
@@ -3720,6 +3761,16 @@ async function handleAction(db, action, params) {
                 statusColor = '#16a34a';
               }
 
+              let isMissingBreak = false;
+              if (!isBreakExempt && log && log.clock_in && log.clock_out && !log.break_out) {
+                isMissingBreak = true;
+                missingBreakOccurrences++;
+                statusText += ' [⚠️ ไม่สแกนพัก]';
+                if (statusColor === '#16a34a') {
+                  statusColor = '#d97706';
+                }
+              }
+
               if (isOtEligible && Number(log.ot_hours) > 0) {
                 curOtHrs = Number(log.ot_hours);
                 const alreadyInOtReq = empOts.some(o => o.date === dateStr);
@@ -3829,6 +3880,8 @@ async function handleAction(db, action, params) {
             dayOfWeek: new Date(dateStr + 'T00:00:00Z').toLocaleDateString('th-TH', { weekday: 'short' }),
             clockIn: (log && log.clock_in) ? log.clock_in : '-',
             clockOut: (log && log.clock_out) ? log.clock_out : '-',
+            breakOut: (log && log.break_out) ? log.break_out : '-',
+            breakIn: (log && log.break_in) ? log.break_in : '-',
             morningLateMinutes: morningLateMins,
             overbreakMinutes: overBreakMins,
             lateMinutes: curLateMins,
@@ -3839,6 +3892,8 @@ async function handleAction(db, action, params) {
             isLeave,
             isAbsent,
             isHoliday,
+            missingBreak: isMissingBreak,
+            isBreakExempt,
             holidayName: holidayInfo ? holidayInfo.holiday_name : '',
             remark: (log && log.remark) ? log.remark : ''
           });
@@ -3936,6 +3991,12 @@ async function handleAction(db, action, params) {
             }
           }
 
+          if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY' && missingBreakOccurrences > 0) {
+            disqualifyReasons.push(`ไม่สแกนออกพัก ${missingBreakOccurrences} ครั้ง (ผิดระเบียบการสแกนพัก)`);
+          } else if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY_EXCEED' && missingBreakOccurrences > 1) {
+            disqualifyReasons.push(`ไม่สแกนออกพัก ${missingBreakOccurrences} ครั้ง (เกินโควตา 1 ครั้ง)`);
+          }
+
           if (disqualifyReasons.length > 0) {
             isDiligenceQualified = false;
           }
@@ -3966,6 +4027,8 @@ async function handleAction(db, action, params) {
           lateTimes,
           lateMinutes,
           otHours: Math.round(otHours * 100) / 100,
+          missingBreakCount: missingBreakOccurrences,
+          isBreakExempt: isBreakExempt,
           isDiligenceQualified,
           diligenceAmount: isDiligenceQualified ? targetAllowance : 0,
           diligenceDisqualifyReason: disqualifyReasons.join(', '),
@@ -6046,6 +6109,7 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
         await db.prepare("ALTER TABLE employees ADD COLUMN is_ot_eligible TEXT DEFAULT 'true'").run().catch(() => {});
         await db.prepare("ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT 'false'").run().catch(() => {});
         await db.prepare("ALTER TABLE employees ADD COLUMN is_attendance_exempt TEXT DEFAULT 'false'").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN is_break_exempt TEXT DEFAULT 'false'").run().catch(() => {});
 
         if (!opts.selectiveMode) {
           await db.prepare('DELETE FROM employees').run().catch(() => {});
@@ -6055,8 +6119,8 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
           if (e.emp_id && e.full_name) {
             stmts.push(db.prepare(`
               INSERT OR REPLACE INTO employees 
-              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, is_attendance_exempt)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, is_attendance_exempt, is_break_exempt)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               e.emp_id, e.full_name, e.nickname || '', e.citizen_id || '', e.phone || '', e.address || '',
               e.department || '', e.position || '', Number(e.base_salary) || 0,
@@ -6074,7 +6138,8 @@ ${canViewSalary ? `- ยอดการเงินงวดนี้: เงิ
               String(e.allow_all_branches || 'false'),
               String(e.is_ot_eligible !== undefined && e.is_ot_eligible !== null ? e.is_ot_eligible : 'true'),
               String(e.is_undertime_exempt !== undefined && e.is_undertime_exempt !== null ? e.is_undertime_exempt : 'false'),
-              String(e.is_attendance_exempt !== undefined && e.is_attendance_exempt !== null ? e.is_attendance_exempt : 'false')
+              String(e.is_attendance_exempt !== undefined && e.is_attendance_exempt !== null ? e.is_attendance_exempt : 'false'),
+              String(e.is_break_exempt !== undefined && e.is_break_exempt !== null ? e.is_break_exempt : 'false')
             ));
           }
         }

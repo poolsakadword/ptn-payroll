@@ -416,7 +416,8 @@ var State = {
     diligenceLateGraceMins: 2,
     diligenceLateMaxCount: 1,
     autoDiligenceEnabled: true,
-    countOverbreakAsLate: true
+    countOverbreakAsLate: true,
+    missingBreakPenaltyMode: 'ALERT_ONLY'
   },
   annualSickMap: {},
   companyHolidays: []
@@ -2105,8 +2106,15 @@ function openInputFastEditDrawer(empId) {
   var ifeContent = document.getElementById('ifeContent');
   var ifeFooter = document.getElementById('ifeFooter');
 
+  var exemptBadges = '';
+  if (emp.isBreakExempt === true || emp.isBreakExempt === 'true') {
+    exemptBadges += ' <span style="font-size:11px;font-weight:700;color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;padding:1px 6px;border-radius:4px"><i class="fa-solid fa-mug-hot"></i> ไม่ต้องสแกนพัก</span>';
+  }
+  if (emp.isAttendanceExempt === true || emp.isAttendanceExempt === 'true') {
+    exemptBadges += ' <span style="font-size:11px;font-weight:700;color:#1e40af;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px"><i class="fa-solid fa-crown"></i> ยกเว้นลงเวลา</span>';
+  }
   if (ifeAvatar) ifeAvatar.textContent = initial;
-  if (ifeTitle) ifeTitle.innerHTML = esc(fullName) + (nick ? ' <span style="font-size:12px;font-weight:700;color:#15803d;background:#dcfce7;border:1px solid #86efac;padding:1px 6px;border-radius:4px">(' + esc(nick) + ')</span>' : '');
+  if (ifeTitle) ifeTitle.innerHTML = esc(fullName) + (nick ? ' <span style="font-size:12px;font-weight:700;color:#15803d;background:#dcfce7;border:1px solid #86efac;padding:1px 6px;border-radius:4px">(' + esc(nick) + ')</span>' : '') + exemptBadges;
   if (ifeSub) ifeSub.textContent = empId + ' • ' + (emp.position || 'พนักงาน') + ' • ' + bName;
 
   var conflictInfo = getEmployeeConflictInfo(empId, rec);
@@ -2948,6 +2956,9 @@ function renderEmployeesTable() {
     var branchNameDisplay = branchObj ? branchObj.branch_name : (e.branchId === 'B02' ? 'สาขา 2' : (e.branchId === 'B03' ? 'สาขา 3' : (e.branchId === 'B04' ? 'สาขา 4' : 'สำนักงานใหญ่')));
     var roamingText = e.allowAllBranches ? ' <span style="color:#0284c7;font-size:10px;font-weight:700" title="ลงเวลาได้ทุกสาขา">(ทุกสาขา)</span>' : '';
     var branchBadgeHtml = '<div style="font-size:11px;color:#0369a1;font-weight:600;margin-top:2px"><i class="fa-solid fa-store" style="font-size:10px;margin-right:2px"></i> ' + esc(branchNameDisplay) + roamingText + '</div>';
+    var breakExemptTag = (e.isBreakExempt === true || e.isBreakExempt === 'true') ? '<span class="period-pill" style="background:#f0fdf4;color:#166534;border-color:#bbf7d0;font-size:10px;padding:1px 5px" title="ยกเว้นการสแกนพักเที่ยง/บ่าย"><i class="fa-solid fa-mug-hot"></i> ไม่ต้องสแกนพัก</span>' : '';
+    var attExemptTag = (e.isAttendanceExempt === true || e.isAttendanceExempt === 'true') ? '<span class="period-pill" style="background:#eff6ff;color:#1e40af;border-color:#bfdbfe;font-size:10px;padding:1px 5px" title="ผู้บริหาร/ยกเว้นลงเวลา"><i class="fa-solid fa-crown"></i> ยกเว้นลงเวลา</span>' : '';
+    var policyBadgesHtml = (breakExemptTag || attExemptTag) ? ('<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">' + breakExemptTag + attExemptTag + '</div>') : '';
 
     // 1. Render Table Row
     if (isGeneralUser || !canViewSalary) {
@@ -2962,7 +2973,7 @@ function renderEmployeesTable() {
             '</div>' +
           '</div>' +
         '</td>' +
-        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div>' + branchBadgeHtml + '</td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div>' + branchBadgeHtml + policyBadgesHtml + '</td>' +
         '<td class="text-center">' + stBadge + '</td>' +
         '<td>' + esc(birthText) + '</td>' +
         '<td class="font-mono">' + esc(e.phone || '-') + '</td>' +
@@ -2985,7 +2996,7 @@ function renderEmployeesTable() {
             '</div>' +
           '</div>' +
         '</td>' +
-        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div>' + branchBadgeHtml + '</td>' +
+        '<td><span class="period-pill">' + esc(e.department || '-') + '</span><div style="font-size:11px;color:var(--text-muted);margin-top:2px">' + esc(e.position || '-') + '</div>' + branchBadgeHtml + policyBadgesHtml + '</td>' +
         '<td class="text-center">' + stBadge + '</td>' +
         '<td class="text-right font-mono font-bold">' + fmt(e.baseSalary) + '</td>' +
         '<td class="text-right font-mono">' + (Number(e.pfRate) > 0 ? (((Number(e.pfRate) * 100).toFixed(0)) + '%') : '<span class="text-muted" style="font-size:11px">0%</span>') + '</td>' +
@@ -3025,6 +3036,7 @@ function renderEmployeesTable() {
           '<span style="color:#64748b;font-size:10.5px;display:block">แผนก / ตำแหน่ง</span>' +
           '<span style="font-weight:700;color:#0f172a">' + esc(e.department || '-') + '</span>' +
           '<span style="color:#64748b;display:block;font-size:10.5px">' + esc(e.position || '-') + '</span>' +
+          policyBadgesHtml +
         '</div>' +
         '<div>' +
           '<span style="color:#64748b;font-size:10.5px;display:block">เงินเดือนฐาน &amp; PF</span>' +
@@ -3990,6 +4002,7 @@ function renderCompanySettings() {
   if (document.getElementById('cfgDiligenceLateMaxCount')) document.getElementById('cfgDiligenceLateMaxCount').value = pd.diligenceLateMaxCount !== undefined ? pd.diligenceLateMaxCount : 1;
   if (document.getElementById('cfgAutoDiligenceEnabled')) document.getElementById('cfgAutoDiligenceEnabled').checked = pd.autoDiligenceEnabled !== false;
   if (document.getElementById('cfgCountOverbreakAsLate')) document.getElementById('cfgCountOverbreakAsLate').checked = pd.countOverbreakAsLate !== false;
+  if (document.getElementById('cfgMissingBreakPenaltyMode')) document.getElementById('cfgMissingBreakPenaltyMode').value = pd.missingBreakPenaltyMode || 'ALERT_ONLY';
 
   // Load PTN Time announcement settings
   loadAppAnnouncementSettings();
@@ -4013,7 +4026,8 @@ function savePayrollDefaults(e) {
     diligenceLateGraceMins: document.getElementById('cfgDiligenceLateGraceMins') ? Number(document.getElementById('cfgDiligenceLateGraceMins').value) : 2,
     diligenceLateMaxCount: document.getElementById('cfgDiligenceLateMaxCount') ? Number(document.getElementById('cfgDiligenceLateMaxCount').value) : 1,
     autoDiligenceEnabled: document.getElementById('cfgAutoDiligenceEnabled') ? document.getElementById('cfgAutoDiligenceEnabled').checked : true,
-    countOverbreakAsLate: document.getElementById('cfgCountOverbreakAsLate') ? document.getElementById('cfgCountOverbreakAsLate').checked : true
+    countOverbreakAsLate: document.getElementById('cfgCountOverbreakAsLate') ? document.getElementById('cfgCountOverbreakAsLate').checked : true,
+    missingBreakPenaltyMode: document.getElementById('cfgMissingBreakPenaltyMode') ? document.getElementById('cfgMissingBreakPenaltyMode').value : 'ALERT_ONLY'
   };
   callApi('savePayrollDefaults', { defaults: d })
     .then(function(r) {
@@ -5199,6 +5213,8 @@ function openAddEmployeeModal() {
   if (document.getElementById('mDiligenceAllowance')) document.getElementById('mDiligenceAllowance').value = '';
   var isAttendanceExemptCheck = document.getElementById('mIsAttendanceExempt');
   if (isAttendanceExemptCheck) isAttendanceExemptCheck.checked = false;
+  var isBreakExemptCheck = document.getElementById('mIsBreakExempt');
+  if (isBreakExemptCheck) isBreakExemptCheck.checked = false;
   if (document.getElementById('mResignDate')) document.getElementById('mResignDate').value = '';
   updateBirthDateThaiHint();
   updateJoinDateThaiHint();
@@ -5228,6 +5244,8 @@ function openEditEmployeeModal(empId) {
   if (isUndertimeCheck) isUndertimeCheck.checked = (e.isUndertimeExempt === true || e.isUndertimeExempt === 'true');
   var isAttendanceExemptCheck = document.getElementById('mIsAttendanceExempt');
   if (isAttendanceExemptCheck) isAttendanceExemptCheck.checked = (e.isAttendanceExempt === true || e.isAttendanceExempt === 'true');
+  var isBreakExemptCheck = document.getElementById('mIsBreakExempt');
+  if (isBreakExemptCheck) isBreakExemptCheck.checked = (e.isBreakExempt === true || e.isBreakExempt === 'true');
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
   document.getElementById('empOrigId').value = e.empId;
@@ -5325,6 +5343,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
     isOtEligible: (document.getElementById('mIsOtEligible') ? document.getElementById('mIsOtEligible').checked : true),
     isUndertimeExempt: (document.getElementById('mIsUndertimeExempt') ? document.getElementById('mIsUndertimeExempt').checked : false),
     isAttendanceExempt: (document.getElementById('mIsAttendanceExempt') ? document.getElementById('mIsAttendanceExempt').checked : false),
+    isBreakExempt: (document.getElementById('mIsBreakExempt') ? document.getElementById('mIsBreakExempt').checked : false),
     status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
     probationDays: (document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119),
     probationEndDate: (document.getElementById('mProbationEndDate') ? document.getElementById('mProbationEndDate').value : ''),
@@ -11788,7 +11807,11 @@ function renderIndividualAttendanceSheet(empId) {
         html += '<td style="border:1px solid #cbd5e1;padding:5px;font-family:monospace;font-weight:700;color:' + clockOutColor + ';font-size:12px">' + esc(clockOutText) + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:5px;color:' + (r.lateMinutes > 0 ? '#c2410c;font-weight:800' : '#64748b;font-weight:600') + ';font-family:monospace;font-size:12px">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:5px;color:' + (r.otHours > 0 ? '#4338ca;font-weight:800' : '#64748b;font-weight:600') + ';font-family:monospace;font-size:12px">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:left;color:' + r.statusColor + ';font-weight:700">' + esc(r.statusText) + '</td>';
+        var statusHtml = esc(r.statusText);
+        if (r.missingBreak || (r.statusText && r.statusText.indexOf('ไม่สแกนพัก') >= 0)) {
+          statusHtml = statusHtml.replace('[⚠️ ไม่สแกนพัก]', '<span class="period-pill" style="background:#fef3c7;color:#b45309;border-color:#fde68a;font-size:10.5px;font-weight:700;margin-left:4px">⚠️ ไม่สแกนพัก</span>');
+        }
+        html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:left;color:' + r.statusColor + ';font-weight:700">' + statusHtml + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:5px;text-align:left;color:#334155;font-size:11px">' + esc(r.remark || '-') + '</td>';
         html += '</tr>';
       });

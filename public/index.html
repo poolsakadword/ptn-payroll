@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=9.95">
+  <link rel="stylesheet" href="css/style.css?v=9.96">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -3439,6 +3439,20 @@
                     <small style="font-size:10px;color:#64748b;display:block;margin-top:2px">สายรวมเกินจำนวนครั้งนี้ = ตัดสิทธิ์ทันที</small>
                   </div>
                 </div>
+                <div class="form-group" style="margin-top:10px;margin-bottom:6px">
+                  <label style="font-size:11.5px;font-weight:700;color:#166534;display:flex;align-items:center;gap:6px">
+                    <i class="fa-solid fa-mug-hot" style="color:#d97706"></i> นโยบายเมื่อพนักงานไม่สแกนออกพัก (Missing Break Scan Policy) *
+                  </label>
+                  <select id="cfgMissingBreakPenaltyMode" style="width:100%;padding:7px 10px;font-size:12px;border:1.5px solid #86efac;border-radius:6px;background:#fff;font-weight:600;color:#1e293b">
+                    <option value="ALERT_ONLY" selected>แนวทางที่ 1 (แนะนำ): แจ้งเตือนอย่างเดียว [⚠️ ไม่สแกนพัก] - จ่ายเต็ม ไม่ตัดเงิน ไม่ตัดเบี้ยขยัน</option>
+                    <option value="DILIGENCE_DISQUALIFY_EXCEED">แนวทางที่ 2: ตัดสิทธิ์เบี้ยขยันหากลืมสแกนเกิน 1 ครั้ง/งวด</option>
+                    <option value="DILIGENCE_DISQUALIFY">แนวทางที่ 3: กฎเข้มงวด - ตัดสิทธิ์เบี้ยขยันทันทีหากลืมสแกนพัก (&ge; 1 ครั้ง)</option>
+                  </select>
+                  <small style="font-size:10.5px;color:#64748b;display:block;margin-top:3px">
+                    * พนักงานที่เปิดออปชัน "ยกเว้นการสแกนพักเที่ยง/บ่าย" ในประวัติพนักงาน จะได้รับการยกเว้นไม่ถูกตรวจจับในทุกกรณี
+                  </small>
+                </div>
+
                 <div style="font-size:11px;color:#15803d;margin-top:8px;padding:6px 10px;background:#dcfce7;border-radius:6px;line-height:1.5">
                   <i class="fa-solid fa-shield-halved"></i> <strong>เกณฑ์การตัดสิทธิ์อัตโนมัติ:</strong> ขาดงาน &ge; 1 วัน | ลากิจ &ge; 1 วัน | ลาป่วย (ทั้งมีและไม่มีใบรับรองแพทย์) &ge; 1 วัน | ออกก่อนเวลา/ขาดช่วง | มาสายเกินเกณฑ์ (รวมบ่ายหากเปิดใช้) &rarr; ระบบจะตั้งเบี้ยขยันเป็น ฿0 ทันที
                 </div>
@@ -3964,6 +3978,17 @@
               </label>
               <p style="margin:4px 0 0 28px;font-size:11px;color:#1d4ed8;line-height:1.4">
                 ไม่ต้องบันทึกเวลาทำงานใน PTN Time ระบบจะข้ามการตรวจเวลาอัตโนมัติ ไม่หักขาดงาน ไม่หักสาย และจ่ายเงินเดือนฐานเต็มจำนวนทุกงวด
+              </p>
+            </div>
+
+            <!-- Break Scan Exemption (Pharmacists / Flexible Break / Office) Option -->
+            <div class="form-group" style="background:#f0fdf4;border:1.5px solid #bbf7d0;border-radius:var(--radius-md);padding:10px 14px;margin-bottom:12px">
+              <label style="display:inline-flex;align-items:center;gap:10px;font-size:12.5px;font-weight:700;color:#166534;cursor:pointer">
+                <input type="checkbox" id="mIsBreakExempt" style="width:18px;height:18px;accent-color:#16a34a;cursor:pointer">
+                <span><i class="fa-solid fa-mug-hot"></i> ยกเว้นการสแกนพักเที่ยง/บ่าย (ไม่ต้องสแกนพัก)</span>
+              </label>
+              <p style="margin:4px 0 0 28px;font-size:11px;color:#15803d;line-height:1.4">
+                สำหรับตำแหน่งที่มีเวลาพักยืดหยุ่น เช่น เภสัชกร หรือพนักงานออฟฟิศ ไม่ต้องสแกนออกพัก ระบบจะไม่แจ้งเตือนลืมสแกนพัก และไม่ตัดสิทธิ์เบี้ยขยัน
               </p>
             </div>
 
@@ -6396,7 +6421,7 @@
     <div class="ins-actions-footer" id="ifeFooter" style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:#f8fafc;border-top:1px solid #e2e8f0"></div>
   </aside>
 
-  <script src="js/config.js?v=9.95"></script>
-  <script src="js/app.js?v=9.95"></script>
+  <script src="js/config.js?v=9.96"></script>
+  <script src="js/app.js?v=9.96"></script>
 </body>
 </html>
