@@ -931,18 +931,21 @@ footer {
   body.printing-payroll-summary #appShell,
   body.printing-attendance-summary #appShell,
   body.printing-attendance-individual #appShell,
+  body.printing-emp-modal #appShell,
   body.printing-payslip .main-container,
   body.printing-salary-cert .main-container,
   body.printing-50twi .main-container,
   body.printing-payroll-summary .main-container,
   body.printing-attendance-summary .main-container,
   body.printing-attendance-individual .main-container,
+  body.printing-emp-modal .main-container,
   body.printing-payslip .tab-content,
   body.printing-salary-cert .tab-content,
   body.printing-50twi .tab-content,
   body.printing-payroll-summary .tab-content,
   body.printing-attendance-summary .tab-content,
-  body.printing-attendance-individual .tab-content {
+  body.printing-attendance-individual .tab-content,
+  body.printing-emp-modal .tab-content {
     display: none !important;
   }
 
@@ -1282,12 +1285,96 @@ footer {
     visibility: visible !important;
   }
 
+  /* ------------------------------------------------------------------------
+     A5. EMPLOYEE REGISTRY PRINT MODAL (ROSTER LANDSCAPE OR PROFILE PORTRAIT)
+     ------------------------------------------------------------------------ */
+  body.printing-emp-modal.roster-orientation {
+    page: landscapePage;
+  }
+  body.printing-emp-modal.profile-orientation {
+    page: portrait;
+  }
+  body.printing-emp-modal > *:not(#printEmployeesModal) {
+    display: none !important;
+  }
+  body.printing-emp-modal .modal-overlay:not(#printEmployeesModal) {
+    display: none !important;
+  }
+  body.printing-emp-modal #printEmployeesModal {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-emp-modal #printEmployeesModal .modal-card {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    border-radius: 0 !important;
+  }
+  body.printing-emp-modal #printEmployeesModal .modal-header,
+  body.printing-emp-modal #printEmployeesModal .emp-print-controls-bar,
+  body.printing-emp-modal #printEmployeesModal .modal-footer,
+  body.printing-emp-modal #printEmployeesModal .no-print,
+  body.printing-emp-modal #printEmployeesModal .modal-card > *:not(.modal-body) {
+    display: none !important;
+  }
+  body.printing-emp-modal #printEmployeesModal .modal-body {
+    display: block !important;
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+  body.printing-emp-modal #empPrintPaperContainer {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 4mm 6mm !important;
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+  }
+  body.printing-emp-modal #empPrintPaperContainer * {
+    visibility: visible !important;
+  }
+  body.printing-emp-modal table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+  body.printing-emp-modal thead {
+    display: table-header-group !important;
+  }
+  body.printing-emp-modal tr {
+    page-break-inside: avoid !important;
+  }
+
 
   /* ========================================================================
      GROUP B: TAB PRINT DOCUMENTS (History Individual, Yearly Summary, Analytics)
      When printing tabs, all modal overlays are ALWAYS HIDDEN!
      ======================================================================== */
-  body:not(.printing-payslip):not(.printing-salary-cert):not(.printing-50twi):not(.printing-payroll-summary):not(.printing-attendance-summary):not(.printing-attendance-individual) .modal-overlay {
+  body:not(.printing-payslip):not(.printing-salary-cert):not(.printing-50twi):not(.printing-payroll-summary):not(.printing-attendance-summary):not(.printing-attendance-individual):not(.printing-emp-modal) .modal-overlay {
     display: none !important;
   }
 

@@ -9,13 +9,16 @@ var ALL_PRINT_CLASSES = [
   'printing-history',
   'printing-yearly-summary',
   'printing-batch-history',
-  'printing-analytics'
+  'printing-analytics',
+  'printing-emp-modal'
 ];
 
 function clearAllPrintClasses() {
   ALL_PRINT_CLASSES.forEach(function(cls) {
     document.body.classList.remove(cls);
   });
+  document.body.classList.remove('roster-orientation');
+  document.body.classList.remove('profile-orientation');
   var payrollSumContainer = document.getElementById('payrollSummaryPrintContainer');
   if (payrollSumContainer) {
     payrollSumContainer.innerHTML = '';
@@ -2981,6 +2984,7 @@ function renderEmployeesTable() {
         '<td>' + esc(formatDateThaiBE(e.joinDate)) + '</td>' +
         '<td class="text-center nowrap">' +
           devUnlockBtn +
+          '<button type="button" class="btn-icon" style="background:#eff6ff;color:#2563eb;border-color:#bfdbfe;font-weight:700" onclick="openPrintEmployeesModal(\'' + esc(e.empId) + '\')" title="พิมพ์ประวัติพนักงานคนนี้ (A4)"><i class="fa-solid fa-print"></i></button> ' +
           (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button>' : '<span class="text-muted">-</span>') +
         '</td>' +
       '</tr>';
@@ -3005,6 +3009,7 @@ function renderEmployeesTable() {
         '<td>' + esc(formatDateThaiBE(e.joinDate)) + '</td>' +
         '<td class="text-center nowrap">' +
           devUnlockBtn +
+          '<button type="button" class="btn-icon" style="background:#eff6ff;color:#2563eb;border-color:#bfdbfe;font-weight:700" onclick="openPrintEmployeesModal(\'' + esc(e.empId) + '\')" title="พิมพ์ประวัติพนักงานคนนี้ (A4)"><i class="fa-solid fa-print"></i></button> ' +
           (st === 'Probation' ? '<button type="button" class="btn-icon edit" style="background:#ecfdf5;color:#059669;border-color:#a7f3d0;font-weight:700" onclick="passProbation(\'' + esc(e.empId) + '\')" title="อนุมัติผ่านโปร"><i class="fa-solid fa-check"></i> ผ่านโปร</button> ' : '') +
           (canEditEmp ? '<button type="button" class="btn-icon edit" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไข</button> ' : '') +
           (canDelEmp ? '<button type="button" class="btn-icon del" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i> ลบ</button>' : '') +
@@ -3058,6 +3063,7 @@ function renderEmployeesTable() {
 
       '<div style="display:flex;align-items:center;gap:6px;padding-top:6px">' +
         ((e.isDeviceBound && canUnlockDevice) ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;border-color:#fecaca;background:#fef2f2;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button>' : '') +
+        '<button type="button" class="btn btn-slate btn-sm" style="color:#2563eb;padding:4px 8px;font-weight:700" onclick="openPrintEmployeesModal(\'' + esc(e.empId) + '\')" title="พิมพ์ประวัติพนักงาน (A4)"><i class="fa-solid fa-print"></i></button>' +
         (st === 'Probation' ? '<button type="button" class="btn btn-success btn-sm" style="flex:1" onclick="passProbation(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-check"></i> ผ่านโปร</button>' : '') +
         (canEditEmp ? '<button type="button" class="btn btn-slate btn-sm" style="flex:1" onclick="openEditEmployeeModal(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-pen"></i> แก้ไขประวัติ</button>' : '') +
         (canDelEmp ? '<button type="button" class="btn btn-slate btn-sm" style="color:#dc2626;padding:4px 8px" onclick="deleteEmployee(\'' + esc(e.empId) + '\')"><i class="fa-solid fa-trash"></i></button>' : '') +
@@ -5394,6 +5400,357 @@ function deleteEmployee(empId) {
       }
     })
     .catch(function(e) { showToast(e.message, 'error'); });
+}
+
+// ==============================================================================
+// EMPLOYEE REGISTRY PRINT CONTROLLER (ROSTER A4 LANDSCAPE & PROFILE A4 PORTRAIT)
+// ==============================================================================
+var _empPrintMode = 'roster'; // 'roster' | 'profile'
+
+function openPrintEmployeesModal(empId) {
+  var canViewEmp = hasPermission('view_emp') || isSuperAdmin();
+  if (!canViewEmp) {
+    showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าใช้งานทะเบียนพนักงาน', 'warning');
+    return;
+  }
+
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+  var salaryLabel = document.getElementById('empPrintShowSalaryLabel');
+  var salaryChk = document.getElementById('empPrintShowSalary');
+  if (salaryLabel && salaryChk) {
+    if (!canViewSalary) {
+      salaryLabel.style.display = 'none';
+      salaryChk.checked = false;
+    } else {
+      salaryLabel.style.display = 'flex';
+      salaryChk.checked = true;
+    }
+  }
+
+  // Populate employee dropdown for Profile mode
+  var empSel = document.getElementById('empPrintSelectEmp');
+  if (empSel) {
+    var emps = State.employees || [];
+    empSel.innerHTML = emps.map(function(e) {
+      return '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</option>';
+    }).join('');
+    if (empId) {
+      empSel.value = empId;
+    }
+  }
+
+  // Populate department filter for Roster mode
+  var deptSel = document.getElementById('empPrintFilterDept');
+  if (deptSel) {
+    var depts = {};
+    (State.employees || []).forEach(function(e) {
+      if (e.department) depts[e.department] = true;
+    });
+    var dHtml = '<option value="ALL">ทุกแผนก (' + (State.employees || []).length + ' ท่าน)</option>';
+    Object.keys(depts).sort().forEach(function(d) {
+      dHtml += '<option value="' + esc(d) + '">' + esc(d) + '</option>';
+    });
+    deptSel.innerHTML = dHtml;
+  }
+
+  if (empId) {
+    setEmpPrintMode('profile');
+  } else {
+    setEmpPrintMode('roster');
+  }
+
+  openModal('printEmployeesModal');
+}
+
+function setEmpPrintMode(mode) {
+  _empPrintMode = mode;
+  var btnRoster = document.getElementById('btnEmpPrintModeRoster');
+  var btnProfile = document.getElementById('btnEmpPrintModeProfile');
+  var wrapEmp = document.getElementById('empPrintSelectWrap');
+  var wrapDept = document.getElementById('empPrintDeptWrap');
+  var wrapStatus = document.getElementById('empPrintStatusWrap');
+  var container = document.getElementById('empPrintPaperContainer');
+
+  if (btnRoster) btnRoster.className = (mode === 'roster') ? 'btn btn-primary btn-sm' : 'btn btn-slate btn-sm';
+  if (btnProfile) btnProfile.className = (mode === 'profile') ? 'btn btn-primary btn-sm' : 'btn btn-slate btn-sm';
+
+  if (wrapEmp) wrapEmp.style.display = (mode === 'profile') ? 'flex' : 'none';
+  if (wrapDept) wrapDept.style.display = (mode === 'roster') ? 'flex' : 'none';
+  if (wrapStatus) wrapStatus.style.display = (mode === 'roster') ? 'flex' : 'none';
+
+  if (container) {
+    if (mode === 'roster') {
+      container.style.maxWidth = '100%';
+    } else {
+      container.style.maxWidth = '840px';
+    }
+  }
+
+  renderEmpPrintModal();
+}
+
+function renderEmpPrintModal() {
+  var container = document.getElementById('empPrintPaperContainer');
+  if (!container) return;
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด (PTN PHARMA CENTER CO., LTD.)';
+  var compTax = State.company.taxId || '0105559876543';
+  var compAddr = State.company.address || '';
+  var compPhone = State.company.phone || '';
+
+  var d = new Date();
+  var thaiMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var dateStr = d.getDate() + ' ' + thaiMonths[d.getMonth()] + ' ' + (d.getFullYear() + 543) + ' เวลา ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ' น.';
+
+  var canViewSalary = hasPermission('view_salary') || isSuperAdmin();
+  var showSalary = canViewSalary && document.getElementById('empPrintShowSalary') && document.getElementById('empPrintShowSalary').checked;
+
+  if (_empPrintMode === 'roster') {
+    // FORMAT 1: ROSTER TABLE A4 LANDSCAPE
+    var filterDept = document.getElementById('empPrintFilterDept') ? document.getElementById('empPrintFilterDept').value : 'ALL';
+    var filterStatus = document.getElementById('empPrintFilterStatus') ? document.getElementById('empPrintFilterStatus').value : 'ALL_ACTIVE';
+
+    var list = (State.employees || []).filter(function(e) {
+      if (filterDept !== 'ALL' && e.department !== filterDept) return false;
+      var st = e.status || 'Active';
+      if (filterStatus === 'ALL_ACTIVE') {
+        return st === 'Active' || st === 'Probation';
+      } else if (filterStatus === 'ALL') {
+        return true;
+      } else {
+        return st === filterStatus;
+      }
+    });
+
+    var totalBaseSalary = 0;
+    var rowsHtml = '';
+    list.forEach(function(e, idx) {
+      var sal = Number(e.baseSalary) || 0;
+      totalBaseSalary += sal;
+      var st = e.status || 'Active';
+      var stText = '🟢 ทำงานอยู่';
+      if (st === 'Probation') stText = '🟠 ทดลองงาน';
+      else if (st === 'Resigned') stText = '🔴 ลาออก';
+      else if (st === 'Suspended') stText = '🟡 พักงาน';
+
+      var bName = e.bankName || '-';
+      var bAcc = e.bankAccount || '-';
+
+      rowsHtml += '<tr style="border-bottom: 1px solid #e2e8f0;">' +
+        '<td style="padding: 6px 4px; text-align: center; color: #64748b; font-size: 11px;">' + (idx + 1) + '</td>' +
+        '<td style="padding: 6px 6px; font-family: monospace; font-weight: 700; color: #1d4ed8; font-size: 11.5px;">' + esc(e.empId) + '</td>' +
+        '<td style="padding: 6px 8px; font-weight: 700; color: #0f172a; font-size: 12px;">' +
+          esc(e.fullName) + (e.nickname ? ' <span style="font-weight: normal; color: #2563eb;">(' + esc(e.nickname) + ')</span>' : '') +
+        '</td>' +
+        '<td style="padding: 6px 8px; font-size: 11.5px; color: #334155;">' +
+          '<div>' + esc(e.position || '-') + '</div>' +
+          '<div style="font-size: 10.5px; color: #64748b;">' + esc(e.department || '-') + '</div>' +
+        '</td>' +
+        '<td style="padding: 6px 6px; text-align: center; font-size: 11px; color: #475569;">' + esc(e.branch || 'สาขา 1') + '</td>' +
+        '<td style="padding: 6px 6px; text-align: center; font-size: 11px; font-weight: 600;">' + stText + '</td>' +
+        '<td style="padding: 6px 6px; text-align: center; font-family: monospace; font-size: 11px;">' + (e.joinDate ? formatDateThaiBE(e.joinDate) : '-') + '</td>' +
+        '<td style="padding: 6px 6px; text-align: center; font-family: monospace; font-size: 11px; color: #334155;">' + esc(e.phone || '-') + '</td>' +
+        '<td style="padding: 6px 6px; font-size: 11px;">' +
+          '<div>' + esc(bName) + '</div>' +
+          '<div style="font-family: monospace; font-size: 10.5px; color: #64748b;">' + esc(bAcc) + '</div>' +
+        '</td>' +
+        (showSalary ? ('<td style="padding: 6px 8px; text-align: right; font-family: monospace; font-weight: 700; color: #0f172a; font-size: 11.5px; background: #f8fafc;">' + fmt(sal) + '</td>') : '') +
+      '</tr>';
+    });
+
+    if (list.length === 0) {
+      rowsHtml = '<tr><td colspan="' + (showSalary ? '10' : '9') + '" style="text-align: center; padding: 24px; color: #64748b; font-size: 12px;">ไม่พบข้อมูลพนักงานตามเงื่อนไขที่เลือก</td></tr>';
+    }
+
+    container.innerHTML = '' +
+      '<div style="border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: flex-start;">' +
+        '<div>' +
+          '<div style="font-size: 18px; font-weight: 800; color: #0f172a; line-height: 1.2;">' + esc(compName) + '</div>' +
+          '<div style="font-size: 11.5px; color: #475569; margin-top: 2px;">' + (compTax ? 'เลขประจำตัวผู้เสียภาษี: ' + esc(compTax) + ' | ' : '') + (compAddr ? esc(compAddr) : '') + (compPhone ? ' โทร: ' + esc(compPhone) : '') + '</div>' +
+          '<div style="display: inline-block; margin-top: 6px; padding: 2px 8px; background: #0f172a; color: #ffffff; font-size: 11.5px; font-weight: 700; border-radius: 4px;">' +
+            'ทะเบียนประวัติพนักงานและทำเนียบบุคลากร (Staff Directory & Personnel Registry)' +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align: right; font-size: 11px; color: #475569; line-height: 1.5;">' +
+          '<div><b>วันที่พิมพ์:</b> ' + dateStr + '</div>' +
+          '<div><b>ขอบเขตข้อมูล:</b> แผนก: ' + (filterDept === 'ALL' ? 'ทั้งหมด' : esc(filterDept)) + '</div>' +
+          '<div><b>จำนวนบุคลากร:</b> <span style="font-weight: 700; color: #1d4ed8;">' + list.length + '</span> ท่าน</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">' +
+        '<thead>' +
+          '<tr style="background: #f1f5f9; border-top: 1.5px solid #0f172a; border-bottom: 1.5px solid #0f172a; font-weight: 700; color: #0f172a;">' +
+            '<th style="padding: 7px 4px; text-align: center; width: 35px;">ที่</th>' +
+            '<th style="padding: 7px 6px; text-align: left; width: 75px;">รหัส</th>' +
+            '<th style="padding: 7px 8px; text-align: left;">ชื่อ - นามสกุล (ชื่อเล่น)</th>' +
+            '<th style="padding: 7px 8px; text-align: left;">ตำแหน่ง / แผนก</th>' +
+            '<th style="padding: 7px 6px; text-align: center; width: 90px;">สาขา</th>' +
+            '<th style="padding: 7px 6px; text-align: center; width: 85px;">สถานะ</th>' +
+            '<th style="padding: 7px 6px; text-align: center; width: 95px;">วันเริ่มงาน</th>' +
+            '<th style="padding: 7px 6px; text-align: center; width: 95px;">เบอร์โทร</th>' +
+            '<th style="padding: 7px 6px; text-align: left; width: 130px;">ธนาคาร / บัญชี</th>' +
+            (showSalary ? '<th style="padding: 7px 8px; text-align: right; width: 105px; background: #e2e8f0;">ฐานเงินเดือน</th>' : '') +
+          '</tr>' +
+        '</thead>' +
+        '<tbody>' + rowsHtml + '</tbody>' +
+        (showSalary ? (
+          '<tfoot>' +
+            '<tr style="background: #f8fafc; border-top: 1.5px solid #0f172a; border-bottom: 1.5px solid #0f172a; font-weight: 700; font-size: 11.5px;">' +
+              '<td colspan="9" style="padding: 8px 10px; text-align: right; color: #0f172a;">รวมฐานเงินเดือนพนักงานในรายงาน (' + list.length + ' ท่าน):</td>' +
+              '<td style="padding: 8px 8px; text-align: right; font-family: monospace; font-size: 12px; color: #1d4ed8; background: #eff6ff;">' + fmt(totalBaseSalary) + '</td>' +
+            '</tr>' +
+          '</tfoot>'
+        ) : '') +
+      '</table>' +
+
+      '<div style="margin-top: 24px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 11px; color: #334155; page-break-inside: avoid;">' +
+        '<div>' +
+          '<div style="height: 38px; border-bottom: 1px dashed #94a3b8; margin-bottom: 6px;"></div>' +
+          '<div style="font-weight: 700;">ลงชื่อ ................................................................</div>' +
+          '<div style="color: #64748b; margin-top: 2px;">เจ้าหน้าที่ฝ่ายบุคคล (ผู้จัดทำ)</div>' +
+          '<div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">วันที่: ......./......./...........</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="height: 38px; border-bottom: 1px dashed #94a3b8; margin-bottom: 6px;"></div>' +
+          '<div style="font-weight: 700;">ลงชื่อ ................................................................</div>' +
+          '<div style="color: #64748b; margin-top: 2px;">ผู้จัดการฝ่าย / หัวหน้าแผนก</div>' +
+          '<div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">วันที่: ......./......./...........</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="height: 38px; border-bottom: 1px dashed #94a3b8; margin-bottom: 6px;"></div>' +
+          '<div style="font-weight: 700;">ลงชื่อ ................................................................</div>' +
+          '<div style="color: #64748b; margin-top: 2px;">กรรมการผู้จัดการ / ผู้มีอำนาจอนุมัติ</div>' +
+          '<div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">วันที่: ......./......./...........</div>' +
+        '</div>' +
+      '</div>';
+
+  } else {
+    // FORMAT 2: INDIVIDUAL PROFILE SHEET A4 PORTRAIT
+    var empId = document.getElementById('empPrintSelectEmp') ? document.getElementById('empPrintSelectEmp').value : '';
+    var emp = (State.employees || []).find(function(e) { return e.empId === empId; }) || (State.employees || [])[0];
+
+    if (!emp) {
+      container.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">ไม่พบข้อมูลพนักงาน</div>';
+      return;
+    }
+
+    var st = emp.status || 'Active';
+    var stBadgeHtml = '<span style="display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #dcfce7; color: #166534; border: 1px solid #bbf7d0;">🟢 พนักงานประจำ (Active)</span>';
+    if (st === 'Probation') {
+      stBadgeHtml = '<span style="display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #ffedd5; color: #9a3412; border: 1px solid #fed7aa;">🟠 ช่วงทดลองงาน (Probation)</span>';
+    } else if (st === 'Resigned') {
+      stBadgeHtml = '<span style="display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca;">🔴 พ้นสภาพ / ลาออกแล้ว</span>';
+    }
+
+    var initials = (emp.fullName || '').substring(0, 2);
+    var avatarHtml = emp.photoUrl
+      ? '<img src="' + esc(emp.photoUrl) + '" alt="' + esc(emp.fullName) + '" style="width: 110px; height: 130px; object-fit: cover; border-radius: 8px; border: 1.5px solid #cbd5e1; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">'
+      : '<div style="width: 110px; height: 130px; border-radius: 8px; border: 1.5px solid #cbd5e1; background: #e0e7ff; color: #3730a3; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800;">' + esc(initials) + '</div>';
+
+    var tenureStr = calculateTenureString(emp.joinDate, emp.resignDate);
+    var otText = (emp.isOtEligible === false || emp.isOtEligible === 'false') ? 'ไม่มีสิทธิ์รับค่าล่วงเวลา (Ineligible)' : 'มีสิทธิ์ได้รับค่าล่วงเวลา (ตามข้อตกลงบริษัท)';
+    var breakText = (emp.isUndertimeExempt === true || emp.isUndertimeExempt === 'true') ? 'ยกเว้นการสแกนพักเที่ยง (Exempt)' : 'สแกนเวลาเข้า-ออกปกติ';
+    var attText = (emp.isAttendanceExempt === true || emp.isAttendanceExempt === 'true') ? 'ยกเว้นการลงเวลาเข้า-ออกงาน (ผู้บริหาร)' : 'บันทึกเวลาทำงานตามระเบียบ';
+    var devStatus = emp.isDeviceBound ? ('ผูกอุปกรณ์แล้ว: ' + ((emp.boundDevice && emp.boundDevice.deviceName) || 'Mobile Device')) : 'ยังไม่ผูกอุปกรณ์';
+
+    container.innerHTML = '' +
+      '<div style="border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-start;">' +
+        '<div>' +
+          '<div style="font-size: 19px; font-weight: 800; color: #0f172a; line-height: 1.2;">' + esc(compName) + '</div>' +
+          '<div style="font-size: 11.5px; color: #475569; margin-top: 2px;">' + (compTax ? 'ทะเบียนนิติบุคคล: ' + esc(compTax) + ' | ' : '') + (compAddr ? esc(compAddr) : '') + '</div>' +
+          '<div style="display: inline-block; margin-top: 6px; padding: 2px 10px; background: #1e3a8a; color: #ffffff; font-size: 11.5px; font-weight: 700; border-radius: 4px;">' +
+            'ใบประวัติพนักงานรายบุคคล (Individual Employee Profile Record)' +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align: right; font-size: 11.5px; color: #475569; line-height: 1.5;">' +
+          '<div><b>รหัสพนักงาน:</b> <span style="font-family: monospace; font-size: 14px; font-weight: 800; color: #1d4ed8;">' + esc(emp.empId) + '</span></div>' +
+          '<div style="margin-top: 2px;"><b>วันที่พิมพ์:</b> ' + dateStr + '</div>' +
+        '</div>' +
+      '</div>' +
+
+      '<div style="display: grid; grid-template-columns: 140px 1fr; gap: 18px; margin-bottom: 16px;">' +
+        '<div style="display: flex; flex-direction: column; align-items: center; text-align: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px 8px;">' +
+          avatarHtml +
+          '<div style="margin-top: 10px;">' + stBadgeHtml + '</div>' +
+          '<div style="font-size: 11px; color: #64748b; margin-top: 6px;">อายุงาน: <b style="color: #0f172a;">' + tenureStr + '</b></div>' +
+        '</div>' +
+
+        '<div style="display: flex; flex-direction: column; gap: 12px;">' +
+          '<div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">' +
+            '<div style="font-size: 12px; font-weight: 700; color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 8px;">' +
+              '<i class="fa-solid fa-address-card"></i> 1. ข้อมูลส่วนตัวและตำแหน่งงาน' +
+            '</div>' +
+            '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 11.5px;">' +
+              '<div><span style="color: #64748b;">ชื่อ-นามสกุล:</span> <b style="color: #0f172a; font-size: 12.5px;">' + esc(emp.fullName) + (emp.nickname ? ' (' + esc(emp.nickname) + ')' : '') + '</b></div>' +
+              '<div><span style="color: #64748b;">เลขบัตรประชาชน:</span> <span style="font-family: monospace; font-weight: 600;">' + esc(emp.citizenId || '-') + '</span></div>' +
+              '<div><span style="color: #64748b;">ตำแหน่ง:</span> <b style="color: #0f172a;">' + esc(emp.position || '-') + '</b></div>' +
+              '<div><span style="color: #64748b;">แผนก:</span> <span style="font-weight: 600;">' + esc(emp.department || '-') + '</span></div>' +
+              '<div><span style="color: #64748b;">สาขาที่สังกัด:</span> <span>' + esc(emp.branch || 'สาขา 1 (สำนักงานใหญ่)') + '</span></div>' +
+              '<div><span style="color: #64748b;">วันเริ่มงาน:</span> <span style="font-family: monospace;">' + (emp.joinDate ? formatDateThaiBE(emp.joinDate) : '-') + '</span></div>' +
+              '<div><span style="color: #64748b;">วันเกิด / อายุ:</span> <span>' + (emp.birthDate ? (formatDateThaiBE(emp.birthDate) + (emp.age ? ' (อายุ ' + emp.age + ' ปี)' : '')) : '-') + '</span></div>' +
+              '<div><span style="color: #64748b;">เบอร์โทรศัพท์:</span> <span style="font-family: monospace; font-weight: 600;">' + esc(emp.phone || '-') + '</span></div>' +
+              '<div style="grid-column: 1 / -1;"><span style="color: #64748b;">ที่อยู่ตามทะเบียน/ติดต่อ:</span> <span>' + esc(emp.address || '-') + '</span></div>' +
+            '</div>' +
+          '</div>' +
+
+          (showSalary ? (
+            '<div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 12px 16px;">' +
+              '<div style="font-size: 12px; font-weight: 700; color: #059669; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 8px;">' +
+                '<i class="fa-solid fa-money-check-dollar"></i> 2. สิทธิประโยชน์และการจ่ายเงินเดือน' +
+              '</div>' +
+              '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 11.5px;">' +
+                '<div><span style="color: #64748b;">ฐานเงินเดือนประจำ:</span> <b style="color: #1d4ed8; font-family: monospace; font-size: 13px;">' + fmt(emp.baseSalary) + '</b></div>' +
+                '<div><span style="color: #64748b;">ธนาคาร / เลขที่บัญชี:</span> <span style="font-weight: 600;">' + esc(emp.bankName || '-') + ' ' + esc(emp.bankAccount || '-') + '</span></div>' +
+                '<div><span style="color: #64748b;">กองทุนสำรองเลี้ยงชีพ (PF):</span> <span>' + (Number(emp.pfRate) > 0 ? ('เข้าร่วมกองทุน (หัก ' + ((Number(emp.pfRate) * 100).toFixed(2)) + '%)') : 'ไม่เข้าร่วม') + '</span></div>' +
+                '<div><span style="color: #64748b;">ประกันสังคม (SSO):</span> <span>' + (Number(emp.defaultSso) > 0 ? ('ผู้ประกันตน (หัก ' + fmt(emp.defaultSso) + '/เดือน)') : 'ไม่หัก SSO') + '</span></div>' +
+              '</div>' +
+            '</div>'
+          ) : '') +
+        '</div>' +
+      '</div>' +
+
+      '<div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 11.5px;">' +
+        '<div style="font-size: 12px; font-weight: 700; color: #d97706; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 8px;">' +
+          '<i class="fa-solid fa-clock"></i> 3. นโยบายการลงเวลาและเงื่อนไขการทำงาน (PTN Time Configuration)' +
+        '</div>' +
+        '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px;">' +
+          '<div><span style="color: #64748b;">สิทธิ์การรับค่าล่วงเวลา (OT):</span> <span style="font-weight: 600;">' + esc(otText) + '</span></div>' +
+          '<div><span style="color: #64748b;">การสแกนพักเที่ยง:</span> <span style="font-weight: 600;">' + esc(breakText) + '</span></div>' +
+          '<div><span style="color: #64748b;">การลงเวลาเข้า-ออก:</span> <span>' + esc(attText) + '</span></div>' +
+          '<div><span style="color: #64748b;">การผูกเครื่องลงเวลา:</span> <span style="color: #2563eb;">' + esc(devStatus) + '</span></div>' +
+          (emp.remark ? ('<div style="grid-column: 1 / -1;"><span style="color: #64748b;">หมายเหตุฝ่ายบุคคล:</span> <span style="color: #0f172a;">' + esc(emp.remark) + '</span></div>') : '') +
+        '</div>' +
+      '</div>' +
+
+      '<div style="margin-top: 32px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center; font-size: 11px; color: #334155; page-break-inside: avoid;">' +
+        '<div>' +
+          '<div style="height: 44px; border-bottom: 1px dashed #94a3b8; margin-bottom: 6px;"></div>' +
+          '<div style="font-weight: 700;">ลงชื่อ ................................................................</div>' +
+          '<div style="color: #475569; margin-top: 2px;">( ' + esc(emp.fullName) + ' )</div>' +
+          '<div style="color: #64748b; font-size: 10px;">พนักงานผู้ถือประวัติ</div>' +
+          '<div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">วันที่: ......./......./...........</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="height: 44px; border-bottom: 1px dashed #94a3b8; margin-bottom: 6px;"></div>' +
+          '<div style="font-weight: 700;">ลงชื่อ ................................................................</div>' +
+          '<div style="color: #475569; margin-top: 2px;">( ................................................................ )</div>' +
+          '<div style="color: #64748b; font-size: 10px;">เจ้าหน้าที่ฝ่ายบุคคล / ผู้มีอำนาจลงนาม</div>' +
+          '<div style="font-size: 10px; color: #94a3b8; margin-top: 2px;">วันที่: ......./......./...........</div>' +
+        '</div>' +
+      '</div>';
+  }
+}
+
+function executePrintEmployees() {
+  clearAllPrintClasses();
+  document.body.classList.add('printing-emp-modal');
+  document.body.classList.add(_empPrintMode === 'roster' ? 'roster-orientation' : 'profile-orientation');
+
+  setTimeout(function() {
+    window.print();
+    setTimeout(clearAllPrintClasses, 1500);
+  }, 100);
 }
 
 function populatePayslipModal(row) {
