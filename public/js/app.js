@@ -10,7 +10,8 @@ var ALL_PRINT_CLASSES = [
   'printing-yearly-summary',
   'printing-batch-history',
   'printing-analytics',
-  'printing-emp-modal'
+  'printing-emp-modal',
+  'printing-emp-registry'
 ];
 
 function clearAllPrintClasses() {
@@ -23,6 +24,14 @@ function clearAllPrintClasses() {
   if (payrollSumContainer) {
     payrollSumContainer.innerHTML = '';
   }
+  var empRegContainer = document.getElementById('empRegistryPrintContainer');
+  if (empRegContainer) {
+    empRegContainer.innerHTML = '';
+  }
+  var orientStyle = document.getElementById('printPageOrientationStyle');
+  if (orientStyle) {
+    orientStyle.textContent = '';
+  }
 }
 
 function preparePayrollSummaryPrintContainer() {
@@ -30,6 +39,14 @@ function preparePayrollSummaryPrintContainer() {
   var targetContainer = document.getElementById('payrollSummaryPrintContainer');
   if (srcArea && targetContainer) {
     targetContainer.innerHTML = '<div class="payroll-summary-print-wrapper" style="font-family:\'Sarabun\',sans-serif;color:#0f172a;background:#ffffff;">' + srcArea.innerHTML + '</div>';
+  }
+}
+
+function prepareEmpRegistryPrintContainer() {
+  var srcArea = document.getElementById('empPrintPaperContainer');
+  var targetContainer = document.getElementById('empRegistryPrintContainer');
+  if (srcArea && targetContainer) {
+    targetContainer.innerHTML = srcArea.innerHTML;
   }
 }
 
@@ -42,6 +59,7 @@ window.addEventListener('beforeprint', function() {
   var payslipModal = document.getElementById('payslipModal');
   var twi50Modal = document.getElementById('twi50Modal');
   var payrollSignoffModal = document.getElementById('payrollSignoffModal');
+  var printEmployeesModal = document.getElementById('printEmployeesModal');
 
   if (salaryCertModal && salaryCertModal.classList.contains('active')) {
     clearAllPrintClasses();
@@ -56,6 +74,21 @@ window.addEventListener('beforeprint', function() {
     clearAllPrintClasses();
     preparePayrollSummaryPrintContainer();
     document.body.classList.add('printing-payroll-summary');
+  } else if (printEmployeesModal && printEmployeesModal.classList.contains('active')) {
+    clearAllPrintClasses();
+    prepareEmpRegistryPrintContainer();
+    var orientStyle = document.getElementById('printPageOrientationStyle');
+    if (!orientStyle) {
+      orientStyle = document.createElement('style');
+      orientStyle.id = 'printPageOrientationStyle';
+      document.head.appendChild(orientStyle);
+    }
+    if (typeof _empPrintMode !== 'undefined' && _empPrintMode === 'roster') {
+      orientStyle.textContent = '@page { size: A4 landscape !important; margin: 8mm 8mm !important; }';
+    } else {
+      orientStyle.textContent = '@page { size: A4 portrait !important; margin: 10mm 10mm !important; }';
+    }
+    document.body.classList.add('printing-emp-registry');
   }
 });
 
@@ -5432,7 +5465,8 @@ function openPrintEmployeesModal(empId) {
   if (empSel) {
     var emps = State.employees || [];
     empSel.innerHTML = emps.map(function(e) {
-      return '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + '</option>';
+      var resignedLabel = (e.status === 'Resigned') ? ' [ลาออก]' : '';
+      return '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + resignedLabel + '</option>';
     }).join('');
     if (empId) {
       empSel.value = empId;
@@ -5444,13 +5478,36 @@ function openPrintEmployeesModal(empId) {
   if (deptSel) {
     var depts = {};
     (State.employees || []).forEach(function(e) {
-      if (e.department) depts[e.department] = true;
+      if (e.department) depts[e.department] = (depts[e.department] || 0) + 1;
     });
     var dHtml = '<option value="ALL">ทุกแผนก (' + (State.employees || []).length + ' ท่าน)</option>';
     Object.keys(depts).sort().forEach(function(d) {
-      dHtml += '<option value="' + esc(d) + '">' + esc(d) + '</option>';
+      dHtml += '<option value="' + esc(d) + '">' + esc(d) + ' (' + depts[d] + ' ท่าน)</option>';
     });
     deptSel.innerHTML = dHtml;
+  }
+
+  // Populate status filter with counts
+  var statusSel = document.getElementById('empPrintFilterStatus');
+  if (statusSel) {
+    var emps = State.employees || [];
+    var actC = 0, probC = 0, resC = 0;
+    emps.forEach(function(e) {
+      var st = e.status || 'Active';
+      if (st === 'Probation') probC++;
+      else if (st === 'Resigned') resC++;
+      else actC++;
+    });
+    var totActive = actC + probC;
+    var totAll = emps.length;
+
+    statusSel.innerHTML = '' +
+      '<option value="ALL">พนักงานทั้งหมดทุกคน (' + totAll + ' ท่าน: รวมลาออก)</option>' +
+      '<option value="ALL_ACTIVE">พนักงานปัจจุบันทั้งหมด (' + totActive + ' ท่าน: ประจำ + ทดลองงาน)</option>' +
+      '<option value="Active">เฉพาะทำงานอยู่ประจำ (' + actC + ' ท่าน)</option>' +
+      '<option value="Probation">เฉพาะช่วงทดลองงาน (' + probC + ' ท่าน)</option>' +
+      '<option value="Resigned">เฉพาะพ้นสภาพ / ลาออกแล้ว (' + resC + ' ท่าน)</option>';
+    statusSel.value = (typeof currentEmpSubTab !== 'undefined' && currentEmpSubTab === 'resigned') ? 'Resigned' : 'ALL';
   }
 
   if (empId) {
@@ -5508,7 +5565,13 @@ function renderEmpPrintModal() {
   if (_empPrintMode === 'roster') {
     // FORMAT 1: ROSTER TABLE A4 LANDSCAPE
     var filterDept = document.getElementById('empPrintFilterDept') ? document.getElementById('empPrintFilterDept').value : 'ALL';
-    var filterStatus = document.getElementById('empPrintFilterStatus') ? document.getElementById('empPrintFilterStatus').value : 'ALL_ACTIVE';
+    var filterStatus = document.getElementById('empPrintFilterStatus') ? document.getElementById('empPrintFilterStatus').value : 'ALL';
+
+    var statusDesc = 'พนักงานทั้งหมดทุกคน';
+    if (filterStatus === 'ALL_ACTIVE') statusDesc = 'พนักงานปัจจุบัน (ประจำ + ทดลองงาน)';
+    else if (filterStatus === 'Active') statusDesc = 'เฉพาะพนักงานประจำ';
+    else if (filterStatus === 'Probation') statusDesc = 'เฉพาะช่วงทดลองงาน';
+    else if (filterStatus === 'Resigned') statusDesc = 'เฉพาะพ้นสภาพ/ลาออกแล้ว';
 
     var list = (State.employees || []).filter(function(e) {
       if (filterDept !== 'ALL' && e.department !== filterDept) return false;
@@ -5536,7 +5599,7 @@ function renderEmpPrintModal() {
       var bName = e.bankName || '-';
       var bAcc = e.bankAccount || '-';
 
-      rowsHtml += '<tr style="border-bottom: 1px solid #e2e8f0;">' +
+      rowsHtml += '<tr style="border-bottom: 1px solid #e2e8f0; page-break-inside: avoid; break-inside: avoid;">' +
         '<td style="padding: 6px 4px; text-align: center; color: #64748b; font-size: 11px;">' + (idx + 1) + '</td>' +
         '<td style="padding: 6px 6px; font-family: monospace; font-weight: 700; color: #1d4ed8; font-size: 11.5px;">' + esc(e.empId) + '</td>' +
         '<td style="padding: 6px 8px; font-weight: 700; color: #0f172a; font-size: 12px;">' +
@@ -5573,8 +5636,8 @@ function renderEmpPrintModal() {
         '</div>' +
         '<div style="text-align: right; font-size: 11px; color: #475569; line-height: 1.5;">' +
           '<div><b>วันที่พิมพ์:</b> ' + dateStr + '</div>' +
-          '<div><b>ขอบเขตข้อมูล:</b> แผนก: ' + (filterDept === 'ALL' ? 'ทั้งหมด' : esc(filterDept)) + '</div>' +
-          '<div><b>จำนวนบุคลากร:</b> <span style="font-weight: 700; color: #1d4ed8;">' + list.length + '</span> ท่าน</div>' +
+          '<div><b>ขอบเขตข้อมูล:</b> แผนก: ' + (filterDept === 'ALL' ? 'ทั้งหมด' : esc(filterDept)) + ' | สถานะ: ' + esc(statusDesc) + '</div>' +
+          '<div><b>จำนวนในรายงาน:</b> <span style="font-weight: 800; color: #1d4ed8; font-size: 13px;">' + list.length + '</span> / ' + (State.employees || []).length + ' ท่าน</div>' +
         '</div>' +
       '</div>' +
 
@@ -5596,7 +5659,7 @@ function renderEmpPrintModal() {
         '<tbody>' + rowsHtml + '</tbody>' +
         (showSalary ? (
           '<tfoot>' +
-            '<tr style="background: #f8fafc; border-top: 1.5px solid #0f172a; border-bottom: 1.5px solid #0f172a; font-weight: 700; font-size: 11.5px;">' +
+            '<tr style="background: #f8fafc; border-top: 1.5px solid #0f172a; border-bottom: 1.5px solid #0f172a; font-weight: 700; font-size: 11.5px; page-break-inside: avoid; break-inside: avoid;">' +
               '<td colspan="9" style="padding: 8px 10px; text-align: right; color: #0f172a;">รวมฐานเงินเดือนพนักงานในรายงาน (' + list.length + ' ท่าน):</td>' +
               '<td style="padding: 8px 8px; text-align: right; font-family: monospace; font-size: 12px; color: #1d4ed8; background: #eff6ff;">' + fmt(totalBaseSalary) + '</td>' +
             '</tr>' +
@@ -5604,7 +5667,7 @@ function renderEmpPrintModal() {
         ) : '') +
       '</table>' +
 
-      '<div style="margin-top: 24px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 11px; color: #334155; page-break-inside: avoid;">' +
+      '<div style="margin-top: 24px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center; font-size: 11px; color: #334155; page-break-inside: avoid; break-inside: avoid;">' +
         '<div>' +
           '<div style="height: 38px; border-bottom: 1px dashed #94a3b8; margin-bottom: 6px;"></div>' +
           '<div style="font-weight: 700;">ลงชื่อ ................................................................</div>' +
@@ -5723,7 +5786,7 @@ function renderEmpPrintModal() {
         '</div>' +
       '</div>' +
 
-      '<div style="margin-top: 32px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center; font-size: 11px; color: #334155; page-break-inside: avoid;">' +
+      '<div style="margin-top: 32px; padding-top: 14px; border-top: 1px solid #e2e8f0; display: grid; grid-template-columns: 1fr 1fr; gap: 40px; text-align: center; font-size: 11px; color: #334155; page-break-inside: avoid; break-inside: avoid;">' +
         '<div>' +
           '<div style="height: 44px; border-bottom: 1px dashed #94a3b8; margin-bottom: 6px;"></div>' +
           '<div style="font-weight: 700;">ลงชื่อ ................................................................</div>' +
@@ -5744,8 +5807,23 @@ function renderEmpPrintModal() {
 
 function executePrintEmployees() {
   clearAllPrintClasses();
-  document.body.classList.add('printing-emp-modal');
-  document.body.classList.add(_empPrintMode === 'roster' ? 'roster-orientation' : 'profile-orientation');
+  prepareEmpRegistryPrintContainer();
+
+  // Force dynamic @page orientation so all browsers (Chrome/Safari/Edge/Firefox) print landscape or portrait correctly
+  var orientStyle = document.getElementById('printPageOrientationStyle');
+  if (!orientStyle) {
+    orientStyle = document.createElement('style');
+    orientStyle.id = 'printPageOrientationStyle';
+    document.head.appendChild(orientStyle);
+  }
+
+  if (_empPrintMode === 'roster') {
+    orientStyle.textContent = '@page { size: A4 landscape !important; margin: 8mm 8mm !important; }';
+  } else {
+    orientStyle.textContent = '@page { size: A4 portrait !important; margin: 10mm 10mm !important; }';
+  }
+
+  document.body.classList.add('printing-emp-registry');
 
   setTimeout(function() {
     window.print();
