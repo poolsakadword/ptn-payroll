@@ -10053,6 +10053,33 @@ var _currentAttendanceEmpSummary = null;
 var _currentAttendanceIsIndividual = false;
 var _currentAttendanceSelectedEmpInfo = null;
 
+function getActiveCutoffPeriodString() {
+  var nowUtc = new Date();
+  var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+  var curY = bkk.getFullYear();
+  var curM = bkk.getMonth() + 1; // 1-12
+  var curD = bkk.getDate();
+  var cutDay = 25;
+  if (_currentAttendanceSettings && _currentAttendanceSettings.cutoff_day) {
+    cutDay = Number(_currentAttendanceSettings.cutoff_day);
+  } else if (State.settings && State.settings.cutoff_day) {
+    cutDay = Number(State.settings.cutoff_day);
+  } else {
+    var cutEl = document.getElementById('attSetCutoffDay');
+    if (cutEl && cutEl.value) cutDay = Number(cutEl.value);
+  }
+  if (!cutDay || isNaN(cutDay) || cutDay < 1 || cutDay > 31) cutDay = 25;
+
+  if (cutDay < 30 && curD > cutDay) {
+    curM += 1;
+    if (curM > 12) {
+      curM = 1;
+      curY += 1;
+    }
+  }
+  return curY + '-' + String(curM).padStart(2, '0');
+}
+
 function getAttendanceCutoffDatesClient(periodStr, customCutDay) {
   var cutDay = customCutDay;
   if (!cutDay) {
@@ -10092,6 +10119,19 @@ function getAttendanceCutoffDatesClient(periodStr, customCutDay) {
         var py = parseInt(numMatch[1] || numMatch[0], 10);
         if (py > 2400) py -= 543;
         yearCE = py;
+      }
+    }
+  } else {
+    var nowUtc = new Date();
+    var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
+    yearCE = bkk.getFullYear();
+    month = bkk.getMonth() + 1;
+    var day = bkk.getDate();
+    if (cutDay < 30 && day > cutDay) {
+      month += 1;
+      if (month > 12) {
+        month = 1;
+        yearCE += 1;
       }
     }
   }
@@ -10143,9 +10183,7 @@ function updateAttendancePeriodBadge() {
   if (badge) {
     var pVal = periodInput ? periodInput.value : '';
     if (!pVal) {
-      var nowUtc = new Date();
-      var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
-      pVal = bangkok.toISOString().substring(0, 7);
+      pVal = getActiveCutoffPeriodString();
       if (periodInput) periodInput.value = pVal;
     }
     var info = getAttendanceCutoffDatesClient(pVal);
@@ -10163,9 +10201,7 @@ function onAttendancePeriodChanged() {
 function setAttendanceFilterThisPeriod() {
   var periodInput = document.getElementById('attFilterPeriod');
   if (periodInput) {
-    var nowUtc = new Date();
-    var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
-    periodInput.value = bangkok.toISOString().substring(0, 7);
+    periodInput.value = getActiveCutoffPeriodString();
     _currentAttendancePeriod = periodInput.value;
   }
   updateAttendancePeriodBadge();
@@ -10215,9 +10251,7 @@ function onAttendanceDateModeChanged() {
   } else if (_currentAttendanceDateMode === 'PERIOD') {
     var periodInput = document.getElementById('attFilterPeriod');
     if (periodInput && !periodInput.value) {
-      var nowUtc = new Date();
-      var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
-      periodInput.value = bangkok.toISOString().substring(0, 7);
+      periodInput.value = getActiveCutoffPeriodString();
     }
     updateAttendancePeriodBadge();
   } else if (_currentAttendanceDateMode === 'RANGE') {
@@ -10748,7 +10782,7 @@ function onAttendanceReqDateModeChanged() {
   } else if (_currentAttendanceRequestDateMode === 'PERIOD') {
     var periodInput = document.getElementById('attReqPeriod');
     if (periodInput && !periodInput.value) {
-      periodInput.value = currentMonthStr;
+      periodInput.value = getActiveCutoffPeriodString();
     }
     updateAttendanceReqPeriodBadge();
   } else if (_currentAttendanceRequestDateMode === 'RANGE') {
@@ -10774,9 +10808,7 @@ function updateAttendanceReqPeriodBadge() {
   if (badge) {
     var pVal = periodInput ? periodInput.value : '';
     if (!pVal) {
-      var nowUtc = new Date();
-      var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
-      pVal = bangkok.toISOString().substring(0, 7);
+      pVal = getActiveCutoffPeriodString();
       if (periodInput) periodInput.value = pVal;
     }
     var info = getAttendanceCutoffDatesClient(pVal);
@@ -10792,9 +10824,7 @@ function onAttendanceReqPeriodChanged() {
 function setAttendanceReqPeriodCurrent() {
   var periodInput = document.getElementById('attReqPeriod');
   if (periodInput) {
-    var nowUtc = new Date();
-    var bangkok = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
-    periodInput.value = bangkok.toISOString().substring(0, 7);
+    periodInput.value = getActiveCutoffPeriodString();
   }
   updateAttendanceReqPeriodBadge();
   loadAttendanceRequests();
@@ -17053,9 +17083,10 @@ function setExportAttendancePreset(preset) {
   var currentDate = now.getDate();
 
   if (preset === 'cutoff') {
-    // 1. If State.period is set, calculate cutoff dates matching the active period
-    if (State.period && typeof getAttendanceCutoffDatesClient === 'function') {
-      var periodDates = getAttendanceCutoffDatesClient(State.period, cutDay);
+    // 1. Calculate cutoff dates matching the active period
+    var activePeriodStr = (typeof getActiveCutoffPeriodString === 'function') ? getActiveCutoffPeriodString() : (State.period || '');
+    if (activePeriodStr && typeof getAttendanceCutoffDatesClient === 'function') {
+      var periodDates = getAttendanceCutoffDatesClient(activePeriodStr, cutDay);
       if (periodDates && periodDates.startDate && periodDates.endDate) {
         startInput.value = periodDates.startDate;
         endInput.value = periodDates.endDate;
@@ -17070,9 +17101,18 @@ function setExportAttendancePreset(preset) {
 
     var startMonth = currentMonth - 1;
     var startYear = currentYear;
-    if (startMonth < 1) {
-      startMonth = 12;
-      startYear -= 1;
+    if (cutDay < 30 && currentDate > cutDay) {
+      startMonth = currentMonth;
+      endMonth = currentMonth + 1;
+      if (endMonth > 12) {
+        endMonth = 1;
+        endYear += 1;
+      }
+    } else {
+      if (startMonth < 1) {
+        startMonth = 12;
+        startYear -= 1;
+      }
     }
     var startDayNum = cutDay + 1;
 
@@ -17199,7 +17239,7 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
   holidayMap = holidayMap || {};
   if (Object.keys(holidayMap).length === 0 && Array.isArray(State.companyHolidays)) {
     State.companyHolidays.forEach(function(h) {
-      if (h && h.date) {
+      if (h && h.date && dateList.indexOf(h.date) >= 0) {
         holidayMap[h.date] = h;
       }
     });
@@ -17511,7 +17551,7 @@ function submitPrintTimeCards() {
       }
       var holidayMap = {};
       holidays.forEach(function(h) {
-        if (h && h.date) holidayMap[h.date] = h;
+        if (h && h.date && h.date >= startDate && h.date <= endDate) holidayMap[h.date] = h;
       });
 
       var dateList = generateDateRangeArray(startDate, endDate);
@@ -17693,7 +17733,7 @@ function submitExportTimeCardExcel() {
       }
       var holidayMap = {};
       holidays.forEach(function(h) {
-        if (h && h.date) holidayMap[h.date] = h;
+        if (h && h.date && h.date >= startDate && h.date <= endDate) holidayMap[h.date] = h;
       });
 
       var dateList = generateDateRangeArray(startDate, endDate);

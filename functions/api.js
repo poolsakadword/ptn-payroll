@@ -2983,7 +2983,17 @@ async function handleAction(db, action, params) {
       const reqEmpFilter = String(params.requestEmpId || params.request_emp_id || empFilter || '').trim();
       const dateMode = String(params.dateMode || 'SINGLE').toUpperCase(); // 'SINGLE', 'MONTH', 'PERIOD', 'RANGE'
       const filterMonth = params.month ? String(params.month).trim() : (filterDate ? filterDate.substring(0, 7) : today.substring(0, 7));
-      const filterPeriod = params.period ? String(params.period).trim() : filterMonth;
+
+      // Determine active cutoff period if day > 25
+      let defaultActivePeriod = today.substring(0, 7);
+      const todayDay = parseInt(today.substring(8, 10), 10);
+      if (todayDay > 25) {
+        let m = parseInt(today.substring(5, 7), 10) + 1;
+        let y = parseInt(today.substring(0, 4), 10);
+        if (m > 12) { m = 1; y += 1; }
+        defaultActivePeriod = `${y}-${String(m).padStart(2, '0')}`;
+      }
+      const filterPeriod = params.period ? String(params.period).trim() : defaultActivePeriod;
       const startDate = params.startDate ? String(params.startDate).trim() : '';
       const endDate = params.endDate ? String(params.endDate).trim() : '';
 
@@ -3468,7 +3478,7 @@ async function handleAction(db, action, params) {
       const isCurrentActivePeriod = (today >= startDate && today <= endDate);
 
       // Load Company Holidays
-      const holidaysRows = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
+      const holidaysRows = await db.prepare('SELECT * FROM company_holidays WHERE date BETWEEN ? AND ? ORDER BY date ASC').bind(startDate, endDate).all().catch(() => ({ results: [] }));
       const companyHolidays = holidaysRows.results || [];
       const holidayMap = {};
       const holidayDatesSet = new Set();
@@ -4507,7 +4517,7 @@ async function handleAction(db, action, params) {
         console.error('getAttendanceLogsRange error:', e);
         return { error: e.message || String(e), results: [] };
       });
-      const holidaysQuery = await db.prepare('SELECT * FROM company_holidays ORDER BY date ASC').all().catch(() => ({ results: [] }));
+      const holidaysQuery = await db.prepare('SELECT * FROM company_holidays WHERE date BETWEEN ? AND ? ORDER BY date ASC').bind(startDate, endDate).all().catch(() => ({ results: [] }));
 
       // Query approved leave requests in date range
       let lvSql = `
