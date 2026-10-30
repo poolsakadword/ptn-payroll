@@ -3968,6 +3968,11 @@ async function handleAction(db, action, params) {
         }
 
         // Calculate leave counts
+        const empSessions = getBranchShiftSessions(branch);
+        const morningFraction = empSessions.morningFraction;
+        const afternoonFraction = empSessions.afternoonFraction;
+        const lunchStart = empSessions.lunchStartMin;
+
         let sickWithCertDays = 0, sickWithCertTimes = 0;
         let sickNoCertDays = 0, sickNoCertTimes = 0;
         let businessLeaveDays = 0, businessLeaveTimes = 0;
