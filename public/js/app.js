@@ -16872,37 +16872,138 @@ function loadAiAttendanceInspector() {
     });
 }
 
+function classifyEmployeeAttendanceAnomaly(s, isOngoing) {
+  var isExempt = !!(s.isAttendanceExempt || (s.emp && s.emp.is_attendance_exempt));
+  if (isExempt) {
+    return {
+      isTrueAnomaly: false,
+      isSignificantOverbreak: false,
+      isSevereOrChronicLate: false,
+      isUnexcusedAbsent: false,
+      isHabitualMissingBreak: false,
+      isUncertifiedSick: false,
+      statusType: 'EXEMPT',
+      statusLabel: 'ยกเว้นการลงเวลา (ผู้บริหาร/วิชาชีพ)',
+      diagnosticReason: 'ได้รับการยกเว้นการลงเวลาตามนโยบายบริษัท',
+      flaggedDays: [],
+      worstDay: {}
+    };
+  }
+
+  var daily = s.dailyRecords || [];
+  var severeLateDays = [];
+  var moderateLateDays = [];
+  var severeOverbreakDays = [];
+  var moderateOverbreakDays = [];
+  var unexcusedAbsentDays = [];
+
+  daily.forEach(function(d) {
+    var lateM = Number(d.morningLateMinutes || d.lateMinutes || 0);
+    var obM = Number(d.overbreakMinutes || 0);
+    if (d.isAbsent && d.statusColor === '#dc2626') {
+      unexcusedAbsentDays.push(d);
+    }
+    if (lateM >= 15) {
+      severeLateDays.push(d);
+    } else if (lateM > 0) {
+      moderateLateDays.push(d);
+    }
+
+    if (obM >= 15) {
+      severeOverbreakDays.push(d);
+    } else if (obM >= 5) {
+      moderateOverbreakDays.push(d);
+    }
+  });
+
+  var absentDaysCount = Number(s.absentDays) || 0;
+  if (isOngoing && s.presentDays === 0 && unexcusedAbsentDays.length === 0) {
+    absentDaysCount = 0;
+  }
+
+  var isUnexcusedAbsent = absentDaysCount > 0;
+  var isSevereOrChronicLate = (severeLateDays.length > 0) || (Number(s.lateMinutes) >= 30) || (Number(s.lateTimes) >= 3);
+  var isSignificantOverbreak = (severeOverbreakDays.length > 0) || (moderateOverbreakDays.length >= 3);
+  var isHabitualMissingBreak = (Number(s.missingBreakCount) >= 3) && !s.isBreakExempt;
+  var isUncertifiedSick = (Number(s.sickNoCertDays) >= 2);
+
+  var isTrueAnomaly = isUnexcusedAbsent || isSevereOrChronicLate || isSignificantOverbreak || isHabitualMissingBreak || isUncertifiedSick;
+
+  var reasons = [];
+  if (isUnexcusedAbsent) {
+    reasons.push('ขาดงานโดยไม่ได้รับอนุญาต ' + absentDaysCount + ' วัน');
+  }
+  if (severeLateDays.length > 0) {
+    var maxLate = Math.max.apply(null, severeLateDays.map(function(d) { return Number(d.morningLateMinutes || d.lateMinutes || 0); }));
+    reasons.push('มาสายเช้าเกินเกณฑ์ ' + maxLate + ' นาที (รวมสาย ' + (s.lateMinutes || maxLate) + ' นาที)');
+  } else if (isSevereOrChronicLate) {
+    reasons.push('มาสายสะสม ' + (s.lateMinutes || 0) + ' นาที (' + (s.lateTimes || 0) + ' ครั้ง)');
+  }
+  if (severeOverbreakDays.length > 0) {
+    var maxOb = Math.max.apply(null, severeOverbreakDays.map(function(d) { return Number(d.overbreakMinutes || 0); }));
+    reasons.push('พักเที่ยงเกินเวลาอย่างมีนัยสำคัญ ' + maxOb + ' นาที');
+  } else if (isSignificantOverbreak) {
+    reasons.push('พักเที่ยงเกินเวลาเป็นประจำ (' + moderateOverbreakDays.length + ' วัน)');
+  }
+  if (isHabitualMissingBreak) {
+    reasons.push('ไม่สแกนออกพัก ' + s.missingBreakCount + ' ครั้ง (ผิดระเบียบการสแกนพักซ้ำซาก)');
+  }
+  if (isUncertifiedSick) {
+    reasons.push('ลาป่วยไม่มีใบรับรองแพทย์ ' + s.sickNoCertDays + ' วัน');
+  }
+
+  var flaggedDays = daily.filter(function(d) {
+    var lm = Number(d.morningLateMinutes || d.lateMinutes || 0);
+    var ob = Number(d.overbreakMinutes || 0);
+    return (lm >= 15 || (lm > 0 && s.lateTimes >= 3) || ob >= 15 || (ob >= 5 && moderateOverbreakDays.length >= 3) || (d.isAbsent && d.statusColor === '#dc2626'));
+  });
+  if (flaggedDays.length === 0 && (severeLateDays.length || severeOverbreakDays.length || unexcusedAbsentDays.length)) {
+    flaggedDays = severeLateDays.concat(severeOverbreakDays).concat(unexcusedAbsentDays);
+  }
+
+  return {
+    isTrueAnomaly: isTrueAnomaly,
+    isSignificantOverbreak: isSignificantOverbreak,
+    isSevereOrChronicLate: isSevereOrChronicLate,
+    isUnexcusedAbsent: isUnexcusedAbsent,
+    isHabitualMissingBreak: isHabitualMissingBreak,
+    isUncertifiedSick: isUncertifiedSick,
+    diagnosticReason: reasons.join(', ') || 'สถิติการลงเวลาไม่เป็นไปตามระเบียบ',
+    flaggedDays: flaggedDays,
+    worstDay: flaggedDays[0] || daily[0] || {}
+  };
+}
+
 function renderAiInspectorDashboard(summaryList) {
   var total = summaryList.length || 0;
   var cutoff = _aiInspectorCutoffInfo || {};
   var isOngoing = !!cutoff.isCurrentActivePeriod;
 
+  var trueAnomalyList = [];
   var overbreakList = [];
   var earlyOutList = [];
-  var diligenceRiskList = [];
   var passedList = [];
 
   summaryList.forEach(function(s) {
-    var abnormalDays = (s.dailyRecords || []).filter(function(d) {
-      return (Number(d.overbreakMinutes) > 0 || Number(d.lateMinutes) > 0 || Number(d.morningLateMinutes) > 0 || (d.isAbsent && d.statusColor === '#dc2626'));
-    });
-    var hasOverbreak = (Number(s.overbreakMinutes) > 0) || abnormalDays.some(function(d) { return Number(d.overbreakMinutes) > 0; });
-    var hasLate = (Number(s.lateMinutes) > 0) || abnormalDays.some(function(d) { return Number(d.morningLateMinutes) > 0; });
-    
-    // In ongoing period, someone who just hasn't clocked in today yet is waiting, not a violator
-    var isDiligenceLost = (s.isDiligenceQualified === false);
-    if (isOngoing && s.presentDays === 0 && !hasLate && !hasOverbreak && abnormalDays.length === 0) {
-      isDiligenceLost = false;
+    var c = classifyEmployeeAttendanceAnomaly(s, isOngoing);
+    s._aiClassification = c;
+
+    if (c.isTrueAnomaly) {
+      trueAnomalyList.push(s);
+    } else {
+      passedList.push(s);
     }
 
-    if (hasOverbreak) overbreakList.push(s);
-    if (hasLate || abnormalDays.some(function(d) { return d.statusText && d.statusText.indexOf('ขาด') !== -1; })) earlyOutList.push(s);
-    if (isDiligenceLost || hasOverbreak || (hasLate && Number(s.lateMinutes) > 1)) diligenceRiskList.push(s);
-    if (!isDiligenceLost && !hasOverbreak && !hasLate) passedList.push(s);
+    if (c.isSignificantOverbreak) {
+      overbreakList.push(s);
+    }
+    if (c.isSevereOrChronicLate || c.isUnexcusedAbsent) {
+      earlyOutList.push(s);
+    }
   });
 
   // KPI Calculations
-  var totalAnomalies = diligenceRiskList.length;
+  var anomalyCount = trueAnomalyList.length;
   var passedCount = passedList.length;
   var healthPercent = total > 0 ? Math.round((passedCount / total) * 1000) / 10 : 100;
   if (healthPercent > 100) healthPercent = 100;
@@ -16912,7 +17013,7 @@ function renderAiInspectorDashboard(summaryList) {
   var elHealthSub = document.getElementById('aiKpiHealthSub');
   if (elHealth) elHealth.textContent = healthPercent + '%';
   if (elHealthBar) elHealthBar.style.width = healthPercent + '%';
-  if (elHealthSub) elHealthSub.textContent = (healthPercent >= 90 ? '↑ สูงกว่าเป้าหมาย ' + (healthPercent - 90).toFixed(1) + '%' : '↓ ต่ำกว่าเกณฑ์มาตรฐาน');
+  if (elHealthSub) elHealthSub.textContent = (healthPercent >= 90 ? '↑ สูงกว่าเป้าหมาย ' + (healthPercent - 90).toFixed(1) + '%' : '↓ มีกลุ่มผิดปกติ ' + (100 - healthPercent).toFixed(1) + '%');
 
   var elOverbreakCount = document.getElementById('aiKpiOverbreakCount');
   var elOverbreakBar = document.getElementById('aiKpiOverbreakBar');
@@ -16923,23 +17024,22 @@ function renderAiInspectorDashboard(summaryList) {
   var elRiskCount = document.getElementById('aiKpiRiskCount');
   var elRiskBar = document.getElementById('aiKpiRiskBar');
   var elRiskList = document.getElementById('aiKpiRiskEmpList');
-  var riskCount = diligenceRiskList.length;
-  if (elRiskCount) elRiskCount.textContent = riskCount;
-  if (elRiskBar) elRiskBar.style.width = Math.min(100, Math.round((riskCount / (total || 1)) * 100)) + '%';
+  if (elRiskCount) elRiskCount.textContent = anomalyCount;
+  if (elRiskBar) elRiskBar.style.width = Math.min(100, Math.round((anomalyCount / (total || 1)) * 100)) + '%';
   if (elRiskList) {
-    if (diligenceRiskList.length > 0) {
-      var riskNames = diligenceRiskList.slice(0, 4).map(function(x) { 
+    if (trueAnomalyList.length > 0) {
+      var riskNames = trueAnomalyList.slice(0, 4).map(function(x) { 
         var id = x.empId || x.emp_id;
         return x.nickname ? (id + ' (' + x.nickname + ')') : id; 
       });
       elRiskList.textContent = riskNames.join(', ');
     } else {
-      elRiskList.textContent = 'ไม่มีกลุ่มเสี่ยง';
+      elRiskList.textContent = 'ไม่มีกลุ่มผิดปกติ';
     }
   }
 
   // Filter counters
-  if (document.getElementById('cntAiFilterAll')) document.getElementById('cntAiFilterAll').textContent = riskCount;
+  if (document.getElementById('cntAiFilterAll')) document.getElementById('cntAiFilterAll').textContent = anomalyCount;
   if (document.getElementById('cntAiFilterOverbreak')) document.getElementById('cntAiFilterOverbreak').textContent = obCount;
   if (document.getElementById('cntAiFilterEarly')) document.getElementById('cntAiFilterEarly').textContent = earlyOutList.length;
   if (document.getElementById('cntAiFilterPassed')) document.getElementById('cntAiFilterPassed').textContent = passedCount;
@@ -16947,19 +17047,20 @@ function renderAiInspectorDashboard(summaryList) {
   // Update Insights List Dynamically
   var insightsBox = document.getElementById('aiInsightsListContainer');
   if (insightsBox) {
-    if (diligenceRiskList.length === 0 && overbreakList.length === 0) {
+    if (trueAnomalyList.length === 0) {
       if (isOngoing) {
-        insightsBox.innerHTML = '<li><strong>รอบปัจจุบัน (' + (cutoff.startDate || '') + ' - ' + (cutoff.endDate || '') + '):</strong> กำลังลงเวลาสะสมแบบ Real-time ยังไม่พบพนักงานทำผิดกฎหรือเสี่ยงหลุดสิทธิ์เบี้ยขยัน</li>' +
-          '<li><strong>ระบบตรวจจับอัตโนมัติ:</strong> หากพนักงานเริ่มพักเกินหรือสายสะสม ระบบจะแจ้งเตือน HR ทันที</li>';
+        insightsBox.innerHTML = '<li><strong>รอบปัจจุบัน (' + (cutoff.startDate || '') + ' - ' + (cutoff.endDate || '') + '):</strong> กำลังลงเวลาสะสมแบบ Real-time ไม่พบพนักงานทำผิดกฎหรือมีพฤติกรรมผิดปกติ</li>' +
+          '<li><strong>ระบบตรวจจับอัจฉริยะ:</strong> หากพบการพักเกินมีนัยสำคัญ ขาดงาน หรือสายสะสม ระบบจะแจ้งเตือน HR ทันที</li>';
       } else {
-        insightsBox.innerHTML = '<li><strong>ผ่านเกณฑ์ 100%:</strong> พนักงานทุกคนในงวดนี้มีวินัยการลงเวลาที่ดีเยี่ยมและได้รับเบี้ยขยันครบถ้วน</li>';
+        insightsBox.innerHTML = '<li><strong>ผ่านเกณฑ์สมบูรณ์:</strong> พนักงานทุกคนมีวินัยการลงเวลาที่ดี ไม่พบรายการผิดปกติที่มีนัยสำคัญในงวดนี้</li>' +
+          '<li><strong>การลาที่อนุมัติ:</strong> การลากิจและลาป่วยมีใบรับรองแพทย์ได้รับการตรวจสอบถูกต้องตามระเบียบ ไม่ถือเป็นความผิดปกติของการลงเวลา</li>';
       }
     } else {
       var bullets = '';
-      diligenceRiskList.slice(0, 3).forEach(function(s) {
+      trueAnomalyList.forEach(function(s) {
         var id = s.empId || s.emp_id;
         var nick = s.nickname ? (' (' + s.nickname + ')') : '';
-        var reason = s.diligenceDisqualifyReason || 'พบสถิติเวลาทำงานไม่ครบตามเกณฑ์';
+        var reason = s._aiClassification ? s._aiClassification.diagnosticReason : (s.diligenceDisqualifyReason || 'พบสถิติเวลาทำงานไม่ครบตามเกณฑ์');
         bullets += '<li><strong>' + esc(id + nick) + ':</strong> ' + esc(reason) + '</li>';
       });
       insightsBox.innerHTML = bullets;
@@ -16970,7 +17071,7 @@ function renderAiInspectorDashboard(summaryList) {
   var pin1 = document.getElementById('aiRadarPin1');
   var pin2 = document.getElementById('aiRadarPin2');
   var pin3 = document.getElementById('aiRadarPin3');
-  var activePins = (diligenceRiskList.length > 0 ? diligenceRiskList : summaryList).slice(0, 3);
+  var activePins = (trueAnomalyList.length > 0 ? trueAnomalyList : summaryList).slice(0, 3);
   if (pin1 && activePins[0]) pin1.textContent = (activePins[0].nickname || activePins[0].empId || 'จุด 1') + ' 12m';
   if (pin2 && activePins[1]) pin2.textContent = (activePins[1].nickname || activePins[1].empId || 'จุด 2') + ' 8m';
   if (pin3 && activePins[2]) pin3.textContent = (activePins[2].nickname || activePins[2].empId || 'จุด 3') + ' 18m';
@@ -17002,30 +17103,17 @@ function renderAiInspectorCards() {
 
   var filtered = [];
   summaryList.forEach(function(s) {
-    var abnormalDays = (s.dailyRecords || []).filter(function(d) {
-      return (Number(d.overbreakMinutes) > 0 || Number(d.lateMinutes) > 0 || Number(d.morningLateMinutes) > 0 || (d.isAbsent && d.statusColor === '#dc2626'));
-    });
-    var hasOverbreak = (Number(s.overbreakMinutes) > 0) || abnormalDays.some(function(d) { return Number(d.overbreakMinutes) > 0; });
-    var hasLate = (Number(s.lateMinutes) > 0) || abnormalDays.some(function(d) { return Number(d.morningLateMinutes) > 0; });
-    var isDiligenceLost = (s.isDiligenceQualified === false);
-    if (isOngoing && s.presentDays === 0 && !hasLate && !hasOverbreak && abnormalDays.length === 0) {
-      isDiligenceLost = false;
-    }
+    var c = s._aiClassification || classifyEmployeeAttendanceAnomaly(s, isOngoing);
+    s._aiClassification = c;
 
     if (filter === 'OVERBREAK') {
-      if (hasOverbreak) filtered.push({ emp: s, abnormalDays: abnormalDays });
+      if (c.isSignificantOverbreak) filtered.push({ emp: s, info: c });
     } else if (filter === 'EARLY_OUT') {
-      if (hasLate || abnormalDays.some(function(d) { return d.statusText && d.statusText.indexOf('ขาด') !== -1; })) {
-        filtered.push({ emp: s, abnormalDays: abnormalDays });
-      }
+      if (c.isSevereOrChronicLate || c.isUnexcusedAbsent) filtered.push({ emp: s, info: c });
     } else if (filter === 'ALL_ANOMALY') {
-      if (isDiligenceLost || hasOverbreak || hasLate) {
-        filtered.push({ emp: s, abnormalDays: abnormalDays });
-      }
+      if (c.isTrueAnomaly) filtered.push({ emp: s, info: c });
     } else if (filter === 'PASSED') {
-      if (!isDiligenceLost && !hasOverbreak && !hasLate) {
-        filtered.push({ emp: s, abnormalDays: [] });
-      }
+      if (!c.isTrueAnomaly) filtered.push({ emp: s, info: c });
     }
   });
 
@@ -17037,32 +17125,48 @@ function renderAiInspectorCards() {
         '<div style="font-size:36px;margin-bottom:8px">🎉</div>' +
         '<div style="font-weight:800;font-size:15px;color:#34d399">ไม่พบรายการผิดปกติในงวดนี้</div>' +
         '<div style="font-size:12px;color:#94a3b8;margin-top:4px">' +
-          (isOngoing ? 'พนักงานทุกคนลงเวลาตามเกณฑ์ปกติในรอบนี้ (ยังไม่พบการทำผิดกฎระเบียบหรือพักเกิน)' : 'พนักงานทุกคนผ่านเกณฑ์สมบูรณ์ ไม่มีรายการเสี่ยงหลุดสิทธิ์ในงวดนี้') +
+          (isOngoing ? 'พนักงานทุกคนลงเวลาตามเกณฑ์ปกติในรอบนี้ (ยังไม่พบการทำผิดกฎระเบียบหรือพักเกิน)' : 'พนักงานทุกคนผ่านเกณฑ์ปกติ ไม่มีรายการผิดปกติที่มีนัยสำคัญในงวดนี้') +
         '</div>' +
       '</div>';
     }
     return;
   }
 
-  // If filter is PASSED, render list of employees who passed
+  // If filter is PASSED, render list of employees who passed with appropriate tags
   if (filter === 'PASSED') {
     var html = bannerHtml + '<div style="background:rgba(15,23,42,0.9);border:1px solid #1e293b;border-radius:12px;padding:16px">' +
       '<div style="font-weight:800;color:#34d399;font-size:13.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px">' +
-        '<i class="fa-solid fa-circle-check"></i> รายชื่อพนักงานที่ผ่านเกณฑ์สมบูรณ์ (' + filtered.length + ' คน)' +
+        '<i class="fa-solid fa-circle-check"></i> รายชื่อพนักงานปกติ / ผ่านเกณฑ์ (' + filtered.length + ' คน)' +
       '</div>' +
-      '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(210px, 1fr));gap:8px">';
+      '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:8px">';
     filtered.forEach(function(item) {
       var pe = item.emp;
       var empId = pe.empId || pe.emp_id;
       var fullName = pe.fullName || pe.emp_name || empId;
       var nick = pe.nickname || '';
+
+      var badgeHtml = '';
+      if (pe.isAttendanceExempt) {
+        badgeHtml = '<span style="background:rgba(100,116,139,0.25);color:#94a3b8;font-size:10px;padding:2px 6px;border-radius:4px">ยกเว้นสแกน</span>';
+      } else if (Number(pe.businessLeaveDays) > 0) {
+        badgeHtml = '<span style="background:rgba(59,130,246,0.15);color:#93c5fd;font-size:10px;padding:2px 6px;border-radius:4px">ลากิจ ' + pe.businessLeaveDays + 'ว.</span>';
+      } else if (Number(pe.sickWithCertDays) > 0) {
+        badgeHtml = '<span style="background:rgba(16,185,129,0.15);color:#6ee7b7;font-size:10px;padding:2px 6px;border-radius:4px">ลาป่วยมีใบรับรอง</span>';
+      } else if (pe.status === 'Resigned') {
+        badgeHtml = '<span style="background:rgba(148,163,184,0.15);color:#94a3b8;font-size:10px;padding:2px 6px;border-radius:4px">ลาออกตามรอบ</span>';
+      } else if (pe.isDiligenceQualified) {
+        badgeHtml = '<span style="color:#34d399;font-size:10.5px;font-weight:700">1,000฿</span>';
+      } else {
+        badgeHtml = '<span style="color:#94a3b8;font-size:10.5px">ผ่านเกณฑ์</span>';
+      }
+
       html += '<div style="background:rgba(30,41,59,0.7);padding:8px 10px;border-radius:8px;border:1px solid #334155;font-size:12px;display:flex;justify-content:space-between;align-items:center">' +
-        '<div>' +
+        '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px">' +
           '<span style="color:#60a5fa;font-family:monospace;font-weight:700">' + esc(empId) + '</span> ' +
           '<strong style="color:#f1f5f9">' + esc(fullName) + '</strong> ' +
           (nick ? ('<span style="color:#fbbf24">(' + esc(nick) + ')</span>') : '') +
         '</div>' +
-        '<span style="color:#34d399;font-size:10.5px;font-weight:700">1,000฿</span>' +
+        '<div>' + badgeHtml + '</div>' +
       '</div>';
     });
     html += '</div></div>';
@@ -17074,31 +17178,42 @@ function renderAiInspectorCards() {
   var html = bannerHtml;
   filtered.forEach(function(item) {
     var s = item.emp;
+    var c = item.info || s._aiClassification || {};
     var empId = s.empId || s.emp_id;
     var fullName = s.fullName || s.emp_name || empId;
     var nick = s.nickname || '';
     var branchId = s.branchId || s.branch_id || 'B01';
     var branchName = s.branchName || s.branch_name || 'สำนักงานใหญ่';
     var dept = s.department || s.dept || '-';
-    var abnormalDays = item.abnormalDays || [];
-    var worstDay = abnormalDays[0] || {};
+    var abnormalDays = c.flaggedDays || [];
+    var worstDay = c.worstDay || abnormalDays[0] || {};
     var isDiligenceLost = (s.isDiligenceQualified === false);
-    var reason = s.diligenceDisqualifyReason || (worstDay.statusText ? ('ตรวจพบ ' + worstDay.statusText) : 'ตรวจพบเวลาทำงานไม่ครบตามเกณฑ์');
+    var reason = c.diagnosticReason || s.diligenceDisqualifyReason || 'พบสถิติเวลาทำงานไม่ครบตามเกณฑ์';
 
-    var borderLeft = isDiligenceLost ? '#f43f5e' : '#f59e0b';
-    var riskBadge = isDiligenceLost
-      ? '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(244,63,94,0.15);color:#fb7185;border:1px solid rgba(244,63,94,0.3);font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px">⚠️ เสี่ยงหลุดเบี้ยขยัน</span>'
-      : '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.3);font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px">⚡ ตรวจพบความผิดปกติ</span>';
+    var borderLeft = c.isUnexcusedAbsent ? '#ef4444' : (c.isSevereOrChronicLate ? '#f43f5e' : '#f59e0b');
+    var riskBadge = '';
+    if (c.isUnexcusedAbsent) {
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.4);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">🚨 ขาดงานไม่มีใบลา</span>';
+    } else if (c.isSevereOrChronicLate) {
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(244,63,94,0.2);color:#fb7185;border:1px solid rgba(244,63,94,0.4);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⏰ สายระดับวิกฤต (>15น.)</span>';
+    } else if (c.isSignificantOverbreak) {
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">☕ พักเกินเวลามีนัยสำคัญ</span>';
+    } else if (c.isHabitualMissingBreak) {
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(168,85,247,0.2);color:#c084fc;border:1px solid rgba(168,85,247,0.4);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⚠️ ไม่สแกนพักซ้ำซาก</span>';
+    } else {
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(244,63,94,0.15);color:#fb7185;border:1px solid rgba(244,63,94,0.3);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⚠️ ตรวจพบความผิดปกติ</span>';
+    }
 
     // Tags for dates
     var tagsHtml = '';
     if (abnormalDays.length > 0) {
-      abnormalDays.forEach(function(d) {
+      abnormalDays.slice(0, 5).forEach(function(d) {
         var dayDateParts = (d.date || '').split('-');
         var dayFormatted = dayDateParts[2] ? (parseInt(dayDateParts[2], 10) + ' ' + (['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][parseInt(dayDateParts[1], 10) - 1] || '')) : d.date;
-        var icon = Number(d.overbreakMinutes) > 0 ? '☕' : (Number(d.morningLateMinutes) > 0 ? '⏰' : '⚠️');
+        var icon = Number(d.overbreakMinutes) > 0 ? '☕' : (Number(d.morningLateMinutes) > 0 ? '⏰' : (d.isAbsent ? '🚨' : '⚠️'));
+        var text = d.isAbsent ? 'ขาดงาน' : (Number(d.morningLateMinutes) > 0 ? ('สาย ' + d.morningLateMinutes + ' น.') : (Number(d.overbreakMinutes) > 0 ? ('พักเกิน ' + d.overbreakMinutes + ' น.') : (d.statusText || 'ผิดปกติ')));
         tagsHtml += '<span style="background:rgba(15,23,42,0.9);border:1px solid #1e293b;padding:5px 9px;border-radius:6px;font-size:11px;color:#e2e8f0;display:inline-flex;align-items:center;gap:5px">' +
-          '<span>' + icon + '</span> <strong>' + dayFormatted + ':</strong> ' + esc(d.statusText || ('สาย ' + d.lateMinutes + ' น.')) +
+          '<span>' + icon + '</span> <strong>' + dayFormatted + ':</strong> ' + esc(text) +
         '</span>';
       });
     }
@@ -17112,7 +17227,7 @@ function renderAiInspectorCards() {
     var timelineHtml = '<div style="background:rgba(15,23,42,0.9);padding:12px;border-radius:10px;border:1px solid #1e293b">' +
       '<div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:#cbd5e1;margin-bottom:8px">' +
         '<span>📊 ไทม์ไลน์เวลาทำงาน (' + (worstDay.date || 'วันที่ตรวจพบ') + ')</span>' +
-        (overbreakM > 0 ? '<span style="color:#fbbf24;font-family:monospace">พักเกิน ' + overbreakM + ' นาที</span>' : (lateM > 0 ? '<span style="color:#fb7185;font-family:monospace">สายเช้า ' + lateM + ' นาที</span>' : '')) +
+        (overbreakM > 0 ? '<span style="color:#fbbf24;font-family:monospace">พักเกิน ' + overbreakM + ' นาที</span>' : (lateM > 0 ? '<span style="color:#fb7185;font-family:monospace">สายเช้า ' + lateM + ' นาที</span>' : (worstDay.isAbsent ? '<span style="color:#ef4444;font-family:monospace">ไม่พบประวัติลงเวลา</span>' : ''))) +
       '</div>' +
       '<div class="ai-timeline-bar">' +
         '<div class="ai-timeline-morning" style="width:' + (overbreakM > 0 ? '40%' : '48%') + '">' + inTime + ' - 13:00</div>' +

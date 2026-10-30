@@ -3722,8 +3722,8 @@ async function handleAction(db, action, params) {
         let absentTimes = 0;
         let currentlyAbsentSequence = false;
         let missingBreakOccurrences = 0;
-        const isBreakExempt = (emp && (emp.is_break_exempt === 'true' || emp.is_break_exempt === true || emp.is_break_exempt === 1 || emp.is_break_exempt === '1')) ||
-                              (emp && (emp.is_attendance_exempt === 'true' || emp.is_attendance_exempt === true || emp.is_attendance_exempt === 1 || emp.is_attendance_exempt === '1'));
+        const isAttendanceExempt = (emp && (emp.is_attendance_exempt === 'true' || emp.is_attendance_exempt === true || emp.is_attendance_exempt === 1 || emp.is_attendance_exempt === '1'));
+        const isBreakExempt = (emp && (emp.is_break_exempt === 'true' || emp.is_break_exempt === true || emp.is_break_exempt === 1 || emp.is_break_exempt === '1')) || isAttendanceExempt;
 
         for (const dateStr of workingDates) {
           const log = empLogs[dateStr];
@@ -3973,17 +3973,31 @@ async function handleAction(db, action, params) {
                 currentlyAbsentSequence = false;
               }
             } else if (dateStr < today) {
-              isAbsent = true;
-              absentDays += 1.0;
-              statusText = 'ขาดงาน';
-              statusColor = '#dc2626';
-              currentlyAbsentSequence = true;
+              if (isAttendanceExempt) {
+                isPresent = true;
+                presentDays += 1.0;
+                statusText = 'ยกเว้นการลงเวลา';
+                statusColor = '#64748b';
+              } else {
+                isAbsent = true;
+                absentDays += 1.0;
+                statusText = 'ขาดงาน';
+                statusColor = '#dc2626';
+                currentlyAbsentSequence = true;
+              }
             } else if (dateStr === today) {
-              statusText = 'ยังไม่ลงเวลา';
-              statusColor = '#94a3b8';
-              if (currentlyAbsentSequence) {
-                absentTimes++;
-                currentlyAbsentSequence = false;
+              if (isAttendanceExempt) {
+                isPresent = true;
+                presentDays += 1.0;
+                statusText = 'ยกเว้นการลงเวลา';
+                statusColor = '#64748b';
+              } else {
+                statusText = 'ยังไม่ลงเวลา';
+                statusColor = '#94a3b8';
+                if (currentlyAbsentSequence) {
+                  absentTimes++;
+                  currentlyAbsentSequence = false;
+                }
               }
             } else {
               statusText = 'ยังไม่ถึงวัน';
@@ -4091,48 +4105,52 @@ async function handleAction(db, action, params) {
         const disqualifyReasons = [];
 
         if (autoDiligenceEnabled) {
-          if (joinDateStr && joinDateStr > startDate) {
-            disqualifyReasons.push('พนักงานเข้าใหม่ระหว่างงวด (ทำงานไม่เต็มงวด)');
-          }
-          if (emp.status === 'Resigned' || (emp.resign_date && normalizeDateToIso(emp.resign_date) < endDate)) {
-            disqualifyReasons.push('พนักงานลาออกระหว่างงวด');
-          }
-          if (presentDays === 0) {
-            disqualifyReasons.push('ไม่มีประวัติการลงเวลาในงวดนี้');
-          }
-          if (absentDays > 0) {
-            disqualifyReasons.push(`ขาดงาน ${absentDays} วัน (${absentTimes} ครั้ง)`);
-          }
-          if (businessLeaveDays > 0) {
-            disqualifyReasons.push(`ลากิจ ${businessLeaveDays} วัน`);
-          }
-          if (sickNoCertDays > 0) {
-            disqualifyReasons.push(`ลาป่วยไม่มีใบรับรอง ${sickNoCertDays} วัน`);
-          }
-          if (sickWithCertDays > 0) {
-            disqualifyReasons.push(`ลาป่วยมีใบรับรอง ${sickWithCertDays} วัน`);
-          }
-          if (lateTimes > maxLateCount) {
-            disqualifyReasons.push(`มาสาย ${lateTimes} ครั้ง (เกินเกณฑ์ ${maxLateCount} ครั้ง)`);
-          }
+          if (isAttendanceExempt) {
+            // Exempt personnel (e.g. executives, pharmacists) do not scan clock-in and are not disqualified
+          } else {
+            if (joinDateStr && joinDateStr > startDate) {
+              disqualifyReasons.push('พนักงานเข้าใหม่ระหว่างงวด (ทำงานไม่เต็มงวด)');
+            }
+            if (emp.status === 'Resigned' || (emp.resign_date && normalizeDateToIso(emp.resign_date) < endDate)) {
+              disqualifyReasons.push('พนักงานลาออกระหว่างงวด');
+            }
+            if (presentDays === 0) {
+              disqualifyReasons.push('ไม่มีประวัติการลงเวลาในงวดนี้');
+            }
+            if (absentDays > 0) {
+              disqualifyReasons.push(`ขาดงาน ${absentDays} วัน (${absentTimes} ครั้ง)`);
+            }
+            if (businessLeaveDays > 0) {
+              disqualifyReasons.push(`ลากิจ ${businessLeaveDays} วัน`);
+            }
+            if (sickNoCertDays > 0) {
+              disqualifyReasons.push(`ลาป่วยไม่มีใบรับรอง ${sickNoCertDays} วัน`);
+            }
+            if (sickWithCertDays > 0) {
+              disqualifyReasons.push(`ลาป่วยมีใบรับรอง ${sickWithCertDays} วัน`);
+            }
+            if (lateTimes > maxLateCount) {
+              disqualifyReasons.push(`มาสาย ${lateTimes} ครั้ง (เกินเกณฑ์ ${maxLateCount} ครั้ง)`);
+            }
 
-          for (const rec of dailyRecords) {
-            if (!rec.isHoliday) {
-              if (rec.morningLateMinutes > graceMins) {
-                disqualifyReasons.push(`สายเช้าเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.morningLateMinutes} นาที > ${graceMins} นาที)`);
-                break;
-              }
-              if (countOverbreakAsLate && rec.overbreakMinutes > graceMins) {
-                disqualifyReasons.push(`เข้าบ่ายสายเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.overbreakMinutes} นาที > ${graceMins} นาที)`);
-                break;
+            for (const rec of dailyRecords) {
+              if (!rec.isHoliday) {
+                if (rec.morningLateMinutes > graceMins) {
+                  disqualifyReasons.push(`สายเช้าเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.morningLateMinutes} นาที > ${graceMins} นาที)`);
+                  break;
+                }
+                if (countOverbreakAsLate && rec.overbreakMinutes > graceMins) {
+                  disqualifyReasons.push(`เข้าบ่ายสายเกินเกณฑ์ วันที่ ${rec.date.substring(8)} (${rec.overbreakMinutes} นาที > ${graceMins} นาที)`);
+                  break;
+                }
               }
             }
-          }
 
-          if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY' && missingBreakOccurrences > 0) {
-            disqualifyReasons.push(`ไม่สแกนออกพัก ${missingBreakOccurrences} ครั้ง (ผิดระเบียบการสแกนพัก)`);
-          } else if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY_EXCEED' && missingBreakOccurrences > 1) {
-            disqualifyReasons.push(`ไม่สแกนออกพัก ${missingBreakOccurrences} ครั้ง (เกินโควตา 1 ครั้ง)`);
+            if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY' && missingBreakOccurrences > 0) {
+              disqualifyReasons.push(`ไม่สแกนออกพัก ${missingBreakOccurrences} ครั้ง (ผิดระเบียบการสแกนพัก)`);
+            } else if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY_EXCEED' && missingBreakOccurrences > 1) {
+              disqualifyReasons.push(`ไม่สแกนออกพัก ${missingBreakOccurrences} ครั้ง (เกินโควตา 1 ครั้ง)`);
+            }
           }
 
           if (disqualifyReasons.length > 0) {
@@ -4167,6 +4185,7 @@ async function handleAction(db, action, params) {
           otHours: Math.round(otHours * 100) / 100,
           missingBreakCount: missingBreakOccurrences,
           isBreakExempt: isBreakExempt,
+          isAttendanceExempt: isAttendanceExempt,
           isDiligenceQualified,
           diligenceAmount: isDiligenceQualified ? targetAllowance : 0,
           diligenceDisqualifyReason: disqualifyReasons.join(', '),
