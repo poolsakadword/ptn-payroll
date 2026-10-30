@@ -3619,6 +3619,70 @@ function renderYearlySummaryTable() {
   }
 }
 
+var histPeriodSortOrder = 'asc';
+
+function getPeriodSortKey(period) {
+  if (!period) return 0;
+  var p = String(period).trim();
+
+  // 1. Check Thai full month names
+  var thaiMonths = [
+    'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+    'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
+  ];
+  var mIdx = -1;
+  for (var i = 0; i < thaiMonths.length; i++) {
+    if (p.indexOf(thaiMonths[i]) >= 0) {
+      mIdx = i + 1;
+      break;
+    }
+  }
+
+  // 2. Check Thai abbreviated month names
+  if (mIdx < 0) {
+    var thaiShort = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    for (var j = 0; j < thaiShort.length; j++) {
+      if (p.indexOf(thaiShort[j]) >= 0) {
+        mIdx = j + 1;
+        break;
+      }
+    }
+  }
+
+  // 3. Check ISO YYYY-MM
+  var iso = p.match(/^(\d{4})[-/](\d{1,2})/);
+  if (iso) {
+    var iy = parseInt(iso[1], 10);
+    if (iy > 2400) iy -= 543;
+    var im = parseInt(iso[2], 10);
+    return iy * 100 + im;
+  }
+
+  // 4. Extract year from Thai period (e.g. "สิงหาคม 2569")
+  var yMatch = p.match(/\d{4}/);
+  var yr = yMatch ? parseInt(yMatch[0], 10) : 0;
+  if (yr > 2400) yr -= 543;
+
+  if (yr > 0 && mIdx > 0) {
+    return yr * 100 + mIdx;
+  }
+  if (mIdx > 0) return mIdx;
+  return 0;
+}
+
+function toggleHistoryPeriodSort() {
+  histPeriodSortOrder = (histPeriodSortOrder === 'asc') ? 'desc' : 'asc';
+  var icon = document.getElementById('histPeriodSortIcon');
+  if (icon) icon.textContent = (histPeriodSortOrder === 'asc') ? '▲' : '▼';
+  if (currentHistoryList && currentHistoryList.length > 0) {
+    currentHistoryList.sort(function(a, b) {
+      var diff = getPeriodSortKey(a.period) - getPeriodSortKey(b.period);
+      return histPeriodSortOrder === 'desc' ? -diff : diff;
+    });
+    filterHistoryTable();
+  }
+}
+
 function onHistoryEmpChanged(silent) {
   var sel = document.getElementById('histEmpSelect');
   var empId = sel ? sel.value : '';
@@ -3645,9 +3709,15 @@ function onHistoryEmpChanged(silent) {
       var yr = yrSel ? yrSel.value : '';
       if (yr && yr !== 'ALL') {
         currentHistoryList = currentHistoryList.filter(function(h) {
-          return h.period && h.period.indexOf(yr) >= 0;
+          return periodMatchesYear(h.period, yr);
         });
       }
+
+      // Sort chronologically by month
+      currentHistoryList.sort(function(a, b) {
+        var diff = getPeriodSortKey(a.period) - getPeriodSortKey(b.period);
+        return histPeriodSortOrder === 'desc' ? -diff : diff;
+      });
 
       var initials = (emp.fullName || '').substring(0, 2);
       var histAvatarEl = document.getElementById('histEmpAvatarInitials');
@@ -7077,6 +7147,9 @@ function printAllEmployeesBatch() {
         var emp = item.emp;
         var rows = item.rows;
         if (rows.length === 0) return; // Skip employees with no records in this year
+        rows.sort(function(a, b) {
+          return getPeriodSortKey(a.period) - getPeriodSortKey(b.period);
+        });
 
         var pfText = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate)) && Number(emp.pfRate) > 0) ? (Math.round(Number(emp.pfRate) * 100) + '%') : 'ไม่หัก PF';
 

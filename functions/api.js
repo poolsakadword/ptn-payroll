@@ -624,6 +624,59 @@ function normalizeDateToIso(str) {
   return s.substring(0, 10);
 }
 
+const THAI_MONTH_NAMES_LIST = [
+  'มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+  'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'
+];
+const THAI_SHORT_MONTH_NAMES_LIST = [
+  'ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
+  'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'
+];
+
+function getPeriodSortKey(period) {
+  if (!period) return 0;
+  const p = String(period).trim();
+
+  // 1. Check Thai full month names
+  let mIdx = -1;
+  for (let i = 0; i < THAI_MONTH_NAMES_LIST.length; i++) {
+    if (p.includes(THAI_MONTH_NAMES_LIST[i])) {
+      mIdx = i + 1;
+      break;
+    }
+  }
+
+  // 2. Check Thai abbreviated month names
+  if (mIdx < 0) {
+    for (let j = 0; j < THAI_SHORT_MONTH_NAMES_LIST.length; j++) {
+      if (p.includes(THAI_SHORT_MONTH_NAMES_LIST[j])) {
+        mIdx = j + 1;
+        break;
+      }
+    }
+  }
+
+  // 3. Check ISO YYYY-MM
+  const iso = p.match(/^(\d{4})[-/](\d{1,2})/);
+  if (iso) {
+    let iy = parseInt(iso[1], 10);
+    if (iy > 2400) iy -= 543;
+    const im = parseInt(iso[2], 10);
+    return iy * 100 + im;
+  }
+
+  // 4. Extract year from Thai period (e.g. "สิงหาคม 2569")
+  const yMatch = p.match(/\d{4}/);
+  let yr = yMatch ? parseInt(yMatch[0], 10) : 0;
+  if (yr > 2400) yr -= 543;
+
+  if (yr > 0 && mIdx > 0) {
+    return yr * 100 + mIdx;
+  }
+  if (mIdx > 0) return mIdx;
+  return 0;
+}
+
 function categorizeLeaveType(leaveType, medicalCertUrl) {
   const raw = String(leaveType || '').trim();
   const rawUpper = raw.toUpperCase();
@@ -5398,6 +5451,10 @@ async function handleAction(db, action, params) {
         s.totalNetPay += Number(c.net_pay) || 0;
       }
 
+      for (const s of Object.values(empSummaryMap)) {
+        s.periodsList.sort((a, b) => getPeriodSortKey(a) - getPeriodSortKey(b));
+      }
+
       const summaryList = Object.values(empSummaryMap).sort((a,b) => a.empId.localeCompare(b.empId));
 
       const grandTotal = {
@@ -5427,8 +5484,8 @@ async function handleAction(db, action, params) {
     }
 
     case 'getAllEmployeeHistory': {
-      const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY period DESC, emp_id ASC').all()).results || [];
-      const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY period DESC, emp_id ASC').all()).results || [];
+      const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY emp_id ASC').all()).results || [];
+      const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY emp_id ASC').all()).results || [];
       const emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
       const branches = (await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }))).results || [];
 
@@ -5446,6 +5503,11 @@ async function handleAction(db, action, params) {
       }
 
       const allRecords = calcs.map(c => mapPayrollCalcHistoryRecord(c, inputMap, empMap));
+      allRecords.sort((a, b) => {
+        const pDiff = getPeriodSortKey(a.period) - getPeriodSortKey(b.period);
+        if (pDiff !== 0) return pDiff;
+        return String(a.empId || '').localeCompare(String(b.empId || ''));
+      });
 
       return { success: true, allHistory: allRecords, branches, advanceStats };
     }
@@ -5457,14 +5519,15 @@ async function handleAction(db, action, params) {
       const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
       if (!emp) return { success: false, message: `ไม่พบพนักงานรหัส ${empId}` };
 
-      const calcs = await db.prepare('SELECT * FROM payroll_calcs WHERE emp_id = ? ORDER BY period DESC').bind(empId).all();
-      const inputs = await db.prepare('SELECT * FROM monthly_inputs WHERE emp_id = ? ORDER BY period DESC').bind(empId).all();
+      const calcs = await db.prepare('SELECT * FROM payroll_calcs WHERE emp_id = ?').bind(empId).all();
+      const inputs = await db.prepare('SELECT * FROM monthly_inputs WHERE emp_id = ?').bind(empId).all();
 
       const inputMap = {};
       for (const i of inputs.results || []) inputMap[i.period] = i;
 
       const empMap = { [empId]: emp };
       const historyList = (calcs.results || []).map(c => mapPayrollCalcHistoryRecord(c, inputMap, empMap));
+      historyList.sort((a, b) => getPeriodSortKey(a.period) - getPeriodSortKey(b.period));
 
       return {
         success: true,

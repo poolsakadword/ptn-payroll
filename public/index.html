@@ -2487,7 +2487,7 @@
               <table class="data-table" id="historyTable">
                 <thead id="historyTableHead">
                   <tr>
-                    <th style="width:100px">งวดเดือน</th>
+                    <th style="width:105px;cursor:pointer;user-select:none" onclick="toggleHistoryPeriodSort()" title="คลิกเพื่อสลับเรียงลำดับเดือน (น้อยไปมาก / มากไปน้อย)">งวดเดือน <span id="histPeriodSortIcon" style="font-size:10px;color:var(--primary);margin-left:2px">▲</span></th>
                     <th class="text-right" style="width:95px">เงินเดือนฐาน</th>
                     <th class="text-right" style="width:45px">ขาด</th>
                     <th class="text-right" style="width:45px">ลากิจ</th>
@@ -6508,6 +6508,6 @@
   </aside>
 
   <script src="js/config.js?v=9.98"></script>
-  <script src="js/app.js?v=10.00"></script>
+  <script src="js/app.js?v=10.01"></script>
 </body>
 </html>
