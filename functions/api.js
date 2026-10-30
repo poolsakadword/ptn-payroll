@@ -2188,14 +2188,37 @@ async function handleAction(db, action, params) {
         for (const lr of detailedLeaves) {
           const lrEmpId = String(lr.emp_id || '').trim();
           const emp = employees.find(e => String(e.emp_id).trim() === lrEmpId);
-          const origDays = Number(lr.days_count) || 1.0;
-          let daysDeductedDueToWork = 0;
+          const branch = emp ? branchMap[emp.branch_id] : null;
+          const sessions = getBranchShiftSessions(branch);
+          const timeSlot = String(lr.time_slot || '').toUpperCase();
 
-          // Check each date covered by this leave within cutoff window
           const sDate = String(lr.start_date || '').trim().substring(0, 10);
           const eDate = String(lr.end_date || '').trim().substring(0, 10);
           if (!sDate || !eDate) continue;
 
+          let origDays = Number(lr.days_count) || 1.0;
+          if (origDays === 0.5) {
+            let effectiveSlot = timeSlot;
+            if (!effectiveSlot || effectiveSlot === 'FULL') {
+              const tl = logsByEmpDate[`${lrEmpId}_${sDate}`] || logsByEmpDate[`${lr.emp_id}_${sDate}`];
+              if (tl && tl.clock_in) {
+                const inM = timeStringToMinutes(tl.clock_in);
+                if (inM !== null && inM >= sessions.lunchStartMin) {
+                  effectiveSlot = 'MORNING';
+                } else {
+                  effectiveSlot = 'AFTERNOON';
+                }
+              }
+            }
+            if (effectiveSlot === 'MORNING') {
+              origDays = sessions.morningFraction;
+            } else if (effectiveSlot === 'AFTERNOON') {
+              origDays = sessions.afternoonFraction;
+            }
+          }
+          let daysDeductedDueToWork = 0;
+
+          // Check each date covered by this leave within cutoff window
           let dCur = new Date(sDate + 'T00:00:00Z');
           const dEnd = new Date(eDate + 'T00:00:00Z');
 
@@ -2225,8 +2248,8 @@ async function handleAction(db, action, params) {
                     adjustedDeduction: 1.0,
                     note: `มีใบลา ${lr.leave_type} แต่วันนี้มาทำงานจริง ${wHours} ชม. (เต็มกะ)`
                   });
-                } else if (wHours >= 3.5) {
-                  // HALF WORK DAY: worked at least half day (3.5+ hrs)
+                } else if (wHours >= 3.5 && (Number(lr.days_count) || 1.0) > 0.5) {
+                  // HALF WORK DAY: worked at least half day (3.5+ hrs) for a full-day leave
                   daysDeductedDueToWork += 0.5;
                   overriddenDatesByEmp[`${lrEmpId}_${dStr}`] = 'HALF';
                   overriddenDatesByEmp[`${lr.emp_id}_${dStr}`] = 'HALF';
@@ -2285,8 +2308,25 @@ async function handleAction(db, action, params) {
           const sDate = String(lr.start_date || '').trim().substring(0, 10);
           const eDate = String(lr.end_date || '').trim().substring(0, 10);
           if ((lrEmp === normEmpId || lr.emp_id === empId) && dateStr >= sDate && dateStr <= eDate) {
-            d += Number(lr.days_count) || 1.0;
-            if (lr.time_slot) timeSlot = String(lr.time_slot).toUpperCase();
+            let dc = Number(lr.days_count) || 1.0;
+            let slot = String(lr.time_slot || '').toUpperCase();
+            if (dc === 0.5) {
+              const emp = employees.find(e => String(e.emp_id).trim() === lrEmp);
+              const branch = emp ? branchMap[emp.branch_id] : null;
+              const sessions = getBranchShiftSessions(branch);
+              if (!slot || slot === 'FULL') {
+                const tl = logsByEmpDate[`${lrEmp}_${dateStr}`] || logsByEmpDate[`${empId}_${dateStr}`];
+                if (tl && tl.clock_in) {
+                  const inM = timeStringToMinutes(tl.clock_in);
+                  if (inM !== null && inM >= sessions.lunchStartMin) slot = 'MORNING';
+                  else slot = 'AFTERNOON';
+                }
+              }
+              if (slot === 'MORNING') dc = sessions.morningFraction;
+              else if (slot === 'AFTERNOON') dc = sessions.afternoonFraction;
+            }
+            d += dc;
+            if (slot) timeSlot = slot;
             matchingLeave = lr;
           }
         }
@@ -2336,7 +2376,7 @@ async function handleAction(db, action, params) {
 
         let coversMorning = (leaveSlot === 'FULL' && approvedLeaveDays >= 1.0) || leaveSlot === 'MORNING';
         let coversAfternoon = (leaveSlot === 'FULL' && approvedLeaveDays >= 1.0) || leaveSlot === 'AFTERNOON';
-        if (!coversMorning && !coversAfternoon && approvedLeaveDays === 0.5) {
+        if (!coversMorning && !coversAfternoon && (approvedLeaveDays === 0.5 || (approvedLeaveDays > 0 && approvedLeaveDays < 1.0))) {
           if (inMin !== null && inMin >= lunchStart) coversMorning = true;
           else coversAfternoon = true;
         }
@@ -2555,7 +2595,7 @@ async function handleAction(db, action, params) {
 
             let coversMorning = (leaveSlot === 'FULL' && approvedLeaveDays >= 1.0) || leaveSlot === 'MORNING';
             let coversAfternoon = (leaveSlot === 'FULL' && approvedLeaveDays >= 1.0) || leaveSlot === 'AFTERNOON';
-            if (!coversMorning && !coversAfternoon && approvedLeaveDays === 0.5) {
+            if (!coversMorning && !coversAfternoon && (approvedLeaveDays === 0.5 || (approvedLeaveDays > 0 && approvedLeaveDays < 1.0))) {
               if (tl && tl.clock_in) {
                 const inM = timeStringToMinutes(tl.clock_in);
                 if (inM !== null && inM >= lunchStart) coversMorning = true;
@@ -3684,13 +3724,19 @@ async function handleAction(db, action, params) {
               coversMorning = true;
               coversAfternoon = true;
             } else if (leaveDaysCount === 0.5) {
-              // Legacy 0.5 without slot: covers whichever half employee did not work
+              // 0.5 leave without slot or full: covers whichever half employee did not work
               if (log && log.clock_in) {
                 const inM = timeStringToMinutes(log.clock_in);
-                if (inM !== null && inM >= lunchStart) coversMorning = true;
-                else coversAfternoon = true;
+                if (inM !== null && inM >= lunchStart) {
+                  coversMorning = true;
+                  leaveTimeSlot = 'MORNING';
+                } else {
+                  coversAfternoon = true;
+                  leaveTimeSlot = 'AFTERNOON';
+                }
               } else {
                 coversMorning = true;
+                leaveTimeSlot = 'MORNING';
               }
             } else {
               coversMorning = true;
@@ -3743,7 +3789,14 @@ async function handleAction(db, action, params) {
               }
             } else {
               isPresent = true;
-              presentDays++;
+              if (matchingLeave && (leaveDaysCount === 0.5 || (leaveDaysCount > 0 && leaveDaysCount < 1.0))) {
+                let workedFraction = 0.5;
+                if (coversMorning) workedFraction = afternoonFraction;
+                else if (coversAfternoon) workedFraction = morningFraction;
+                presentDays += Math.round(workedFraction * 100) / 100;
+              } else {
+                presentDays++;
+              }
               morningLateMins = Number(log.late_minutes) || 0;
               overBreakMins = countOverbreakAsLate ? (Number(log.overbreak_minutes) || 0) : 0;
               curLateMins = morningLateMins + overBreakMins;
@@ -3936,7 +3989,24 @@ async function handleAction(db, action, params) {
           }
 
           if (sDate === eDate && Number(lr.days_count) > 0 && Number(lr.days_count) < daysInCutoff) {
-            daysInCutoff = Number(lr.days_count);
+            let origDaysInLeave = Number(lr.days_count);
+            if (origDaysInLeave === 0.5) {
+              let lrSlot = String(lr.time_slot || '').toUpperCase();
+              if (!lrSlot || lrSlot === 'FULL') {
+                const tl = empLogs[sDate];
+                if (tl && tl.clock_in) {
+                  const inM = timeStringToMinutes(tl.clock_in);
+                  if (inM !== null && inM >= lunchStart) lrSlot = 'MORNING';
+                  else lrSlot = 'AFTERNOON';
+                }
+              }
+              if (lrSlot === 'MORNING') {
+                origDaysInLeave = morningFraction;
+              } else if (lrSlot === 'AFTERNOON') {
+                origDaysInLeave = afternoonFraction;
+              }
+            }
+            daysInCutoff = origDaysInLeave;
           }
 
           if (daysInCutoff > 0) {
