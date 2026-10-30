@@ -3809,22 +3809,24 @@ async function handleAction(db, action, params) {
             let currentAbsentFraction = 0;
 
             // 1. Morning absence: clocked in at or after lunch start (missed morning) AND not covered by morning leave
-            if (inMin !== null && inMin >= lunchStart && !coversMorning) {
-              isHalfAbsent = true;
-              currentAbsentFraction = morningFraction;
-              halfAbsentLabel = `ขาดงาน (ครึ่งเช้า ${morningHours} ชม.)`;
-            }
-            // 2. Afternoon absence: clocked in morning, but missed afternoon AND not covered by afternoon leave
-            else if (inMin !== null && inMin < lunchStart && !coversAfternoon) {
-              const isAfternoonMissing = (outMin !== null && outMin <= lunchEnd) ||
-                                         (dateStr < today && (
-                                           (bOutMin !== null && bInMin === null && outMin === null) ||
-                                           (outMin === null && bInMin === null && wHours <= 0)
-                                         ));
-              if (isAfternoonMissing) {
+            if (!isAttendanceExempt) {
+              if (inMin !== null && inMin >= lunchStart && !coversMorning) {
                 isHalfAbsent = true;
-                currentAbsentFraction = afternoonFraction;
-                halfAbsentLabel = `ขาดงาน (ครึ่งบ่าย ${afternoonHours} ชม.)`;
+                currentAbsentFraction = morningFraction;
+                halfAbsentLabel = `ขาดงาน (ครึ่งเช้า ${morningHours} ชม.)`;
+              }
+              // 2. Afternoon absence: clocked in morning, but missed afternoon AND not covered by afternoon leave
+              else if (inMin !== null && inMin < lunchStart && !coversAfternoon) {
+                const isAfternoonMissing = (outMin !== null && outMin <= lunchEnd) ||
+                                           (dateStr < today && (
+                                             (bOutMin !== null && bInMin === null && outMin === null) ||
+                                             (outMin === null && bInMin === null && wHours <= 0)
+                                           ));
+                if (isAfternoonMissing) {
+                  isHalfAbsent = true;
+                  currentAbsentFraction = afternoonFraction;
+                  halfAbsentLabel = `ขาดงาน (ครึ่งบ่าย ${afternoonHours} ชม.)`;
+                }
               }
             }
 
@@ -3850,9 +3852,15 @@ async function handleAction(db, action, params) {
               } else {
                 presentDays++;
               }
-              morningLateMins = Number(log.late_minutes) || 0;
-              overBreakMins = countOverbreakAsLate ? (Number(log.overbreak_minutes) || 0) : 0;
-              curLateMins = morningLateMins + overBreakMins;
+              if (isAttendanceExempt) {
+                morningLateMins = 0;
+                overBreakMins = 0;
+                curLateMins = 0;
+              } else {
+                morningLateMins = Number(log.late_minutes) || 0;
+                overBreakMins = countOverbreakAsLate ? (Number(log.overbreak_minutes) || 0) : 0;
+                curLateMins = morningLateMins + overBreakMins;
+              }
 
               let dayLateTimes = 0;
               if (morningLateMins > 0) dayLateTimes++;
