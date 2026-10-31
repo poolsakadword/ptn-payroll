@@ -4705,11 +4705,38 @@ async function handleAction(db, action, params) {
         return { results: [] };
       });
 
+      // Query approved advance requests in date range
+      let advSql = `
+        SELECT 
+          ar.id, ar.emp_id, ar.amount, ar.request_date, ar.period, ar.reason, ar.status, ar.approved_at,
+          e.full_name, e.nickname, e.department, e.position
+        FROM advance_requests ar
+        LEFT JOIN employees e ON ar.emp_id = e.emp_id
+        WHERE UPPER(TRIM(ar.status)) = 'APPROVED'
+          AND substr(ar.request_date, 1, 10) BETWEEN ? AND ?
+      `;
+      const advBinds = [startDate, endDate];
+      if (branchFilter && branchFilter !== 'ALL') {
+        advSql += ` AND (e.branch_id = ?)`;
+        advBinds.push(branchFilter);
+      }
+      if (empFilter && empFilter !== 'ALL') {
+        advSql += ` AND ar.emp_id = ?`;
+        advBinds.push(empFilter);
+      }
+      advSql += ` ORDER BY ar.emp_id ASC, ar.request_date ASC`;
+
+      const advancesQuery = await db.prepare(advSql).bind(...advBinds).all().catch(e => {
+        console.error('getAttendanceLogsRange advances error:', e);
+        return { results: [] };
+      });
+
       return {
         success: !query.error,
         error: query.error || undefined,
         logs: query.results || [],
         leaves: leavesQuery.results || [],
+        advances: advancesQuery.results || [],
         holidays: holidaysQuery.results || [],
         startDate,
         endDate,

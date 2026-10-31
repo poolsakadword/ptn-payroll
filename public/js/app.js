@@ -17847,7 +17847,7 @@ function getLeaveSlotLabel(slot) {
 }
 
 // Build Classic Time Card HTML for a single employee sheet
-function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pageNum, totalPages, holidayMap, empLeaves) {
+function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pageNum, totalPages, holidayMap, empLeaves, empAdvances) {
   var thaiDays = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
   var daysWorked = 0;
   var totalWorkHours = 0;
@@ -17858,6 +17858,17 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
   var absentCount = 0;
   var holidayCount = 0;
   empLeaves = empLeaves || [];
+  empAdvances = empAdvances || [];
+
+  // Map advances by date and calculate total
+  var dateAdvancesMap = {};
+  var totalAdvanceAmount = 0;
+  empAdvances.forEach(function(ad) {
+    var reqD = String(ad.request_date || '').trim().substring(0, 10);
+    if (!dateAdvancesMap[reqD]) dateAdvancesMap[reqD] = [];
+    dateAdvancesMap[reqD].push(ad);
+    totalAdvanceAmount += (Number(ad.amount) || 0);
+  });
 
   holidayMap = holidayMap || {};
   if (Object.keys(holidayMap).length === 0 && Array.isArray(State.companyHolidays)) {
@@ -17886,6 +17897,9 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
     if (isHoliday) {
       holidayCount++;
     }
+
+    // Match approved advance for this date
+    var dayAdvances = dateAdvancesMap[dStr] || [];
 
     // Match approved leave for this date
     var matchingLeave = null;
@@ -17932,6 +17946,12 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
         var reasonText = matchingLeave.reason ? (' • ' + matchingLeave.reason) : '';
         notes.push('📝 ' + lvTypeName + lvSlotName + reasonText);
       }
+      if (dayAdvances.length > 0) {
+        dayAdvances.forEach(function(ad) {
+          var amt = Number(ad.amount) || 0;
+          notes.push('💵 เบิกเงินล่วงหน้า ' + amt.toLocaleString() + ' บ.');
+        });
+      }
       if (isHoliday) {
         notes.push('⭐ ทำงานวันหยุด (' + holidayName + ')');
       }
@@ -17943,12 +17963,12 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
 
       var lateCellStyle = lateM > 0 ? 'color:#b91c1c;font-weight:700;background:#fee2e2;' : 'color:#64748b;';
       var in1Color = lateM > 0 ? '#dc2626' : '#1d4ed8';
-      var rowBg = isHoliday ? 'background:#fef3c7;' : (matchingLeave ? 'background:#f5f3ff;' : (isSunday ? 'background:#fff1f2;' : (idx % 2 === 1 ? 'background:#faf5ea;' : '')));
+      var rowBg = isHoliday ? 'background:#fef3c7;' : (matchingLeave ? 'background:#f5f3ff;' : (dayAdvances.length > 0 ? 'background:#fef9c3;border-left:3px solid #eab308;' : (isSunday ? 'background:#fff1f2;' : (idx % 2 === 1 ? 'background:#faf5ea;' : ''))));
 
       rowsHtml += '<tr style="height:20px;' + rowBg + '">' +
         '<td>' + (idx + 1) + '</td>' +
         '<td class="font-digital">' + dateDisplay + '</td>' +
-        '<td style="' + (isSunday ? 'color:#b91c1c;font-weight:700;' : (isHoliday ? 'color:#b45309;font-weight:700;' : (matchingLeave ? 'color:#6d28d9;font-weight:700;' : ''))) + '">' + dayName + '</td>' +
+        '<td style="' + (isSunday ? 'color:#b91c1c;font-weight:700;' : (isHoliday ? 'color:#b45309;font-weight:700;' : (matchingLeave ? 'color:#6d28d9;font-weight:700;' : (dayAdvances.length > 0 ? 'color:#854d0e;font-weight:700;' : '')))) + '">' + dayName + '</td>' +
         '<td class="font-digital" style="font-weight:700;color:' + in1Color + '">' + in1 + '</td>' +
         '<td class="font-digital" style="color:#475569">' + out1 + '</td>' +
         '<td class="font-digital" style="color:#475569">' + in2 + '</td>' +
@@ -17957,7 +17977,7 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
         '<td class="font-digital" style="color:#78350f">' + otEnd + '</td>' +
         '<td style="font-weight:700">' + (wH > 0 ? wH.toFixed(1) : '-') + '</td>' +
         '<td style="' + lateCellStyle + '">' + (lateM > 0 ? lateM : '-') + '</td>' +
-        '<td style="text-align:left;padding-left:6px;font-size:9.5px;color:' + (isHoliday ? '#b45309;font-weight:700;' : (matchingLeave ? '#6d28d9;font-weight:700;' : '#78350f;')) + '">' + (notes.join(', ') || 'ปกติ') + '</td>' +
+        '<td style="text-align:left;padding-left:6px;font-size:9.5px;color:' + (isHoliday ? '#b45309;font-weight:700;' : (matchingLeave ? '#6d28d9;font-weight:700;' : (dayAdvances.length > 0 ? '#854d0e;font-weight:700;' : '#78350f;'))) + '">' + (notes.join(', ') || 'ปกติ') + '</td>' +
       '</tr>';
     } else {
       // Empty day row (No clock-in)
@@ -17969,6 +17989,10 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
         leaveCount += lvVal;
         var reasonText = matchingLeave.reason ? (' • ' + matchingLeave.reason) : '';
         var leaveFullText = '📝 ' + lvTypeName + lvSlotName + reasonText;
+        if (dayAdvances.length > 0) {
+          var advT = dayAdvances.map(function(ad) { return '💵 เบิกเงิน ' + (Number(ad.amount) || 0).toLocaleString() + ' บ.'; }).join(', ');
+          leaveFullText += ' • ' + advT;
+        }
 
         rowsHtml += '<tr style="height:20px;background:#f5f3ff;border-left:3px solid #8b5cf6;">' +
           '<td>' + (idx + 1) + '</td>' +
@@ -17980,6 +18004,20 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
           '<td>-</td>' +
           '<td>-</td>' +
           '<td style="text-align:left;padding-left:6px;color:#6d28d9;font-weight:700;font-size:9.5px;">' + lvTypeName + '</td>' +
+        '</tr>';
+      } else if (dayAdvances.length > 0) {
+        // Day with Advance Request without clock-in
+        var advListText = dayAdvances.map(function(ad) { return '💵 เบิกเงินล่วงหน้า ' + (Number(ad.amount) || 0).toLocaleString() + ' บ. (อนุมัติแล้ว)'; }).join(', ');
+        rowsHtml += '<tr style="height:20px;background:#fef9c3;border-left:3px solid #eab308;">' +
+          '<td>' + (idx + 1) + '</td>' +
+          '<td class="font-digital" style="font-weight:700;color:#854d0e;">' + dateDisplay + '</td>' +
+          '<td style="color:#854d0e;font-weight:700;">' + dayName + '</td>' +
+          '<td colspan="6" style="color:#854d0e;font-weight:700;font-size:9.5px;text-align:center;">' +
+            advListText +
+          '</td>' +
+          '<td>-</td>' +
+          '<td>-</td>' +
+          '<td style="text-align:left;padding-left:6px;color:#854d0e;font-weight:700;font-size:9.5px;">เบิกเงินล่วงหน้า</td>' +
         '</tr>';
       } else if (isHoliday) {
         // Special / Company Holiday Row
@@ -18069,7 +18107,7 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
           '<th colspan="2" style="background: #fef3c7;">ล่วงเวลา (OT)</th>' +
           '<th rowspan="2" style="width: 44px;">รวม ชม.</th>' +
           '<th rowspan="2" style="width: 40px;">สาย (น.)</th>' +
-          '<th rowspan="2">หมายเหตุ / ตราประทับ</th>' +
+          '<th rowspan="2">หมายเหตุ / การลา / รายการเงินเบิก</th>' +
         '</tr>' +
         '<tr>' +
           '<th style="width: 42px; color: #1e3a8a;">เข้า 1</th>' +
@@ -18095,6 +18133,31 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
       '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">วันหยุดบริษัท / พิเศษ</div><div style="font-size: 13px; font-weight: 800; color: #b45309;">' + holidayCount + ' วัน</div></div>' +
     '</div>' +
 
+    '<!-- Advance Payment Summary Banner -->' +
+    (totalAdvanceAmount > 0 ? (
+      '<div style="margin-top: 6px; border: 1.5px solid #eab308; background: #fffbeb; border-radius: 4px; padding: 5px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 11px;">' +
+        '<div style="display: flex; align-items: center; gap: 8px;">' +
+          '<span style="background: #eab308; color: #713f12; width: 22px; height: 22px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 11px;">฿</span>' +
+          '<div>' +
+            '<strong style="color: #854d0e; font-size: 11.5px;">รายการเบิกเงินล่วงหน้างวดนี้ (Advance Payment):</strong>' +
+            '<span style="color: #713f12; margin-left: 6px;">' +
+              empAdvances.map(function(ad) {
+                var d = String(ad.request_date || '').substring(0, 10);
+                var parts = d.split('-');
+                var thD = parts.length === 3 ? (parts[2] + '/' + parts[1] + '/' + (parseInt(parts[0], 10) + 543)) : d;
+                return (thD ? ('วันที่ ' + thD + ' ') : '') + (Number(ad.amount) || 0).toLocaleString() + '฿';
+              }).join(', ') +
+            '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="text-align: right;">' +
+          '<span style="font-size: 10px; color: #854d0e;">ยอดเบิกรวม:</span>' +
+          '<strong class="font-digital" style="font-size: 13.5px; color: #b45309; margin-left: 4px;">฿ ' + totalAdvanceAmount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + '</strong>' +
+          '<span style="font-size: 9px; color: #a16207; display: block;">(หักในสลิปเงินเดือนงวดนี้)</span>' +
+        '</div>' +
+      '</div>'
+    ) : '') +
+
     '<!-- Signatures -->' +
     '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 14px; text-align: center; font-size: 11px; color: #451a03;">' +
       '<div>' +
@@ -18102,6 +18165,7 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
         '<div style="font-weight: 700;">ลายมือชื่อพนักงาน</div>' +
         '<div style="font-size: 10px; color: #78350f;">( ' + (getEmpFullName(emp) || '..............................') + ' )</div>' +
         '<div style="font-size: 9.5px; color: #92400e;">วันที่ ...../...../..........</div>' +
+        (totalAdvanceAmount > 0 ? ('<div style="font-size: 8.5px; color: #b45309; margin-top: 2px;">*รับทราบเวลาทำงานและยอดหักเบิกเงิน ' + totalAdvanceAmount.toLocaleString() + '฿*</div>') : '') +
       '</div>' +
       '<div>' +
         '<div style="border-bottom: 1px dotted #92400e; width: 80%; margin: 25px auto 4px;"></div>' +
@@ -18254,12 +18318,21 @@ function submitPrintTimeCards() {
         empLeavesMap[key].push(lv);
       });
 
+      var advances = r.advances || [];
+      var empAdvancesMap = {};
+      advances.forEach(function(ad) {
+        var key = String(ad.emp_id || '').trim();
+        if (!empAdvancesMap[key]) empAdvancesMap[key] = [];
+        empAdvancesMap[key].push(ad);
+      });
+
       var sheetsHtml = '';
       employeesToPrint.forEach(function(emp, i) {
         var eId = getEmpId(emp);
         var eMap = empLogsMap[eId] || {};
         var eLeaves = empLeavesMap[eId] || [];
-        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, eMap, periodText, i + 1, employeesToPrint.length, holidayMap, eLeaves);
+        var eAdvances = empAdvancesMap[eId] || [];
+        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, eMap, periodText, i + 1, employeesToPrint.length, holidayMap, eLeaves, eAdvances);
       });
 
       var printDocHtml = '<!DOCTYPE html>' +
@@ -18433,11 +18506,20 @@ function submitExportTimeCardExcel() {
         empLeavesMap[key].push(lv);
       });
 
+      var advances = r.advances || [];
+      var empAdvancesMap = {};
+      advances.forEach(function(ad) {
+        var key = String(ad.emp_id || '').trim();
+        if (!empAdvancesMap[key]) empAdvancesMap[key] = [];
+        empAdvancesMap[key].push(ad);
+      });
+
       var sheetsHtml = '';
       employeesToPrint.forEach(function(emp, i) {
         var eId = getEmpId(emp);
         var eLeaves = empLeavesMap[eId] || [];
-        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, empLogsMap[eId] || {}, periodText, i + 1, employeesToPrint.length, holidayMap, eLeaves);
+        var eAdvances = empAdvancesMap[eId] || [];
+        sheetsHtml += generateSingleTimeCardSheetHtml(emp, dateList, empLogsMap[eId] || {}, periodText, i + 1, employeesToPrint.length, holidayMap, eLeaves, eAdvances);
         sheetsHtml += '<br><br>';
       });
 
