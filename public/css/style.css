@@ -2434,56 +2434,56 @@ footer {
 
 
 /* =========================================================================
-   AI ATTENDANCE & ANOMALY INSPECTOR (COMMAND CENTER DASHBOARD)
+   AI ATTENDANCE & ANOMALY INSPECTOR (CORPORATE LIGHT COMMAND CENTER)
    ========================================================================= */
 .ai-inspector-container {
-  background: #0b0f19;
-  color: #f1f5f9;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  color: #0f172a;
   border-radius: 16px;
   padding: 20px;
-  border: 1px solid #1e293b;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
   font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
   margin-bottom: 24px;
 }
 .ai-glass-card {
-  background: rgba(17, 24, 39, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
   border-radius: 14px;
 }
 .ai-glass-card-hover {
   transition: all 0.2s ease;
 }
 .ai-glass-card-hover:hover {
-  background: rgba(30, 41, 59, 0.9);
-  border-color: rgba(99, 102, 241, 0.4);
+  background: #ffffff;
+  border-color: #93c5fd;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
   transform: translateY(-2px);
 }
 @keyframes ai-radar-pulse {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  50% { transform: scale(1.08); opacity: 0.3; }
-  100% { transform: scale(0.95); opacity: 0.8; }
+  0% { transform: scale(0.95); opacity: 0.85; }
+  50% { transform: scale(1.06); opacity: 0.35; }
+  100% { transform: scale(0.95); opacity: 0.85; }
 }
 .ai-radar-ring {
   animation: ai-radar-pulse 3s infinite ease-in-out;
 }
 .badge-glow-rose {
-  box-shadow: 0 0 12px rgba(244, 63, 94, 0.4);
+  box-shadow: 0 2px 8px rgba(244, 63, 94, 0.15);
 }
 .badge-glow-amber {
-  box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.15);
 }
 .badge-glow-emerald {
-  box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15);
 }
 .ai-timeline-bar {
   display: flex;
   overflow: hidden;
   height: 28px;
   border-radius: 8px;
-  background: #1e293b;
+  background: #e2e8f0;
   padding: 2px;
   gap: 2px;
   font-family: monospace;
@@ -2491,7 +2491,7 @@ footer {
   font-weight: 700;
 }
 .ai-timeline-morning {
-  background: #059669;
+  background: #10b981;
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -2501,8 +2501,9 @@ footer {
   padding: 0 6px;
 }
 .ai-timeline-break {
-  background: #f59e0b;
-  color: #0f172a;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2525,7 +2526,7 @@ footer {
   position: absolute;
   cursor: pointer;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-color: #475569;
+  background-color: #cbd5e1;
   transition: .3s;
   border-radius: 20px;
 }
@@ -2539,6 +2540,7 @@ footer {
   background-color: white;
   transition: .3s;
   border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 input:checked + .ai-slider {
   background-color: #2563eb;

@@ -16730,6 +16730,7 @@ function syncAttendanceToPayrollPeriod() {
 // ==============================================================================
 var _aiInspectorFilter = 'ALL_ANOMALY';
 var _aiInspectorData = null;
+var _aiInspectorBranches = null;
 
 function setAiInspectorFilter(filterName) {
   _aiInspectorFilter = filterName || 'ALL_ANOMALY';
@@ -16743,7 +16744,7 @@ function setAiInspectorFilter(filterName) {
         btn.style.fontWeight = '700';
       } else {
         btn.style.background = 'transparent';
-        btn.style.color = '#94a3b8';
+        btn.style.color = '#475569';
         btn.style.fontWeight = '600';
       }
     }
@@ -16853,22 +16854,23 @@ function loadAiAttendanceInspector() {
 
   var container = document.getElementById('aiInspectorCardsContainer');
   if (container) {
-    container.innerHTML = '<div style="text-align:center;padding:36px;color:#94a3b8"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px;color:#6366f1;display:block;margin-bottom:8px"></i> AI กำลังประมวลผลข้อมูลการลงเวลาและคำนวณสิทธิ์...</div>';
+    container.innerHTML = '<div style="text-align:center;padding:36px;color:#64748b"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px;color:#2563eb;display:block;margin-bottom:8px"></i> AI กำลังประมวลผลข้อมูลการลงเวลาและคำนวณพิกัด GPS จริง...</div>';
   }
 
   callApi('getAttendancePeriodSummary', { period: period })
     .then(function(res) {
       if (!res || !res.success) {
-        if (container) container.innerHTML = '<div style="text-align:center;padding:24px;color:#ef4444">ไม่สามารถโหลดข้อมูลงวดนี้ได้</div>';
+        if (container) container.innerHTML = '<div style="text-align:center;padding:24px;color:#dc2626">ไม่สามารถโหลดข้อมูลงวดนี้ได้</div>';
         return;
       }
       _aiInspectorData = res.summaryList || res.summary || [];
       _aiInspectorCutoffInfo = res.cutoffInfo || {};
       _aiInspectorPeriod = res.period || period;
+      _aiInspectorBranches = res.branches || State.branches || [];
       renderAiInspectorDashboard(_aiInspectorData);
     })
     .catch(function(err) {
-      if (container) container.innerHTML = '<div style="text-align:center;padding:24px;color:#ef4444">เกิดข้อผิดพลาด: ' + esc(err.message || err) + '</div>';
+      if (container) container.innerHTML = '<div style="text-align:center;padding:24px;color:#dc2626">เกิดข้อผิดพลาด: ' + esc(err.message || err) + '</div>';
     });
 }
 
@@ -16983,10 +16985,15 @@ function renderAiInspectorDashboard(summaryList) {
   var overbreakList = [];
   var earlyOutList = [];
   var passedList = [];
+  var totalGpsScansAll = 0;
+  var totalGeofenceFailsAll = 0;
 
   summaryList.forEach(function(s) {
     var c = classifyEmployeeAttendanceAnomaly(s, isOngoing);
     s._aiClassification = c;
+
+    totalGpsScansAll += (Number(s.gpsScanCount) || 0);
+    totalGeofenceFailsAll += (Number(s.geofenceFailCount) || 0);
 
     if (c.isTrueAnomaly) {
       trueAnomalyList.push(s);
@@ -17015,6 +17022,23 @@ function renderAiInspectorDashboard(summaryList) {
   if (elHealthBar) elHealthBar.style.width = healthPercent + '%';
   if (elHealthSub) elHealthSub.textContent = (healthPercent >= 90 ? '↑ สูงกว่าเป้าหมาย ' + (healthPercent - 90).toFixed(1) + '%' : '↓ มีกลุ่มผิดปกติ ' + (100 - healthPercent).toFixed(1) + '%');
 
+  // KPI 2: Real GPS & Face Verification
+  var gpsAccuracyPct = totalGpsScansAll > 0 ? Math.max(0, Math.min(100, Math.round(((totalGpsScansAll - totalGeofenceFailsAll) / totalGpsScansAll) * 1000) / 10)) : 100;
+  var elFaceScore = document.getElementById('aiKpiFaceScore');
+  var elFaceBar = document.getElementById('aiKpiFaceBar');
+  var elFaceSub = document.getElementById('aiKpiFaceSub');
+  if (elFaceScore) elFaceScore.textContent = gpsAccuracyPct + '%';
+  if (elFaceBar) elFaceBar.style.width = gpsAccuracyPct + '%';
+  if (elFaceSub) {
+    if (totalGpsScansAll > 0) {
+      elFaceSub.textContent = totalGeofenceFailsAll === 0
+        ? ('ตรวจสอบพิกัดจริง ' + totalGpsScansAll.toLocaleString() + ' ครั้ง อยู่ในรัศมีครบ')
+        : ('พบอยู่นอกรัศมี ' + totalGeofenceFailsAll + ' ครั้ง จาก ' + totalGpsScansAll.toLocaleString() + ' สแกน');
+    } else {
+      elFaceSub.textContent = 'ไม่พบรูปถ่ายซ้ำหรือสแกนจากหน้าจอ';
+    }
+  }
+
   var elOverbreakCount = document.getElementById('aiKpiOverbreakCount');
   var elOverbreakBar = document.getElementById('aiKpiOverbreakBar');
   var obCount = overbreakList.length;
@@ -17030,7 +17054,7 @@ function renderAiInspectorDashboard(summaryList) {
     if (trueAnomalyList.length > 0) {
       var riskNames = trueAnomalyList.slice(0, 4).map(function(x) { 
         var id = x.empId || x.emp_id;
-        return x.nickname ? (id + ' (' + x.nickname + ')') : id; 
+        return x.nickname && x.nickname !== '-' ? (id + ' (' + x.nickname + ')') : id; 
       });
       elRiskList.textContent = riskNames.join(', ');
     } else {
@@ -17050,16 +17074,16 @@ function renderAiInspectorDashboard(summaryList) {
     if (trueAnomalyList.length === 0) {
       if (isOngoing) {
         insightsBox.innerHTML = '<li><strong>รอบปัจจุบัน (' + (cutoff.startDate || '') + ' - ' + (cutoff.endDate || '') + '):</strong> กำลังลงเวลาสะสมแบบ Real-time ไม่พบพนักงานทำผิดกฎหรือมีพฤติกรรมผิดปกติ</li>' +
-          '<li><strong>ระบบตรวจจับอัจฉริยะ:</strong> หากพบการพักเกินมีนัยสำคัญ ขาดงาน หรือสายสะสม ระบบจะแจ้งเตือน HR ทันที</li>';
+          '<li><strong>เรดาร์พิกัดจริง (Geofence):</strong> ตรวจสอบพิกัด GPS จริง ' + totalGpsScansAll.toLocaleString() + ' จุดสแกน อยู่ในรัศมีสาขาถูกต้อง</li>';
       } else {
         insightsBox.innerHTML = '<li><strong>ผ่านเกณฑ์สมบูรณ์:</strong> พนักงานทุกคนมีวินัยการลงเวลาที่ดี ไม่พบรายการผิดปกติที่มีนัยสำคัญในงวดนี้</li>' +
-          '<li><strong>การลาที่อนุมัติ:</strong> การลากิจและลาป่วยมีใบรับรองแพทย์ได้รับการตรวจสอบถูกต้องตามระเบียบ ไม่ถือเป็นความผิดปกติของการลงเวลา</li>';
+          '<li><strong>การลาที่อนุมัติ &amp; พิกัด GPS:</strong> การลากิจ/ลาป่วยมีใบรับรองแพทย์ถูกต้องตามระเบียบ และสแกน GPS จริง ' + totalGpsScansAll.toLocaleString() + ' ครั้งอยู่ในรัศมีสาขา</li>';
       }
     } else {
       var bullets = '';
       trueAnomalyList.forEach(function(s) {
         var id = s.empId || s.emp_id;
-        var nick = s.nickname ? (' (' + s.nickname + ')') : '';
+        var nick = (s.nickname && s.nickname !== '-') ? (' (' + s.nickname + ')') : '';
         var reason = s._aiClassification ? s._aiClassification.diagnosticReason : (s.diligenceDisqualifyReason || 'พบสถิติเวลาทำงานไม่ครบตามเกณฑ์');
         bullets += '<li><strong>' + esc(id + nick) + ':</strong> ' + esc(reason) + '</li>';
       });
@@ -17067,16 +17091,208 @@ function renderAiInspectorDashboard(summaryList) {
     }
   }
 
-  // Update Radar Pins Dynamically
-  var pin1 = document.getElementById('aiRadarPin1');
-  var pin2 = document.getElementById('aiRadarPin2');
-  var pin3 = document.getElementById('aiRadarPin3');
-  var activePins = (trueAnomalyList.length > 0 ? trueAnomalyList : summaryList).slice(0, 3);
-  if (pin1 && activePins[0]) pin1.textContent = (activePins[0].nickname || activePins[0].empId || 'จุด 1') + ' 12m';
-  if (pin2 && activePins[1]) pin2.textContent = (activePins[1].nickname || activePins[1].empId || 'จุด 2') + ' 8m';
-  if (pin3 && activePins[2]) pin3.textContent = (activePins[2].nickname || activePins[2].empId || 'จุด 3') + ' 18m';
+  // Render Real GPS Geofence Radar
+  renderAiGeofenceRadar();
 
   renderAiInspectorCards();
+}
+
+function renderAiGeofenceRadar() {
+  var summaryList = _aiInspectorData || [];
+  var branches = (_aiInspectorBranches && _aiInspectorBranches.length > 0) ? _aiInspectorBranches : (State.branches || []);
+  var selBranchEl = document.getElementById('aiRadarBranchSelect');
+  var selectedBranchId = (selBranchEl && selBranchEl.value) ? selBranchEl.value : 'ALL';
+
+  // Find active reference branch details
+  var refBranch = null;
+  if (selectedBranchId !== 'ALL') {
+    refBranch = branches.find(function(b) { return b.branch_id === selectedBranchId; });
+  }
+  if (!refBranch && branches.length > 0) {
+    refBranch = branches[0];
+  }
+
+  var refName = selectedBranchId === 'ALL'
+    ? 'ทุกสาขา (เทียบจุดศูนย์กลาง)'
+    : ((refBranch && refBranch.branch_name) ? refBranch.branch_name : selectedBranchId);
+  var refLat = (refBranch && Number(refBranch.lat)) ? Number(refBranch.lat) : 15.678515;
+  var refLng = (refBranch && Number(refBranch.lng)) ? Number(refBranch.lng) : 100.090373;
+  var refRadius = (refBranch && Number(refBranch.radius_meters)) ? Number(refBranch.radius_meters) : 40;
+
+  var elBranchLabel = document.getElementById('aiRadarBranchLabel');
+  var elCoordLabel = document.getElementById('aiRadarCoordLabel');
+  var elRadiusBadge = document.getElementById('aiRadarRadiusBadge');
+  var elScaleOuter = document.getElementById('aiRadarScaleOuter');
+  var elScaleMid = document.getElementById('aiRadarScaleMid');
+
+  if (elBranchLabel) {
+    elBranchLabel.textContent = selectedBranchId === 'ALL'
+      ? ('ทุกสาขา (' + (branches.length || 3) + ' สาขา)')
+      : (refName + ' (' + refRadius + 'm)');
+  }
+  if (elCoordLabel) {
+    elCoordLabel.textContent = selectedBranchId === 'ALL'
+      ? ('📍 อ้างอิงพิกัดจริงแต่ละสาขา (HQ ' + refLat.toFixed(4) + '°, ' + refLng.toFixed(4) + '°)')
+      : ('📍 พิกัดสาขา: ' + refLat.toFixed(4) + '°, ' + refLng.toFixed(4) + '°');
+  }
+  if (elRadiusBadge) {
+    elRadiusBadge.textContent = 'รัศมี ' + refRadius + 'm';
+  }
+  if (elScaleOuter) elScaleOuter.textContent = refRadius + 'm';
+  if (elScaleMid) elScaleMid.textContent = Math.round(refRadius / 2) + 'm';
+
+  // Filter employees for selected branch who have real GPS scans
+  var branchEmployees = summaryList.filter(function(s) {
+    if (selectedBranchId !== 'ALL' && (s.branchId || s.branch_id) !== selectedBranchId) return false;
+    return (Number(s.gpsScanCount) || 0) > 0;
+  });
+
+  // Aggregate real GPS statistics
+  var totalScans = 0;
+  var totalFails = 0;
+  var weightedDistSum = 0;
+  branchEmployees.forEach(function(s) {
+    var cnt = Number(s.gpsScanCount) || 0;
+    var avgD = Number(s.avgGpsDistance) || 0;
+    totalScans += cnt;
+    totalFails += (Number(s.geofenceFailCount) || 0);
+    weightedDistSum += (avgD * cnt);
+  });
+
+  var overallAvgDist = totalScans > 0 ? (weightedDistSum / totalScans).toFixed(1) : '0.0';
+  var accuracyPct = totalScans > 0 ? Math.max(0, Math.min(100, Math.round(((totalScans - totalFails) / totalScans) * 1000) / 10)) : 100;
+
+  var elSummaryText = document.getElementById('aiRadarGpsSummaryText');
+  var elStatusBadge = document.getElementById('aiRadarGpsStatusBadge');
+
+  if (elSummaryText) {
+    if (totalScans > 0) {
+      elSummaryText.innerHTML = 'สแกน GPS จริง: <strong style="color:#0f172a">' + totalScans.toLocaleString() + ' ครั้ง</strong> • เฉลี่ย <strong style="color:#0284c7">' + overallAvgDist + 'm</strong>';
+    } else {
+      elSummaryText.innerHTML = 'สแกน GPS จริง: <strong style="color:#64748b">ไม่มีข้อมูลพิกัดในงวดนี้</strong>';
+    }
+  }
+  if (elStatusBadge) {
+    if (totalScans === 0) {
+      elStatusBadge.innerHTML = '<span style="color:#64748b;font-weight:600">รอข้อมูลสแกน</span>';
+    } else if (totalFails === 0) {
+      elStatusBadge.innerHTML = '<span style="color:#059669;font-weight:700"><i class="fa-solid fa-circle-check"></i> อยู่ในรัศมี 100%</span>';
+    } else {
+      elStatusBadge.innerHTML = '<span style="color:#dc2626;font-weight:700"><i class="fa-solid fa-triangle-exclamation"></i> นอกพิกัด ' + totalFails + ' ครั้ง (' + accuracyPct + '%)</span>';
+    }
+  }
+
+  // Sort employees: out-of-radius first, then by distance descending so interesting pins are visible
+  var sortedForPins = branchEmployees.slice().sort(function(a, b) {
+    var failDiff = (Number(b.geofenceFailCount) || 0) - (Number(a.geofenceFailCount) || 0);
+    if (failDiff !== 0) return failDiff;
+    return (Number(b.avgGpsDistance) || 0) - (Number(a.avgGpsDistance) || 0);
+  });
+
+  var pinsContainer = document.getElementById('aiRadarPinsContainer');
+  if (pinsContainer) {
+    if (sortedForPins.length === 0) {
+      pinsContainer.innerHTML = '<div style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);font-size:10.5px;color:#64748b;background:rgba(255,255,255,0.9);padding:2px 8px;border-radius:6px;border:1px solid #cbd5e1">ไม่พบจุดสแกน GPS ในสาขานี้</div>';
+    } else {
+      var pinsToPlot = sortedForPins.slice(0, 7);
+      var placedCoords = [];
+      var pinsHtml = '';
+
+      pinsToPlot.forEach(function(emp, idx) {
+        var dist = Number(emp.avgGpsDistance) || 0;
+        var empRad = Number(emp.branchRadius) || refRadius || 40;
+        var isOut = (Number(emp.geofenceFailCount) || 0) > 0 || dist > empRad;
+        var isNearEdge = !isOut && dist > (empRad * 0.8);
+
+        // Scale distance to radar radius (28px min so it clears center building, 88px max at outer ring)
+        var ratio = empRad > 0 ? (dist / empRad) : 0.3;
+        var clampedRatio = Math.min(1.05, Math.max(0.12, ratio));
+        var pixelR = Math.round(28 + clampedRatio * 60);
+
+        // Use real compass bearing from branch center, with collision avoidance so labels never overlap
+        var baseAngleDeg = (emp.lastGpsBearing !== null && emp.lastGpsBearing !== undefined)
+          ? Number(emp.lastGpsBearing)
+          : ((idx * 55 + 30) % 360);
+
+        var finalX = 0;
+        var finalY = 0;
+        for (var attempt = 0; attempt < 8; attempt++) {
+          var testDeg = (baseAngleDeg + attempt * 45) % 360;
+          var rad = (testDeg - 90) * (Math.PI / 180);
+          var tx = Math.round(Math.cos(rad) * pixelR);
+          var ty = Math.round(Math.sin(rad) * pixelR * 0.82); // slight vertical compression for 215px height
+          var tooClose = placedCoords.some(function(p) {
+            var dx = p.x - tx;
+            var dy = p.y - ty;
+            return Math.sqrt(dx * dx + dy * dy) < 34;
+          });
+          if (!tooClose || attempt === 7) {
+            finalX = tx;
+            finalY = ty;
+            placedCoords.push({ x: finalX, y: finalY });
+            break;
+          }
+        }
+
+        var dotBg = isOut ? '#dc2626' : (isNearEdge ? '#d97706' : '#10b981');
+        var pillBg = isOut ? '#fef2f2' : (isNearEdge ? '#fffbeb' : 'rgba(255,255,255,0.94)');
+        var pillBorder = isOut ? '#fca5a5' : (isNearEdge ? '#fde68a' : '#a7f3d0');
+        var pillText = isOut ? '#991b1b' : (isNearEdge ? '#92400e' : '#065f46');
+        var displayName = (emp.nickname && emp.nickname !== '-') ? emp.nickname : (emp.empId || emp.emp_id);
+
+        pinsHtml += '<div title="' + esc((emp.fullName || displayName) + ' • เฉลี่ย ' + dist + 'm (สูงสุด ' + (emp.maxGpsDistance || dist) + 'm จาก ' + emp.gpsScanCount + ' สแกน)') + '" ' +
+          'style="position:absolute;left:calc(50% + ' + finalX + 'px);top:calc(50% + ' + finalY + 'px);transform:translate(-50%,-50%);display:flex;align-items:center;gap:3px;background:' + pillBg + ';border:1px solid ' + pillBorder + ';padding:1.5px 6px;border-radius:999px;box-shadow:0 2px 4px rgba(15,23,42,0.08);white-space:nowrap;cursor:help">' +
+          '<span style="width:7px;height:7px;border-radius:999px;background:' + dotBg + ';display:inline-block;flex-shrink:0"></span>' +
+          '<span style="font-size:9.5px;color:' + pillText + ';font-family:monospace;font-weight:700">' + esc(displayName) + ' (' + dist + 'm)</span>' +
+        '</div>';
+      });
+
+      pinsContainer.innerHTML = pinsHtml;
+    }
+  }
+
+  // Render compact real employee GPS distance table below radar
+  var empListBox = document.getElementById('aiRadarEmpListBox');
+  if (empListBox) {
+    if (branchEmployees.length === 0) {
+      empListBox.innerHTML = '<div style="text-align:center;font-size:11px;color:#94a3b8;padding:8px">ไม่มีประวัติพิกัด GPS ของพนักงานในหมวดที่เลือก</div>';
+    } else {
+      var listSorted = branchEmployees.slice().sort(function(a, b) {
+        var failDiff = (Number(b.geofenceFailCount) || 0) - (Number(a.geofenceFailCount) || 0);
+        if (failDiff !== 0) return failDiff;
+        return (Number(a.avgGpsDistance) || 0) - (Number(b.avgGpsDistance) || 0);
+      });
+
+      var rowsHtml = '';
+      listSorted.forEach(function(emp) {
+        var id = emp.empId || emp.emp_id;
+        var nick = (emp.nickname && emp.nickname !== '-') ? emp.nickname : (emp.fullName || id);
+        var bId = emp.branchId || emp.branch_id || 'B01';
+        var avgD = Number(emp.avgGpsDistance) || 0;
+        var maxD = Number(emp.maxGpsDistance) || avgD;
+        var bRad = Number(emp.branchRadius) || refRadius || 40;
+        var fails = Number(emp.geofenceFailCount) || 0;
+        var isOut = fails > 0 || avgD > bRad;
+
+        var statusPill = isOut
+          ? '<span style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700">⚠️ นอกพิกัด (' + avgD + 'm)</span>'
+          : '<span style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;padding:1px 6px;border-radius:4px;font-size:9.5px;font-weight:700">📍 เฉลี่ย ' + avgD + 'm</span>';
+
+        rowsHtml += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:11px">' +
+          '<div style="display:flex;align-items:center;gap:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' +
+            '<span style="font-family:monospace;font-weight:700;color:#1d4ed8;font-size:10.5px">' + esc(id) + '</span>' +
+            '<strong style="color:#0f172a">' + esc(nick) + '</strong>' +
+            '<span style="color:#64748b;font-size:10px">(' + esc(bId) + ' • ' + emp.gpsScanCount + ' สแกน)</span>' +
+          '</div>' +
+          '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0">' +
+            '<span style="font-size:9.5px;color:#64748b;font-family:monospace">สูงสุด ' + maxD + 'm</span>' +
+            statusPill +
+          '</div>' +
+        '</div>';
+      });
+      empListBox.innerHTML = rowsHtml;
+    }
+  }
 }
 
 function renderAiInspectorCards() {
@@ -17090,12 +17306,12 @@ function renderAiInspectorCards() {
 
   var bannerHtml = '';
   if (isOngoing) {
-    bannerHtml = '<div style="background:rgba(30,58,138,0.35);border:1px solid rgba(59,130,246,0.3);border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">' +
-      '<div style="font-size:12px;color:#93c5fd;display:flex;align-items:center;gap:8px">' +
-        '<span style="width:9px;height:9px;border-radius:999px;background:#3b82f6;display:inline-block" class="ai-radar-ring"></span>' +
+    bannerHtml = '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">' +
+      '<div style="font-size:12px;color:#1e3a8a;display:flex;align-items:center;gap:8px">' +
+        '<span style="width:9px;height:9px;border-radius:999px;background:#2563eb;display:inline-block" class="ai-radar-ring"></span>' +
         '<span><strong>งวดปัจจุบัน (ยังไม่ถึงรอบตัดวิก):</strong> สแกนข้อมูลสะสม Real-time ถึงวันนี้ (' + (cutoff.startDate || '') + ' ถึง ' + (cutoff.endDate || '') + ')</span>' +
       '</div>' +
-      '<span style="background:rgba(59,130,246,0.25);color:#bfdbfe;font-size:11px;padding:3px 10px;border-radius:999px;font-weight:700;border:1px solid rgba(59,130,246,0.3)">' +
+      '<span style="background:#dbeafe;color:#1d4ed8;font-size:11px;padding:3px 10px;border-radius:999px;font-weight:700;border:1px solid #93c5fd">' +
         '⚡ กำลังลงเวลาสะสม' +
       '</span>' +
     '</div>';
@@ -17119,12 +17335,12 @@ function renderAiInspectorCards() {
 
   if (filtered.length === 0) {
     if (filter === 'PASSED') {
-      container.innerHTML = bannerHtml + '<div style="text-align:center;padding:30px;color:#94a3b8">ไม่มีพนักงานในหมวดนี้</div>';
+      container.innerHTML = bannerHtml + '<div style="text-align:center;padding:30px;color:#64748b">ไม่มีพนักงานในหมวดนี้</div>';
     } else {
-      container.innerHTML = bannerHtml + '<div class="ai-glass-card" style="text-align:center;padding:36px 20px;border-radius:14px;border:1px solid #1e293b">' +
+      container.innerHTML = bannerHtml + '<div class="ai-glass-card" style="text-align:center;padding:36px 20px;border-radius:14px;border:1px solid #d1fae5;background:linear-gradient(180deg, #ffffff 0%, #f0fdf4 100%)">' +
         '<div style="font-size:36px;margin-bottom:8px">🎉</div>' +
-        '<div style="font-weight:800;font-size:15px;color:#34d399">ไม่พบรายการผิดปกติในงวดนี้</div>' +
-        '<div style="font-size:12px;color:#94a3b8;margin-top:4px">' +
+        '<div style="font-weight:800;font-size:15px;color:#059669">ไม่พบรายการผิดปกติในงวดนี้</div>' +
+        '<div style="font-size:12px;color:#475569;margin-top:4px">' +
           (isOngoing ? 'พนักงานทุกคนลงเวลาตามเกณฑ์ปกติในรอบนี้ (ยังไม่พบการทำผิดกฎระเบียบหรือพักเกิน)' : 'พนักงานทุกคนผ่านเกณฑ์ปกติ ไม่มีรายการผิดปกติที่มีนัยสำคัญในงวดนี้') +
         '</div>' +
       '</div>';
@@ -17134,8 +17350,8 @@ function renderAiInspectorCards() {
 
   // If filter is PASSED, render list of employees who passed with appropriate tags
   if (filter === 'PASSED') {
-    var html = bannerHtml + '<div style="background:rgba(15,23,42,0.9);border:1px solid #1e293b;border-radius:12px;padding:16px">' +
-      '<div style="font-weight:800;color:#34d399;font-size:13.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px">' +
+    var html = bannerHtml + '<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(15,23,42,0.04)">' +
+      '<div style="font-weight:800;color:#059669;font-size:13.5px;margin-bottom:12px;display:flex;align-items:center;gap:6px">' +
         '<i class="fa-solid fa-circle-check"></i> รายชื่อพนักงานปกติ / ผ่านเกณฑ์ (' + filtered.length + ' คน)' +
       '</div>' +
       '<div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(240px, 1fr));gap:8px">';
@@ -17143,30 +17359,30 @@ function renderAiInspectorCards() {
       var pe = item.emp;
       var empId = pe.empId || pe.emp_id;
       var fullName = pe.fullName || pe.emp_name || empId;
-      var nick = pe.nickname || '';
+      var nick = (pe.nickname && pe.nickname !== '-') ? pe.nickname : '';
 
       var badgeHtml = '';
       if (pe.isAttendanceExempt) {
-        badgeHtml = '<span style="background:rgba(100,116,139,0.25);color:#94a3b8;font-size:10px;padding:2px 6px;border-radius:4px">ยกเว้นสแกน</span>';
+        badgeHtml = '<span style="background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">ยกเว้นสแกน</span>';
       } else if (Number(pe.businessLeaveDays) > 0) {
-        badgeHtml = '<span style="background:rgba(59,130,246,0.15);color:#93c5fd;font-size:10px;padding:2px 6px;border-radius:4px">ลากิจ ' + pe.businessLeaveDays + 'ว.</span>';
+        badgeHtml = '<span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">ลากิจ ' + pe.businessLeaveDays + 'ว.</span>';
       } else if (Number(pe.sickWithCertDays) > 0) {
-        badgeHtml = '<span style="background:rgba(16,185,129,0.15);color:#6ee7b7;font-size:10px;padding:2px 6px;border-radius:4px">ลาป่วยมีใบรับรอง</span>';
+        badgeHtml = '<span style="background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600">ลาป่วยมีใบรับรอง</span>';
       } else if (pe.status === 'Resigned') {
-        badgeHtml = '<span style="background:rgba(148,163,184,0.15);color:#94a3b8;font-size:10px;padding:2px 6px;border-radius:4px">ลาออกตามรอบ</span>';
+        badgeHtml = '<span style="background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1;font-size:10px;padding:2px 6px;border-radius:4px">ลาออกตามรอบ</span>';
       } else if (pe.isDiligenceQualified) {
-        badgeHtml = '<span style="color:#34d399;font-size:10.5px;font-weight:700">1,000฿</span>';
+        badgeHtml = '<span style="background:#ecfdf5;color:#059669;border:1px solid #a7f3d0;padding:1px 6px;border-radius:4px;font-size:10.5px;font-weight:700">1,000฿</span>';
       } else {
-        badgeHtml = '<span style="color:#94a3b8;font-size:10.5px">ผ่านเกณฑ์</span>';
+        badgeHtml = '<span style="color:#64748b;font-size:10.5px;font-weight:600">ปกติ</span>';
       }
 
-      html += '<div style="background:rgba(30,41,59,0.7);padding:8px 10px;border-radius:8px;border:1px solid #334155;font-size:12px;display:flex;justify-content:space-between;align-items:center">' +
+      html += '<div style="background:#f8fafc;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0;font-size:12px;display:flex;justify-content:space-between;align-items:center">' +
         '<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-right:6px">' +
-          '<span style="color:#60a5fa;font-family:monospace;font-weight:700">' + esc(empId) + '</span> ' +
-          '<strong style="color:#f1f5f9">' + esc(fullName) + '</strong> ' +
-          (nick ? ('<span style="color:#fbbf24">(' + esc(nick) + ')</span>') : '') +
+          '<span style="color:#1d4ed8;font-family:monospace;font-weight:700">' + esc(empId) + '</span> ' +
+          '<strong style="color:#0f172a">' + esc(fullName) + '</strong> ' +
+          (nick ? ('<span style="color:#b45309;font-weight:600">(' + esc(nick) + ')</span>') : '') +
         '</div>' +
-        '<div>' + badgeHtml + '</div>' +
+        '<div style="flex-shrink:0">' + badgeHtml + '</div>' +
       '</div>';
     });
     html += '</div></div>';
@@ -17174,14 +17390,14 @@ function renderAiInspectorCards() {
     return;
   }
 
-  // Render anomaly cards
+  // Render anomaly cards (Corporate Light Theme)
   var html = bannerHtml;
   filtered.forEach(function(item) {
     var s = item.emp;
     var c = item.info || s._aiClassification || {};
     var empId = s.empId || s.emp_id;
     var fullName = s.fullName || s.emp_name || empId;
-    var nick = s.nickname || '';
+    var nick = (s.nickname && s.nickname !== '-') ? s.nickname : '';
     var branchId = s.branchId || s.branch_id || 'B01';
     var branchName = s.branchName || s.branch_name || 'สำนักงานใหญ่';
     var dept = s.department || s.dept || '-';
@@ -17193,15 +17409,15 @@ function renderAiInspectorCards() {
     var borderLeft = c.isUnexcusedAbsent ? '#ef4444' : (c.isSevereOrChronicLate ? '#f43f5e' : '#f59e0b');
     var riskBadge = '';
     if (c.isUnexcusedAbsent) {
-      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.4);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">🚨 ขาดงานไม่มีใบลา</span>';
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">🚨 ขาดงานไม่มีใบลา</span>';
     } else if (c.isSevereOrChronicLate) {
-      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(244,63,94,0.2);color:#fb7185;border:1px solid rgba(244,63,94,0.4);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⏰ สายระดับวิกฤต (>15น.)</span>';
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⏰ สายระดับวิกฤต (&gt;15น.)</span>';
     } else if (c.isSignificantOverbreak) {
-      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">☕ พักเกินเวลามีนัยสำคัญ</span>';
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:#fffbeb;color:#d97706;border:1px solid #fde68a;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">☕ พักเกินเวลามีนัยสำคัญ</span>';
     } else if (c.isHabitualMissingBreak) {
-      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(168,85,247,0.2);color:#c084fc;border:1px solid rgba(168,85,247,0.4);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⚠️ ไม่สแกนพักซ้ำซาก</span>';
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:#faf5ff;color:#7e22ce;border:1px solid #e9d5ff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⚠️ ไม่สแกนพักซ้ำซาก</span>';
     } else {
-      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:rgba(244,63,94,0.15);color:#fb7185;border:1px solid rgba(244,63,94,0.3);font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⚠️ ตรวจพบความผิดปกติ</span>';
+      riskBadge = '<span id="aiBadgeRisk_' + empId + '" style="background:#fff1f2;color:#e11d48;border:1px solid #fecdd3;font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px">⚠️ ตรวจพบความผิดปกติ</span>';
     }
 
     // Tags for dates
@@ -17212,8 +17428,8 @@ function renderAiInspectorCards() {
         var dayFormatted = dayDateParts[2] ? (parseInt(dayDateParts[2], 10) + ' ' + (['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'][parseInt(dayDateParts[1], 10) - 1] || '')) : d.date;
         var icon = Number(d.overbreakMinutes) > 0 ? '☕' : (Number(d.morningLateMinutes) > 0 ? '⏰' : (d.isAbsent ? '🚨' : '⚠️'));
         var text = d.isAbsent ? 'ขาดงาน' : (Number(d.morningLateMinutes) > 0 ? ('สาย ' + d.morningLateMinutes + ' น.') : (Number(d.overbreakMinutes) > 0 ? ('พักเกิน ' + d.overbreakMinutes + ' น.') : (d.statusText || 'ผิดปกติ')));
-        tagsHtml += '<span style="background:rgba(15,23,42,0.9);border:1px solid #1e293b;padding:5px 9px;border-radius:6px;font-size:11px;color:#e2e8f0;display:inline-flex;align-items:center;gap:5px">' +
-          '<span>' + icon + '</span> <strong>' + dayFormatted + ':</strong> ' + esc(text) +
+        tagsHtml += '<span style="background:#f8fafc;border:1px solid #cbd5e1;padding:4px 9px;border-radius:6px;font-size:11px;color:#334155;display:inline-flex;align-items:center;gap:5px;font-weight:600">' +
+          '<span>' + icon + '</span> <strong style="color:#0f172a">' + dayFormatted + ':</strong> ' + esc(text) +
         '</span>';
       });
     }
@@ -17224,10 +17440,10 @@ function renderAiInspectorCards() {
     var overbreakM = Number(worstDay.overbreakMinutes) || 0;
     var lateM = Number(worstDay.morningLateMinutes) || 0;
 
-    var timelineHtml = '<div style="background:rgba(15,23,42,0.9);padding:12px;border-radius:10px;border:1px solid #1e293b">' +
-      '<div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:#cbd5e1;margin-bottom:8px">' +
+    var timelineHtml = '<div style="background:#f8fafc;padding:12px;border-radius:10px;border:1px solid #e2e8f0">' +
+      '<div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:#334155;margin-bottom:8px">' +
         '<span>📊 ไทม์ไลน์เวลาทำงาน (' + (worstDay.date || 'วันที่ตรวจพบ') + ')</span>' +
-        (overbreakM > 0 ? '<span style="color:#fbbf24;font-family:monospace">พักเกิน ' + overbreakM + ' นาที</span>' : (lateM > 0 ? '<span style="color:#fb7185;font-family:monospace">สายเช้า ' + lateM + ' นาที</span>' : (worstDay.isAbsent ? '<span style="color:#ef4444;font-family:monospace">ไม่พบประวัติลงเวลา</span>' : ''))) +
+        (overbreakM > 0 ? '<span style="color:#d97706;font-family:monospace">พักเกิน ' + overbreakM + ' นาที</span>' : (lateM > 0 ? '<span style="color:#e11d48;font-family:monospace">สายเช้า ' + lateM + ' นาที</span>' : (worstDay.isAbsent ? '<span style="color:#dc2626;font-family:monospace">ไม่พบประวัติลงเวลา</span>' : ''))) +
       '</div>' +
       '<div class="ai-timeline-bar">' +
         '<div class="ai-timeline-morning" style="width:' + (overbreakM > 0 ? '40%' : '48%') + '">' + inTime + ' - 13:00</div>' +
@@ -17237,35 +17453,36 @@ function renderAiInspectorCards() {
     '</div>';
 
     html += '<div class="ai-glass-card ai-glass-card-hover" style="padding:18px;border-left:4px solid ' + borderLeft + ';position:relative;margin-bottom:12px">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-bottom:1px solid #1e293b;padding-bottom:12px;margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;border-bottom:1px solid #e2e8f0;padding-bottom:12px;margin-bottom:12px">' +
         '<div style="display:flex;align-items:center;gap:12px">' +
-          '<div style="position:relative;width:44px;height:44px;border-radius:12px;background:#1e293b;border:2px solid #334155;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;color:#fbbf24;overflow:hidden">' +
-            (nick || empId.substring(empId.length - 3)) +
-            '<span style="position:absolute;bottom:0;left:0;right:0;background:rgba(15,23,42,0.9);font-size:8px;text-align:center;color:#94a3b8;font-family:monospace">' + esc(branchId) + '</span>' +
+          '<div style="position:relative;width:44px;height:44px;border-radius:12px;background:#eff6ff;border:1.5px solid #bfdbfe;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#1d4ed8;overflow:hidden">' +
+            esc(nick || empId.substring(empId.length - 3)) +
+            '<span style="position:absolute;bottom:0;left:0;right:0;background:#dbeafe;font-size:8px;text-align:center;color:#1e40af;font-family:monospace;font-weight:700">' + esc(branchId) + '</span>' +
           '</div>' +
           '<div>' +
             '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">' +
-              '<span style="font-weight:800;color:#fff;font-size:14.5px">' + esc(fullName) + '</span>' +
-              (nick ? ('<span style="color:#fbbf24;font-weight:700;font-size:13px">(' + esc(nick) + ')</span>') : '') +
-              '<span style="background:#1e293b;color:#60a5fa;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;font-family:monospace">' + esc(empId) + '</span>' +
+              '<span style="font-weight:800;color:#0f172a;font-size:14.5px">' + esc(fullName) + '</span>' +
+              (nick ? ('<span style="color:#d97706;font-weight:700;font-size:13px">(' + esc(nick) + ')</span>') : '') +
+              '<span style="background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;font-family:monospace">' + esc(empId) + '</span>' +
               riskBadge +
             '</div>' +
-            '<div style="font-size:11.5px;color:#94a3b8;margin-top:2px">' +
+            '<div style="font-size:11.5px;color:#64748b;margin-top:2px">' +
               'แผนก: ' + esc(dept) + ' • ' + esc(branchName) +
+              (s.avgGpsDistance !== null && s.avgGpsDistance !== undefined ? (' • 📍 ระยะสแกนเฉลี่ย ' + s.avgGpsDistance + 'm') : '') +
             '</div>' +
           '</div>' +
         '</div>' +
-        (s.lateMinutes > 0 ? ('<span class="badge-glow-amber" style="background:rgba(120,53,15,0.6);color:#fbbf24;border:1px solid rgba(245,158,11,0.4);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px">รวมสายสะสม ' + s.lateMinutes + ' นาที (' + s.lateTimes + ' ครั้ง)</span>') : '') +
+        (s.lateMinutes > 0 ? ('<span class="badge-glow-amber" style="background:#fffbeb;color:#b45309;border:1px solid #fde68a;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px">รวมสายสะสม ' + s.lateMinutes + ' นาที (' + s.lateTimes + ' ครั้ง)</span>') : '') +
       '</div>' +
 
       '<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:12px;margin-bottom:14px">' +
         timelineHtml +
-        '<div style="background:rgba(15,23,42,0.9);padding:12px;border-radius:10px;border:1px solid #1e293b;display:flex;flex-direction:column;justify-content:space-between">' +
+        '<div style="background:#fff1f2;padding:12px;border-radius:10px;border:1px solid #fecdd3;display:flex;flex-direction:column;justify-content:space-between">' +
           '<div>' +
-            '<span style="font-size:11.5px;font-weight:700;color:#cbd5e1;display:block;margin-bottom:4px">🤖 AI วินิจฉัยสาเหตุ</span>' +
-            '<p style="font-size:11.5px;color:#fca5a5;line-height:1.5;margin:0">' + esc(reason) + '</p>' +
+            '<span style="font-size:11.5px;font-weight:700;color:#9f1239;display:block;margin-bottom:4px">🤖 AI วินิจฉัยสาเหตุ</span>' +
+            '<p style="font-size:11.5px;color:#be123c;line-height:1.5;margin:0;font-weight:600">' + esc(reason) + '</p>' +
           '</div>' +
-          (worstDay.remark ? ('<div style="margin-top:8px;padding-top:6px;border-top:1px solid #1e293b;font-size:11px;color:#fde047;font-weight:600">📝 หมายเหตุ: ' + esc(worstDay.remark) + '</div>') : '') +
+          (worstDay.remark ? ('<div style="margin-top:8px;padding-top:6px;border-top:1px solid #fecdd3;font-size:11px;color:#92400e;font-weight:600">📝 หมายเหตุ: ' + esc(worstDay.remark) + '</div>') : '') +
         '</div>' +
       '</div>' +
 
@@ -17273,15 +17490,15 @@ function renderAiInspectorCards() {
 
       // Action Footer
       '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:6px">' +
-        '<div style="font-size:11.5px;color:#94a3b8">' +
-          'สถานะ: <strong style="color:' + (isDiligenceLost ? '#fb7185' : '#34d399') + '">' + (isDiligenceLost ? 'หลุดสิทธิ์เบี้ยขยัน' : 'ได้รับเบี้ยขยัน') + '</strong>' +
+        '<div style="font-size:11.5px;color:#475569">' +
+          'สถานะเบี้ยขยัน: <strong style="color:' + (isDiligenceLost ? '#e11d48' : '#059669') + '">' + (isDiligenceLost ? 'หลุดสิทธิ์เบี้ยขยัน' : 'ได้รับเบี้ยขยัน') + '</strong>' +
         '</div>' +
         '<div style="display:flex;gap:8px" id="aiCardActions_' + empId + '">' +
           '<button type="button" id="btnAiApprove_' + empId + '" onclick="aiInspectorApproveAllowance(\'' + esc(empId) + '\', \'' + esc(nick) + '\')" class="btn btn-sm" style="background:#059669;color:#fff;font-weight:700;font-size:11.5px;padding:6px 12px;border-radius:8px;border:none;cursor:pointer">' +
             '<i class="fa-solid fa-check"></i> ' + (isDiligenceLost ? 'อนุโลมให้ได้รับเบี้ยขยัน (1,000฿)' : 'ยืนยันจ่ายเบี้ยขยัน (1,000฿)') +
           '</button>' +
-          '<button type="button" onclick="aiInspectorSendPush(\'' + esc(empId) + '\', \'' + esc(nick) + '\')" class="btn btn-sm" style="background:#1e293b;color:#cbd5e1;font-weight:600;font-size:11.5px;padding:6px 12px;border-radius:8px;border:1px solid #334155;cursor:pointer">' +
-            '<i class="fa-solid fa-paper-plane"></i> แจ้งเตือนเข้าแอป PTN Time' +
+          '<button type="button" onclick="aiInspectorSendPush(\'' + esc(empId) + '\', \'' + esc(nick) + '\')" class="btn btn-sm" style="background:#f8fafc;color:#334155;font-weight:700;font-size:11.5px;padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;cursor:pointer">' +
+            '<i class="fa-solid fa-paper-plane" style="color:#2563eb"></i> แจ้งเตือนเข้าแอป PTN Time' +
           '</button>' +
         '</div>' +
       '</div>' +

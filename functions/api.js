@@ -3614,7 +3614,7 @@ async function handleAction(db, action, params) {
       const employees = empQuery.results || [];
 
       // Load Time Logs in Cutoff Window
-      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, break_minutes, overbreak_minutes, status, branch_id, is_full_pay, remark FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
+      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, break_minutes, overbreak_minutes, status, branch_id, is_full_pay, remark, in_lat, in_lng, out_lat, out_lng, break_out_lat, break_out_lng, break_in_lat, break_in_lng FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
       const tlQuery = await db.prepare(tlSql).bind(startDate, endDate).all().catch(() => ({ results: [] }));
       const allLogs = tlQuery.results || [];
 
@@ -4166,6 +4166,73 @@ async function handleAction(db, action, params) {
           }
         }
 
+        // Compute real GPS Geofence statistics for this employee across all logs in period
+        const bLat = Number(branch.lat) || 15.678515;
+        const bLng = Number(branch.lng) || 100.090373;
+        const bRadius = Number(branch.radius_meters) || 40;
+        let gpsScanCount = 0;
+        let geofenceFailCount = 0;
+        let sumGpsDist = 0;
+        let maxGpsDist = 0;
+        let lastGpsDist = null;
+        let lastGpsBearing = null;
+        let lastGpsLat = null;
+        let lastGpsLng = null;
+
+        const calcDistBrng = (lat1, lng1, lat2, lng2) => {
+          const R = 6371000;
+          const toRad = d => (d * Math.PI) / 180;
+          const toDeg = r => (r * 180) / Math.PI;
+          const dLat = toRad(lat2 - lat1);
+          const dLng = toRad(lng2 - lng1);
+          const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const dist = Math.round(R * c * 10) / 10;
+          const y = Math.sin(dLng) * Math.cos(toRad(lat2));
+          const x = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2)) -
+                    Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLng);
+          const brng = Math.round((toDeg(Math.atan2(y, x)) + 360) % 360);
+          return { dist, brng };
+        };
+
+        for (const dKey of Object.keys(empLogs)) {
+          const lg = empLogs[dKey];
+          if (!lg) continue;
+          const logBranch = branchMap[lg.branch_id || emp.branch_id] || branch;
+          const refLat = Number(logBranch.lat) || bLat;
+          const refLng = Number(logBranch.lng) || bLng;
+          const refRad = Number(logBranch.radius_meters) || bRadius;
+
+          if (lg.status === 'GEOFENCE_FAIL') geofenceFailCount++;
+
+          const pts = [
+            [lg.in_lat, lg.in_lng],
+            [lg.break_out_lat, lg.break_out_lng],
+            [lg.break_in_lat, lg.break_in_lng],
+            [lg.out_lat, lg.out_lng]
+          ];
+          for (const [pLat, pLng] of pts) {
+            const nLat = Number(pLat);
+            const nLng = Number(pLng);
+            if (pLat !== null && pLat !== undefined && pLat !== '' && !isNaN(nLat) && !isNaN(nLng) && nLat > 5 && nLng > 90) {
+              const { dist, brng } = calcDistBrng(refLat, refLng, nLat, nLng);
+              gpsScanCount++;
+              sumGpsDist += dist;
+              if (dist > maxGpsDist) maxGpsDist = dist;
+              lastGpsDist = dist;
+              lastGpsBearing = brng;
+              lastGpsLat = nLat;
+              lastGpsLng = nLng;
+              if (dist > refRad + 15 && lg.status !== 'GEOFENCE_FAIL') {
+                geofenceFailCount++;
+              }
+            }
+          }
+        }
+        const avgGpsDistance = gpsScanCount > 0 ? Math.round((sumGpsDist / gpsScanCount) * 10) / 10 : null;
+
         const empRow = {
           no: i + 1,
           empId: emp.emp_id,
@@ -4197,6 +4264,17 @@ async function handleAction(db, action, params) {
           isDiligenceQualified,
           diligenceAmount: isDiligenceQualified ? targetAllowance : 0,
           diligenceDisqualifyReason: disqualifyReasons.join(', '),
+          gpsScanCount,
+          avgGpsDistance,
+          maxGpsDistance: gpsScanCount > 0 ? maxGpsDist : null,
+          lastGpsDistance: lastGpsDist,
+          lastGpsBearing,
+          lastGpsLat,
+          lastGpsLng,
+          geofenceFailCount,
+          branchRadius: bRadius,
+          branchLat: bLat,
+          branchLng: bLng,
           dailyRecords
         };
 
