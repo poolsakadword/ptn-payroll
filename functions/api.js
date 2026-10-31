@@ -4397,6 +4397,94 @@ async function handleAction(db, action, params) {
       return { success: true, message: msg };
     }
 
+    // 5.3.05 BATCH HANDLE ATTENDANCE APPROVALS (BULK APPROVE / REJECT / DELETE)
+    case 'batchHandleAttendanceApprovals': {
+      const approverId = params.username || 'Admin';
+      const allowed = await userHasPermission(db, approverId, 'approve_attendance');
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์อนุมัติคำขอ' };
+
+      const items = Array.isArray(params.items) ? params.items : [];
+      const decision = params.decision || 'APPROVE';
+      const rejectionReason = params.rejectionReason || '';
+
+      if (items.length === 0) {
+        return { success: false, message: 'กรุณาเลือกรายการคำขออย่างน้อย 1 รายการ' };
+      }
+
+      let status = 'APPROVED';
+      if (decision === 'REJECT') {
+        status = 'REJECTED';
+      } else if (decision === 'PENDING' || decision === 'RESET') {
+        status = 'PENDING';
+      }
+
+      let processedCount = 0;
+      for (const reqItem of items) {
+        const type = reqItem && reqItem.type;
+        const id = reqItem && reqItem.id;
+        if (!type || !id) continue;
+
+        if (decision === 'DELETE') {
+          const delRes = await executeDeleteAttendanceRequest(db, type, id, approverId).catch(() => null);
+          if (delRes && delRes.success) processedCount++;
+          continue;
+        }
+
+        let targetEmpId = null;
+        let reqDesc = '';
+        if (type === 'leave') {
+          const row = await db.prepare('SELECT emp_id, leave_type, days_count FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
+          if (row) { targetEmpId = row.emp_id; reqDesc = `ขอลางาน (${row.leave_type || ''}) ${row.days_count || 1} วัน`; }
+          await db.prepare(`
+            UPDATE leave_requests 
+            SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours'), rejection_reason = ?
+            WHERE id = ?
+          `).bind(status, approverId, status === 'REJECTED' ? rejectionReason : '', id).run();
+          processedCount++;
+        } else if (type === 'ot') {
+          const row = await db.prepare('SELECT emp_id, planned_hours, date FROM ot_requests WHERE id = ?').bind(id).first().catch(() => null);
+          if (row) { targetEmpId = row.emp_id; reqDesc = `ขอทำ OT ${row.planned_hours || ''} ชม. (${row.date || ''})`; }
+          await db.prepare(`
+            UPDATE ot_requests 
+            SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours')
+            WHERE id = ?
+          `).bind(status, approverId, id).run();
+          processedCount++;
+        } else if (type === 'advance') {
+          const row = await db.prepare('SELECT emp_id, amount FROM advance_requests WHERE id = ?').bind(id).first().catch(() => null);
+          if (row) { targetEmpId = row.emp_id; reqDesc = `ขอเบิกเงินล่วงหน้า ${Number(row.amount || 0).toLocaleString()} บาท`; }
+          await db.prepare(`
+            UPDATE advance_requests 
+            SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours'), rejection_reason = ?
+            WHERE id = ?
+          `).bind(status, approverId, status === 'REJECTED' ? rejectionReason : '', id).run();
+          processedCount++;
+        }
+
+        if (targetEmpId && (status === 'APPROVED' || status === 'REJECTED')) {
+          const isApproved = status === 'APPROVED';
+          const notifTitle = isApproved ? '✅ คำขอได้รับการอนุมัติแล้ว' : '❌ คำขอไม่ได้รับการอนุมัติ';
+          const notifBody = isApproved
+            ? `คำขอ${reqDesc} ได้รับการอนุมัติแล้วโดย ${approverId || 'Admin'}`
+            : `คำขอ${reqDesc} ไม่ได้รับการอนุมัติ ${rejectionReason ? `(เหตุผล: ${rejectionReason})` : ''}`;
+          sendPushToEmployee(db, targetEmpId, {
+            title: notifTitle,
+            body: notifBody,
+            url: '/?tab=history',
+            tag: `approval-${type}-${id}`
+          }).catch(err => console.error('sendPushToEmployee error:', err));
+        }
+      }
+
+      const actionLabel = decision === 'DELETE' ? 'ลบถาวร' : (status === 'APPROVED' ? 'อนุมัติ' : (status === 'REJECTED' ? 'ปฏิเสธ' : 'รีเซ็ตสถานะ'));
+      await logSystemActivity(db, approverId, 'BATCH_ATTENDANCE_APPROVAL', `${actionLabel}คำขอแบบกลุ่ม จำนวน ${processedCount} รายการ`);
+      return {
+        success: true,
+        count: processedCount,
+        message: `${actionLabel}คำขอเรียบร้อยแล้ว ${processedCount} รายการ`
+      };
+    }
+
     // 5.3.1 DELETE ATTENDANCE REQUEST (PERMANENT DELETE FOR LEAVE, OT, ADVANCE)
     case 'deleteAttendanceRequest': {
       const callerUser = params.username || 'Admin';

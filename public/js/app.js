@@ -11419,6 +11419,8 @@ function resetAttendanceRequestFilters() {
 var _loadAttendanceRequestsSeq = 0;
 function loadAttendanceRequests() {
   var currentSeq = ++_loadAttendanceRequestsSeq;
+  var bulkToolbar = document.getElementById('attReqBulkToolbar');
+  if (bulkToolbar) bulkToolbar.style.display = 'none';
   var container = document.getElementById('attPendingListContainer');
   if (container) {
     container.innerHTML = '<div class="text-muted text-center" style="padding:32px 16px;font-size:12.5px">' +
@@ -14680,6 +14682,9 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
   }
 
   if (total === 0) {
+    var bulkToolbarEmpty = document.getElementById('attReqBulkToolbar');
+    if (bulkToolbarEmpty) bulkToolbarEmpty.style.display = 'none';
+
     var statusLabels = {
       'PENDING': 'รออนุมัติ',
       'APPROVED': 'อนุมัติแล้ว',
@@ -14713,14 +14718,19 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
     return;
   }
 
+  var canApprove = hasPermission('approve_attendance') || isSuperAdmin();
   var html = '';
 
   // Leaves
   (leaves || []).forEach(function(item) {
     var typeLabel = 'ขอลางาน (' + (item.leave_type || 'ทั่วไป') + ')';
-    html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #3b82f6;border-radius:8px;padding:12px">' +
+    var chkHtml = canApprove
+      ? '<input type="checkbox" class="att-req-checkbox" data-req-type="leave" data-req-id="' + item.id + '" data-req-status="' + esc(item.status || 'PENDING') + '" data-req-amount="0" onchange="onAttReqCheckboxChange(this)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;margin:0">'
+      : '';
+    html += '<div class="att-req-card-item" style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #3b82f6;border-radius:8px;padding:12px;transition:background 0.15s ease,border-color 0.15s ease">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px">' +
-        '<div style="display:flex;gap:6px;align-items:center">' +
+        '<div style="display:flex;gap:7px;align-items:center">' +
+          chkHtml +
           '<span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#dbeafe;padding:2px 8px;border-radius:12px">' + typeLabel + '</span>' +
           getAttendanceStatusBadge(item.status) +
         '</div>' +
@@ -14743,9 +14753,13 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
 
   // OTs
   (ots || []).forEach(function(item) {
-    html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #f59e0b;border-radius:8px;padding:12px">' +
+    var chkHtml = canApprove
+      ? '<input type="checkbox" class="att-req-checkbox" data-req-type="ot" data-req-id="' + item.id + '" data-req-status="' + esc(item.status || 'PENDING') + '" data-req-amount="0" onchange="onAttReqCheckboxChange(this)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;margin:0">'
+      : '';
+    html += '<div class="att-req-card-item" style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #f59e0b;border-radius:8px;padding:12px;transition:background 0.15s ease,border-color 0.15s ease">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px">' +
-        '<div style="display:flex;gap:6px;align-items:center">' +
+        '<div style="display:flex;gap:7px;align-items:center">' +
+          chkHtml +
           '<span style="font-size:11px;font-weight:700;color:#b45309;background:#fef3c7;padding:2px 8px;border-radius:12px">ขอทำ OT</span>' +
           getAttendanceStatusBadge(item.status) +
         '</div>' +
@@ -14762,9 +14776,13 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
 
   // Advances
   (advances || []).forEach(function(item) {
-    html += '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #10b981;border-radius:8px;padding:12px">' +
+    var chkHtml = canApprove
+      ? '<input type="checkbox" class="att-req-checkbox" data-req-type="advance" data-req-id="' + item.id + '" data-req-status="' + esc(item.status || 'PENDING') + '" data-req-amount="' + (Number(item.amount) || 0) + '" onchange="onAttReqCheckboxChange(this)" style="width:16px;height:16px;accent-color:#2563eb;cursor:pointer;margin:0">'
+      : '';
+    html += '<div class="att-req-card-item" style="background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid #10b981;border-radius:8px;padding:12px;transition:background 0.15s ease,border-color 0.15s ease">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:6px">' +
-        '<div style="display:flex;gap:6px;align-items:center">' +
+        '<div style="display:flex;gap:7px;align-items:center">' +
+          chkHtml +
           '<span style="font-size:11px;font-weight:700;color:#047857;background:#d1fae5;padding:2px 8px;border-radius:12px">ขอเบิกเงินล่วงหน้า</span>' +
           getAttendanceStatusBadge(item.status) +
         '</div>' +
@@ -14781,6 +14799,188 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
   });
 
   container.innerHTML = html;
+  updateAttReqBatchToolbar();
+}
+
+function toggleSelectAllAttRequests(checked) {
+  var checkboxes = document.querySelectorAll('#attPendingListContainer .att-req-checkbox');
+  checkboxes.forEach(function(cb) {
+    cb.checked = !!checked;
+    var card = cb.closest('.att-req-card-item');
+    if (card) {
+      card.style.background = cb.checked ? '#eff6ff' : '#f8fafc';
+    }
+  });
+  updateAttReqBatchToolbar();
+}
+
+function onAttReqCheckboxChange(cb) {
+  if (cb) {
+    var card = cb.closest('.att-req-card-item');
+    if (card) {
+      card.style.background = cb.checked ? '#eff6ff' : '#f8fafc';
+    }
+  }
+  updateAttReqBatchToolbar();
+}
+
+function clearAllAttRequestSelections() {
+  var masterCb = document.getElementById('chkSelectAllAttRequests');
+  if (masterCb) {
+    masterCb.checked = false;
+    masterCb.indeterminate = false;
+  }
+  toggleSelectAllAttRequests(false);
+}
+
+function updateAttReqBatchToolbar() {
+  var toolbar = document.getElementById('attReqBulkToolbar');
+  if (!toolbar) return;
+
+  var canApprove = hasPermission('approve_attendance') || isSuperAdmin();
+  var allCbs = Array.prototype.slice.call(document.querySelectorAll('#attPendingListContainer .att-req-checkbox'));
+  var totalVisible = allCbs.length;
+
+  if (!canApprove || totalVisible === 0) {
+    toolbar.style.display = 'none';
+    return;
+  }
+
+  toolbar.style.display = 'flex';
+
+  var totalVisibleEl = document.getElementById('attReqTotalVisibleCount');
+  if (totalVisibleEl) totalVisibleEl.textContent = totalVisible;
+
+  var checkedCbs = allCbs.filter(function(cb) { return cb.checked; });
+  var pendingCbs = allCbs.filter(function(cb) { return (cb.getAttribute('data-req-status') || 'PENDING') === 'PENDING'; });
+
+  var masterCb = document.getElementById('chkSelectAllAttRequests');
+  if (masterCb) {
+    masterCb.checked = checkedCbs.length === totalVisible && totalVisible > 0;
+    masterCb.indeterminate = checkedCbs.length > 0 && checkedCbs.length < totalVisible;
+  }
+
+  var selectedWrap = document.getElementById('attReqSelectedStatusWrap');
+  var selectedCountEl = document.getElementById('attReqSelectedCount');
+  var summaryBadgeEl = document.getElementById('attReqSelectedSummaryBadge');
+  var batchActionBtns = document.getElementById('attReqBatchActionBtns');
+  var btnApproveCountEl = document.getElementById('btnBatchApproveReqCount');
+  var btnQuickPending = document.getElementById('btnApproveAllPendingVisible');
+  var btnQuickPendingCount = document.getElementById('attReqAllPendingBtnCount');
+
+  if (checkedCbs.length > 0) {
+    if (selectedWrap) selectedWrap.style.display = 'inline-flex';
+    if (selectedCountEl) selectedCountEl.textContent = checkedCbs.length;
+    if (btnApproveCountEl) btnApproveCountEl.textContent = checkedCbs.length;
+    if (batchActionBtns) batchActionBtns.style.display = 'inline-flex';
+    if (btnQuickPending) btnQuickPending.style.display = 'none';
+
+    var leaveCnt = 0, otCnt = 0, advCnt = 0, advSum = 0;
+    checkedCbs.forEach(function(cb) {
+      var t = cb.getAttribute('data-req-type');
+      if (t === 'leave') leaveCnt++;
+      else if (t === 'ot') otCnt++;
+      else if (t === 'advance') {
+        advCnt++;
+        advSum += Number(cb.getAttribute('data-req-amount') || 0);
+      }
+    });
+    var parts = [];
+    if (leaveCnt > 0) parts.push('ลา ' + leaveCnt);
+    if (otCnt > 0) parts.push('OT ' + otCnt);
+    if (advCnt > 0) parts.push('เบิก ' + advCnt + ' (฿' + advSum.toLocaleString() + ')');
+    if (summaryBadgeEl) {
+      summaryBadgeEl.textContent = parts.length > 0 ? '(' + parts.join(' · ') + ')' : '';
+    }
+  } else {
+    if (selectedWrap) selectedWrap.style.display = 'none';
+    if (batchActionBtns) batchActionBtns.style.display = 'none';
+    if (btnQuickPending) {
+      if (pendingCbs.length > 0) {
+        btnQuickPending.style.display = 'inline-flex';
+        if (btnQuickPendingCount) btnQuickPendingCount.textContent = pendingCbs.length;
+      } else {
+        btnQuickPending.style.display = 'none';
+      }
+    }
+  }
+}
+
+function approveAllVisiblePendingRequests() {
+  var allCbs = Array.prototype.slice.call(document.querySelectorAll('#attPendingListContainer .att-req-checkbox'));
+  var pendingCbs = allCbs.filter(function(cb) { return (cb.getAttribute('data-req-status') || 'PENDING') === 'PENDING'; });
+  if (pendingCbs.length === 0) {
+    showToast('ไม่มีรายการรออนุมัติในหน้านี้', 'warning');
+    return;
+  }
+  allCbs.forEach(function(cb) {
+    var isPending = (cb.getAttribute('data-req-status') || 'PENDING') === 'PENDING';
+    cb.checked = isPending;
+    var card = cb.closest('.att-req-card-item');
+    if (card) card.style.background = isPending ? '#eff6ff' : '#f8fafc';
+  });
+  updateAttReqBatchToolbar();
+  batchApproveSelectedRequests('APPROVE');
+}
+
+function batchApproveSelectedRequests(decision) {
+  var checkedCbs = Array.prototype.slice.call(document.querySelectorAll('#attPendingListContainer .att-req-checkbox:checked'));
+  if (checkedCbs.length === 0) {
+    showToast('กรุณาติ๊กเลือกรายการคำขออย่างน้อย 1 รายการ', 'warning');
+    return;
+  }
+
+  var items = [];
+  var leaveCnt = 0, otCnt = 0, advCnt = 0, advSum = 0;
+  checkedCbs.forEach(function(cb) {
+    var type = cb.getAttribute('data-req-type');
+    var id = Number(cb.getAttribute('data-req-id'));
+    if (type && id) {
+      items.push({ type: type, id: id });
+      if (type === 'leave') leaveCnt++;
+      else if (type === 'ot') otCnt++;
+      else if (type === 'advance') {
+        advCnt++;
+        advSum += Number(cb.getAttribute('data-req-amount') || 0);
+      }
+    }
+  });
+
+  var breakdownLines = [];
+  if (leaveCnt > 0) breakdownLines.push('• ขอลางาน: ' + leaveCnt + ' รายการ');
+  if (otCnt > 0) breakdownLines.push('• ขอทำ OT: ' + otCnt + ' รายการ');
+  if (advCnt > 0) breakdownLines.push('• ขอเบิกเงินล่วงหน้า: ' + advCnt + ' รายการ (รวม ฿' + advSum.toLocaleString() + ' บาท)');
+
+  var actionText = decision === 'APPROVE' ? 'อนุมัติ' : (decision === 'DELETE' ? 'ลบถาวร' : 'ปฏิเสธ');
+  var confirmMsg = 'ยืนยันการ "' + actionText + '" คำขอที่เลือกทั้งหมด ' + items.length + ' รายการ ?\n\n' + breakdownLines.join('\n');
+  if (decision === 'DELETE') {
+    confirmMsg += '\n\n⚠️ คำเตือน: รายการที่เลือกจะถูกลบออกจากฐานข้อมูลอย่างถาวรทันที';
+  }
+  if (!confirm(confirmMsg)) return;
+
+  var reason = '';
+  if (decision === 'REJECT') {
+    reason = prompt('โปรดระบุเหตุผลการปฏิเสธสำหรับทั้ง ' + items.length + ' รายการ (ถ้ามี):', '') || '';
+  }
+
+  callApi('batchHandleAttendanceApprovals', {
+    items: items,
+    decision: decision,
+    rejectionReason: reason,
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+    .then(function(r) {
+      if (!r || !r.success) {
+        showToast((r && r.message) || 'เกิดข้อผิดพลาดในการดำเนินการแบบกลุ่ม', 'error');
+        return;
+      }
+      showToast(r.message || ('ดำเนินการ' + actionText + 'สำเร็จ ' + items.length + ' รายการ'), 'success');
+      loadAttendanceRequests();
+      loadTimeAttendanceDashboard();
+    })
+    .catch(function(err) {
+      showToast(err.message || 'เกิดข้อผิดพลาดในการดำเนินการแบบกลุ่ม', 'error');
+    });
 }
 
 function approveAttendanceRequest(type, id, decision) {
