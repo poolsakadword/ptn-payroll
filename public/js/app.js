@@ -18460,15 +18460,37 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
           '<td style="text-align:left;padding-left:6px;color:#991b1b;font-size:9.5px">วันหยุด</td>' +
         '</tr>';
       } else {
-        rowsHtml += '<tr style="height:20px;' + (idx % 2 === 1 ? 'background:#faf5ea;' : '') + '">' +
-          '<td>' + (idx + 1) + '</td>' +
-          '<td class="font-digital">' + dateDisplay + '</td>' +
-          '<td>' + dayName + '</td>' +
-          '<td colspan="6" style="color:#94a3b8;font-size:9.5px">-</td>' +
-          '<td>-</td>' +
-          '<td>-</td>' +
-          '<td style="text-align:left;padding-left:6px;color:#94a3b8;font-size:9.5px">-</td>' +
-        '</tr>';
+        var nowBkk = new Date(Date.now() + 7 * 3600 * 1000);
+        var todayIso = nowBkk.toISOString().substring(0, 10);
+        var joinD = emp ? String(emp.joinDate || emp.join_date || '').substring(0, 10) : '';
+        var resignD = emp ? String(emp.resignDate || emp.resign_date || '').substring(0, 10) : '';
+        var isBeforeJoin = joinD && dStr < joinD;
+        var isAfterResign = resignD && dStr > resignD;
+
+        if (dStr < todayIso && !isBeforeJoin && !isAfterResign) {
+          absentCount++;
+          rowsHtml += '<tr style="height:20px;background:#fef2f2;border-left:3px solid #ef4444;">' +
+            '<td>' + (idx + 1) + '</td>' +
+            '<td class="font-digital" style="font-weight:700;color:#dc2626;">' + dateDisplay + '</td>' +
+            '<td style="color:#b91c1c;font-weight:700;">' + dayName + '</td>' +
+            '<td colspan="6" style="color:#dc2626;font-weight:700;letter-spacing:0.5px;font-size:9.5px;text-align:center;">' +
+              '🔴 ขาดงาน (ไม่มีบันทึกเวลาทำงาน)' +
+            '</td>' +
+            '<td style="color:#dc2626;font-weight:700;">-</td>' +
+            '<td style="color:#dc2626;font-weight:700;">-</td>' +
+            '<td style="text-align:left;padding-left:6px;color:#dc2626;font-weight:700;font-size:9.5px;">🔴 ขาดงาน</td>' +
+          '</tr>';
+        } else {
+          rowsHtml += '<tr style="height:20px;' + (idx % 2 === 1 ? 'background:#faf5ea;' : '') + '">' +
+            '<td>' + (idx + 1) + '</td>' +
+            '<td class="font-digital">' + dateDisplay + '</td>' +
+            '<td>' + dayName + '</td>' +
+            '<td colspan="6" style="color:#94a3b8;font-size:9.5px">-</td>' +
+            '<td>-</td>' +
+            '<td>-</td>' +
+            '<td style="text-align:left;padding-left:6px;color:#94a3b8;font-size:9.5px">-</td>' +
+          '</tr>';
+        }
       }
     }
   });
@@ -18540,14 +18562,15 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
       '</tbody>' +
     '</table>' +
 
-    '<!-- Summary 6 Box -->' +
-    '<div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 6px; border: 1.5px solid #92400e; background: #fefce8; padding: 5px; text-align: center; font-size: 11px;">' +
-      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">วันทำงานจริง</div><div style="font-size: 13px; font-weight: 800; color: #166534;">' + daysWorked + ' วัน</div></div>' +
-      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">วันลาที่อนุมัติ</div><div style="font-size: 13px; font-weight: 800; color: #6d28d9;">' + leaveCount + ' วัน</div></div>' +
-      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">ชม. งานปกติ</div><div style="font-size: 13px; font-weight: 800; color: #1e40af;">' + totalWorkHours.toFixed(1) + ' ชม.</div></div>' +
-      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">รวมล่วงเวลา (OT)</div><div style="font-size: 13px; font-weight: 800; color: #78350f;">' + totalOtHours.toFixed(1) + ' ชม.</div></div>' +
-      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">มาสายรวม</div><div style="font-size: 13px; font-weight: 800; color: #b91c1c;">' + lateCount + ' ครั้ง (' + totalLateMinutes + ' น.)</div></div>' +
-      '<div><div style="font-size: 9.5px; color: #92400e; font-weight: 700;">วันหยุดบริษัท / พิเศษ</div><div style="font-size: 13px; font-weight: 800; color: #b45309;">' + holidayCount + ' วัน</div></div>' +
+    '<!-- Summary 7 Box -->' +
+    '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 6px; border: 1.5px solid #92400e; background: #fefce8; padding: 5px; text-align: center; font-size: 11px;">' +
+      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">วันทำงานจริง</div><div style="font-size: 12.5px; font-weight: 800; color: #166534;">' + daysWorked + ' วัน</div></div>' +
+      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">วันลาที่อนุมัติ</div><div style="font-size: 12.5px; font-weight: 800; color: #6d28d9;">' + leaveCount + ' วัน</div></div>' +
+      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">ขาดงาน</div><div style="font-size: 12.5px; font-weight: 800; color: ' + (absentCount > 0 ? '#dc2626;' : '#64748b;') + '">' + absentCount + ' วัน</div></div>' +
+      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">ชม. งานปกติ</div><div style="font-size: 12.5px; font-weight: 800; color: #1e40af;">' + totalWorkHours.toFixed(1) + ' ชม.</div></div>' +
+      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">รวมล่วงเวลา (OT)</div><div style="font-size: 12.5px; font-weight: 800; color: #78350f;">' + totalOtHours.toFixed(1) + ' ชม.</div></div>' +
+      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">มาสายรวม</div><div style="font-size: 12.5px; font-weight: 800; color: #b91c1c;">' + lateCount + ' ครั้ง (' + totalLateMinutes + ' น.)</div></div>' +
+      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">วันหยุดบริษัท</div><div style="font-size: 12.5px; font-weight: 800; color: #b45309;">' + holidayCount + ' วัน</div></div>' +
     '</div>' +
 
     '<!-- Advance Payment Summary Banner -->' +
