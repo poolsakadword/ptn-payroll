@@ -181,6 +181,15 @@ export async function ensureGlobalSchemas(db) {
       )
     `).run().catch(() => {});
     await db.prepare('CREATE INDEX IF NOT EXISTS idx_company_holidays_date ON company_holidays(date)').run().catch(() => {});
+
+    // High Performance Indexes for Payroll, Employees & Activity Logs (Phase 3 Optimization)
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_monthly_inputs_period ON monthly_inputs(period)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_monthly_inputs_period_emp ON monthly_inputs(period, emp_id)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_payroll_calcs_period ON payroll_calcs(period)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_payroll_calcs_period_emp ON payroll_calcs(period, emp_id)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp ON activity_logs(timestamp)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status)").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_employees_branch ON employees(branch_id)").run().catch(() => {});
   } catch(e) {
     console.warn('ensureGlobalSchemas note:', e);
   }
