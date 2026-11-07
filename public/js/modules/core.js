@@ -135,6 +135,17 @@ function canAccessTimeAttendanceModule() {
   return perms.some(function(p) { return String(p).indexOf('toggle_early_dismissal:') === 0; });
 }
 
+function canAccessAiAnomalyInspector() {
+  if (!State.currentUser) return false;
+  if (isSuperAdmin()) return true;
+  var u = State.currentUser.username ? String(State.currentUser.username).trim().toLowerCase() : '';
+  var r = State.currentUser.role ? String(State.currentUser.role).trim().toLowerCase() : '';
+  if (u === 'admin') return true;
+  if (r.indexOf('super') >= 0 || r === 'admin / hr' || r === 'admin') return true;
+  if (hasPermission('all')) return true;
+  return false;
+}
+
 function getDefaultAuthorizedAttendanceSubTab() {
   if (isSuperAdmin() || hasPermission('view_attendance')) return 'logs';
   if (hasPermission('approve_attendance') || hasPermission('create_attendance_requests')) return 'approvals';
@@ -354,6 +365,9 @@ function applyRolePermissions() {
   if (btnEmpSlip) btnEmpSlip.style.display = canViewPayslipStrict ? 'inline-flex' : 'none';
 
   // 10. Time Attendance Actions
+  var canAccessAiInspector = canAccessAiAnomalyInspector();
+  var btnAttLaunchAi = document.getElementById('btnAttLaunchAiInspector');
+  if (btnAttLaunchAi) btnAttLaunchAi.style.display = canAccessAiInspector ? 'inline-flex' : 'none';
   var btnAttQr = document.getElementById('btnAttMasterQr');
   if (btnAttQr) btnAttQr.style.display = canUnlockDevice ? 'inline-flex' : 'none';
   var btnAttSync = document.getElementById('btnAttSyncPeriod');
@@ -370,6 +384,8 @@ function applyRolePermissions() {
   if (tabBtnSummary) tabBtnSummary.style.display = canViewAttendanceLogs ? 'inline-flex' : 'none';
   var tabBtnApprovals = document.getElementById('attSubTabBtn_approvals');
   if (tabBtnApprovals) tabBtnApprovals.style.display = canApproveAttendance ? 'inline-flex' : 'none';
+  var tabBtnAiInspector = document.getElementById('attSubTabBtn_ai_inspector');
+  if (tabBtnAiInspector) tabBtnAiInspector.style.display = canAccessAiInspector ? 'inline-flex' : 'none';
   var tabBtnBranches = document.getElementById('attSubTabBtn_branches');
   if (tabBtnBranches) tabBtnBranches.style.display = canManageAttendanceSettings ? 'inline-flex' : 'none';
   var tabBtnSettings = document.getElementById('attSubTabBtn_settings');
@@ -381,6 +397,8 @@ function applyRolePermissions() {
     currentSubTabAllowed = false;
   } else if (_activeAttendanceSubTab === 'approvals' && !canApproveAttendance) {
     currentSubTabAllowed = false;
+  } else if (_activeAttendanceSubTab === 'ai_inspector' && !canAccessAiInspector) {
+    currentSubTabAllowed = false;
   } else if ((_activeAttendanceSubTab === 'branches' || _activeAttendanceSubTab === 'settings') && !canManageAttendanceSettings) {
     currentSubTabAllowed = false;
   }
@@ -390,7 +408,7 @@ function applyRolePermissions() {
     if (defTab) {
       switchAttendanceSubTab(defTab);
     } else {
-      ['logs', 'summary', 'approvals', 'settings', 'branches'].forEach(function(t) {
+      ['logs', 'summary', 'approvals', 'ai_inspector', 'settings', 'branches'].forEach(function(t) {
         var p = document.getElementById('attSubTabPane_' + t);
         if (p) p.style.display = 'none';
       });

@@ -1505,9 +1505,10 @@ function switchAttendanceSubTab(tabName) {
   var canViewLogs = isSuperAdmin() || hasPermission('view_attendance');
   var canApprove = isSuperAdmin() || hasPermission('approve_attendance') || hasPermission('create_attendance_requests');
   var canManageSettings = isSuperAdmin() || hasPermission('manage_attendance_settings');
+  var canAccessAiInspector = canAccessAiAnomalyInspector();
 
   // Permission guards
-  if ((tabName === 'logs' || tabName === 'summary' || tabName === 'ai_inspector') && !canViewLogs) {
+  if ((tabName === 'logs' || tabName === 'summary') && !canViewLogs) {
     var defTab = getDefaultAuthorizedAttendanceSubTab();
     if (defTab && defTab !== tabName) {
       showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูหน้าบันทึกเวลาประจำวัน', 'warning');
@@ -1515,6 +1516,15 @@ function switchAttendanceSubTab(tabName) {
       return;
     }
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูหน้าบันทึกเวลาประจำวัน', 'warning');
+    return;
+  }
+
+  if (tabName === 'ai_inspector' && !canAccessAiInspector) {
+    var defTab = getDefaultAuthorizedAttendanceSubTab();
+    showToast('สิทธิ์ไม่เพียงพอ: หน้า AI ตรวจจับผิดปกติสงวนสิทธิ์เฉพาะ Super Admin และ Admin เท่านั้น', 'warning');
+    if (defTab && defTab !== 'ai_inspector') {
+      switchAttendanceSubTab(defTab);
+    }
     return;
   }
 
@@ -6272,6 +6282,13 @@ var _aiInspectorCutoffInfo = null;
 var _aiInspectorPeriod = null;
 
 function loadAiAttendanceInspector() {
+  if (!canAccessAiAnomalyInspector()) {
+    showToast('สิทธิ์ไม่เพียงพอ: หน้า AI ตรวจจับผิดปกติสงวนสิทธิ์เฉพาะ Super Admin และ Admin เท่านั้น', 'warning');
+    var defTab = getDefaultAuthorizedAttendanceSubTab();
+    if (defTab && defTab !== 'ai_inspector') switchAttendanceSubTab(defTab);
+    return;
+  }
+
   var selPeriod = document.getElementById('aiInspectorPeriodSelect');
   var period = (selPeriod && selPeriod.value) ? selPeriod.value : State.period;
 
