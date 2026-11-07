@@ -855,5 +855,77 @@ function openActivityLogModal() {
     });
 }
 
-
 // ==============================================================================
+// PHOTO RETENTION POLICY & CLOUDFLARE R2 CLEANUP CONTROLLER (24 MONTHS)
+// ==============================================================================
+function triggerPhotoRetentionCleanup() {
+  if (!isSuperAdmin() && !hasPermission('manage_company')) {
+    showToast('สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin หรือผู้จัดการระบบ', 'error');
+    return;
+  }
+
+  showToast('กำลังตรวจสอบข้อมูลรูปภาพในระบบ...', 'info');
+  callApi('getPhotoStorageStats', {})
+    .then(function(r) {
+      var cutoff = r.cutoffDate || '24 เดือนก่อน';
+      var eligibleCount = r.eligibleOldPhotosCount || 0;
+      var r2Status = r.hasR2Binding ? '✅ เปิดใช้งาน Cloudflare R2' : 'ℹ️ โหมดจัดเก็บแบบ Local Optimized';
+      var textMsg = 'ระบบจะทำการค้นหาและล้างเฉพาะรูปถ่ายสแกนเวลาเข้า-ออกงานที่บันทึกก่อนวันที่ ' + cutoff + ' (เก่าเกิน 24 เดือน / 2 ปี)\n\n' +
+                    '📊 ข้อมูลพื้นที่และการจัดเก็บ:\n' +
+                    '• สถานะ Storage: ' + r2Status + '\n' +
+                    '• รูปสแกนเวลาเก่าที่พร้อมล้าง: ' + eligibleCount + ' รายการ\n' +
+                    '• ประวัติวัน-เวลาทำงาน, OT, และสถิติเงินเดือน: คงอยู่ครบถ้วน 100% ไม่ถูกลบ\n\n' +
+                    'คุณต้องการดำเนินการล้างรูปภาพเพื่อประหยัดพื้นที่ฐานข้อมูลหรือไม่?';
+
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: 'ยืนยันล้างรูปสแกนเวลาเก่า (> 24 เดือน)',
+          text: textMsg,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#10b981',
+          cancelButtonColor: '#64748b',
+          confirmButtonText: 'ยืนยันล้างรูปเก่า',
+          cancelButtonText: 'ยกเลิก'
+        }).then(function(result) {
+          if (result.isConfirmed) {
+            executePhotoRetentionCleanup();
+          }
+        });
+      } else {
+        if (confirm(textMsg)) {
+          executePhotoRetentionCleanup();
+        }
+      }
+    })
+    .catch(function(err) {
+      showToast('ไม่สามารถตรวจสอบสถิติรูปภาพได้: ' + err.message, 'error');
+    });
+}
+
+function executePhotoRetentionCleanup() {
+  showToast('กำลังดำเนินการตาม Retention Policy ล้างรูปภาพเก่า...', 'info');
+  callApi('cleanupOldAttendancePhotos', {
+    username: (State.currentUser && State.currentUser.username) || 'Admin'
+  })
+  .then(function(res) {
+    if (res.success) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          icon: 'success',
+          title: 'ล้างรูปภาพเรียบร้อยแล้ว',
+          text: res.message || 'ล้างรูปถ่ายสแกนเวลาเก่าเกิน 24 เดือนเรียบร้อยแล้ว'
+        });
+      } else {
+        alert(res.message);
+      }
+      showToast(res.message, 'success');
+      loadAppData();
+    } else {
+      showToast(res.message || 'เกิดข้อผิดพลาดในการล้างรูป', 'error');
+    }
+  })
+  .catch(function(e) {
+    showToast('Error: ' + e.message, 'error');
+  });
+}

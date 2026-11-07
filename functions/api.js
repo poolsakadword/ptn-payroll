@@ -17,6 +17,7 @@ import { holidayHandlers } from './_modules/holidays.js';
 import { notificationHandlers } from './_modules/notifications.js';
 import { backupHandlers } from './_modules/backup.js';
 import { aiHandlers } from './_modules/ai.js';
+import { storageHandlers } from './_modules/storage.js';
 
 const actionHandlers = {
   ...authHandlers,
@@ -28,6 +29,7 @@ const actionHandlers = {
   ...notificationHandlers,
   ...backupHandlers,
   ...aiHandlers,
+  ...storageHandlers,
 };
 
 export async function onRequest(context) {
@@ -107,6 +109,23 @@ export async function onRequest(context) {
     }
     params.period = period;
 
+    // Special Binary Handler: Stream Photo directly from Cloudflare R2
+    if (action === 'getPhoto') {
+      const key = params.key || url.searchParams.get('key');
+      const r2 = env.PHOTOS_BUCKET || env.R2 || env.BUCKET;
+      if (key && r2 && typeof r2.get === 'function') {
+        const object = await r2.get(key);
+        if (object) {
+          const headers = new Headers();
+          headers.set('Content-Type', object.httpMetadata?.contentType || 'image/jpeg');
+          headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+          headers.set('Access-Control-Allow-Origin', '*');
+          return new Response(object.body, { headers });
+        }
+      }
+      return new Response(null, { status: 404, headers: corsHeaders });
+    }
+
     const handler = actionHandlers[action];
     if (!handler) {
       return new Response(JSON.stringify({
@@ -118,7 +137,7 @@ export async function onRequest(context) {
       });
     }
 
-    const result = await handler(db, params);
+    const result = await handler(db, params, period, env);
     return new Response(JSON.stringify(result), {
       status: 200,
       headers: { 'Content-Type': 'application/json', ...corsHeaders }

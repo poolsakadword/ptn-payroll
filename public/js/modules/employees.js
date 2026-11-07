@@ -591,7 +591,28 @@ function handleEmployeePhotoSelect(e) {
     var rawDataUrl = evt.target.result;
     compressEmployeePhoto(rawDataUrl, 400, 400, 0.82, function(compressedUrl) {
       updateEmployeePhotoPreview(compressedUrl);
-      showToast('อัปโหลดและปรับขนาดรูปภาพสำเร็จ');
+      var empId = document.getElementById('mEmpId') ? document.getElementById('mEmpId').value.trim() : 'temp';
+      callApi('uploadPhoto', {
+        dataUrl: compressedUrl,
+        folder: 'employees',
+        empId: empId,
+        filename: 'emp_' + empId + '_' + Date.now() + '.jpg'
+      })
+      .then(function(res) {
+        if (res && res.success && res.url) {
+          var hiddenInput = document.getElementById('mPhotoUrl');
+          if (hiddenInput) hiddenInput.value = res.url;
+          if (res.storage === 'R2') {
+            showToast('อัปโหลดรูปภาพสู่ Cloudflare R2 สำเร็จเรียบร้อย', 'success');
+          } else {
+            showToast('ปรับขนาดและบันทึกรูปภาพเรียบร้อยแล้ว', 'success');
+          }
+        }
+      })
+      .catch(function(err) {
+        console.warn('R2 upload note:', err);
+        showToast('อัปโหลดและปรับขนาดรูปภาพสำเร็จ');
+      });
     });
   };
   reader.readAsDataURL(file);
