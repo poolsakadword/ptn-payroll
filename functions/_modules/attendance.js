@@ -2837,6 +2837,10 @@ export const attendanceHandlers = {
   },
 
   getMasterUnlockQr: async (db, params) => {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'unlock_device')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าถึง Master Unlock Token' };
+
       const token = await getMasterUnlockToken(0);
       const secondsLeft = 60 - (Math.floor(Date.now() / 1000) % 60);
       return {

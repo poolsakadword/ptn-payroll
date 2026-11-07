@@ -101,6 +101,10 @@ export const holidayHandlers = {
   },
 
   getActivityLogs: async (db, params) => {
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'manage_backup')) || (await userHasPermission(db, callerUser, 'view_analytics')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูบันทึกกิจกรรมระบบ' };
+
       await db.prepare('CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, username TEXT, action TEXT, details TEXT)').run().catch(() => {});
       const logs = (await db.prepare('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 100').all()).results || [];
       return { success: true, logs: logs };

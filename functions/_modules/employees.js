@@ -60,11 +60,25 @@ export const employeeHandlers = {
         await db.prepare('DELETE FROM employees WHERE emp_id = ?').bind(origId).run();
       }
 
-      const pfRateVal = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate))) ? Number(emp.pfRate) : 0.05;
-      const baseSalaryVal = Number(emp.baseSalary) || 0;
+      const canEditSalary = (await userHasPermission(db, callerUser, 'view_salary')) || (await isUserSuperAdmin(db, callerUser));
+      let pfRateVal = (emp.pfRate !== null && emp.pfRate !== undefined && !isNaN(Number(emp.pfRate))) ? Number(emp.pfRate) : 0.05;
+      let baseSalaryVal = Number(emp.baseSalary) || 0;
+      let bankAccountVal = emp.bankAccount || '';
+      let ssoVal = (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750;
+      let taxVal = Number(emp.defaultTax) || 0;
+
+      // If user lacks view_salary permission, retain existing financial figures and bank account from DB
+      if (!canEditSalary && (origId || emp.empId)) {
+        const existingEmp = await db.prepare('SELECT base_salary, bank_account, pf_rate, default_sso, default_tax FROM employees WHERE emp_id = ?').bind(origId || emp.empId).first();
+        if (existingEmp) {
+          baseSalaryVal = Number(existingEmp.base_salary) || 0;
+          bankAccountVal = existingEmp.bank_account || '';
+          pfRateVal = (existingEmp.pf_rate !== null && existingEmp.pf_rate !== undefined) ? Number(existingEmp.pf_rate) : 0.05;
+          ssoVal = Number(existingEmp.default_sso) || 0;
+          taxVal = Number(existingEmp.default_tax) || 0;
+        }
+      }
       const pfAmtVal = pfRateVal > 0 ? Math.round(baseSalaryVal * pfRateVal * 100) / 100 : 0;
-      const ssoVal = (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750;
-      const taxVal = Number(emp.defaultTax) || 0;
 
       const cleanBirthDate = normalizeDateToIso(emp.birthDate || '');
       const cleanJoinDate = normalizeDateToIso(emp.joinDate || '');
@@ -105,7 +119,7 @@ export const employeeHandlers = {
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
-        emp.bankName || '', emp.bankAccount || '', cleanBirthDate, Number(emp.age) || 0,
+        emp.bankName || '', bankAccountVal, cleanBirthDate, Number(emp.age) || 0,
         cleanJoinDate,
         pfRateVal, ssoVal,
         taxVal, emp.remark || '',
@@ -244,6 +258,10 @@ export const employeeHandlers = {
 
   get50TwiData: async (db, params) => {
     let period = params.period;
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'issue_salary_cert')) || (await userHasPermission(db, callerUser, 'view_payroll')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ออกหนังสือรับรองภาษี 50 ทวิ' };
+
       const empId = params.empId;
       const year = params.year || (new Date().getFullYear() + 543).toString();
       if (!empId) return { success: false, message: 'Missing empId' };

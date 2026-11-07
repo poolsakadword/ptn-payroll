@@ -62,6 +62,11 @@ function checkAuth() {
   if (savedUser) {
     try {
       State.currentUser = JSON.parse(savedUser);
+      if (!State.currentUser || !State.currentUser.token) {
+        console.warn('Session has no security token, requiring fresh login...');
+        handleLogout();
+        return;
+      }
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('appShell').classList.add('active');
       try { applyRolePermissions(); } catch(err) { console.error('applyRolePermissions error:', err); }

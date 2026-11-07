@@ -92,6 +92,12 @@ export async function onRequest(context) {
     if (params.verifiedUser) {
       params.username = params.verifiedUser;
       params.currentUsername = params.verifiedUser;
+    } else {
+      // Disallow spoofing username without a verified cryptographic token for protected actions
+      if (action !== 'checkLogin' && action !== 'kioskScanQrAttendance' && action !== 'checkBranchGpsOnly') {
+        params.username = '';
+        params.currentUsername = '';
+      }
     }
 
     // Resolve active period context (preserved from monolithic backend)

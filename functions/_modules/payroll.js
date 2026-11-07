@@ -212,6 +212,12 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
 export const payrollHandlers = {
   getAppInitialData: async (db, params) => {
     let period = params.period;
+    const callerUser = params.verifiedUser || params.username || '';
+    const canViewSalary = callerUser ? (await userHasPermission(db, callerUser, 'view_salary') || await isUserSuperAdmin(db, callerUser)) : false;
+    const canViewPayroll = callerUser ? (await userHasPermission(db, callerUser, 'view_payroll') || await isUserSuperAdmin(db, callerUser)) : false;
+    const canManageUsers = callerUser ? (await userHasPermission(db, callerUser, 'manage_users') || await isUserSuperAdmin(db, callerUser)) : false;
+    const isSuper = callerUser ? (await isUserSuperAdmin(db, callerUser)) : false;
+
       const settingsRows = await db.prepare('SELECT key, value FROM settings').all();
       const settingsMap = {
         companyName: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
@@ -240,7 +246,7 @@ export const payrollHandlers = {
         if (row.key === 'SignatoryTitleEn') settingsMap.signatoryTitleEn = row.value;
         if (row.key === 'EmployerSsoId') settingsMap.employerSsoId = row.value;
         if (row.key === 'CompanyBranch') settingsMap.companyBranch = row.value;
-        if (row.key === 'GeminiApiKey') settingsMap.geminiApiKey = row.value;
+        if (row.key === 'GeminiApiKey' && isSuper) settingsMap.geminiApiKey = row.value;
         if (row.key === `Period_Status_${period}`) {
           if (row.value && row.value.startsWith('CLOSED')) {
             isClosed = true;
@@ -295,21 +301,21 @@ export const payrollHandlers = {
         isUndertimeExempt: (e.is_undertime_exempt === 'true' || e.is_undertime_exempt === true || e.is_undertime_exempt === 1 || e.is_undertime_exempt === '1'),
         isAttendanceExempt: (e.is_attendance_exempt === 'true' || e.is_attendance_exempt === true || e.is_attendance_exempt === 1 || e.is_attendance_exempt === '1'),
         isBreakExempt: (e.is_break_exempt === 'true' || e.is_break_exempt === true || e.is_break_exempt === 1 || e.is_break_exempt === '1'),
-        baseSalary: Number(e.base_salary) || 0,
+        baseSalary: canViewSalary ? (Number(e.base_salary) || 0) : 0,
         bankName: e.bank_name || '',
-        bankAccount: e.bank_account || '',
+        bankAccount: canViewSalary ? (e.bank_account || '') : (e.bank_account ? '***' + String(e.bank_account).slice(-3) : ''),
         birthDate: e.birth_date || '',
         age: Number(e.age) || 0,
         joinDate: e.join_date || '',
-        pfRate: (e.pf_rate !== null && e.pf_rate !== undefined && !isNaN(Number(e.pf_rate))) ? Number(e.pf_rate) : 0.05,
-        defaultSso: (e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 0,
-        defaultTax: Number(e.default_tax) || 0,
+        pfRate: canViewSalary ? ((e.pf_rate !== null && e.pf_rate !== undefined && !isNaN(Number(e.pf_rate))) ? Number(e.pf_rate) : 0.05) : 0,
+        defaultSso: canViewSalary ? ((e.default_sso !== null && e.default_sso !== undefined && !isNaN(Number(e.default_sso))) ? Number(e.default_sso) : 0) : 0,
+        defaultTax: canViewSalary ? (Number(e.default_tax) || 0) : 0,
         status: e.status || 'Active',
         probationDays: Number(e.probation_days) || 119,
         probationEndDate: e.probation_end_date || '',
         remark: e.remark || '',
         resignDate: e.resign_date || '',
-        diligenceAllowance: (e.diligence_allowance !== null && e.diligence_allowance !== undefined && !isNaN(Number(e.diligence_allowance))) ? Number(e.diligence_allowance) : null,
+        diligenceAllowance: canViewSalary ? ((e.diligence_allowance !== null && e.diligence_allowance !== undefined && !isNaN(Number(e.diligence_allowance))) ? Number(e.diligence_allowance) : null) : null,
         isDeviceBound: !!deviceMap[e.emp_id],
         boundDevice: deviceMap[e.emp_id] || null
       }));
@@ -339,25 +345,25 @@ export const payrollHandlers = {
         empId: i.emp_id,
         empName: i.emp_name || '',
         nickname: empNickMap[i.emp_id] || '',
-        baseSalary: Number(i.base_salary) || 0,
-        pfRate: (i.pf_rate !== null && i.pf_rate !== undefined && !isNaN(Number(i.pf_rate))) ? Number(i.pf_rate) : 0.05,
-        pfAmount: Number(i.pf_amount) || 0,
+        baseSalary: canViewSalary ? (Number(i.base_salary) || 0) : 0,
+        pfRate: canViewSalary ? ((i.pf_rate !== null && i.pf_rate !== undefined && !isNaN(Number(i.pf_rate))) ? Number(i.pf_rate) : 0.05) : 0,
+        pfAmount: canViewSalary ? (Number(i.pf_amount) || 0) : 0,
         absentDays: Number(i.absent_days) || 0,
         leaveDays: Number(i.leave_days) || 0,
         sickLeaveDays: Number(i.sick_leave_days) || 0,
         unpaidSickLeaveDays: Number(i.unpaid_sick_leave_days) || 0,
-        lateDeduct: Number(i.late_deduct) || 0,
+        lateDeduct: canViewSalary ? (Number(i.late_deduct) || 0) : 0,
         lateMinutes: Number(i.late_minutes) || 0,
         lateCount: Number(i.late_count) || 0,
         otHours: Number(i.ot_hours) || 0,
-        otRate: (i.ot_rate !== null && i.ot_rate !== undefined && !isNaN(Number(i.ot_rate))) ? Number(i.ot_rate) : 40,
-        allowance: Number(i.allowance) || 0,
-        bonus: Number(i.bonus) || 0,
-        advanceDeduct: Number(i.advance_deduct) || 0,
-        otherDeduct: Number(i.other_deduct) || 0,
-        carriedDebt: Number(i.carried_debt) || 0,
-        sso: (i.sso !== null && i.sso !== undefined && !isNaN(Number(i.sso))) ? Number(i.sso) : 0,
-        tax: Number(i.tax) || 0
+        otRate: canViewSalary ? ((i.ot_rate !== null && i.ot_rate !== undefined && !isNaN(Number(i.ot_rate))) ? Number(i.ot_rate) : 40) : 0,
+        allowance: canViewSalary ? (Number(i.allowance) || 0) : 0,
+        bonus: canViewSalary ? (Number(i.bonus) || 0) : 0,
+        advanceDeduct: canViewSalary ? (Number(i.advance_deduct) || 0) : 0,
+        otherDeduct: canViewSalary ? (Number(i.other_deduct) || 0) : 0,
+        carriedDebt: canViewSalary ? (Number(i.carried_debt) || 0) : 0,
+        sso: canViewSalary ? ((i.sso !== null && i.sso !== undefined && !isNaN(Number(i.sso))) ? Number(i.sso) : 0) : 0,
+        tax: canViewSalary ? (Number(i.tax) || 0) : 0
       }));
 
       // Payroll Calcs
@@ -379,7 +385,15 @@ export const payrollHandlers = {
         if (e.empId) empObjMap[e.empId] = e;
       }
 
-      if (inputRecords.length === 0) {
+      if (!canViewPayroll) {
+        payrollList = [];
+        totalGross = 0;
+        totalDeductions = 0;
+        totalNet = 0;
+        totalEarnedBase = 0;
+        totalEarnedGross = 0;
+        totalEarnedNet = 0;
+      } else if (inputRecords.length === 0) {
         await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
       } else {
         let calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
@@ -469,22 +483,25 @@ export const payrollHandlers = {
         });
       }
 
-      // Users
-      const usersQuery = await db.prepare('SELECT username, password, role, permissions FROM users ORDER BY username ASC').all();
-      const users = (usersQuery.results || []).map(u => {
-        let perms = [];
-        try {
-          perms = u.permissions ? (typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions) : getDefaultRolePermissions(u.role);
-        } catch(e) {
-          perms = getDefaultRolePermissions(u.role);
-        }
-        return {
-          username: u.username,
-          password: u.password,
-          role: u.role || 'User',
-          permissions: perms
-        };
-      });
+      // Users - Only returned if caller has manage_users or is SuperAdmin. Passwords masked.
+      let users = [];
+      if (canManageUsers) {
+        const usersQuery = await db.prepare('SELECT username, role, permissions FROM users ORDER BY username ASC').all();
+        users = (usersQuery.results || []).map(u => {
+          let perms = [];
+          try {
+            perms = u.permissions ? (typeof u.permissions === 'string' ? JSON.parse(u.permissions) : u.permissions) : getDefaultRolePermissions(u.role);
+          } catch(e) {
+            perms = getDefaultRolePermissions(u.role);
+          }
+          return {
+            username: u.username,
+            password: '••••••••',
+            role: u.role || 'User',
+            permissions: perms
+          };
+        });
+      }
 
       const latestRowPeriod = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
       let latestActivePeriod = (latestRowPeriod && latestRowPeriod.period) ? latestRowPeriod.period : period;
@@ -616,14 +633,47 @@ export const payrollHandlers = {
         return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้แก้ไขหรือบันทึกข้อมูล กรุณาปลดล็อคงวดก่อนดำเนินการ` };
       }
 
+      const canEditSalary = (await userHasPermission(db, callerUser, 'view_salary')) || (await isUserSuperAdmin(db, callerUser));
       const r = params.record || {};
       const origEmpId = params.origEmpId;
       if (!r.empId) return { success: false, message: 'กรุณาเลือกรหัสพนักงาน' };
 
-      const baseSal = Number(r.baseSalary) || 0;
-      const pfRate = (r.pfRate !== null && r.pfRate !== undefined && !isNaN(Number(r.pfRate))) ? Number(r.pfRate) : 0.05;
-      const pfAmt = pfRate > 0 ? (Number(r.pfAmount !== undefined && r.pfAmount !== null ? r.pfAmount : Math.round(baseSal * pfRate * 100) / 100)) : 0;
-      const otRate = (r.otRate !== null && r.otRate !== undefined && !isNaN(Number(r.otRate))) ? Number(r.otRate) : 40;
+      let baseSal = Number(r.baseSalary) || 0;
+      let pfRate = (r.pfRate !== null && r.pfRate !== undefined && !isNaN(Number(r.pfRate))) ? Number(r.pfRate) : 0.05;
+      let pfAmt = pfRate > 0 ? (Number(r.pfAmount !== undefined && r.pfAmount !== null ? r.pfAmount : Math.round(baseSal * pfRate * 100) / 100)) : 0;
+      let otRate = (r.otRate !== null && r.otRate !== undefined && !isNaN(Number(r.otRate))) ? Number(r.otRate) : 40;
+      let allowance = Number(r.allowance) || 0;
+      let bonus = Number(r.bonus) || 0;
+      let advanceDeduct = Number(r.advanceDeduct) || 0;
+      let otherDeduct = Number(r.otherDeduct) || 0;
+      let sso = (r.sso !== null && r.sso !== undefined && !isNaN(Number(r.sso))) ? Number(r.sso) : 0;
+      let tax = Number(r.tax) || 0;
+
+      // If user does NOT have permission to view/edit salary, protect financial figures from being zeroed out
+      if (!canEditSalary) {
+        const existInput = await db.prepare('SELECT base_salary, pf_rate, pf_amount, ot_rate, allowance, bonus, advance_deduct, other_deduct, sso, tax FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, origEmpId || r.empId).first();
+        if (existInput) {
+          baseSal = Number(existInput.base_salary) || 0;
+          pfRate = Number(existInput.pf_rate) || 0.05;
+          pfAmt = Number(existInput.pf_amount) || 0;
+          otRate = Number(existInput.ot_rate) || 40;
+          allowance = Number(existInput.allowance) || 0;
+          bonus = Number(existInput.bonus) || 0;
+          advanceDeduct = Number(existInput.advance_deduct) || 0;
+          otherDeduct = Number(existInput.other_deduct) || 0;
+          sso = Number(existInput.sso) || 0;
+          tax = Number(existInput.tax) || 0;
+        } else {
+          const empRow = await db.prepare('SELECT base_salary, pf_rate, default_sso, default_tax FROM employees WHERE emp_id = ?').bind(r.empId).first();
+          if (empRow) {
+            baseSal = Number(empRow.base_salary) || 0;
+            pfRate = Number(empRow.pf_rate) || 0.05;
+            pfAmt = Math.round(baseSal * pfRate * 100) / 100;
+            sso = Number(empRow.default_sso) || 0;
+            tax = Number(empRow.default_tax) || 0;
+          }
+        }
+      }
 
       if (origEmpId && origEmpId !== r.empId) {
         await db.prepare('DELETE FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, origEmpId).run();
@@ -653,8 +703,8 @@ export const payrollHandlers = {
         Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.unpaidSickLeaveDays) || 0, Number(r.lateDeduct) || 0,
         lateMins, lateCnt,
         Number(r.otHours) || 0, otRate,
-        Number(r.allowance) || 0, Number(r.bonus) || 0, Number(r.advanceDeduct) || 0,
-        Number(r.otherDeduct) || 0, carriedDebt, (r.sso !== null && r.sso !== undefined && !isNaN(Number(r.sso))) ? Number(r.sso) : 0, Number(r.tax) || 0
+        allowance, bonus, advanceDeduct,
+        otherDeduct, carriedDebt, sso, tax
       ).run();
 
       await calculateAndSavePayroll(db, period);
@@ -853,6 +903,10 @@ export const payrollHandlers = {
 
   getYearlySummary: async (db, params) => {
     let period = params.period;
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'view_payroll')) || (await userHasPermission(db, callerUser, 'view_history')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าถึงรายงานสรุปประจำปี' };
+
       const year = String(params.year || '').trim();
       let calcsQuery = 'SELECT * FROM payroll_calcs';
       let inputsQuery = 'SELECT * FROM monthly_inputs';
@@ -1013,6 +1067,10 @@ export const payrollHandlers = {
 
   getAllEmployeeHistory: async (db, params) => {
     let period = params.period;
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'view_history')) || (await userHasPermission(db, callerUser, 'view_payroll')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูประวัติเงินเดือนย้อนหลัง' };
+
       const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY emp_id ASC').all()).results || [];
       const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY emp_id ASC').all()).results || [];
       const emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
@@ -1043,6 +1101,10 @@ export const payrollHandlers = {
 
   getEmployeeHistory: async (db, params) => {
     let period = params.period;
+      const callerUser = params.username || '';
+      const allowed = (await userHasPermission(db, callerUser, 'view_history')) || (await userHasPermission(db, callerUser, 'view_payroll')) || (await isUserSuperAdmin(db, callerUser));
+      if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูประวัติเงินเดือนย้อนหลัง' };
+
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
 
