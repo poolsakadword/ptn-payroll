@@ -1064,6 +1064,16 @@ function loadAppData(isExplicitPeriodChange) {
       State.workingDays = r.workingDays || 30;
       State.isClosed = r.isClosed || false;
       State.closedInfo = r.closedInfo || '';
+      State.isMidPeriod = r.isMidPeriod || false;
+      State.asOfDate = r.asOfDate || '';
+      State.elapsedWorkDays = r.elapsedWorkDays || 0;
+      State.periodCutoff = r.periodCutoff || null;
+      var savedMode = localStorage.getItem('ptn_payroll_calc_mode');
+      if (savedMode) {
+        State.payrollCalcMode = savedMode;
+      } else {
+        State.payrollCalcMode = State.isMidPeriod ? 'EARNED' : 'FULL';
+      }
       State.company = r.settings || State.company;
       State.payrollDefaults = r.payrollDefaults || State.payrollDefaults;
       State.annualSickMap = r.annualSickMap || {};
@@ -1453,8 +1463,10 @@ function updatePayrollKpiDeck(branchList) {
   var sumAdvance = 0;
   var countChanges = 0;
 
+  var isEarned = (State.payrollCalcMode === 'EARNED' && (State.isMidPeriod || (branchList[0] && branchList[0].isMidPeriod)));
+
   (branchList || []).forEach(function(r) {
-    var net = Number(r.netPay) || 0;
+    var net = (isEarned && r.earnedNetPay !== undefined) ? Number(r.earnedNetPay) : (Number(r.netPay) || 0);
     var otH = Number(r.otHours) || 0;
     var otP = Number(r.otPay) || 0;
     var lDed = Number(r.leaveDeduction) || 0;
@@ -1490,7 +1502,7 @@ function updatePayrollKpiDeck(branchList) {
   var elAllCount = document.getElementById('payroll-kpi-all-count');
   var elAllSub = document.getElementById('payroll-kpi-all-sub');
   if (elAllCount) elAllCount.textContent = countAll + ' คน';
-  if (elAllSub) elAllSub.textContent = 'ยอดจ่ายสุทธิ ' + (canViewSalary ? fmt(sumNet) : '฿***');
+  if (elAllSub) elAllSub.textContent = (isEarned ? 'สุทธิสะสมถึงวันนี้ ' : 'ยอดจ่ายสุทธิ ') + (canViewSalary ? fmt(sumNet) : '฿***');
 
   var elOtCount = document.getElementById('payroll-kpi-ot-count');
   var elOtSub = document.getElementById('payroll-kpi-ot-sub');
@@ -1717,6 +1729,16 @@ function setPayrollViewMode(mode) {
   renderPayrollTable();
 }
 
+function setPayrollCalcMode(mode) {
+  State.payrollCalcMode = mode;
+  try { localStorage.setItem('ptn_payroll_calc_mode', mode); } catch(e) {}
+  var btnEarned = document.getElementById('btnPayrollModeEarned');
+  var btnFull = document.getElementById('btnPayrollModeFull');
+  if (btnEarned) btnEarned.classList.toggle('active', mode === 'EARNED');
+  if (btnFull) btnFull.classList.toggle('active', mode === 'FULL');
+  renderPayrollTable();
+}
+
 // 2. PAYROLL TABLE & CARDS RENDERER (PHASE 3 MULTI-VIEW)
 function renderPayrollTable() {
   var tbody = document.getElementById('payrollTableBody');
@@ -1731,6 +1753,12 @@ function renderPayrollTable() {
   var btnCards = document.getElementById('btnViewCards');
   if (btnTable) btnTable.classList.toggle('active', mode === 'TABLE');
   if (btnCards) btnCards.classList.toggle('active', mode === 'CARD');
+
+  var calcMode = State.payrollCalcMode || 'EARNED';
+  var btnEarned = document.getElementById('btnPayrollModeEarned');
+  var btnFull = document.getElementById('btnPayrollModeFull');
+  if (btnEarned) btnEarned.classList.toggle('active', calcMode === 'EARNED');
+  if (btnFull) btnFull.classList.toggle('active', calcMode === 'FULL');
 
   var q = (document.getElementById('payrollSearchInput') ? document.getElementById('payrollSearchInput').value : '').trim().toLowerCase();
   var bFilter = State.payrollBranchFilter || 'ALL';
@@ -1753,6 +1781,70 @@ function renderPayrollTable() {
   });
 
   updatePayrollKpiDeck(branchList);
+
+  var isMid = Boolean(State.isMidPeriod || (branchList[0] && branchList[0].isMidPeriod));
+  var isEarned = (calcMode === 'EARNED' && isMid);
+
+  // Render Mid-Period Earned Wage Preview Banner
+  var banner = document.getElementById('payrollMidPeriodBanner');
+  if (banner) {
+    if (isMid) {
+      banner.style.display = 'block';
+      var elDays = State.elapsedWorkDays || (branchList[0] && branchList[0].elapsedWorkDays) || 0;
+      var totDays = State.workingDays || (branchList[0] && branchList[0].totalWorkDays) || 26;
+      var asOfDate = State.asOfDate || (branchList[0] && branchList[0].asOfDate) || '';
+      var asOfThai = formatDateThaiBE(asOfDate);
+      var pct = totDays > 0 ? Math.round((elDays / totDays) * 100) : 0;
+
+      if (isEarned) {
+        banner.className = 'alert alert-info';
+        banner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;background:linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);border:1.5px solid #bfdbfe;border-radius:10px;padding:10px 14px;margin-bottom:12px;gap:12px;flex-wrap:wrap';
+        banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px">' +
+          '<div style="width:36px;height:36px;border-radius:8px;background:#2563eb;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0"><i class="fa-solid fa-bolt"></i></div>' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:800;color:#1e40af"><i class="fa-solid fa-eye" style="color:#d97706"></i> โหมดพรีวิว: คำนวณรายได้สะสมตามวันที่ผ่านมาจริง (Earned Wage to-Date)</div>' +
+            '<div style="font-size:11.5px;color:#475569;margin-top:2px">ประเมิน ณ วันที่ <strong>' + esc(asOfThai) + '</strong> • ผ่านไปแล้ว <strong>' + elDays + ' / ' + totDays + ' วันทำงาน</strong> (' + pct + '%) • ฐานเงินเดือนคิดตามสัดส่วนวันทำงานจริงเพื่อให้เห็นยอดสุทธิสะสม ณ ปัจจุบัน</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          '<button type="button" class="btn btn-xs" onclick="setPayrollCalcMode(\'FULL\')" style="background:#ffffff;border:1px solid #cbd5e1;color:#334155;font-weight:700;padding:5px 10px;border-radius:6px;cursor:pointer">' +
+            '<i class="fa-solid fa-calendar-check" style="color:#2563eb"></i> ดูยอดคาดการณ์เต็มงวด' +
+          '</button>' +
+        '</div>';
+      } else {
+        banner.className = 'alert alert-warning';
+        banner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;background:#fffbeb;border:1.5px solid #fde68a;border-radius:10px;padding:10px 14px;margin-bottom:12px;gap:12px;flex-wrap:wrap';
+        banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px">' +
+          '<div style="width:36px;height:36px;border-radius:8px;background:#f59e0b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0"><i class="fa-solid fa-calendar-check"></i></div>' +
+          '<div>' +
+            '<div style="font-size:13px;font-weight:800;color:#92400e"><i class="fa-solid fa-file-invoice-dollar"></i> มุมมองคาดการณ์เต็มงวด (Full Period Projection)</div>' +
+            '<div style="font-size:11.5px;color:#78350f;margin-top:2px">กำลังแสดงฐานเงินเดือนเต็มเดือนสำหรับเตรียมปิดงวด • สามารถสลับไปดู <strong>"พรีวิวสะสมจริงถึงวันนี้"</strong> เพื่อดูตัวเลขสะท้อนจริง ณ ปัจจุบัน</div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px">' +
+          '<button type="button" class="btn btn-xs btn-primary" onclick="setPayrollCalcMode(\'EARNED\')" style="font-weight:700;padding:5px 12px;border-radius:6px;cursor:pointer">' +
+            '<i class="fa-solid fa-bolt" style="color:#fde68a"></i> สลับเป็นพรีวิวสะสมจริง' +
+          '</button>' +
+        '</div>';
+      }
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
+  // Update table header labels
+  var thBase = document.getElementById('thPayrollBaseSalary');
+  var thGross = document.getElementById('thPayrollGross');
+  var thNet = document.getElementById('thPayrollNet');
+  if (isEarned) {
+    if (thBase) thBase.innerHTML = 'ฐานสะสม <span style="font-size:10px;color:#d97706;font-weight:700">(Earned)</span>';
+    if (thGross) thGross.innerHTML = 'Gross สะสม <span style="font-size:10px;color:#2563eb;font-weight:700">(Earned)</span>';
+    if (thNet) thNet.innerHTML = 'สุทธิสะสม (Earned Net)';
+  } else {
+    if (thBase) thBase.innerHTML = 'เงินเดือนฐาน';
+    if (thGross) thGross.innerHTML = 'Gross';
+    if (thNet) thNet.innerHTML = 'สุทธิ (Net)';
+  }
 
   var qFilter = State.payrollQuickFilter || 'ALL';
   var list = branchList.filter(function(r) {
@@ -1810,19 +1902,37 @@ function renderPayrollTable() {
     var otClass = otDelta ? 'text-right font-mono text-blue font-bold cell-delta-updated' : 'text-right font-mono text-blue font-bold';
     var otTag = otDelta ? ' <span class="delta-tag" title="เดิม: ' + otDelta.before + ' -> ใหม่: ' + otDelta.after + '">ใหม่</span>' : '';
 
+    var displayBase = (isEarned && row.earnedBaseSalary !== undefined) ? Number(row.earnedBaseSalary) : baseSal;
+    var displayGross = (isEarned && row.earnedGrossPay !== undefined) ? Number(row.earnedGrossPay) : Number(row.grossPay);
+    var displayNet = (isEarned && row.earnedNetPay !== undefined) ? Number(row.earnedNetPay) : Number(row.netPay);
+
     h += '<tr class="' + rowClass + '" onclick="openInspector(\'' + esc(row.empId) + '\')" title="คลิกเพื่อดูสรุปรายได้-รายการหักอย่างละเอียด">' +
       '<td class="font-mono font-bold sticky-col" style="left:0;width:80px;min-width:80px;max-width:80px">' + esc(row.empId) + '</td>' +
       '<td class="font-bold sticky-col sticky-col-divider" style="left:80px;min-width:180px">' + esc(row.name) + nickHtml + conflictHtml + '</td>' +
       '<td><span class="period-pill">' + esc(row.department || '-') + '</span> ' + esc(row.position || '') + '</td>' +
       '<td class="text-muted" style="font-size:11px">' + esc(row.bankName || '-') + '<br>' + esc(row.bankAccount || '-') + '</td>' +
-      '<td class="text-right font-mono font-bold">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold">' +
+        (canViewSalary ? (
+          (isEarned && row.earnedBaseSalary !== undefined) ? (
+            '<div><span style="color:#d97706">฿' + fmt(displayBase) + '</span></div>' +
+            '<div style="font-size:10px;color:#94a3b8;font-weight:normal" title="ฐานสัญญาเต็มเดือน">เต็มงวด: ฿' + fmt(baseSal) + '</div>'
+          ) : fmt(baseSal)
+        ) : '฿***') +
+      '</td>' +
       '<td class="text-right font-mono text-blue font-bold bg-blue-light">' + (canViewSalary ? fmt(dailyRate) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (row.otHours || 0) + '</td>' +
       '<td class="' + otClass + '">' + (canViewSalary ? fmt(row.otPay) : '฿***') + otTag + '</td>' +
       '<td class="text-right font-mono text-green font-bold">' + (canViewSalary ? fmt(row.allowance) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.bonus) : '฿***') + '</td>' +
       '<td class="text-right font-mono text-red font-bold">' + (canViewSalary ? fmt(row.leaveDeduction) : '฿***') + '</td>' +
-      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' + (canViewSalary ? fmt(row.grossPay) : '฿***') + '</td>' +
+      '<td class="text-right font-mono font-bold text-blue bg-blue-light">' +
+        (canViewSalary ? (
+          (isEarned && row.earnedGrossPay !== undefined) ? (
+            '<div><span style="color:#1e40af">฿' + fmt(displayGross) + '</span></div>' +
+            '<div style="font-size:10px;color:#94a3b8;font-weight:normal" title="Gross คาดการณ์เต็มงวด">เต็มงวด: ฿' + fmt(row.grossPay) + '</div>'
+          ) : fmt(row.grossPay)
+        ) : '฿***') +
+      '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.sso) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold text-blue">' + (canViewSalary ? fmt(row.pf) : '฿***') + '</td>' +
       '<td class="text-right font-mono">' + (canViewSalary ? fmt(row.tax) : '฿***') + '</td>' +
@@ -1831,7 +1941,12 @@ function renderPayrollTable() {
       '<td class="text-right font-mono font-bold text-red bg-red-light">' + (canViewSalary ? fmt(row.totalDeductions || 0) : '฿***') + '</td>' +
       '<td class="text-right font-mono font-bold bg-green-light" style="font-size:13px">' +
         (canViewSalary ? (
-          '<span class="text-green">' + fmt(row.netPay) + '</span>' +
+          (isEarned && row.earnedNetPay !== undefined) ? (
+            '<div><span class="text-green" style="font-size:13.5px;font-weight:800">฿' + fmt(displayNet) + '</span> <span style="font-size:10px;font-weight:700;background:#fef3c7;color:#b45309;padding:1px 4px;border-radius:4px;border:1px solid #fde68a">สะสม</span></div>' +
+            '<div style="font-size:10px;color:#94a3b8;font-weight:normal" title="สุทธิคาดการณ์เต็มงวด">เต็มงวด: ฿' + fmt(row.netPay) + '</div>'
+          ) : (
+            '<span class="text-green">' + fmt(row.netPay) + '</span>'
+          ) +
           (Number(row.carriedDebt) > 0 ? '<div style="font-size:10px;font-weight:700;color:#dc2626;white-space:nowrap;margin-top:2px"><i class="fa-solid fa-triangle-exclamation"></i> หนี้ยกยอด ' + fmt(row.carriedDebt) + '</div>' : '')
         ) : '฿***') +
       '</td>' +
@@ -1856,6 +1971,7 @@ function renderPayrollCardsView(list, container, q, bFilter) {
   }
 
   var canViewSalary = hasPermission('view_salary');
+  var isEarned = (State.payrollCalcMode === 'EARNED' && (State.isMidPeriod || (list[0] && list[0].isMidPeriod)));
   var html = '';
 
   list.forEach(function(row) {
@@ -1875,6 +1991,10 @@ function renderPayrollCardsView(list, container, q, bFilter) {
     var totalDeduct = Number(row.totalDeductions) || 0;
     var netPay = Number(row.netPay) || 0;
 
+    var displayBase = (isEarned && row.earnedBaseSalary !== undefined) ? Number(row.earnedBaseSalary) : baseSal;
+    var displayNet = (isEarned && row.earnedNetPay !== undefined) ? Number(row.earnedNetPay) : netPay;
+    var displayDed = (isEarned && row.earnedTotalDeductions !== undefined) ? Number(row.earnedTotalDeductions) : totalDeduct;
+
     html += '<div class="emp-payroll-card' + deltaClass + '" onclick="openInspector(\'' + esc(row.empId) + '\')">' +
       '<div class="emp-card-header">' +
         '<div class="emp-card-info">' +
@@ -1889,8 +2009,10 @@ function renderPayrollCardsView(list, container, q, bFilter) {
       conflictBadges +
       '<div class="emp-card-metrics">' +
         '<div class="emp-card-metric-item">' +
-          '<span class="emp-card-metric-label">เงินเดือนฐาน:</span>' +
-          '<span class="emp-card-metric-value">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</span>' +
+          '<span class="emp-card-metric-label">' + (isEarned ? 'ฐานสะสม (Earned):' : 'เงินเดือนฐาน:') + '</span>' +
+          '<span class="emp-card-metric-value">' + (canViewSalary ? (
+            isEarned ? ('<span style="color:#d97706">฿' + fmt(displayBase) + '</span>') : fmt(baseSal)
+          ) : '฿***') + '</span>' +
         '</div>' +
         '<div class="emp-card-metric-item">' +
           '<span class="emp-card-metric-label">OT (' + otHours + 'h):</span>' +
@@ -1902,16 +2024,16 @@ function renderPayrollCardsView(list, container, q, bFilter) {
         '</div>' +
         '<div class="emp-card-metric-item">' +
           '<span class="emp-card-metric-label">รวมหัก:</span>' +
-          '<span class="emp-card-metric-value" style="color:#dc2626">' + (canViewSalary ? '-' + fmt(totalDeduct) : '฿***') + '</span>' +
+          '<span class="emp-card-metric-value" style="color:#dc2626">' + (canViewSalary ? '-' + fmt(displayDed) : '฿***') + '</span>' +
         '</div>' +
       '</div>' +
       '<div class="emp-card-footer">' +
         '<div>' +
-          '<div class="emp-card-net-label">สุทธิ (Net Pay)</div>' +
+          '<div class="emp-card-net-label">' + (isEarned ? 'สุทธิสะสม (Earned Net)' : 'สุทธิ (Net Pay)') + '</div>' +
           '<div style="font-size:10px;color:#94a3b8"><i class="fa-solid fa-credit-card"></i> ' + esc(row.bankName || 'TTB') + '</div>' +
         '</div>' +
         '<div class="text-right">' +
-          '<div class="emp-card-net-val">' + (canViewSalary ? fmt(netPay) : '฿***') + '</div>' +
+          '<div class="emp-card-net-val"' + (isEarned ? ' style="color:#15803d;font-weight:800"' : '') + '>' + (canViewSalary ? fmt(displayNet) : '฿***') + '</div>' +
           '<button type="button" class="btn btn-outline btn-xs" style="margin-top:3px;font-size:11px;padding:2px 8px" onclick="event.stopPropagation();viewPayslip(\'' + esc(row.empId) + '\')">' +
             '<i class="fa-solid fa-file-invoice-dollar text-blue"></i> สลิป' +
           '</button>' +
@@ -1983,6 +2105,49 @@ function openInspector(empId) {
     html += '<div style="background:#fffbeb;border:1px solid #fef3c7;border-radius:8px;padding:10px 12px;font-size:12px;display:flex;flex-direction:column;gap:4px">' +
       '<div style="font-weight:700;color:#b45309"><i class="fa-solid fa-triangle-exclamation"></i> ข้อสังเกตประจำงวด:</div>' +
       '<div>' + conflictInfo.badgeHtml + '</div>' +
+    '</div>';
+  }
+
+  // 2.1 Mid-Period Accrued/Earned Wage Preview Card (if period is active/in-progress)
+  var isMidPeriod = Boolean(payroll.isMidPeriod || State.isMidPeriod);
+  if (isMidPeriod) {
+    var elDays = Number(payroll.elapsedWorkDays || State.elapsedWorkDays || 0);
+    var totDays = Number(payroll.totalWorkDays || State.workingDays || 26);
+    var pct = totDays > 0 ? Math.round((elDays / totDays) * 100) : 0;
+    var dRate = Number(payroll.dailyRate) || (totDays > 0 ? Math.round(baseSal / totDays * 100) / 100 : 0);
+    var eBase = (payroll.earnedBaseSalary !== undefined) ? Number(payroll.earnedBaseSalary) : Math.round(dRate * elDays * 100) / 100;
+    var eGross = (payroll.earnedGrossPay !== undefined) ? Number(payroll.earnedGrossPay) : Math.round((eBase + otPay + allowance + bonus - leaveDeduct) * 100) / 100;
+    var eNet = (payroll.earnedNetPay !== undefined) ? Number(payroll.earnedNetPay) : netPay;
+    var eSso = (payroll.earnedSso !== undefined) ? Number(payroll.earnedSso) : Math.min(750, Math.round(eBase * 0.05 * 100) / 100);
+    var ePf = (payroll.earnedPf !== undefined) ? Number(payroll.earnedPf) : 0;
+    var asOfThai = formatDateThaiBE(payroll.asOfDate || State.asOfDate);
+
+    html += '<div class="calc-breakdown-card" style="border:1.5px solid #bfdbfe;background:linear-gradient(180deg, #eff6ff 0%, #ffffff 100%)">' +
+      '<div class="calc-breakdown-title" style="color:#1d4ed8;display:flex;align-items:center;justify-content:space-between">' +
+        '<span><i class="fa-solid fa-chart-line"></i> คำนวณระหว่างงวด (Earned to-Date)</span>' +
+        '<span style="font-size:11px;font-weight:700;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:12px">' +
+          elDays + ' / ' + totDays + ' วัน (' + pct + '%)' +
+        '</span>' +
+      '</div>' +
+      '<div style="font-size:11.5px;color:#475569;margin-bottom:8px">ประเมิน ณ วันที่ <strong>' + esc(asOfThai) + '</strong> (สะท้อนผลงานจริงตามวันทำงานที่ผ่านมา)</div>' +
+      '<div class="calc-row"><span>ฐานสัญญาเต็มเดือน</span><span class="val font-mono">' + (canViewSalary ? fmt(baseSal) : '฿***') + '</span></div>' +
+      '<div class="calc-row"><span>อัตราค่าจ้างต่อวัน (หาร ' + totDays + ' วัน)</span><span class="val font-mono text-blue font-bold">' + (canViewSalary ? fmt(dRate) + ' / วัน' : '฿***') + '</span></div>' +
+      '<div class="calc-row font-bold" style="background:#dbeafe;padding:4px 6px;border-radius:4px">' +
+        '<span style="color:#1e40af"><i class="fa-solid fa-circle-check" style="color:#2563eb"></i> ฐานสะสมตามวันจริง (' + elDays + ' วัน)</span>' +
+        '<span class="val font-mono" style="color:#1e40af;font-size:13px">' + (canViewSalary ? fmt(eBase) : '฿***') + '</span>' +
+      '</div>' +
+      '<div class="calc-row"><span>หักขาด/ลา/สาย สะสมถึงวันนี้</span><span class="val font-mono text-red">' + (canViewSalary ? (leaveDeduct > 0 ? '-' + fmt(leaveDeduct) : '฿0') : '฿***') + '</span></div>' +
+      '<div class="calc-row"><span>OT สะสมถึงวันนี้ (' + otHours + ' ชม.)</span><span class="val font-mono text-blue">' + (canViewSalary ? (otPay > 0 ? '+' + fmt(otPay) : '฿0') : '฿***') + '</span></div>' +
+      '<div class="calc-row"><span>ประกันสังคมสะสม (5% ไม่เกิน 750)</span><span class="val font-mono text-red">' + (canViewSalary ? (eSso > 0 ? '-' + fmt(eSso) : '฿0') : '฿***') + '</span></div>' +
+      (ePf > 0 ? '<div class="calc-row"><span>กองทุน PF สะสม</span><span class="val font-mono text-red">' + (canViewSalary ? '-' + fmt(ePf) : '฿***') + '</span></div>' : '') +
+      (advanceDeduct > 0 ? '<div class="calc-row"><span>หักเบิกล่วงหน้า</span><span class="val font-mono text-red">' + (canViewSalary ? '-' + fmt(advanceDeduct) : '฿***') + '</span></div>' : '') +
+      '<div class="calc-row total" style="background:#ecfdf5;border-top:1.5px solid #a7f3d0;padding:6px;border-radius:4px;margin-top:4px">' +
+        '<span style="color:#065f46;font-size:12.5px;font-weight:700"><i class="fa-solid fa-wallet" style="color:#059669"></i> ยอดสุทธิสะสม ณ วันนี้ (Earned Net)</span>' +
+        '<span class="val font-mono" style="color:#059669;font-size:15px;font-weight:800">' + (canViewSalary ? fmt(eNet) : '฿***') + '</span>' +
+      '</div>' +
+      '<div style="font-size:11px;color:#64748b;margin-top:6px;line-height:1.4">' +
+        '<i class="fa-solid fa-circle-info" style="color:#3b82f6"></i> หากทำงานจนครบงวดโดยไม่ขาด/ลาเพิ่ม ยอดสุทธิสิ้นงวดจะเป็น <strong>' + (canViewSalary ? fmt(netPay) : '฿***') + '</strong>' +
+      '</div>' +
     '</div>';
   }
 

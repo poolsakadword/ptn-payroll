@@ -328,6 +328,8 @@
               </button>
             </div>
           </div>
+          <!-- MID-PERIOD EARNED WAGE PREVIEW BANNER -->
+          <div id="payrollMidPeriodBanner" style="display:none;margin-bottom:12px"></div>
           <!-- SYNC DELTA & ANOMALY BANNER -->
           <div id="payrollSyncDeltaBanner" style="display:none;margin-bottom:10px"></div>
           <!-- FAST BRANCH FILTER SEGMENT & VIEW SWITCHER -->
@@ -338,14 +340,25 @@
                 <!-- Rendered dynamically by JS -->
               </div>
             </div>
-            <!-- VIEW SWITCHER: TABLE vs CARDS -->
-            <div class="view-switch-btn-group" id="payrollViewSwitcher">
-              <button type="button" class="view-switch-btn active" id="btnViewTable" onclick="setPayrollViewMode('TABLE')" title="มุมมองตารางตรึงคอลัมน์">
-                <i class="fa-solid fa-table-list"></i> ตาราง
-              </button>
-              <button type="button" class="view-switch-btn" id="btnViewCards" onclick="setPayrollViewMode('CARD')" title="มุมมองการ์ดพนักงาน">
-                <i class="fa-solid fa-grip"></i> การ์ด
-              </button>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <!-- CALC PREVIEW MODE SWITCHER -->
+              <div class="view-switch-btn-group" id="payrollCalcModeSwitcher" title="สลับโหมดการคำนวณเงินเดือน">
+                <button type="button" class="view-switch-btn active" id="btnPayrollModeEarned" onclick="setPayrollCalcMode('EARNED')" title="คำนวณฐานเงินเดือนสะสมตามวันที่ผ่านมาจริง ณ ปัจจุบัน (Earned Wage to-Date)">
+                  <i class="fa-solid fa-bolt" style="color:#d97706"></i> ยอดสะสมจริง (Earned)
+                </button>
+                <button type="button" class="view-switch-btn" id="btnPayrollModeFull" onclick="setPayrollCalcMode('FULL')" title="คำนวณฐานเงินเดือนเต็มเดือนสำหรับเตรียมปิดงวด (Full Month)">
+                  <i class="fa-solid fa-calendar-check" style="color:#2563eb"></i> คาดการณ์เต็มงวด (Full)
+                </button>
+              </div>
+              <!-- VIEW SWITCHER: TABLE vs CARDS -->
+              <div class="view-switch-btn-group" id="payrollViewSwitcher">
+                <button type="button" class="view-switch-btn active" id="btnViewTable" onclick="setPayrollViewMode('TABLE')" title="มุมมองตารางตรึงคอลัมน์">
+                  <i class="fa-solid fa-table-list"></i> ตาราง
+                </button>
+                <button type="button" class="view-switch-btn" id="btnViewCards" onclick="setPayrollViewMode('CARD')" title="มุมมองการ์ดพนักงาน">
+                  <i class="fa-solid fa-grip"></i> การ์ด
+                </button>
+              </div>
             </div>
           </div>
           <!-- TABLE VIEW WRAPPER -->
@@ -357,21 +370,21 @@
                   <th class="sticky-col sticky-col-divider" style="left:80px;min-width:180px">ชื่อ-นามสกุล</th>
                   <th>แผนก / ตำแหน่ง</th>
                   <th>ธนาคาร / เลขบัญชี</th>
-                  <th class="text-right" style="width:105px">เงินเดือนฐาน</th>
+                  <th class="text-right" style="width:115px" id="thPayrollBaseSalary">เงินเดือนฐาน</th>
                   <th class="text-right text-blue bg-blue-light" style="width:90px">ค่าจ้าง/วัน</th>
                   <th class="text-right" style="width:70px">OT (ชม.)</th>
                   <th class="text-right text-blue" style="width:95px">เงิน OT (40฿)</th>
                   <th class="text-right text-green" style="width:85px">เบี้ยขยัน</th>
                   <th class="text-right" style="width:75px">โบนัส</th>
                   <th class="text-right text-red" style="width:105px">หักขาด/ลา/สาย</th>
-                  <th class="text-right font-bold text-blue bg-blue-light" style="width:105px">Gross</th>
+                  <th class="text-right font-bold text-blue bg-blue-light" style="width:105px" id="thPayrollGross">Gross</th>
                   <th class="text-right font-bold text-red" style="width:95px">ประกันสังคม</th>
                   <th class="text-right text-blue font-bold" style="width:90px">กองทุน PF</th>
                   <th class="text-right" style="width:75px">ภาษี</th>
                   <th class="text-right text-red" style="width:85px">หักเงินเบิก</th>
                   <th class="text-right text-red" style="width:75px">หักอื่นๆ</th>
                   <th class="text-right font-bold text-red bg-red-light" style="width:100px">รวมหัก</th>
-                  <th class="text-right font-bold text-green bg-green-light" style="width:115px">สุทธิ (Net)</th>
+                  <th class="text-right font-bold text-green bg-green-light" style="width:120px" id="thPayrollNet">สุทธิ (Net)</th>
                   <th class="text-center" style="width:95px">สลิป</th>
                 </tr>
               </thead>
@@ -6560,6 +6573,6 @@
   </aside>
 
   <script src="js/config.js?v=9.98"></script>
-  <script src="js/app.js?v=10.06"></script>
+  <script src="js/app.js?v=10.07"></script>
 </body>
 </html>

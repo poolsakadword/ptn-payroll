@@ -1158,6 +1158,46 @@ function calculateNewHireProRataRatio(joinDateStr, startDate, endDate, holidayDa
   return calculatePeriodProRataRatio(joinDateStr, null, startDate, endDate, holidayDatesSet);
 }
 
+function getElapsedWorkingDaysInCutoff(startDate, endDate, asOfDate, holidayDatesSet = new Set(), joinDateStr = '', resignDateStr = '') {
+  const totalDays = getActualWorkingDaysInCutoff(startDate, endDate, holidayDatesSet);
+  if (totalDays <= 0) return { elapsedDays: 0, totalDays: 26, ratio: 0 };
+
+  let effStart = startDate;
+  if (joinDateStr && joinDateStr > startDate) {
+    effStart = joinDateStr;
+  }
+
+  let effEnd = endDate;
+  if (asOfDate && asOfDate < endDate) {
+    effEnd = asOfDate;
+  }
+  if (resignDateStr && resignDateStr < effEnd) {
+    effEnd = resignDateStr;
+  }
+
+  if (joinDateStr && joinDateStr > effEnd) {
+    return { elapsedDays: 0, totalDays, ratio: 0 };
+  }
+  if (effStart > effEnd) {
+    return { elapsedDays: 0, totalDays, ratio: 0 };
+  }
+
+  let count = 0;
+  let cur = new Date(effStart + 'T00:00:00Z');
+  const end = new Date(effEnd + 'T00:00:00Z');
+  while (cur <= end) {
+    const day = cur.getUTCDay(); // 0 = Sunday
+    const dStr = cur.toISOString().substring(0, 10);
+    if (day !== 0 && !holidayDatesSet.has(dStr)) {
+      count++;
+    }
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+
+  const ratio = totalDays > 0 ? (count / totalDays) : 0;
+  return { elapsedDays: count, totalDays, ratio };
+}
+
 async function getCompanyHolidayDatesSet(db, startDate, endDate) {
   try {
     let sql = 'SELECT date FROM company_holidays';
@@ -1399,6 +1439,19 @@ async function handleAction(db, action, params) {
       let totalGross = 0;
       let totalDeductions = 0;
       let totalNet = 0;
+      let totalEarnedBase = 0;
+      let totalEarnedGross = 0;
+      let totalEarnedNet = 0;
+
+      const bkkTime = new Date(Date.now() + (7 * 3600 * 1000));
+      const todayBangkok = bkkTime.toISOString().substring(0, 10);
+      const isMidPeriod = (!isClosed && todayBangkok >= dates.startDate && todayBangkok <= dates.endDate);
+      const generalElapsed = getElapsedWorkingDaysInCutoff(dates.startDate, dates.endDate, todayBangkok, holidayDatesSet);
+
+      const empObjMap = {};
+      for (const e of employees) {
+        if (e.empId) empObjMap[e.empId] = e;
+      }
 
       if (inputRecords.length === 0) {
         await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
@@ -1417,6 +1470,36 @@ async function handleAction(db, action, params) {
           totalDeductions += ded;
           totalNet += net;
 
+          const emp = empObjMap[c.emp_id] || {};
+          const contractBaseSal = Number(emp.baseSalary) || Number(c.base_salary) || 0;
+          const dailyRate = workingDays > 0 ? (contractBaseSal / workingDays) : (contractBaseSal / 30);
+          const empElapsed = getElapsedWorkingDaysInCutoff(dates.startDate, dates.endDate, todayBangkok, holidayDatesSet, emp.joinDate, emp.resignDate);
+
+          // Earned Base Salary based on actual elapsed working days to-date
+          const earnedBaseSalary = Math.round(dailyRate * empElapsed.elapsedDays * 100) / 100;
+          const otPay = Number(c.ot_pay) || 0;
+          const allowance = Number(c.allowance) || 0;
+          const bonus = Number(c.bonus) || 0;
+          const leaveDeduction = Number(c.leave_deduction) || 0;
+          const earnedGrossPay = Math.round((earnedBaseSalary + otPay + allowance + bonus - leaveDeduction) * 100) / 100;
+
+          // Statutory & Mid-Period Deductions to-date
+          const earnedSso = Math.min(Number(c.sso) || 750, Math.round(earnedBaseSalary * 0.05 * 100) / 100);
+          const pfRate = (Number(c.pf) > 0 && contractBaseSal > 0) ? (Number(c.pf) / contractBaseSal) : (Number(emp.pfRate) || 0);
+          const earnedPf = Math.round(earnedBaseSalary * pfRate * 100) / 100;
+          const earnedTax = Math.round((Number(c.tax) || 0) * empElapsed.ratio * 100) / 100;
+          const advDed = Number(c.advance_deduct) || 0;
+          const othDed = Number(c.other_deduct) || 0;
+          const carriedDebt = Number(c.carried_debt) || 0;
+          const earnedTotalDeductions = Math.round((earnedSso + earnedPf + earnedTax + advDed + othDed + carriedDebt) * 100) / 100;
+          const rawEarnedNet = Math.round((earnedGrossPay - earnedTotalDeductions) * 100) / 100;
+          const earnedNetPay = rawEarnedNet > 0 ? Math.ceil(rawEarnedNet) : 0;
+          const earnedCarriedDebt = rawEarnedNet < 0 ? Math.round(Math.abs(rawEarnedNet) * 100) / 100 : 0;
+
+          totalEarnedBase += earnedBaseSalary;
+          totalEarnedGross += earnedGrossPay;
+          totalEarnedNet += earnedNetPay;
+
           return {
             period: c.period,
             empId: c.emp_id,
@@ -1429,19 +1512,33 @@ async function handleAction(db, action, params) {
             baseSalary: Number(c.base_salary) || 0,
             otHours: Number(c.ot_hours) || 0,
             otRate: Number(c.ot_rate) || 40,
-            otPay: Number(c.ot_pay) || 0,
-            allowance: Number(c.allowance) || 0,
-            bonus: Number(c.bonus) || 0,
-            leaveDeduction: Number(c.leave_deduction) || 0,
+            otPay: otPay,
+            allowance: allowance,
+            bonus: bonus,
+            leaveDeduction: leaveDeduction,
             grossPay: gross,
             sso: Number(c.sso) || 0,
             pf: Number(c.pf) || 0,
             tax: Number(c.tax) || 0,
-            advanceDeduct: Number(c.advance_deduct) || 0,
-            otherDeduct: Number(c.other_deduct) || 0,
-            carriedDebt: Number(c.carried_debt) || 0,
+            advanceDeduct: advDed,
+            otherDeduct: othDed,
+            carriedDebt: carriedDebt,
             totalDeductions: ded,
-            netPay: net
+            netPay: net,
+            // Mid-Period Accrued/Earned Wage Preview Fields
+            dailyRate: Math.round(dailyRate * 100) / 100,
+            elapsedWorkDays: empElapsed.elapsedDays,
+            totalWorkDays: workingDays,
+            asOfDate: todayBangkok,
+            isMidPeriod: isMidPeriod,
+            earnedBaseSalary: earnedBaseSalary,
+            earnedGrossPay: earnedGrossPay,
+            earnedSso: earnedSso,
+            earnedPf: earnedPf,
+            earnedTax: earnedTax,
+            earnedTotalDeductions: earnedTotalDeductions,
+            earnedNetPay: earnedNetPay,
+            earnedCarriedDebt: earnedCarriedDebt
           };
         });
       }
@@ -1507,6 +1604,10 @@ async function handleAction(db, action, params) {
         period: period,
         latestActivePeriod: latestActivePeriod,
         workingDays: workingDays,
+        isMidPeriod: isMidPeriod,
+        asOfDate: todayBangkok,
+        elapsedWorkDays: generalElapsed.elapsedDays,
+        periodCutoff: { startDate: dates.startDate, endDate: dates.endDate },
         settings: settingsMap,
         payrollDefaults: payrollDefaults,
         isClosed: isClosed,
@@ -1518,7 +1619,10 @@ async function handleAction(db, action, params) {
           totalEmployees: payrollList.length,
           totalGross: Math.round(totalGross * 100) / 100,
           totalDeductions: Math.round(totalDeductions * 100) / 100,
-          totalNet: Math.round(totalNet * 100) / 100
+          totalNet: Math.round(totalNet * 100) / 100,
+          totalEarnedBase: Math.round(totalEarnedBase * 100) / 100,
+          totalEarnedGross: Math.round(totalEarnedGross * 100) / 100,
+          totalEarnedNet: Math.round(totalEarnedNet * 100) / 100
         },
         users: users,
         branches: branchRows.results || [],
