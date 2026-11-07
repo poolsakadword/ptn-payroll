@@ -8,6 +8,7 @@ import { calculateAndSavePayroll } from './payroll.js';
 
 export const employeeHandlers = {
   batchImportEmployees: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_emp')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์นำเข้าข้อมูลพนักงาน' };
@@ -46,6 +47,7 @@ export const employeeHandlers = {
   },
 
   saveEmployee: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_emp')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เพิ่มหรือแก้ไขข้อมูลพนักงาน' };
@@ -241,6 +243,7 @@ export const employeeHandlers = {
   },
 
   get50TwiData: async (db, params) => {
+    let period = params.period;
       const empId = params.empId;
       const year = params.year || (new Date().getFullYear() + 543).toString();
       if (!empId) return { success: false, message: 'Missing empId' };

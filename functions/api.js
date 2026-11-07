@@ -7,6 +7,7 @@
 
 import { ensureGlobalSchemas } from './_modules/db.js';
 import { verifySessionToken } from './_modules/security.js';
+import { getDefaultPeriod, getNextPeriodStr } from './_modules/date-utils.js';
 import { authHandlers } from './_modules/auth.js';
 import { payrollHandlers } from './_modules/payroll.js';
 import { attendanceHandlers } from './_modules/attendance.js';
@@ -90,6 +91,21 @@ export async function onRequest(context) {
       params.username = params.verifiedUser;
       params.currentUsername = params.verifiedUser;
     }
+
+    // Resolve active period context (preserved from monolithic backend)
+    let period = params.period;
+    if (!period) {
+      const latestRow = await db.prepare('SELECT period FROM monthly_inputs ORDER BY rowid DESC LIMIT 1').first().catch(() => null);
+      period = (latestRow && latestRow.period) ? latestRow.period : getDefaultPeriod();
+      if (latestRow && latestRow.period) {
+        const closedSetting = await db.prepare("SELECT value FROM settings WHERE key = ?").bind(`Period_Status_${latestRow.period}`).first().catch(() => null);
+        if (closedSetting && closedSetting.value && closedSetting.value.startsWith('CLOSED')) {
+          const nextP = getNextPeriodStr(latestRow.period);
+          if (nextP) period = nextP;
+        }
+      }
+    }
+    params.period = period;
 
     const handler = actionHandlers[action];
     if (!handler) {

@@ -215,6 +215,7 @@ export async function executeDeleteAttendanceRequest(db, type, id, callerUser) {
 
 export const attendanceHandlers = {
   syncFromPtnTime: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'sync_ptn_time')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงข้อมูลจากระบบ PTN Time' };
@@ -1241,6 +1242,7 @@ export const attendanceHandlers = {
   },
 
   getTimeAttendanceDashboard: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || 'Admin';
       const isAllowed = await userHasPermission(db, callerUser, 'view_attendance');
       if (!isAllowed) {
@@ -2748,6 +2750,7 @@ export const attendanceHandlers = {
   },
 
   createAttendanceRequest: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || 'Admin';
       const allowed = (await userHasPermission(db, callerUser, 'create_attendance_requests')) ||
                       (await userHasPermission(db, callerUser, 'approve_attendance')) ||
@@ -2844,6 +2847,7 @@ export const attendanceHandlers = {
   },
 
   getAttendanceLogsRange: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || 'Admin';
       const allowed = await userHasPermission(db, callerUser, 'view_attendance');
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูข้อมูลลงเวลา' };
@@ -3397,6 +3401,7 @@ export const attendanceHandlers = {
   },
 
   importAttendanceBatch: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์นำเข้าข้อมูลประจำงวด' };

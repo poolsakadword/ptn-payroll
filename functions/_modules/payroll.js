@@ -211,6 +211,7 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
 
 export const payrollHandlers = {
   getAppInitialData: async (db, params) => {
+    let period = params.period;
       const settingsRows = await db.prepare('SELECT key, value FROM settings').all();
       const settingsMap = {
         companyName: 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด',
@@ -556,6 +557,7 @@ export const payrollHandlers = {
   },
 
   savePayrollDefaults: async (db, params) => {
+    let period = params.period;
       const callerUser = params.currentUsername || params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await userHasPermission(db, callerUser, 'calc_payroll')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ตั้งค่านโยบายเงินเดือน' };
@@ -581,6 +583,7 @@ export const payrollHandlers = {
   },
 
   savePeriodWorkDays: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || 'Admin';
       const allowed = (await isUserSuperAdmin(db, callerUser)) || (await userHasPermission(db, callerUser, 'calc_payroll'));
       if (!allowed) {
@@ -597,6 +600,7 @@ export const payrollHandlers = {
   },
 
   getActualWorkDays: async (db, params) => {
+    let period = params.period;
       const dates = await getCutoffDatesForPeriod(db, period);
       const holidayDatesSet = await getCompanyHolidayDatesSet(db, dates.startDate, dates.endDate);
       const actualDays = getActualWorkingDaysInCutoff(dates.startDate, dates.endDate, holidayDatesSet);
@@ -604,6 +608,7 @@ export const payrollHandlers = {
   },
 
   saveInputRecord: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์บันทึกข้อมูลประจำงวด' };
@@ -657,6 +662,7 @@ export const payrollHandlers = {
   },
 
   deleteInputRecord: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด' };
@@ -674,6 +680,7 @@ export const payrollHandlers = {
   },
 
   batchDeleteInputRecords: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'edit_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด' };
@@ -697,6 +704,7 @@ export const payrollHandlers = {
   },
 
   populateEmployeesToPeriod: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'populate_inputs')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงพนักงานเข้างวดนี้' };
@@ -830,6 +838,7 @@ export const payrollHandlers = {
   },
 
   processPayroll: async (db, params) => {
+    let period = params.period;
       const callerUser = params.currentUsername || params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'calc_payroll')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ประมวลผลเงินเดือน' };
@@ -843,6 +852,7 @@ export const payrollHandlers = {
   },
 
   getYearlySummary: async (db, params) => {
+    let period = params.period;
       const year = String(params.year || '').trim();
       let calcsQuery = 'SELECT * FROM payroll_calcs';
       let inputsQuery = 'SELECT * FROM monthly_inputs';
@@ -1002,6 +1012,7 @@ export const payrollHandlers = {
   },
 
   getAllEmployeeHistory: async (db, params) => {
+    let period = params.period;
       const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY emp_id ASC').all()).results || [];
       const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY emp_id ASC').all()).results || [];
       const emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
@@ -1031,6 +1042,7 @@ export const payrollHandlers = {
   },
 
   getEmployeeHistory: async (db, params) => {
+    let period = params.period;
       const empId = params.empId;
       if (!empId) return { success: false, message: 'Missing empId' };
 
@@ -1075,6 +1087,7 @@ export const payrollHandlers = {
   },
 
   closePeriod: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'close_period')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ปิดงวดเงินเดือน' };
@@ -1095,6 +1108,7 @@ export const payrollHandlers = {
   },
 
   reopenPeriod: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'close_period')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เปิดงวดเงินเดือน' };

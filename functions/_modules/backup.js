@@ -6,6 +6,7 @@ import { isUserSuperAdmin, userHasPermission } from './security.js';
 
 export const backupHandlers = {
   backupDatabase: async (db, params) => {
+    let period = params.period;
       const callerUser = params.currentUsername || params.username || '';
       let allowed = (await userHasPermission(db, callerUser, 'manage_backup')) || (await userHasPermission(db, callerUser, 'close_period')) || (await isUserSuperAdmin(db, callerUser));
       if (params.cronSecret && params.cronSecret === 'PTN_SUPER_SECRET_CRON_KEY_2026') allowed = true;
@@ -95,6 +96,7 @@ export const backupHandlers = {
   },
 
   restoreDatabase: async (db, params) => {
+    let period = params.period;
       const callerUser = params.currentUsername || params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'manage_backup')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์กู้คืนข้อมูล' };

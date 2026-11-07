@@ -27,6 +27,7 @@ export const aiHandlers = {
   },
 
   askAiAssistant: async (db, params) => {
+    let period = params.period;
       const userMsg = (params.message || '').trim();
       const currentPeriod = period;
       const currentUser = params.user || {};

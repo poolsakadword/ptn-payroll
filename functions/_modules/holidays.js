@@ -12,6 +12,7 @@ export const holidayHandlers = {
   },
 
   saveCompanyHoliday: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการวันหยุดบริษัท' };
@@ -37,6 +38,7 @@ export const holidayHandlers = {
   },
 
   deleteCompanyHoliday: async (db, params) => {
+    let period = params.period;
       const callerUser = params.username || '';
       const allowed = (await userHasPermission(db, callerUser, 'manage_company')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์จัดการวันหยุดบริษัท' };
