@@ -122,12 +122,15 @@ export function bytesToBase64Url(bytes) {
 
 const JWT_SESSION_SECRET = 'PTN_SECRET_KEY_PAYROLL_2026_ENTERPRISE_HMAC';
 
-export async function generateSessionToken(username, role) {
-  const payload = JSON.stringify({
+export async function generateSessionToken(username, role, passwordHash = '') {
+  const pfp = passwordHash ? (await sha256Hex(String(passwordHash))).substring(0, 10) : '';
+  const payloadObj = {
     u: username,
     r: role,
     exp: Date.now() + (7 * 24 * 3600 * 1000) // 7 days expiration
-  });
+  };
+  if (pfp) payloadObj.p = pfp;
+  const payload = JSON.stringify(payloadObj);
   const b64Payload = btoa(unescape(encodeURIComponent(payload)));
   const sig = await sha256Hex(b64Payload + ':' + JWT_SESSION_SECRET);
   return `${b64Payload}.${sig}`;
@@ -143,8 +146,40 @@ export async function verifySessionToken(token) {
   try {
     const payload = JSON.parse(decodeURIComponent(escape(atob(b64Payload))));
     if (payload.exp && Date.now() > payload.exp) return null;
-    return payload; // { u: username, r: role, exp: timestamp }
+    return payload; // { u: username, r: role, p?: passwordFingerprint, exp: timestamp }
   } catch(e) {
     return null;
   }
+}
+
+export async function validateActiveUserSession(db, session) {
+  if (!session || !session.u) return { valid: false, reason: 'INVALID_SESSION' };
+  const u = String(session.u).trim().toLowerCase();
+  const userRow = await db.prepare('SELECT username, password, role, permissions FROM users WHERE LOWER(username) = ?').bind(u).first();
+  if (!userRow) {
+    return { valid: false, reason: 'USER_DELETED' };
+  }
+  if (session.p) {
+    const currentPfp = userRow.password ? (await sha256Hex(String(userRow.password))).substring(0, 10) : '';
+    if (session.p !== currentPfp) {
+      return { valid: false, reason: 'PASSWORD_CHANGED' };
+    }
+  }
+  let perms = [];
+  try {
+    perms = userRow.permissions ? (typeof userRow.permissions === 'string' ? JSON.parse(userRow.permissions) : userRow.permissions) : getDefaultRolePermissions(userRow.role);
+  } catch(e) {
+    perms = getDefaultRolePermissions(userRow.role);
+  }
+  const roleStr = userRow.role || 'User';
+  const rLower = roleStr.toLowerCase();
+  if (u === 'admin' || rLower.includes('super') || rLower === 'admin / hr' || rLower === 'admin') {
+    perms = ['all'];
+  }
+  return {
+    valid: true,
+    username: userRow.username,
+    role: roleStr,
+    permissions: perms
+  };
 }

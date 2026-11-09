@@ -23,10 +23,11 @@ export const authHandlers = {
       const userRow = await db.prepare('SELECT * FROM users WHERE LOWER(username) = ?').bind(u).first();
       const isPasswordValid = userRow ? await verifyUserPassword(p, userRow.password) : false;
       if (userRow && isPasswordValid) {
+        let activePassHash = userRow.password || '';
         // Auto-upgrade legacy plaintext password to secure SHA-256 hash
-        if (!userRow.password.startsWith('sha256:')) {
-          const newHashed = await hashUserPassword(p);
-          await db.prepare('UPDATE users SET password = ? WHERE username = ?').bind(newHashed, userRow.username).run().catch(() => {});
+        if (!activePassHash.startsWith('sha256:')) {
+          activePassHash = await hashUserPassword(p);
+          await db.prepare('UPDATE users SET password = ? WHERE username = ?').bind(activePassHash, userRow.username).run().catch(() => {});
         }
         await logSystemActivity(db, userRow.username, 'LOGIN', 'เข้าสู่ระบบสำเร็จ');
         let perms = [];
@@ -38,7 +39,7 @@ export const authHandlers = {
         if (userRow.username === 'admin' || userRow.role === 'Admin / HR' || userRow.role === 'Admin') {
           perms = ['all'];
         }
-        const sessionToken = await generateSessionToken(userRow.username, userRow.role || 'User');
+        const sessionToken = await generateSessionToken(userRow.username, userRow.role || 'User', activePassHash);
         return { success: true, username: userRow.username, role: userRow.role || 'User', permissions: perms, token: sessionToken };
       }
       return { success: false, message: 'ชื่อผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง' };
@@ -64,7 +65,11 @@ export const authHandlers = {
         await db.prepare('UPDATE users SET role = ?, permissions = ? WHERE username = ?').bind(u.role || 'User', permsJson, u.username).run();
       }
       await logSystemActivity(db, params.currentUsername || 'Admin', 'USER_SAVE', `บันทึก/แก้ไขผู้ใช้: ${u.username} (${u.role})`);
-      return { success: true, message: 'บันทึกผู้ใช้งานและกำหนดสิทธิ์เรียบร้อยแล้ว' };
+      let newToken = null;
+      if (hashedPass && callerUser && String(u.username).trim().toLowerCase() === String(callerUser).trim().toLowerCase()) {
+        newToken = await generateSessionToken(u.username, u.role || 'User', hashedPass);
+      }
+      return { success: true, newToken, message: 'บันทึกผู้ใช้งานและกำหนดสิทธิ์เรียบร้อยแล้ว' };
   },
 
   deleteUser: async (db, params) => {

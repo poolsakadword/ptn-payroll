@@ -6,7 +6,7 @@
  */
 
 import { ensureGlobalSchemas } from './_modules/db.js';
-import { verifySessionToken } from './_modules/security.js';
+import { verifySessionToken, validateActiveUserSession } from './_modules/security.js';
 import { getDefaultPeriod, getNextPeriodStr } from './_modules/date-utils.js';
 import { authHandlers } from './_modules/auth.js';
 import { payrollHandlers } from './_modules/payroll.js';
@@ -81,11 +81,26 @@ export async function onRequest(context) {
     } else if (params.token) {
       token = params.token;
     }
-    if (token) {
+    if (token && action !== 'checkLogin') {
       const session = await verifySessionToken(token);
       if (session) {
-        params.verifiedUser = session.u;
-        params.verifiedRole = session.r;
+        const activeUser = await validateActiveUserSession(db, session);
+        if (!activeUser.valid) {
+          return new Response(JSON.stringify({
+            success: false,
+            sessionRevoked: true,
+            reason: activeUser.reason,
+            message: activeUser.reason === 'USER_DELETED'
+              ? 'บัญชีผู้ใช้งานของคุณถูกยกเลิกหรือลบออกจากระบบแล้ว'
+              : 'รหัสผ่านของคุณมีการเปลี่ยนแปลง กรุณาเข้าสู่ระบบใหม่อีกครั้ง'
+          }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...corsHeaders }
+          });
+        }
+        params.verifiedUser = activeUser.username;
+        params.verifiedRole = activeUser.role;
+        params.verifiedPermissions = activeUser.permissions;
       }
     }
 

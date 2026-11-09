@@ -547,6 +547,13 @@ function saveUserForm(e) {
 
   callApi('saveUser', { user: userData, origUser: orig })
     .then(function(r) {
+      if (r && r.newToken && State.currentUser) {
+        State.currentUser.token = r.newToken;
+        try {
+          localStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
+          sessionStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
+        } catch(e) {}
+      }
       showToast(r.message || 'บันทึกผู้ใช้งานเรียบร้อยแล้ว');
       closeModal('userModal');
       loadAppData();

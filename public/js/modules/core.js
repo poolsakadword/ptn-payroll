@@ -539,7 +539,14 @@ function callApi(action, payload, retryCount) {
       }
       throw new Error('HTTP Error: ' + res.status);
     }
-    return res.json();
+    return res.json().then(function(data) {
+      if (data && data.sessionRevoked === true) {
+        showToast(data.message || 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่อีกครั้ง', 'error');
+        if (typeof handleLogout === 'function') handleLogout();
+        throw new Error(data.message || 'Session revoked');
+      }
+      return data;
+    });
   })
   .catch(function(err) {
     if (retryCount < 3 && err && err.message && (err.message.indexOf('Failed to fetch') !== -1 || err.message.indexOf('NetworkError') !== -1 || err.message.indexOf('503') !== -1 || err.message.indexOf('502') !== -1)) {
@@ -747,6 +754,15 @@ function loadAppData(isExplicitPeriodChange) {
       State.payrollList = r.payrollList || [];
       State.stats = r.stats || { totalEmployees: 0, totalGross: 0, totalDeductions: 0, totalNet: 0 };
       State.users = r.users || [];
+      if (r.currentUserSync && State.currentUser && State.currentUser.username &&
+          String(r.currentUserSync.username).toLowerCase() === String(State.currentUser.username).toLowerCase()) {
+        State.currentUser.role = r.currentUserSync.role || State.currentUser.role;
+        State.currentUser.permissions = r.currentUserSync.permissions || State.currentUser.permissions;
+        try {
+          localStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
+          sessionStorage.setItem('ptn_user', JSON.stringify(State.currentUser));
+        } catch(e) {}
+      }
       State.branches = r.branches || [];
       State.companyHolidays = r.companyHolidays || [];
       populateBranchSelects();

@@ -568,6 +568,11 @@ export const payrollHandlers = {
           totalEarnedNet: Math.round(totalEarnedNet * 100) / 100
         },
         users: users,
+        currentUserSync: params.verifiedUser ? {
+          username: params.verifiedUser,
+          role: params.verifiedRole || 'User',
+          permissions: params.verifiedPermissions || []
+        } : null,
         branches: branchRows.results || [],
         companyHolidays: companyHolidays
       };
