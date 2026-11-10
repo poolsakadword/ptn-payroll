@@ -18,6 +18,7 @@ import { notificationHandlers } from './_modules/notifications.js';
 import { backupHandlers } from './_modules/backup.js';
 import { aiHandlers } from './_modules/ai.js';
 import { storageHandlers } from './_modules/storage.js';
+import { incidentHandlers } from './_modules/incidents.js';
 
 const actionHandlers = {
   ...authHandlers,
@@ -30,6 +31,7 @@ const actionHandlers = {
   ...backupHandlers,
   ...aiHandlers,
   ...storageHandlers,
+  ...incidentHandlers,
 };
 
 export async function onRequest(context) {

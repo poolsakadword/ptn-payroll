@@ -968,7 +968,7 @@ function openInspector(empId) {
     (pf > 0 ? '<div class="calc-row"><span>กองทุนสำรองเลี้ยงชีพ (PF)</span><span class="val">' + (canViewSalary ? fmt(pf) : '฿***') + '</span></div>' : '') +
     (tax > 0 ? '<div class="calc-row"><span>ภาษีหัก ณ ที่จ่าย (WHT)</span><span class="val">' + (canViewSalary ? fmt(tax) : '฿***') + '</span></div>' : '') +
     (advanceDeduct > 0 ? '<div class="calc-row"><span>หักเบิกล่วงหน้า (Advance)</span><span class="val" style="color:#dc2626">' + (canViewSalary ? fmt(advanceDeduct) : '฿***') + '</span></div>' : '') +
-    (otherDeduct > 0 ? '<div class="calc-row"><span>หักอื่นๆ</span><span class="val" style="color:#dc2626">' + (canViewSalary ? fmt(otherDeduct) : '฿***') + '</span></div>' : '') +
+    (otherDeduct > 0 ? '<div class="calc-row"><span>หักอื่นๆ <button type="button" class="btn btn-xs btn-outline" style="padding:1px 6px;font-size:10px;margin-left:6px;border-radius:6px;border-color:#cbd5e1" onclick="viewEmployeeIncidentBreakdown(\'' + emp.empId + '\', \'' + State.selectedPeriod + '\')"><i class=\"fa-solid fa-receipt\"></i> ดูแจกแจง</button></span><span class="val" style="color:#dc2626">' + (canViewSalary ? fmt(otherDeduct) : '฿***') + '</span></div>' : '') +
     (carriedDebt > 0 ? '<div class="calc-row"><span>หนี้คงค้างยกยอด</span><span class="val" style="color:#dc2626">' + (canViewSalary ? fmt(carriedDebt) : '฿***') + '</span></div>' : '') +
     '<div class="calc-row total"><span>รวมรายการหัก (Total Deductions)</span><span class="val" style="color:#dc2626">' + (canViewSalary ? '-' + fmt(totalDeduct) : '฿***') + '</span></div>' +
   '</div>';
@@ -1237,7 +1237,7 @@ function openInputFastEditDrawer(empId) {
           '<input type="number" step="any" id="ifeAdvanceDeduct" class="ife-input font-mono" value="' + (Number(rec.advanceDeduct) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
         '</div>' +
         '<div class="ife-field">' +
-          '<label>หักอื่นๆ (บาท)</label>' +
+          '<label style="display:flex;align-items:center;justify-content:space-between"><span>หักอื่นๆ (บาท)</span> <button type="button" class="btn btn-xs btn-outline" style="padding:0px 5px;font-size:10px;border-radius:4px" onclick="viewEmployeeIncidentBreakdown(\'' + rec.empId + '\', State.selectedPeriod)"><i class=\"fa-solid fa-receipt\"></i> ดูแจกแจง</button></label>' +
           '<input type="number" step="any" id="ifeOtherDeduct" class="ife-input font-mono" value="' + (Number(rec.otherDeduct) || 0) + '" oninput="updateIfeLiveCalculation()" ' + (canEdit ? '' : 'readonly') + '>' +
         '</div>' +
       '</div>' +

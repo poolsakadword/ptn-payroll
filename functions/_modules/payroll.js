@@ -116,6 +116,18 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
 
   await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
 
+  // Load active scheduled incident deductions for this period
+  const incidentSchedules = await db.prepare(`
+    SELECT emp_id, SUM(amount) as total_sched_deduct
+    FROM incident_deduction_schedules
+    WHERE target_period = ? AND status = 'SCHEDULED'
+    GROUP BY emp_id
+  `).bind(period).all().catch(() => ({ results: [] }));
+  const incidentSchedMap = {};
+  for (const row of (incidentSchedules.results || [])) {
+    incidentSchedMap[row.emp_id] = Number(row.total_sched_deduct) || 0;
+  }
+
   let count = 0;
   for (const inp of inputList) {
     count++;
@@ -173,7 +185,9 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const pf = pfAmt;
     const tax = Number(inp.tax !== undefined ? inp.tax : (emp.default_tax || 0));
     const advDed = Number(inp.advance_deduct) || 0;
-    const othDed = Number(inp.other_deduct) || 0;
+    const manualOthDed = Number(inp.other_deduct) || 0;
+    const incidentOthDed = incidentSchedMap[empId] || 0;
+    const othDed = Math.round((manualOthDed + incidentOthDed) * 100) / 100;
     const carriedDebtIn = Number(inp.carried_debt) || 0;
     const totalDed = Math.round((sso + pf + tax + advDed + othDed + carriedDebtIn) * 100) / 100;
     const rawNetPay = Math.round((grossPay - totalDed) * 100) / 100;
