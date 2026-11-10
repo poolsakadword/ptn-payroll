@@ -285,7 +285,17 @@ export const payrollHandlers = {
       const branchRows = await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
 
       const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
-      const employees = (empQuery.results || []).map(e => ({
+      const confidentialEmpIdSet = new Set(
+        (empQuery.results || [])
+          .filter(e => (e.is_confidential === 1 || e.is_confidential === '1' || e.is_confidential === 'true'))
+          .map(e => e.emp_id)
+      );
+
+      const filteredEmpResults = isSuper
+        ? (empQuery.results || [])
+        : (empQuery.results || []).filter(e => !confidentialEmpIdSet.has(e.emp_id));
+
+      const employees = filteredEmpResults.map(e => ({
         empId: e.emp_id,
         fullName: e.full_name || '',
         nickname: e.nickname || '',
@@ -301,6 +311,7 @@ export const payrollHandlers = {
         isUndertimeExempt: (e.is_undertime_exempt === 'true' || e.is_undertime_exempt === true || e.is_undertime_exempt === 1 || e.is_undertime_exempt === '1'),
         isAttendanceExempt: (e.is_attendance_exempt === 'true' || e.is_attendance_exempt === true || e.is_attendance_exempt === 1 || e.is_attendance_exempt === '1'),
         isBreakExempt: (e.is_break_exempt === 'true' || e.is_break_exempt === true || e.is_break_exempt === 1 || e.is_break_exempt === '1'),
+        isConfidential: isSuper ? (e.is_confidential === 1 || e.is_confidential === '1' || e.is_confidential === 'true') : false,
         baseSalary: canViewSalary ? (Number(e.base_salary) || 0) : 0,
         bankName: e.bank_name || '',
         bankAccount: canViewSalary ? (e.bank_account || '') : (e.bank_account ? '***' + String(e.bank_account).slice(-3) : ''),
@@ -329,6 +340,9 @@ export const payrollHandlers = {
       // Monthly Inputs
       const inputQuery = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ? ORDER BY no ASC, emp_id ASC').bind(period).all();
       let rawInputs = inputQuery.results || [];
+      if (!isSuper) {
+        rawInputs = rawInputs.filter(r => !confidentialEmpIdSet.has(r.emp_id));
+      }
       const uniqueNos = new Set(rawInputs.map(r => r.no));
       if (rawInputs.length > 1 && (uniqueNos.size === 1 || rawInputs.some(r => !r.no || Number(r.no) <= 0))) {
         // Auto-heal duplicate or corrupted sequence numbers in DB sequentially 1..N by emp_id
@@ -402,7 +416,12 @@ export const payrollHandlers = {
           calcQuery = await db.prepare('SELECT * FROM payroll_calcs WHERE period = ? ORDER BY emp_id ASC').bind(period).all();
         }
 
-        payrollList = (calcQuery.results || []).map(c => {
+        let rawCalcs = calcQuery.results || [];
+        if (!isSuper) {
+          rawCalcs = rawCalcs.filter(c => !confidentialEmpIdSet.has(c.emp_id));
+        }
+
+        payrollList = rawCalcs.map(c => {
           const gross = Number(c.gross_pay) || 0;
           const ded = Number(c.total_deductions) || 0;
           const net = Number(c.net_pay) || 0;
@@ -639,9 +658,15 @@ export const payrollHandlers = {
       }
 
       const canEditSalary = (await userHasPermission(db, callerUser, 'view_salary')) || (await isUserSuperAdmin(db, callerUser));
+      const isCallerSuper = (await isUserSuperAdmin(db, callerUser));
       const r = params.record || {};
       const origEmpId = params.origEmpId;
       if (!r.empId) return { success: false, message: 'กรุณาเลือกรหัสพนักงาน' };
+
+      const targetEmpConf = await db.prepare('SELECT is_confidential FROM employees WHERE emp_id = ?').bind(origEmpId || r.empId).first().catch(() => null);
+      if (targetEmpConf && (targetEmpConf.is_confidential === 1 || targetEmpConf.is_confidential === '1') && !isCallerSuper) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์แก้ไขข้อมูลพนักงานกลุ่มความลับ' };
+      }
 
       let baseSal = Number(r.baseSalary) || 0;
       let pfRate = (r.pfRate !== null && r.pfRate !== undefined && !isNaN(Number(r.pfRate))) ? Number(r.pfRate) : 0.05;
@@ -928,7 +953,12 @@ export const payrollHandlers = {
 
       const calcs = (bindings.length > 0 ? await db.prepare(calcsQuery).bind(...bindings).all() : await db.prepare(calcsQuery).all()).results || [];
       const inputs = (bindings.length > 0 ? await db.prepare(inputsQuery).bind(...bindings).all() : await db.prepare(inputsQuery).all()).results || [];
-      const emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      const isSuperUser = (await isUserSuperAdmin(db, callerUser));
+      let emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      if (!isSuperUser) {
+        const confIds = new Set(emps.filter(e => e.is_confidential === 1 || e.is_confidential === '1').map(e => e.emp_id));
+        emps = emps.filter(e => !confIds.has(e.emp_id));
+      }
 
       const empMap = {};
       for (const e of emps) empMap[e.emp_id] = e;
@@ -1078,7 +1108,12 @@ export const payrollHandlers = {
 
       const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY emp_id ASC').all()).results || [];
       const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY emp_id ASC').all()).results || [];
-      const emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      const isSuperUser = (await isUserSuperAdmin(db, callerUser));
+      let emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      if (!isSuperUser) {
+        const confIds = new Set(emps.filter(e => e.is_confidential === 1 || e.is_confidential === '1').map(e => e.emp_id));
+        emps = emps.filter(e => !confIds.has(e.emp_id));
+      }
       const branches = (await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }))).results || [];
 
       let advanceStats = [];
@@ -1115,6 +1150,10 @@ export const payrollHandlers = {
 
       const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
       if (!emp) return { success: false, message: `ไม่พบพนักงานรหัส ${empId}` };
+      const isCallerSuper = (await isUserSuperAdmin(db, callerUser));
+      if ((emp.is_confidential === 1 || emp.is_confidential === '1') && !isCallerSuper) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูประวัติพนักงานกลุ่มความลับ' };
+      }
 
       const calcs = await db.prepare('SELECT * FROM payroll_calcs WHERE emp_id = ?').bind(empId).all();
       const inputs = await db.prepare('SELECT * FROM monthly_inputs WHERE emp_id = ?').bind(empId).all();

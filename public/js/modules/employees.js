@@ -85,7 +85,7 @@ function renderResignedEmployeesTable() {
         '<div style="display:flex;align-items:center;gap:10px">' +
           avatarHtml +
           '<div>' +
-            '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#64748b;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + '</div>' +
+            '<div style="font-weight:700;color:var(--text-main)">' + esc(e.fullName) + ' ' + (e.nickname ? ('<span class="period-pill" style="background:#f1f5f9;color:#64748b;font-size:10px;padding:1px 6px">' + esc(e.nickname) + '</span>') : '') + (e.isConfidential ? ' <span class="period-pill" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:10px;padding:1px 6px;font-weight:700" title="พนักงานกลุ่มความลับ"><i class="fa-solid fa-lock"></i> ความลับ</span>' : '') + '</div>' +
             '<div style="font-size:11px;color:var(--text-muted);font-family:monospace">' + esc(e.phone || '-') + '</div>' +
           '</div>' +
         '</div>' +
@@ -924,6 +924,11 @@ function openAddEmployeeModal() {
   if (isAttendanceExemptCheck) isAttendanceExemptCheck.checked = false;
   var isBreakExemptCheck = document.getElementById('mIsBreakExempt');
   if (isBreakExemptCheck) isBreakExemptCheck.checked = false;
+  var confWrapper = document.getElementById('wrapperEmpConfidential');
+  var isConfCheck = document.getElementById('mIsConfidential');
+  var isSuperOrAdmin = (typeof isSuperAdmin === 'function' && isSuperAdmin());
+  if (confWrapper) confWrapper.style.display = isSuperOrAdmin ? 'block' : 'none';
+  if (isConfCheck) isConfCheck.checked = false;
   if (document.getElementById('mResignDate')) document.getElementById('mResignDate').value = '';
   updateBirthDateThaiHint();
   updateJoinDateThaiHint();
@@ -955,6 +960,11 @@ function openEditEmployeeModal(empId) {
   if (isAttendanceExemptCheck) isAttendanceExemptCheck.checked = (e.isAttendanceExempt === true || e.isAttendanceExempt === 'true');
   var isBreakExemptCheck = document.getElementById('mIsBreakExempt');
   if (isBreakExemptCheck) isBreakExemptCheck.checked = (e.isBreakExempt === true || e.isBreakExempt === 'true');
+  var confWrapper = document.getElementById('wrapperEmpConfidential');
+  var isConfCheck = document.getElementById('mIsConfidential');
+  var isSuperOrAdmin = (typeof isSuperAdmin === 'function' && isSuperAdmin());
+  if (confWrapper) confWrapper.style.display = isSuperOrAdmin ? 'block' : 'none';
+  if (isConfCheck) isConfCheck.checked = (e.isConfidential === true || e.isConfidential === 1 || e.isConfidential === 'true');
 
   document.getElementById('empModalTitle').innerHTML = '<i class="fa-solid fa-pen-to-square"></i> แก้ไขข้อมูลพนักงาน';
   document.getElementById('empOrigId').value = e.empId;
@@ -1053,6 +1063,12 @@ function saveEmployeeForm(e, openPayslipAfter) {
     isUndertimeExempt: (document.getElementById('mIsUndertimeExempt') ? document.getElementById('mIsUndertimeExempt').checked : false),
     isAttendanceExempt: (document.getElementById('mIsAttendanceExempt') ? document.getElementById('mIsAttendanceExempt').checked : false),
     isBreakExempt: (document.getElementById('mIsBreakExempt') ? document.getElementById('mIsBreakExempt').checked : false),
+    isConfidential: (function() {
+      if (typeof isSuperAdmin === 'function' && !isSuperAdmin()) {
+        return existingEmp ? (existingEmp.isConfidential === true || existingEmp.isConfidential === 1 || existingEmp.isConfidential === 'true') : false;
+      }
+      return (document.getElementById('mIsConfidential') ? document.getElementById('mIsConfidential').checked : false);
+    })(),
     status: (document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active'),
     probationDays: (document.getElementById('mProbationDays') ? Number(document.getElementById('mProbationDays').value) : 119),
     probationEndDate: (document.getElementById('mProbationEndDate') ? document.getElementById('mProbationEndDate').value : ''),

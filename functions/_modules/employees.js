@@ -112,10 +112,19 @@ export const employeeHandlers = {
         : null;
       const cleanResignDate = emp.resignDate ? normalizeDateToIso(emp.resignDate) : null;
 
+      const isCallerSuper = (await isUserSuperAdmin(db, callerUser));
+      let isConfidentialVal = 0;
+      if (isCallerSuper) {
+        isConfidentialVal = (emp.isConfidential === true || emp.isConfidential === 'true' || emp.isConfidential === 1 || emp.isConfidential === '1') ? 1 : 0;
+      } else if (origId || emp.empId) {
+        const existingConf = await db.prepare('SELECT is_confidential FROM employees WHERE emp_id = ?').bind(origId || emp.empId).first();
+        isConfidentialVal = (existingConf && (existingConf.is_confidential === 1 || existingConf.is_confidential === '1')) ? 1 : 0;
+      }
+
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt, is_confidential)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -131,7 +140,8 @@ export const employeeHandlers = {
         diligenceAllowanceVal,
         isAttendanceExemptVal,
         cleanResignDate,
-        isBreakExemptVal
+        isBreakExemptVal,
+        isConfidentialVal
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period and period is not locked
@@ -209,6 +219,9 @@ export const employeeHandlers = {
 
       const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
       if (!emp) return { success: false, message: 'Employee not found' };
+      if ((emp.is_confidential === 1 || emp.is_confidential === '1') && !(await isUserSuperAdmin(db, callerUser))) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าถึงพนักงานกลุ่มความลับ' };
+      }
 
       await db.prepare('UPDATE employees SET status = "Active" WHERE emp_id = ?').bind(empId).run();
       await logSystemActivity(db, params.username || 'Admin', 'PASS_PROBATION', `อนุมัติผ่านการทดลองงาน: ${empId} (${emp.full_name}) ปรับเป็นสถานะ ทำงานอยู่ (Active)`);
@@ -268,6 +281,9 @@ export const employeeHandlers = {
 
       const emp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empId).first();
       if (!emp) return { success: false, message: 'Employee not found' };
+      if ((emp.is_confidential === 1 || emp.is_confidential === '1') && !(await isUserSuperAdmin(db, callerUser))) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าถึงพนักงานกลุ่มความลับ' };
+      }
 
       const compName = (await db.prepare('SELECT value FROM settings WHERE key = "CompanyName"').first())?.value || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
       const compAddr = (await db.prepare('SELECT value FROM settings WHERE key = "Address"').first())?.value || 'กรุงเทพมหานคร';

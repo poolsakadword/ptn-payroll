@@ -1278,11 +1278,17 @@ export const attendanceHandlers = {
       }
 
       // 1.0 Employees list for search & selector (include resigned employees so history & period logs can be inspected)
-      const empRows = await db.prepare(`
-        SELECT emp_id, full_name, nickname, department, position, branch_id, phone, status, resign_date, is_attendance_exempt
+      const isCallerSuper = (await isUserSuperAdmin(db, callerUser));
+      let empRowsSql = `
+        SELECT emp_id, full_name, nickname, department, position, branch_id, phone, status, resign_date, is_attendance_exempt, is_confidential
         FROM employees
-        ORDER BY emp_id ASC
-      `).all().catch(() => ({ results: [] }));
+        WHERE 1=1
+      `;
+      if (!isCallerSuper) {
+        empRowsSql += " AND (is_confidential IS NULL OR is_confidential = 0)";
+      }
+      empRowsSql += " ORDER BY emp_id ASC";
+      const empRows = await db.prepare(empRowsSql).all().catch(() => ({ results: [] }));
       const allEmployees = empRows.results || [];
       const employeeList = allEmployees.map(e => ({
         emp_id: e.emp_id,
@@ -1330,7 +1336,7 @@ export const attendanceHandlers = {
           FROM time_logs l
           LEFT JOIN employees e ON l.emp_id = e.emp_id
           LEFT JOIN branches b ON b.branch_id = COALESCE(l.branch_id, e.branch_id)
-          WHERE l.emp_id = ? AND ${dateClause}
+          WHERE l.emp_id = ? AND ${dateClause} ${!isCallerSuper ? 'AND (e.is_confidential IS NULL OR e.is_confidential = 0)' : ''}
           ORDER BY l.date DESC, l.clock_in DESC
         `).bind(empFilter, ...dateBinds).all().catch(() => ({ results: [] }));
 
@@ -1341,7 +1347,7 @@ export const attendanceHandlers = {
             FROM time_logs l
             LEFT JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN branches b ON b.branch_id = COALESCE(l.branch_id, e.branch_id)
-            WHERE ${dateClause} AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?))
+            WHERE ${dateClause} AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?)) ${!isCallerSuper ? 'AND (e.is_confidential IS NULL OR e.is_confidential = 0)' : ''}
             ORDER BY l.date DESC, l.clock_in DESC
             LIMIT 500
           `).bind(...dateBinds, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
@@ -1351,7 +1357,7 @@ export const attendanceHandlers = {
             FROM time_logs l
             LEFT JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN branches b ON b.branch_id = COALESCE(l.branch_id, e.branch_id)
-            WHERE ${dateClause}
+            WHERE ${dateClause} ${!isCallerSuper ? 'AND (e.is_confidential IS NULL OR e.is_confidential = 0)' : ''}
             ORDER BY l.date DESC, l.clock_in DESC
             LIMIT 500
           `).bind(...dateBinds).all().catch(() => ({ results: [] }));
@@ -1780,7 +1786,11 @@ export const attendanceHandlers = {
       for (const b of branches) branchMap[b.branch_id] = b;
 
       // Load Employees (Include all active working staff: Active, Probation, and mid-period Resigned)
+      const isCallerSuper = (await isUserSuperAdmin(db, callerUser));
       let empSql = "SELECT emp_id, full_name, nickname, department, position, branch_id, base_salary, is_ot_eligible, diligence_allowance, status, join_date, resign_date, is_attendance_exempt, is_break_exempt FROM employees WHERE 1=1";
+      if (!isCallerSuper) {
+        empSql += " AND (is_confidential IS NULL OR is_confidential = 0)";
+      }
       const empBinds = [];
       if (branchId && branchId !== 'ALL') {
         empSql += " AND branch_id = ?";

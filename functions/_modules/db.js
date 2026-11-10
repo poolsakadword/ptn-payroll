@@ -153,6 +153,8 @@ export async function ensureGlobalSchemas(db) {
     await db.prepare('ALTER TABLE employees ADD COLUMN is_attendance_exempt TEXT DEFAULT "false"').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN is_break_exempt TEXT DEFAULT "false"').run().catch(() => {});
     await db.prepare('ALTER TABLE employees ADD COLUMN diligence_allowance REAL').run().catch(() => {});
+    await db.prepare('ALTER TABLE employees ADD COLUMN is_confidential INTEGER DEFAULT 0').run().catch(() => {});
+    await db.prepare('CREATE INDEX IF NOT EXISTS idx_employees_confidential ON employees(is_confidential)').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN unpaid_sick_leave_days REAL DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN late_minutes INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE monthly_inputs ADD COLUMN late_count INTEGER DEFAULT 0').run().catch(() => {});

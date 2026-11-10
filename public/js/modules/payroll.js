@@ -690,6 +690,7 @@ function renderPayrollTable() {
     var emp = (State.employees || []).find(function(e) { return e.empId === row.empId; });
     var empNick = (emp && emp.nickname) ? emp.nickname : (row.nickname || getEmpNickname(row.empId));
     var nickHtml = empNick ? (' <span style="font-size:11px;font-weight:700;color:#2563eb;background:#eff6ff;border:1px solid #bfdbfe;padding:1px 6px;border-radius:4px;white-space:nowrap;margin-left:4px">(' + esc(empNick) + ')</span>') : '';
+    var confTag = (emp && (emp.isConfidential === true || emp.isConfidential === 1 || emp.isConfidential === 'true')) ? ' <span class="period-pill" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:9.5px;padding:1px 5px;font-weight:700" title="พนักงานกลุ่มความลับ (Confidential)"><i class="fa-solid fa-lock"></i> ความลับ</span>' : '';
 
     var delta = State.syncDeltaMap && State.syncDeltaMap[row.empId];
     var rowClass = 'clickable-row' + (delta ? ' row-delta-updated' : '');
@@ -706,7 +707,7 @@ function renderPayrollTable() {
 
     h += '<tr class="' + rowClass + '" onclick="openInspector(\'' + esc(row.empId) + '\')" title="คลิกเพื่อดูสรุปรายได้-รายการหักอย่างละเอียด">' +
       '<td class="font-mono font-bold sticky-col" style="left:0;width:80px;min-width:80px;max-width:80px">' + esc(row.empId) + '</td>' +
-      '<td class="font-bold sticky-col sticky-col-divider" style="left:80px;min-width:180px">' + esc(row.name) + nickHtml + conflictHtml + '</td>' +
+      '<td class="font-bold sticky-col sticky-col-divider" style="left:80px;min-width:180px">' + esc(row.name) + nickHtml + confTag + conflictHtml + '</td>' +
       '<td><span class="period-pill">' + esc(row.department || '-') + '</span> ' + esc(row.position || '') + '</td>' +
       '<td class="text-muted" style="font-size:11px">' + esc(row.bankName || '-') + '<br>' + esc(row.bankAccount || '-') + '</td>' +
       '<td class="text-right font-mono font-bold">' +
@@ -1957,7 +1958,8 @@ function renderEmployeesTable() {
     var branchBadgeHtml = '<div style="font-size:11px;color:#0369a1;font-weight:600;margin-top:2px"><i class="fa-solid fa-store" style="font-size:10px;margin-right:2px"></i> ' + esc(branchNameDisplay) + roamingText + '</div>';
     var breakExemptTag = (e.isBreakExempt === true || e.isBreakExempt === 'true') ? '<span class="period-pill" style="background:#f0fdf4;color:#166534;border-color:#bbf7d0;font-size:10px;padding:1px 5px" title="ยกเว้นการสแกนพักเที่ยง/บ่าย"><i class="fa-solid fa-mug-hot"></i> ไม่ต้องสแกนพัก</span>' : '';
     var attExemptTag = (e.isAttendanceExempt === true || e.isAttendanceExempt === 'true') ? '<span class="period-pill" style="background:#eff6ff;color:#1e40af;border-color:#bfdbfe;font-size:10px;padding:1px 5px" title="ผู้บริหาร/ยกเว้นลงเวลา"><i class="fa-solid fa-crown"></i> ยกเว้นลงเวลา</span>' : '';
-    var policyBadgesHtml = (breakExemptTag || attExemptTag) ? ('<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">' + breakExemptTag + attExemptTag + '</div>') : '';
+    var confidentialTag = (e.isConfidential === true || e.isConfidential === 1 || e.isConfidential === 'true') ? '<span class="period-pill" style="background:#fef3c7;color:#92400e;border-color:#fde68a;font-size:10px;padding:1px 5px;font-weight:700" title="พนักงานกลุ่มความลับ (Confidential)"><i class="fa-solid fa-lock"></i> ความลับ</span>' : '';
+    var policyBadgesHtml = (breakExemptTag || attExemptTag || confidentialTag) ? ('<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">' + breakExemptTag + attExemptTag + confidentialTag + '</div>') : '';
 
     // 1. Render Table Row
     if (isGeneralUser || !canViewSalary) {
