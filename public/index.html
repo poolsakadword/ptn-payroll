@@ -6561,7 +6561,7 @@
 
   <!-- MODAL: INCIDENTS & DAMAGE DEDUCTIONS LEDGER -->
   <div class="modal-overlay" id="modalIncidentsLedger" style="z-index:1170">
-    <div class="modal-card" style="max-width:1180px;width:96vw;max-height:92vh;border-radius:18px;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);display:flex;flex-direction:column">
+    <div class="modal-card" style="max-width:1280px;width:96vw;max-height:92vh;border-radius:18px;overflow:hidden;box-shadow:0 25px 50px -12px rgba(0,0,0,0.35);display:flex;flex-direction:column">
       <!-- Header -->
       <div class="modal-header" style="background:linear-gradient(135deg, #1e293b, #0f172a);color:#fff;padding:16px 22px;display:flex;align-items:center;justify-content:space-between">
         <div style="display:flex;align-items:center;gap:12px">
@@ -6641,9 +6641,9 @@
               </select>
             </div>
 
-            <div class="search-box" style="width:240px">
+            <div class="search-box" style="width:270px;min-width:220px">
               <i class="fa-solid fa-magnifying-glass"></i>
-              <input type="text" id="incSearchInput" placeholder="ค้นหา (รหัส, เรื่อง, พนักงาน)..." oninput="renderIncidentsTable(cachedIncidents)">
+              <input type="text" id="incSearchInput" placeholder="ค้นหา (รหัส, เรื่อง, พนักงาน)..." oninput="renderIncidentsTable(cachedIncidents)" style="width:100%">
             </div>
           </div>
 
@@ -6659,21 +6659,17 @@
 
         <!-- Incidents Table -->
         <div style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;overflow-x:auto;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
-          <table style="width:100%;border-collapse:collapse;font-size:12px;text-align:left">
+          <table style="width:100%;min-width:1040px;border-collapse:collapse;font-size:12.5px;text-align:left">
             <thead>
-              <tr style="background:#f1f5f9;color:#334155;border-bottom:2px solid #cbd5e1;font-weight:700">
-                <th style="padding:10px 12px;width:105px">รหัส</th>
-                <th style="padding:10px 12px;width:95px">วันที่</th>
-                <th style="padding:10px 12px;width:110px">สาขา</th>
-                <th style="padding:10px 12px;width:130px">ประเภท</th>
-                <th style="padding:10px 12px">เรื่อง / รายการความเสียหาย</th>
-                <th style="padding:10px 12px;text-align:right;width:100px">ยอดรวม</th>
-                <th style="padding:10px 12px;text-align:right;width:95px">บ.ช่วยออก</th>
-                <th style="padding:10px 12px;text-align:right;width:105px">สุทธิพนักงาน</th>
-                <th style="padding:10px 12px">พนักงานผู้รับผิดชอบ</th>
-                <th style="padding:10px 12px;text-align:center;width:75px">ผ่อน</th>
-                <th style="padding:10px 12px;text-align:center;width:130px">สถานะ</th>
-                <th style="padding:10px 12px;text-align:center;width:150px">การจัดการ</th>
+              <tr style="background:#f1f5f9;color:#334155;border-bottom:2px solid #cbd5e1;font-weight:700;white-space:nowrap">
+                <th style="padding:11px 14px;width:145px">รหัส / วันที่ &amp; สาขา</th>
+                <th style="padding:11px 14px;min-width:240px">เรื่อง / รายละเอียดความเสียหาย</th>
+                <th style="padding:11px 12px;text-align:right;width:110px">ยอดรวม</th>
+                <th style="padding:11px 12px;text-align:right;width:130px">สุทธิพนักงาน (บ.ช่วย)</th>
+                <th style="padding:11px 14px;min-width:210px">พนักงานผู้รับผิดชอบ</th>
+                <th style="padding:11px 10px;text-align:center;width:75px">ผ่อนชำระ</th>
+                <th style="padding:11px 12px;text-align:center;width:135px">สถานะ</th>
+                <th style="padding:11px 14px;text-align:center;width:145px">การจัดการ</th>
               </tr>
             </thead>
             <tbody id="incidentsTableBody">

@@ -72,7 +72,7 @@ async function loadIncidents() {
   var tbody = document.getElementById('incidentsTableBody');
 
   if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:#94a3b8"><i class="fa-solid fa-spinner fa-spin" style="font-size:22px;margin-bottom:8px;display:block"></i>กำลังโหลดรายการเหตุการณ์ความเสียหาย...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8"><i class="fa-solid fa-spinner fa-spin" style="font-size:22px;margin-bottom:8px;display:block"></i>กำลังโหลดรายการเหตุการณ์ความเสียหาย...</td></tr>';
   }
 
   try {
@@ -87,11 +87,11 @@ async function loadIncidents() {
       updateIncidentKpiCards(cachedIncidents);
     } else {
       cachedIncidents = [];
-      if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:#ef4444">ไม่สามารถโหลดข้อมูลได้: ' + ((data && data.message) || 'เกิดข้อผิดพลาด') + '</td></tr>';
+      if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#ef4444">ไม่สามารถโหลดข้อมูลได้: ' + ((data && data.message) || 'เกิดข้อผิดพลาด') + '</td></tr>';
     }
   } catch (err) {
     console.error('loadIncidents error:', err);
-    if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:#ef4444">เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์: ' + (err.message || '') + '</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#ef4444">เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์: ' + (err.message || '') + '</td></tr>';
   }
 }
 
@@ -143,16 +143,16 @@ function renderIncidentsTable(list) {
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:30px;color:#94a3b8"><i class="fa-regular fa-folder-open" style="font-size:24px;display:block;margin-bottom:8px"></i>ไม่พบรายการเหตุการณ์ความเสียหายตามเงื่อนไขที่เลือก</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8"><i class="fa-regular fa-folder-open" style="font-size:24px;display:block;margin-bottom:8px"></i>ไม่พบรายการเหตุการณ์ความเสียหายตามเงื่อนไขที่เลือก</td></tr>';
     return;
   }
 
   var catMap = {
-    CASH_SHORT: { label: '💵 เงินสดขาด', color: '#dc2626' },
-    GOODS_DAMAGE: { label: '📦 สินค้าเสียหาย', color: '#d97706' },
-    STOCK_LOSS: { label: '🔍 สต็อกหาย', color: '#7c3aed' },
-    PROPERTY_DAMAGE: { label: '🏢 ทรัพย์สินร้าน', color: '#0284c7' },
-    OTHER: { label: '📝 อื่นๆ', color: '#475569' }
+    CASH_SHORT: { label: '💵 เงินสดขาด', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
+    GOODS_DAMAGE: { label: '📦 สินค้าเสียหาย', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
+    STOCK_LOSS: { label: '🔍 สต็อกหาย', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
+    PROPERTY_DAMAGE: { label: '🏢 ทรัพย์สินร้าน', color: '#0284c7', bg: '#f0f9ff', border: '#bae6fd' },
+    OTHER: { label: '📝 อื่นๆ', color: '#475569', bg: '#f8fafc', border: '#e2e8f0' }
   };
 
   var statusMap = {
@@ -162,15 +162,16 @@ function renderIncidentsTable(list) {
   };
 
   tbody.innerHTML = filtered.map(function(i) {
-    var cat = catMap[i.category] || { label: i.category, color: '#475569' };
+    var cat = catMap[i.category] || { label: i.category, color: '#475569', bg: '#f8fafc', border: '#e2e8f0' };
     var st = statusMap[i.status] || { label: i.status, bg: '#f1f5f9', color: '#475569', icon: 'fa-circle' };
     var empCount = i.involvedEmpCount || 1;
     var netAmt = Number(i.net_employee_amount) || 0;
+    var compAmt = Number(i.company_absorbed_amount) || 0;
     var perPerson = Math.round((netAmt / empCount) * 100) / 100;
     var instCount = (i.schedules && i.schedules[0] && i.schedules[0].total_installments) || 1;
 
     var staffListHtml = (i.involvedEmployeesList || []).map(function(emp) {
-      return '<span style="display:inline-block;background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 6px;border-radius:6px;font-size:11px;font-weight:600;margin:1px 2px">' + emp + '</span>';
+      return '<span style="display:inline-block;background:#f8fafc;border:1px solid #cbd5e1;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;color:#1e293b;white-space:nowrap">' + emp + '</span>';
     }).join('');
     if (!staffListHtml) staffListHtml = '<span style="color:#64748b;font-size:11.5px">' + (i.involvedEmployeesText || '-') + '</span>';
 
@@ -180,31 +181,36 @@ function renderIncidentsTable(list) {
 
     return (
       '<tr style="border-bottom:1px solid #e2e8f0;transition:background 0.2s">' +
-        '<td style="padding:10px 12px;font-family:monospace;font-weight:700;color:#0f172a;white-space:nowrap">' + (i.incident_code || '#' + i.id) + '</td>' +
-        '<td style="padding:10px 12px;white-space:nowrap;font-size:11.5px;color:#334155">' + i.incident_date + '</td>' +
-        '<td style="padding:10px 12px;white-space:nowrap;font-size:11.5px;font-weight:600;color:#1e293b">' + (i.branch_name || i.branch_id) + '</td>' +
-        '<td style="padding:10px 12px;white-space:nowrap;font-size:11.5px;font-weight:700;color:' + cat.color + '">' + cat.label + '</td>' +
-        '<td style="padding:10px 12px">' +
-          '<div style="font-weight:700;color:#0f172a;font-size:12.5px">' + i.title + '</div>' +
-          (i.description ? '<div style="font-size:11px;color:#64748b;margin-top:2px;max-width:280px;line-height:1.3">' + i.description + '</div>' : '') +
-          (i.evidence_photo_url ? '<button type="button" onclick="openIncidentPhotoLightbox(\'inc_' + i.id + '\', \'' + (i.incident_code || '').replace(/'/g, '') + '\')" style="background:none;border:none;padding:0;cursor:pointer;font-size:11px;color:#0284c7;font-weight:700;display:inline-flex;align-items:center;gap:4px;margin-top:4px"><i class="fa-solid fa-camera"></i> ดูรูปหลักฐาน</button>' : '') +
+        '<td style="padding:12px 14px;vertical-align:middle;white-space:nowrap">' +
+          '<div style="font-family:monospace;font-weight:800;color:#0f172a;font-size:12.5px">' + (i.incident_code || '#' + i.id) + '</div>' +
+          '<div style="font-size:11px;color:#64748b;margin-top:3px">' + i.incident_date + ' • ' + (i.branch_name || i.branch_id) + '</div>' +
         '</td>' +
-        '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-weight:800;color:#b91c1c">฿' + (Number(i.total_incident_amount) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</td>' +
-        '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-weight:700;color:#059669">฿' + (Number(i.company_absorbed_amount) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</td>' +
-        '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-weight:800;color:#b91c1c">฿' + netAmt.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</td>' +
-        '<td style="padding:10px 12px;max-width:240px">' +
-          '<div style="font-size:11px;color:#64748b;margin-bottom:3px">' + empCount + ' ท่าน • คนละ ฿' + perPerson.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</div>' +
-          '<div>' + staffListHtml + '</div>' +
+        '<td style="padding:12px 14px;vertical-align:middle">' +
+          '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px">' +
+            '<span style="font-size:10.5px;font-weight:700;color:' + cat.color + ';background:' + cat.bg + ';border:1px solid ' + cat.border + ';padding:1px 7px;border-radius:999px;white-space:nowrap">' + cat.label + '</span>' +
+            '<span style="font-weight:700;color:#0f172a;font-size:13px">' + i.title + '</span>' +
+          '</div>' +
+          (i.description ? '<div style="font-size:11.5px;color:#64748b;margin-top:2px;line-height:1.4">' + i.description + '</div>' : '') +
+          (i.evidence_photo_url ? '<button type="button" onclick="openIncidentPhotoLightbox(\'inc_' + i.id + '\', \'' + (i.incident_code || '').replace(/'/g, '') + '\')" style="background:#eff6ff;border:1px solid #bfdbfe;padding:3px 9px;border-radius:6px;cursor:pointer;font-size:11px;color:#0284c7;font-weight:700;display:inline-flex;align-items:center;gap:4px;margin-top:5px;white-space:nowrap"><i class="fa-solid fa-camera"></i> ดูรูปหลักฐาน</button>' : '') +
         '</td>' +
-        '<td style="padding:10px 12px;text-align:center;white-space:nowrap">' +
-          '<span style="font-weight:700;font-size:11.5px;color:#4338ca">' + instCount + ' งวด</span>' +
+        '<td style="padding:12px 12px;vertical-align:middle;text-align:right;font-family:monospace;font-weight:800;color:#334155;white-space:nowrap;font-size:13px">฿' + (Number(i.total_incident_amount) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</td>' +
+        '<td style="padding:12px 12px;vertical-align:middle;text-align:right;white-space:nowrap">' +
+          '<div style="font-family:monospace;font-weight:800;color:#dc2626;font-size:13px">฿' + netAmt.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</div>' +
+          (compAmt > 0 ? '<div style="font-family:monospace;font-size:10.5px;font-weight:700;color:#059669;margin-top:2px">บ.ช่วย ฿' + compAmt.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</div>' : '<div style="font-size:10.5px;color:#94a3b8;margin-top:2px">(บ.ช่วย ฿0.00)</div>') +
         '</td>' +
-        '<td style="padding:10px 12px;text-align:center;white-space:nowrap">' +
-          '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;background:' + st.bg + ';color:' + st.color + '">' +
+        '<td style="padding:12px 14px;vertical-align:middle">' +
+          '<div style="font-size:11px;color:#64748b;margin-bottom:4px;white-space:nowrap">' + empCount + ' ท่าน • คนละ <strong style="color:#0f172a;font-family:monospace">฿' + perPerson.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</strong></div>' +
+          '<div style="display:flex;flex-wrap:wrap;gap:4px">' + staffListHtml + '</div>' +
+        '</td>' +
+        '<td style="padding:12px 10px;vertical-align:middle;text-align:center;white-space:nowrap">' +
+          '<span style="font-weight:700;font-size:11.5px;color:#4338ca;background:#eef2ff;padding:3px 8px;border-radius:999px;border:1px solid #c7d2fe">' + instCount + ' งวด</span>' +
+        '</td>' +
+        '<td style="padding:12px 12px;vertical-align:middle;text-align:center;white-space:nowrap">' +
+          '<span style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:700;background:' + st.bg + ';color:' + st.color + '">' +
             '<i class="fa-solid ' + st.icon + '"></i> ' + st.label +
           '</span>' +
         '</td>' +
-        '<td style="padding:10px 12px;text-align:center;white-space:nowrap">' +
+        '<td style="padding:12px 14px;vertical-align:middle;text-align:center;white-space:nowrap">' +
           '<div style="display:inline-flex;gap:4px">' +
             '<button type="button" class="btn btn-xs ' + (i.status === 'PENDING' ? 'btn-primary' : 'btn-outline') + '" onclick="openReviewIncidentModal(' + i.id + ')" title="ตรวจสอบรายละเอียดและอนุมัติ">' +
               '<i class="fa-solid fa-magnifying-glass"></i> ' + (i.status === 'PENDING' ? 'อนุมัติ' : 'ดูข้อมูล') +
