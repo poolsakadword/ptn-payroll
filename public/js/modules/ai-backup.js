@@ -822,37 +822,158 @@ function handleSendAiMessage(e) {
 // ==============================================================================
 
 // AUDIT TRAIL MODAL CONTROLLER
-function openActivityLogModal() {
-  showToast('กำลังโหลดบันทึกประวัติการใช้งาน...', 'info');
-  callApi('getActivityLogs')
-    .then(function(r) {
-      var tbody = document.getElementById('activityLogTableBody');
-      if (!tbody) return;
-      var logs = r.logs || [];
-      if (logs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:20px">ยังไม่มีบันทึกประวัติการใช้งาน</td></tr>';
-      } else {
-        var h = '';
-        logs.forEach(function(l) {
-          var actionBadgeClass = 'blue';
-          if (l.action === 'LOGIN') actionBadgeClass = 'green';
-          else if (l.action === 'PERIOD_CLOSE') actionBadgeClass = 'red';
-          else if (l.action === 'USER_SAVE') actionBadgeClass = 'purple';
+var cachedActivityLogs = [];
 
-          h += '<tr>' +
-            '<td class="font-mono text-muted" style="font-size:11px">' + esc(l.timestamp) + '</td>' +
-            '<td class="font-bold">' + esc(l.username) + '</td>' +
-            '<td><span class="period-pill" style="font-size:10.5px">' + esc(l.action) + '</span></td>' +
-            '<td>' + esc(l.details) + '</td>' +
-          '</tr>';
-        });
-        tbody.innerHTML = h;
+function openActivityLogModal() {
+  openModal('activityLogModal');
+  loadActivityLogsData();
+}
+
+function loadActivityLogsData() {
+  var tbody = document.getElementById('activityLogTableBody');
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:30px;color:#94a3b8"><i class="fa-solid fa-spinner fa-spin" style="font-size:20px;margin-bottom:8px;display:block"></i>กำลังโหลดประวัติการใช้งานระบบ...</td></tr>';
+  }
+
+  var actionFilter = document.getElementById('auditLogCategoryFilter')?.value || 'ALL';
+  var limitVal = Number(document.getElementById('auditLogLimitSelect')?.value) || 500;
+
+  callApi('getActivityLogs', {
+    actionFilter: actionFilter,
+    limit: limitVal
+  })
+    .then(function(r) {
+      if (r && r.success) {
+        cachedActivityLogs = r.logs || [];
+        renderActivityLogsTable();
+      } else {
+        cachedActivityLogs = [];
+        if (tbody) {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:#dc2626">' + esc((r && r.message) || 'ไม่สามารถโหลดข้อมูลได้') + '</td></tr>';
+        }
       }
-      openModal('activityLogModal');
     })
     .catch(function(err) {
-      showToast('Error: ' + err.message, 'error');
+      cachedActivityLogs = [];
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:24px;color:#dc2626">เกิดข้อผิดพลาด: ' + esc(err.message) + '</td></tr>';
+      }
     });
+}
+
+function getFilteredActivityLogs() {
+  var q = (document.getElementById('auditLogSearchInput')?.value || '').trim().toLowerCase();
+  if (!q) return cachedActivityLogs;
+
+  return cachedActivityLogs.filter(function(l) {
+    return (
+      (l.timestamp || '').toLowerCase().indexOf(q) !== -1 ||
+      (l.username || '').toLowerCase().indexOf(q) !== -1 ||
+      (l.action || '').toLowerCase().indexOf(q) !== -1 ||
+      (l.details || '').toLowerCase().indexOf(q) !== -1
+    );
+  });
+}
+
+function getAuditActionStyle(action) {
+  var act = String(action || '');
+  if (act.indexOf('PTN_TIME_CLOCK') === 0 || act.indexOf('PTN_TIME_BREAK') === 0) {
+    return { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0' };
+  }
+  if (act.indexOf('PTN_TIME_DEVICE') === 0 || act.indexOf('PTN_TIME_SUPERVISOR') === 0) {
+    return { bg: '#fef3c7', color: '#92400e', border: '#fde68a' };
+  }
+  if (act.indexOf('PTN_TIME_REQ') === 0 || act.indexOf('PTN_TIME_APPROVAL') === 0) {
+    return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
+  }
+  if (act.indexOf('INCIDENT') === 0) {
+    return { bg: '#fff1f2', color: '#be123c', border: '#fecdd3' };
+  }
+  if (act === 'PERIOD_CLOSE' || act.indexOf('DELETE') !== -1 || act.indexOf('REJECT') !== -1) {
+    return { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' };
+  }
+  if (act === 'LOGIN' || act.indexOf('USER_') === 0) {
+    return { bg: '#f5f3ff', color: '#6d28d9', border: '#ddd6fe' };
+  }
+  return { bg: '#f1f5f9', color: '#334155', border: '#cbd5e1' };
+}
+
+function renderActivityLogsTable() {
+  var tbody = document.getElementById('activityLogTableBody');
+  var countEl = document.getElementById('auditLogCountBadge');
+  if (!tbody) return;
+
+  var filtered = getFilteredActivityLogs();
+  if (countEl) {
+    countEl.textContent = 'แสดง ' + filtered.length.toLocaleString() + ' รายการ (จากที่โหลด ' + cachedActivityLogs.length.toLocaleString() + ' รายการ)';
+  }
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted" style="padding:28px">ไม่พบบันทึกประวัติการใช้งานตามเงื่อนไขที่ค้นหา</td></tr>';
+    return;
+  }
+
+  var h = '';
+  filtered.forEach(function(l) {
+    var st = getAuditActionStyle(l.action);
+    h += '<tr>' +
+      '<td class="font-mono text-muted" style="font-size:11.5px;white-space:nowrap">' + esc(l.timestamp) + '</td>' +
+      '<td class="font-bold" style="white-space:nowrap;color:#0f172a">' + esc(l.username) + '</td>' +
+      '<td style="white-space:nowrap"><span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:700;font-family:monospace;background:' + st.bg + ';color:' + st.color + ';border:1px solid ' + st.border + '">' + esc(l.action) + '</span></td>' +
+      '<td style="font-size:12px;color:#334155;line-height:1.4">' + esc(l.details) + '</td>' +
+    '</tr>';
+  });
+  tbody.innerHTML = h;
+}
+
+function exportActivityLogs(format) {
+  var list = getFilteredActivityLogs();
+  if (!list || list.length === 0) {
+    showToast('ไม่มีข้อมูลสำหรับส่งออก', 'warning');
+    return;
+  }
+
+  var nowStr = new Date().toISOString().substring(0, 10);
+  var content = '';
+  var filename = '';
+  var mimeType = '';
+
+  if (format === 'log') {
+    filename = 'ptn_audit_trail_' + nowStr + '.log';
+    mimeType = 'text/plain;charset=utf-8;';
+    var header = '# PTN System Audit Trail Log\n# Generated: ' + new Date().toLocaleString('th-TH') + '\n# Total Records: ' + list.length + '\n' + '='.repeat(80) + '\n';
+    var lines = list.map(function(l) {
+      return '[' + (l.timestamp || '-') + '] [' + (l.username || 'System') + '] [' + (l.action || '-') + '] ' + (l.details || '');
+    });
+    content = '\uFEFF' + header + lines.join('\n');
+  } else {
+    filename = 'ptn_audit_trail_' + nowStr + '.csv';
+    mimeType = 'text/csv;charset=utf-8;';
+    var csvRows = ['"ID","Timestamp","Username","Action","Details"'];
+    list.forEach(function(l) {
+      var row = [
+        l.id || '',
+        '"' + String(l.timestamp || '').replace(/"/g, '""') + '"',
+        '"' + String(l.username || '').replace(/"/g, '""') + '"',
+        '"' + String(l.action || '').replace(/"/g, '""') + '"',
+        '"' + String(l.details || '').replace(/"/g, '""') + '"'
+      ];
+      csvRows.push(row.join(','));
+    });
+    content = '\uFEFF' + csvRows.join('\n');
+  }
+
+  var blob = new Blob([content], { type: mimeType });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showToast('ส่งออกไฟล์ ' + filename + ' เรียบร้อยแล้ว (' + list.length + ' รายการ)', 'success');
 }
 
 // ==============================================================================

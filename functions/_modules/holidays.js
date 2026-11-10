@@ -106,7 +106,35 @@ export const holidayHandlers = {
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูบันทึกกิจกรรมระบบ' };
 
       await db.prepare('CREATE TABLE IF NOT EXISTS activity_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT, username TEXT, action TEXT, details TEXT)').run().catch(() => {});
-      const logs = (await db.prepare('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 100').all()).results || [];
+      const limitNum = Math.min(2000, Math.max(50, Number(params.limit) || 500));
+      const sqlParts = ['SELECT * FROM activity_logs WHERE 1=1'];
+      const binds = [];
+
+      if (params.actionFilter && params.actionFilter !== 'ALL') {
+        if (params.actionFilter === 'PTN_TIME') {
+          sqlParts.push("AND action LIKE 'PTN_TIME%'");
+        } else if (params.actionFilter === 'INCIDENT') {
+          sqlParts.push("AND action LIKE 'INCIDENT%'");
+        } else if (params.actionFilter === 'PAYROLL') {
+          sqlParts.push("AND (action LIKE '%PAYROLL%' OR action LIKE 'PERIOD_%' OR action = 'SET_WORK_DAYS')");
+        } else if (params.actionFilter === 'AUTH') {
+          sqlParts.push("AND (action = 'LOGIN' OR action LIKE 'USER_%')");
+        } else {
+          sqlParts.push('AND action = ?');
+          binds.push(params.actionFilter);
+        }
+      }
+
+      if (params.search) {
+        const q = '%' + String(params.search).trim() + '%';
+        sqlParts.push('AND (username LIKE ? OR action LIKE ? OR details LIKE ? OR timestamp LIKE ?)');
+        binds.push(q, q, q, q);
+      }
+
+      sqlParts.push('ORDER BY id DESC LIMIT ?');
+      binds.push(limitNum);
+
+      const logs = (await db.prepare(sqlParts.join(' ')).bind(...binds).all()).results || [];
       return { success: true, logs: logs };
   }
 };
