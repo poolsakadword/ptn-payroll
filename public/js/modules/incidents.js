@@ -6,6 +6,31 @@
 var cachedIncidents = [];
 var activeReviewingIncidentId = null;
 var activeCreatingIncidentId = null;
+var incidentPhotoRegistry = {};
+
+function openIncidentPhotoLightbox(keyOrUrl, titleText) {
+  var photoUrl = incidentPhotoRegistry[keyOrUrl] || keyOrUrl;
+  if (!photoUrl) return;
+
+  if (typeof Swal !== 'undefined') {
+    Swal.fire({
+      title: titleText || '📷 รูปภาพหลักฐานความเสียหาย',
+      html:
+        '<div style="margin-top:8px;max-height:70vh;overflow:auto;background:#f8fafc;border-radius:12px;padding:8px;border:1px solid #e2e8f0">' +
+          '<img src="' + photoUrl + '" style="max-width:100%;max-height:65vh;border-radius:8px;object-fit:contain;margin:0 auto;display:block" />' +
+        '</div>' +
+        '<div style="margin-top:10px;display:flex;justify-content:center;gap:8px">' +
+          '<a href="' + photoUrl + '" download="evidence-photo.jpg" style="font-size:12px;text-decoration:none;padding:6px 14px;border-radius:8px;border:1px solid #cbd5e1;color:#334155;background:#fff;font-weight:700"><i class="fa-solid fa-download"></i> ดาวน์โหลดรูปภาพ</a>' +
+        '</div>',
+      width: 'min(92vw, 680px)',
+      showCloseButton: true,
+      confirmButtonText: 'ปิดหน้าต่าง',
+      confirmButtonColor: '#0284c7'
+    });
+  } else {
+    window.open(photoUrl, '_blank');
+  }
+}
 
 function getIncidentActiveUser() {
   return (State.currentUser && State.currentUser.username) || (window.currentUser && window.currentUser.username) || 'Admin';
@@ -149,6 +174,10 @@ function renderIncidentsTable(list) {
     }).join('');
     if (!staffListHtml) staffListHtml = '<span style="color:#64748b;font-size:11.5px">' + (i.involvedEmployeesText || '-') + '</span>';
 
+    if (i.evidence_photo_url) {
+      incidentPhotoRegistry['inc_' + i.id] = i.evidence_photo_url;
+    }
+
     return (
       '<tr style="border-bottom:1px solid #e2e8f0;transition:background 0.2s">' +
         '<td style="padding:10px 12px;font-family:monospace;font-weight:700;color:#0f172a;white-space:nowrap">' + (i.incident_code || '#' + i.id) + '</td>' +
@@ -158,7 +187,7 @@ function renderIncidentsTable(list) {
         '<td style="padding:10px 12px">' +
           '<div style="font-weight:700;color:#0f172a;font-size:12.5px">' + i.title + '</div>' +
           (i.description ? '<div style="font-size:11px;color:#64748b;margin-top:2px;max-width:280px;line-height:1.3">' + i.description + '</div>' : '') +
-          (i.evidence_photo_url ? '<a href="' + i.evidence_photo_url + '" target="_blank" style="font-size:11px;color:#0284c7;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:3px;margin-top:3px"><i class="fa-solid fa-camera"></i> ดูรูปหลักฐาน</a>' : '') +
+          (i.evidence_photo_url ? '<button type="button" onclick="openIncidentPhotoLightbox(\'inc_' + i.id + '\', \'' + (i.incident_code || '').replace(/'/g, '') + '\')" style="background:none;border:none;padding:0;cursor:pointer;font-size:11px;color:#0284c7;font-weight:700;display:inline-flex;align-items:center;gap:4px;margin-top:4px"><i class="fa-solid fa-camera"></i> ดูรูปหลักฐาน</button>' : '') +
         '</td>' +
         '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-weight:800;color:#b91c1c">฿' + (Number(i.total_incident_amount) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</td>' +
         '<td style="padding:10px 12px;text-align:right;font-family:monospace;font-weight:700;color:#059669">฿' + (Number(i.company_absorbed_amount) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</td>' +
@@ -299,8 +328,34 @@ async function handleAdminIncPhotoUpload(event) {
 
   var reader = new FileReader();
   reader.onload = function(e) {
-    document.getElementById('adminIncPhotoUrl').value = e.target.result;
-    Swal.fire({ icon: 'success', title: 'อัปโหลดรูปสำเร็จ', timer: 1000, showConfirmButton: false });
+    var img = new Image();
+    img.onload = function() {
+      var maxDim = 1200;
+      var w = img.width;
+      var h = img.height;
+      if (w > maxDim || h > maxDim) {
+        if (w > h) {
+          h = Math.round((h * maxDim) / w);
+          w = maxDim;
+        } else {
+          w = Math.round((w * maxDim) / h);
+          h = maxDim;
+        }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      var compressed = canvas.toDataURL('image/jpeg', 0.78);
+      document.getElementById('adminIncPhotoUrl').value = compressed;
+      Swal.fire({ icon: 'success', title: 'อัปโหลดและย่อขนาดรูปสำเร็จ', timer: 1000, showConfirmButton: false });
+    };
+    img.onerror = function() {
+      document.getElementById('adminIncPhotoUrl').value = e.target.result;
+      Swal.fire({ icon: 'success', title: 'อัปโหลดรูปสำเร็จ', timer: 1000, showConfirmButton: false });
+    };
+    img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
@@ -418,8 +473,17 @@ function openReviewIncidentModal(id) {
   var photoLink = document.getElementById('revIncPhotoLink');
   if (photoWrap && photoImg) {
     if (inc.evidence_photo_url) {
+      incidentPhotoRegistry['rev_' + inc.id] = inc.evidence_photo_url;
       photoImg.src = inc.evidence_photo_url;
-      if (photoLink) photoLink.href = inc.evidence_photo_url;
+      photoImg.style.cursor = 'pointer';
+      if (photoLink) {
+        photoLink.href = 'javascript:void(0)';
+        photoLink.removeAttribute('target');
+        photoLink.onclick = function(e) {
+          e.preventDefault();
+          openIncidentPhotoLightbox('rev_' + inc.id, inc.incident_code || inc.title);
+        };
+      }
       photoWrap.style.display = 'block';
     } else {
       photoWrap.style.display = 'none';
@@ -687,6 +751,9 @@ async function viewEmployeeIncidentBreakdown(empId, period) {
           data.items.map(function(it, idx) {
             var cat = catMap[it.category] || it.category;
             var instText = it.total_installments > 1 ? ('งวดที่ ' + it.installment_no + ' จาก ' + it.total_installments + ' งวด') : 'หักงวดเดียว';
+            if (it.evidence_photo_url) {
+              incidentPhotoRegistry['brk_' + idx] = it.evidence_photo_url;
+            }
             return (
               '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px">' +
                 '<div style="display:flex;align-items:center;justify-content:space-between">' +
@@ -700,10 +767,11 @@ async function viewEmployeeIncidentBreakdown(empId, period) {
                 '</div>' +
                 (it.description ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0">' + it.description + '</div>' : '') +
                 (it.evidence_photo_url ? (
-                  '<div style="margin-top:2px">' +
-                    '<a href="' + it.evidence_photo_url + '" target="_blank" style="font-size:11.5px;color:#0284c7;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:4px">' +
+                  '<div style="margin-top:4px;padding-top:6px;border-top:1px dashed #cbd5e1;display:flex;align-items:center;gap:10px">' +
+                    '<img src="' + it.evidence_photo_url + '" onclick="openIncidentPhotoLightbox(\'brk_' + idx + '\', \'' + (it.incident_code || '').replace(/'/g, '') + '\')" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #cbd5e1;cursor:pointer" title="คลิกเพื่อดูรูปขนาดใหญ่" />' +
+                    '<button type="button" onclick="openIncidentPhotoLightbox(\'brk_' + idx + '\', \'' + (it.incident_code || '').replace(/'/g, '') + '\')" style="background:#eff6ff;border:1px solid #bfdbfe;color:#0284c7;padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px">' +
                       '<i class="fa-solid fa-camera"></i> ดูรูปภาพหลักฐานความเสียหาย' +
-                    '</a>' +
+                    '</button>' +
                   '</div>'
                 ) : '') +
               '</div>'
