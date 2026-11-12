@@ -2412,7 +2412,20 @@ function openLeaveDetailModal(leaveId, empId) {
     '<div style="margin-bottom:12px"><strong>เหตุผลการลา:</strong> <div style="background:#f8fafc;padding:8px 10px;border-radius:6px;border:1px dashed #cbd5e1;margin-top:4px">' + esc(match.leaveReason || 'ไม่ได้ระบุเหตุผล') + '</div></div>';
 
   if (match.medicalCertUrl) {
-    html += '<div><strong>เอกสารแนบ / ใบรับรองแพทย์:</strong><div style="margin-top:6px;text-align:center"><img src="' + match.medicalCertUrl + '" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid #cbd5e1;cursor:pointer" onclick="previewAttendancePhoto(\'' + match.medicalCertUrl + '\', \'เอกสารแนบการลา\')" title="คลิกดูภาพใหญ่"></div></div>';
+    html += '<div style="margin-top:12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px">' +
+      '<div style="font-weight:700;color:#166534;font-size:12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">' +
+        '<span><i class="fa-solid fa-file-medical"></i> เอกสารแนบ / ใบรับรองแพทย์:</span>' +
+        '<span style="font-size:11px;color:#15803d"><i class="fa-solid fa-magnifying-glass-plus"></i> แตะที่รูปเพื่อซูมขยาย</span>' +
+      '</div>' +
+      '<div style="text-align:center;position:relative">' +
+        '<img src="' + match.medicalCertUrl + '" style="max-width:100%;max-height:220px;border-radius:8px;border:2px solid #86efac;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.1);display:inline-block" onclick="previewAttendancePhoto(\'' + match.medicalCertUrl + '\', \'เอกสารแนบการลา: ' + esc(match.name) + '\', \'ประเภท: ' + esc(match.leaveType) + ' (' + (match.leaveDays || 1) + ' วัน)\')" title="คลิกเพื่อดูรูปขยายขนาดใหญ่">' +
+      '</div>' +
+      '<div style="text-align:center;margin-top:8px">' +
+        '<button type="button" class="btn btn-sm btn-green" onclick="previewAttendancePhoto(\'' + match.medicalCertUrl + '\', \'เอกสารแนบการลา: ' + esc(match.name) + '\', \'ประเภท: ' + esc(match.leaveType) + ' (' + (match.leaveDays || 1) + ' วัน)\')" style="font-size:11px;padding:5px 14px;font-weight:700;display:inline-flex;align-items:center;gap:6px">' +
+          '<i class="fa-solid fa-magnifying-glass-plus"></i> เปิดดูรูปขยายเต็มจอ &amp; ซูมอ่านเอกสาร' +
+        '</button>' +
+      '</div>' +
+    '</div>';
   }
   html += '</div>';
 
@@ -4377,9 +4390,19 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
       '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + formatDateThaiBE(item.start_date) + '</b> ถึง <b>' + formatDateThaiBE(item.end_date) + '</b> (' + (item.days_count || 1) + ' วัน' + (item.time_slot === 'MORNING' ? ' <span style="font-size:10.5px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:700">🌅 ครึ่งวันเช้า</span>' : (item.time_slot === 'AFTERNOON' ? ' <span style="font-size:10.5px;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;font-weight:700">🌆 ครึ่งวันบ่าย</span>' : '')) + ')</div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
       (item.medical_cert_url ? 
-        '<div style="margin-bottom:8px">' +
-          '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">' +
-            '<i class="fa-solid fa-file-medical" style="color:#2563eb;font-size:13px"></i> ดูรูปใบรับรองแพทย์แนบ (คลิกเพื่อดูภาพขยาย)' +
+        '<div style="margin:8px 0;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
+          '<div style="position:relative;cursor:pointer;flex-shrink:0" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" title="คลิกดูรูปขยายขนาดใหญ่">' +
+            '<img src="' + esc(item.medical_cert_url) + '" alt="Cert" style="width:54px;height:54px;border-radius:8px;object-fit:cover;border:2px solid #16a34a;box-shadow:0 2px 4px rgba(0,0,0,0.1);display:block;transition:transform 0.15s ease" onmouseover="this.style.transform=\'scale(1.06)\'" onmouseout="this.style.transform=\'scale(1)\'">' +
+            '<span style="position:absolute;bottom:-4px;right:-4px;background:#16a34a;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;box-shadow:0 1px 3px rgba(0,0,0,0.2)"><i class="fa-solid fa-magnifying-glass-plus"></i></span>' +
+          '</div>' +
+          '<div style="flex:1;min-width:180px">' +
+            '<div style="font-weight:700;font-size:12px;color:#166534;display:flex;align-items:center;gap:6px">' +
+              '<i class="fa-solid fa-file-medical"></i> มีเอกสารแนบ / ใบรับรองแพทย์' +
+            '</div>' +
+            '<div style="font-size:11px;color:#15803d;margin-top:2px">คลิกที่รูปหรือปุ่มเพื่อดูภาพขยายขนาดใหญ่ ซูม หมุน และดาวน์โหลด</div>' +
+          '</div>' +
+          '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" style="background:#16a34a;color:#fff;border:none;font-size:11.5px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.1);white-space:nowrap">' +
+            '<i class="fa-solid fa-magnifying-glass-plus"></i> คลิกดูรูปขยาย' +
           '</button>' +
         '</div>' : '') +
       '<div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;margin-top:8px">' +
@@ -5331,16 +5354,103 @@ function doSubmitCreateAdminRequest(payload) {
     });
 }
 
+var _currentPhotoZoom = 1;
+var _currentPhotoRotation = 0;
+var _currentPhotoUrl = '';
+var _currentPhotoTitle = '';
+
 function previewAttendancePhoto(url, title, sub) {
+  if (!url) {
+    showToast('ไม่พบไฟล์รูปภาพ', 'info');
+    return;
+  }
+  _currentPhotoUrl = url;
+  _currentPhotoTitle = title || 'ภาพถ่ายเอกสาร / ใบรับรองแพทย์';
+  _currentPhotoZoom = 1;
+  _currentPhotoRotation = 0;
+
   var img = document.getElementById('photoPreviewModalImg');
   var titleEl = document.getElementById('photoPreviewModalTitle');
   var subEl = document.getElementById('photoPreviewModalSub');
 
-  if (img) img.src = url || '';
-  if (titleEl) titleEl.innerHTML = '<i class="fa-solid fa-image text-blue"></i> <span>' + (title || 'ภาพถ่ายเซลฟี่ยืนยันตัวตน') + '</span>';
-  if (subEl) subEl.textContent = sub || '';
+  if (img) {
+    img.src = url || '';
+    img.style.transform = 'scale(1) rotate(0deg)';
+  }
+  updatePhotoZoomIndicator();
+
+  if (titleEl) {
+    var iconClass = (title && title.includes('เซลฟี่')) ? 'fa-image' : 'fa-file-medical';
+    titleEl.innerHTML = '<i class="fa-solid ' + iconClass + ' text-blue"></i> <span>' + (title || 'ภาพถ่ายเอกสาร / ใบรับรองแพทย์') + '</span>';
+  }
+  if (subEl) subEl.textContent = sub || '-';
+
+  // Ensure top-level overlay over other modals or SweetAlerts
+  var modalEl = document.getElementById('modalAttendancePhotoPreview');
+  if (modalEl) modalEl.style.zIndex = '99999';
 
   openModal('modalAttendancePhotoPreview');
+}
+
+function zoomAttendancePhoto(delta) {
+  var img = document.getElementById('photoPreviewModalImg');
+  if (!img) return;
+  _currentPhotoZoom = Math.max(0.5, Math.min(4.0, Math.round((_currentPhotoZoom + delta) * 100) / 100));
+  applyPhotoTransform();
+}
+
+function rotateAttendancePhoto() {
+  _currentPhotoRotation = (_currentPhotoRotation + 90) % 360;
+  applyPhotoTransform();
+}
+
+function resetAttendancePhotoZoom() {
+  _currentPhotoZoom = 1;
+  _currentPhotoRotation = 0;
+  applyPhotoTransform();
+}
+
+function toggleAttendancePhotoZoom(e) {
+  if (_currentPhotoZoom > 1.2) {
+    _currentPhotoZoom = 1;
+  } else {
+    _currentPhotoZoom = 2;
+  }
+  applyPhotoTransform();
+}
+
+function applyPhotoTransform() {
+  var img = document.getElementById('photoPreviewModalImg');
+  if (img) {
+    img.style.transform = 'scale(' + _currentPhotoZoom + ') rotate(' + _currentPhotoRotation + 'deg)';
+  }
+  updatePhotoZoomIndicator();
+}
+
+function updatePhotoZoomIndicator() {
+  var txt = document.getElementById('photoZoomLevelText');
+  if (txt) {
+    txt.textContent = Math.round(_currentPhotoZoom * 100) + '%';
+  }
+}
+
+function openCurrentPhotoNewTab() {
+  if (!_currentPhotoUrl) return;
+  var w = window.open('');
+  if (w) {
+    w.document.write('<!DOCTYPE html><html><head><title>' + (_currentPhotoTitle || 'รูปภาพขยาย') + '</title><style>body{margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;min-height:100vh}img{max-width:98vw;max-height:98vh;object-fit:contain;box-shadow:0 10px 30px rgba(0,0,0,0.5)}</style></head><body><img src="' + _currentPhotoUrl + '"></body></html>');
+    w.document.close();
+  }
+}
+
+function downloadCurrentPhoto() {
+  if (!_currentPhotoUrl) return;
+  var a = document.createElement('a');
+  a.href = _currentPhotoUrl;
+  a.download = (_currentPhotoTitle || 'leave-attachment').replace(/[^a-zA-Z0-9_\u0E00-\u0E7F]/g, '_') + '.jpg';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 // ==============================================================================
@@ -5740,9 +5850,17 @@ function renderAttendanceKpiModalList() {
             '<strong>เหตุผล:</strong> ' + esc(item.reason) +
           '</div>' +
           (item.medicalCertUrl ? 
-            '<div style="margin-top:2px">' +
-              '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medicalCertUrl) + '\', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'' + esc(item.title) + ' (' + esc(item.sub) + ')\')" style="background:#eff6ff;border:1.5px solid #93c5fd;color:#1d4ed8;font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.05)">' +
-                '<i class="fa-solid fa-file-medical" style="color:#2563eb;font-size:13px"></i> ดูรูปใบรับรองแพทย์แนบ (คลิกเพื่อดูภาพขยาย)' +
+            '<div style="margin:4px 0;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
+              '<div style="position:relative;cursor:pointer;flex-shrink:0" onclick="previewAttendancePhoto(\'' + esc(item.medicalCertUrl) + '\', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'' + esc(item.title) + ' (' + esc(item.sub) + ')\')" title="คลิกดูรูปขยาย">' +
+                '<img src="' + esc(item.medicalCertUrl) + '" alt="Cert" style="width:48px;height:48px;border-radius:8px;object-fit:cover;border:2px solid #16a34a;box-shadow:0 2px 4px rgba(0,0,0,0.1);display:block">' +
+                '<span style="position:absolute;bottom:-4px;right:-4px;background:#16a34a;color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:9px"><i class="fa-solid fa-magnifying-glass-plus"></i></span>' +
+              '</div>' +
+              '<div style="flex:1;min-width:140px">' +
+                '<div style="font-weight:700;font-size:11.5px;color:#166534"><i class="fa-solid fa-file-medical"></i> มีเอกสารแนบ / ใบรับรองแพทย์</div>' +
+                '<div style="font-size:10.5px;color:#15803d;margin-top:1px">คลิกที่รูปหรือปุ่มเพื่อดูรูปขยาย ซูม และดาวน์โหลด</div>' +
+              '</div>' +
+              '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medicalCertUrl) + '\', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'' + esc(item.title) + ' (' + esc(item.sub) + ')\')" style="background:#16a34a;color:#fff;border:none;font-size:11px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap">' +
+                '<i class="fa-solid fa-magnifying-glass-plus"></i> คลิกดูรูปขยาย' +
               '</button>' +
             '</div>' : '') +
           '<div style="display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:4px">' +
