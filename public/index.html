@@ -10,7 +10,7 @@
   <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   <link href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link rel="stylesheet" href="css/style.css?v=11.00">
+  <link rel="stylesheet" href="css/style.css?v=11.05">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- SweetAlert2 CDN -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -114,34 +114,34 @@
     <!-- NAVIGATION TABS -->
     <nav class="nav-container">
       <div class="nav-tabs">
-        <button type="button" class="nav-tab-btn active" id="navBtn-dashboard" onclick="switchTab('dashboard')">
-          <i class="fa-solid fa-chart-pie"></i> ภาพรวม (Dashboard)
+        <button type="button" class="nav-tab-btn active" id="navBtn-dashboard" onclick="switchTab('dashboard')" title="ภาพรวม (Dashboard)">
+          <i class="fa-solid fa-chart-pie"></i> ภาพรวม
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-payroll" onclick="switchTab('payroll')">
-          <i class="fa-solid fa-calculator"></i> คำนวณเงินเดือน &amp; สลิป
+        <button type="button" class="nav-tab-btn" id="navBtn-payroll" onclick="switchTab('payroll')" title="คำนวณเงินเดือน &amp; สลิป">
+          <i class="fa-solid fa-calculator"></i> คำนวณเงินเดือน
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-input" onclick="switchTab('input')">
-          <i class="fa-solid fa-calendar-days"></i> บันทึกข้อมูลประจำงวด
+        <button type="button" class="nav-tab-btn" id="navBtn-input" onclick="switchTab('input')" title="บันทึกข้อมูลประจำงวด">
+          <i class="fa-solid fa-calendar-days"></i> บันทึกประจำงวด
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-attendance" onclick="switchTab('attendance')">
-          <i class="fa-solid fa-clock"></i> ระบบลงเวลา &amp; PTN Time
+        <button type="button" class="nav-tab-btn" id="navBtn-attendance" onclick="switchTab('attendance')" title="ระบบลงเวลา &amp; PTN Time">
+          <i class="fa-solid fa-clock"></i> ระบบลงเวลา
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-employees" onclick="switchTab('employees')">
+        <button type="button" class="nav-tab-btn" id="navBtn-employees" onclick="switchTab('employees')" title="ทะเบียนประวัติพนักงาน">
           <i class="fa-solid fa-users"></i> ทะเบียนพนักงาน
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-history" onclick="switchTab('history')">
-          <i class="fa-solid fa-clock-rotate-left"></i> ประวัติการทำงานพนักงาน
+        <button type="button" class="nav-tab-btn" id="navBtn-history" onclick="switchTab('history')" title="ประวัติการทำงานพนักงาน">
+          <i class="fa-solid fa-clock-rotate-left"></i> ประวัติพนักงาน
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-analytics" onclick="switchTab('analytics')">
-          <i class="fa-solid fa-chart-line"></i> วิเคราะห์ข้อมูล (Analytics)
+        <button type="button" class="nav-tab-btn" id="navBtn-analytics" onclick="switchTab('analytics')" title="วิเคราะห์ข้อมูล (Analytics)">
+          <i class="fa-solid fa-chart-line"></i> วิเคราะห์ข้อมูล
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-documents" onclick="switchTab('documents')">
-          <i class="fa-solid fa-folder-open"></i> ศูนย์เอกสาร &amp; ส่งออก
+        <button type="button" class="nav-tab-btn" id="navBtn-documents" onclick="switchTab('documents')" title="ศูนย์เอกสาร &amp; ส่งออก">
+          <i class="fa-solid fa-folder-open"></i> ศูนย์เอกสาร
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-company" onclick="switchTab('company')">
+        <button type="button" class="nav-tab-btn" id="navBtn-company" onclick="switchTab('company')" title="ข้อมูลและการตั้งค่าบริษัท">
           <i class="fa-solid fa-building"></i> ข้อมูลบริษัท
         </button>
-        <button type="button" class="nav-tab-btn" id="navBtn-users" onclick="switchTab('users')">
+        <button type="button" class="nav-tab-btn" id="navBtn-users" onclick="switchTab('users')" title="จัดการผู้ใช้งานระบบ">
           <i class="fa-solid fa-user-gear"></i> ผู้ใช้งาน
         </button>
       </div>

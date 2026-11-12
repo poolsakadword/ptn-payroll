@@ -180,7 +180,7 @@ body {
 .nav-container {
   background: #ffffff;
   border-bottom: 1px solid var(--slate-200);
-  padding: 4px 20px 0 20px;
+  padding: 3px 12px 0 12px;
   overflow-x: auto;
   white-space: nowrap;
   position: sticky;
@@ -192,7 +192,7 @@ body {
   -webkit-overflow-scrolling: touch;
 }
 .nav-container::-webkit-scrollbar {
-  height: 4px;
+  height: 3px;
 }
 .nav-container::-webkit-scrollbar-thumb {
   background: var(--slate-300);
@@ -200,24 +200,30 @@ body {
 }
 .nav-tabs { 
   display: flex; 
-  gap: 6px; 
+  gap: 3px; 
   align-items: flex-end;
+  width: 100%;
+  justify-content: space-between;
 }
 .nav-tab-btn {
-  padding: 10px 14px;
+  flex: 1 1 auto;
+  padding: 9px 8px;
   background: transparent;
   border: none;
   border-bottom: 3px solid transparent;
   border-radius: 8px 8px 0 0;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--slate-600);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  justify-content: center;
+  gap: 6px;
   transition: all 0.15s ease-in-out;
   flex-shrink: 0;
+  white-space: nowrap;
+  text-align: center;
 }
 .nav-tab-btn:hover { 
   color: var(--primary); 
@@ -230,7 +236,7 @@ body {
   font-weight: 700;
 }
 .nav-tab-btn i {
-  font-size: 13.5px;
+  font-size: 13px;
   transition: transform 0.15s ease;
 }
 .nav-tab-btn:hover i {
