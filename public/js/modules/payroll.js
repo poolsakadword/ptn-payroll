@@ -537,6 +537,122 @@ function setPayrollCalcMode(mode) {
   renderPayrollTable();
 }
 
+var _payrollPage = 1;
+var _payrollPageSize = 50;
+var _payrollLastFilterSig = '';
+
+var _inputPage = 1;
+var _inputPageSize = 50;
+var _inputLastFilterSig = '';
+var _selectedInputEmpIds = {};
+var _lastFilteredInputEmpIds = [];
+
+var _empPage = 1;
+var _empPageSize = 50;
+var _empLastFilterSig = '';
+
+function renderTablePaginationBar(containerId, anchorEl, totalItems, currentPage, pageSize, onPageChangeFnName, onSizeChangeFnName) {
+  if (!anchorEl || !anchorEl.parentNode) return;
+  var bar = document.getElementById(containerId);
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = containerId;
+    bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:12px 16px;border-top:1px solid #e2e8f0;background:#f8fafc;border-radius:0 0 12px 12px;font-size:12.5px;color:#475569';
+    if (anchorEl.nextSibling) {
+      anchorEl.parentNode.insertBefore(bar, anchorEl.nextSibling);
+    } else {
+      anchorEl.parentNode.appendChild(bar);
+    }
+  }
+  if (!totalItems || totalItems <= 0) {
+    bar.style.display = 'none';
+    bar.innerHTML = '';
+    return;
+  }
+  bar.style.display = 'flex';
+  var effectiveSize = (pageSize && pageSize > 0) ? pageSize : totalItems;
+  var totalPages = Math.max(1, Math.ceil(totalItems / effectiveSize));
+  var safePage = Math.min(Math.max(1, currentPage || 1), totalPages);
+  var startNum = (safePage - 1) * effectiveSize + 1;
+  var endNum = Math.min(totalItems, safePage * effectiveSize);
+
+  var pageSizeOpts = [
+    { val: 50, label: '50 คน/หน้า' },
+    { val: 100, label: '100 คน/หน้า' },
+    { val: 200, label: '200 คน/หน้า' },
+    { val: 0, label: 'แสดงทั้งหมด (' + totalItems + ')' }
+  ];
+
+  var sizeSelHtml = '<select onchange="' + onSizeChangeFnName + '(Number(this.value))" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;font-size:12px;font-weight:600;color:#1e293b;cursor:pointer">';
+  pageSizeOpts.forEach(function(opt) {
+    sizeSelHtml += '<option value="' + opt.val + '"' + (Number(pageSize) === opt.val ? ' selected' : '') + '>' + opt.label + '</option>';
+  });
+  sizeSelHtml += '</select>';
+
+  var navHtml = '';
+  if (totalPages > 1) {
+    navHtml += '<button type="button" class="btn btn-slate btn-xs" style="padding:4px 8px"' + (safePage <= 1 ? ' disabled' : '') + ' onclick="' + onPageChangeFnName + '(' + (safePage - 1) + ')"><i class="fa-solid fa-chevron-left"></i> ก่อนหน้า</button>';
+    var startP = Math.max(1, safePage - 2);
+    var endP = Math.min(totalPages, startP + 4);
+    if (endP - startP < 4) startP = Math.max(1, endP - 4);
+    if (startP > 1) {
+      navHtml += '<button type="button" class="btn btn-slate btn-xs" style="padding:4px 9px" onclick="' + onPageChangeFnName + '(1)">1</button>';
+      if (startP > 2) navHtml += '<span style="padding:0 4px;color:#94a3b8">...</span>';
+    }
+    for (var p = startP; p <= endP; p++) {
+      var cls = (p === safePage) ? 'btn btn-primary btn-xs' : 'btn btn-slate btn-xs';
+      navHtml += '<button type="button" class="' + cls + '" style="padding:4px 9px;font-weight:700" onclick="' + onPageChangeFnName + '(' + p + ')">' + p + '</button>';
+    }
+    if (endP < totalPages) {
+      if (endP < totalPages - 1) navHtml += '<span style="padding:0 4px;color:#94a3b8">...</span>';
+      navHtml += '<button type="button" class="btn btn-slate btn-xs" style="padding:4px 9px" onclick="' + onPageChangeFnName + '(' + totalPages + ')">' + totalPages + '</button>';
+    }
+    navHtml += '<button type="button" class="btn btn-slate btn-xs" style="padding:4px 8px"' + (safePage >= totalPages ? ' disabled' : '') + ' onclick="' + onPageChangeFnName + '(' + (safePage + 1) + ')">ถัดไป <i class="fa-solid fa-chevron-right"></i></button>';
+  }
+
+  bar.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+      '<span>แสดง <strong style="color:#0f172a">' + startNum + '–' + endNum + '</strong> จากทั้งหมด <strong style="color:#2563eb">' + totalItems + '</strong> คน</span>' +
+      sizeSelHtml +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">' +
+      navHtml +
+    '</div>';
+}
+
+function goToPayrollPage(page) {
+  _payrollPage = Math.max(1, Number(page) || 1);
+  renderPayrollTable();
+}
+
+function changePayrollPageSize(size) {
+  _payrollPageSize = Number(size) || 0;
+  _payrollPage = 1;
+  renderPayrollTable();
+}
+
+function goToInputPage(page) {
+  _inputPage = Math.max(1, Number(page) || 1);
+  renderInputTable();
+}
+
+function changeInputPageSize(size) {
+  _inputPageSize = Number(size) || 0;
+  _inputPage = 1;
+  renderInputTable();
+}
+
+function goToEmpPage(page) {
+  _empPage = Math.max(1, Number(page) || 1);
+  renderEmployeesTable();
+}
+
+function changeEmpPageSize(size) {
+  _empPageSize = Number(size) || 0;
+  _empPage = 1;
+  renderEmployeesTable();
+}
+
 // 2. PAYROLL TABLE & CARDS RENDERER (PHASE 3 MULTI-VIEW)
 function renderPayrollTable() {
   var tbody = document.getElementById('payrollTableBody');
@@ -657,12 +773,28 @@ function renderPayrollTable() {
     return true;
   });
 
+  var payrollFilterSig = [State.period, mode, calcMode, q, bFilter, qFilter, State.filterOnlyChanged ? '1' : '0'].join('|');
+  if (payrollFilterSig !== _payrollLastFilterSig) {
+    _payrollLastFilterSig = payrollFilterSig;
+    _payrollPage = 1;
+  }
+
+  var pTotal = list.length;
+  var pEffSize = (_payrollPageSize && _payrollPageSize > 0) ? _payrollPageSize : Math.max(1, pTotal);
+  var pMaxPage = Math.max(1, Math.ceil(pTotal / pEffSize));
+  if (_payrollPage > pMaxPage) _payrollPage = pMaxPage;
+  var pStart = (_payrollPage - 1) * pEffSize;
+  var pagedList = (_payrollPageSize && _payrollPageSize > 0) ? list.slice(pStart, pStart + pEffSize) : list;
+
+  var paginationAnchor = cardsWrapper || tblWrapper;
+
   if (mode === 'CARD') {
     if (tblWrapper) tblWrapper.style.display = 'none';
     if (cardsWrapper) {
       cardsWrapper.style.display = 'grid';
-      renderPayrollCardsView(list, cardsWrapper, q, bFilter);
+      renderPayrollCardsView(pagedList, cardsWrapper, q, bFilter);
     }
+    renderTablePaginationBar('payrollPaginationBar', paginationAnchor, pTotal, _payrollPage, _payrollPageSize, 'goToPayrollPage', 'changePayrollPageSize');
     return;
   }
 
@@ -675,6 +807,7 @@ function renderPayrollTable() {
       '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calculator"></i> ' + (q || bFilter !== 'ALL' || State.filterOnlyChanged ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลการคำนวณเงินเดือนในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กรุณาไปที่แท็บ <strong>"บันทึกข้อมูลประจำงวด"</strong> แล้วกดปุ่ม <strong>"ดึงพนักงานทุกคนเข้างวดนี้"</strong> หรือบันทึกข้อมูลรายคน</div>' +
     '</td></tr>';
+    renderTablePaginationBar('payrollPaginationBar', paginationAnchor, 0, 1, _payrollPageSize, 'goToPayrollPage', 'changePayrollPageSize');
     return;
   }
 
@@ -683,7 +816,7 @@ function renderPayrollTable() {
   var canViewPayslip = hasPermission('view_payslip') && hasPermission('view_salary');
 
   var h = '';
-  list.forEach(function(row) {
+  pagedList.forEach(function(row) {
     var baseSal = Number(row.baseSalary) || 0;
     var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
 
@@ -755,6 +888,7 @@ function renderPayrollTable() {
     '</tr>';
   });
   tbody.innerHTML = h;
+  renderTablePaginationBar('payrollPaginationBar', paginationAnchor, pTotal, _payrollPage, _payrollPageSize, 'goToPayrollPage', 'changePayrollPageSize');
 }
 
 // RENDER PAYROLL CARDS VIEW (PHASE 3)
@@ -1508,18 +1642,36 @@ function renderInputTable() {
     return true;
   });
 
+  _lastFilteredInputEmpIds = list.map(function(i) { return i.empId; });
+
+  var inputFilterSig = [State.period, q, bFilter, qFilter, State.filterOnlyChanged ? '1' : '0'].join('|');
+  if (inputFilterSig !== _inputLastFilterSig) {
+    _inputLastFilterSig = inputFilterSig;
+    _inputPage = 1;
+  }
+
+  var inputTblWrapper = tbody.closest('.table-wrapper') || tbody.parentNode;
+
   if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="20" class="text-center text-muted" style="padding:32px">' +
       '<div style="font-size:14px;font-weight:700;color:#64748b;margin-bottom:6px"><i class="fa-solid fa-calendar-days"></i> ' + (q || bFilter !== 'ALL' || State.filterOnlyChanged ? 'ไม่พบข้อมูลที่ตรงกับเงื่อนไขการค้นหา' : 'ยังไม่มีข้อมูลในงวด ' + esc(State.period)) + '</div>' +
       '<div style="font-size:12px;color:#94a3b8">กดปุ่มสีเหลือง <strong>"👥 ดึงพนักงานทุกคนเข้างวดนี้"</strong> ด้านบนเพื่อนำเข้าข้อมูลอัตโนมัติ</div>' +
     '</td></tr>';
+    renderTablePaginationBar('inputPaginationBar', inputTblWrapper, 0, 1, _inputPageSize, 'goToInputPage', 'changeInputPageSize');
     updateInputBatchToolbar();
     return;
   }
 
+  var iTotal = list.length;
+  var iEffSize = (_inputPageSize && _inputPageSize > 0) ? _inputPageSize : Math.max(1, iTotal);
+  var iMaxPage = Math.max(1, Math.ceil(iTotal / iEffSize));
+  if (_inputPage > iMaxPage) _inputPage = iMaxPage;
+  var iStart = (_inputPage - 1) * iEffSize;
+  var pagedList = (_inputPageSize && _inputPageSize > 0) ? list.slice(iStart, iStart + iEffSize) : list;
+
   var workDays = State.workingDays > 0 ? State.workingDays : 30;
   var h = '';
-  list.forEach(function(i, idx) {
+  pagedList.forEach(function(i, idx) {
     var baseSal = Number(i.baseSalary) || 0;
     var dailyRate = workDays > 0 ? Math.round(baseSal / workDays * 100) / 100 : 0;
     var pfRate = (i.pfRate !== null && i.pfRate !== undefined && !isNaN(Number(i.pfRate))) ? Number(i.pfRate) : 0;
@@ -1564,12 +1716,13 @@ function renderInputTable() {
     var advTag = advDelta ? ' <span class="delta-tag" title="เดิม: ' + advDelta.before + ' -> ใหม่: ' + advDelta.after + '">ใหม่</span>' : '';
 
     var rowClass = 'clickable-row' + (delta ? ' row-delta-updated' : '');
+    var isChecked = Boolean(_selectedInputEmpIds[i.empId]);
     h += '<tr class="' + rowClass + '" onclick="openInputFastEditDrawer(\'' + esc(i.empId) + '\')" title="คลิกเพื่อเปิดแผงตรวจเวลาและแก้ไขข้อมูลประจำงวด">' +
       '<td class="text-center sticky-col" style="left:0;width:40px;min-width:40px;max-width:40px" onclick="event.stopPropagation()">' +
         (State.isClosed ? '<span class="text-muted" title="งวดนี้ปิดแล้ว"><i class="fa-solid fa-lock" style="font-size:11px;color:#cbd5e1"></i></span>' :
-          (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '" onchange="onInputCheckboxChanged()" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>')) +
+          (canEditInputs ? '<input type="checkbox" class="input-row-checkbox" value="' + esc(i.empId) + '"' + (isChecked ? ' checked' : '') + ' onchange="onInputCheckboxChanged(this)" style="cursor:pointer;accent-color:#e11d48;width:15px;height:15px">' : '<span class="text-muted">-</span>')) +
       '</td>' +
-      '<td class="text-center font-mono sticky-col" style="left:40px;width:50px;min-width:50px;max-width:50px">' + (idx + 1) + '</td>' +
+      '<td class="text-center font-mono sticky-col" style="left:40px;width:50px;min-width:50px;max-width:50px">' + (iStart + idx + 1) + '</td>' +
       '<td class="font-mono font-bold sticky-col" style="left:90px;width:80px;min-width:80px;max-width:80px">' + esc(i.empId) + '</td>' +
       (function() {
       var emp = State.employees.find(function(e) { return e.empId === i.empId; });
@@ -1622,39 +1775,53 @@ function renderInputTable() {
     '</tr>';
   });
   tbody.innerHTML = h;
+  renderTablePaginationBar('inputPaginationBar', inputTblWrapper, iTotal, _inputPage, _inputPageSize, 'goToInputPage', 'changeInputPageSize');
   updateInputBatchToolbar();
 }
 
 // BATCH OPERATIONS ON MONTHLY INPUTS
 function toggleSelectAllInputs(master) {
+  var checked = Boolean(master && master.checked);
+  if (Array.isArray(_lastFilteredInputEmpIds) && _lastFilteredInputEmpIds.length > 0) {
+    _lastFilteredInputEmpIds.forEach(function(id) {
+      if (checked) _selectedInputEmpIds[id] = true;
+      else delete _selectedInputEmpIds[id];
+    });
+  }
   var cbs = document.querySelectorAll('.input-row-checkbox');
   cbs.forEach(function(cb) {
-    cb.checked = master.checked;
+    cb.checked = checked;
   });
   updateInputBatchToolbar();
 }
 
-function onInputCheckboxChanged() {
+function onInputCheckboxChanged(cb) {
+  if (cb && cb.value) {
+    if (cb.checked) _selectedInputEmpIds[cb.value] = true;
+    else delete _selectedInputEmpIds[cb.value];
+  }
   updateInputBatchToolbar();
 }
 
 function updateInputBatchToolbar() {
-  var cbs = document.querySelectorAll('.input-row-checkbox:checked');
-  var count = cbs.length;
+  var selectedKeys = Object.keys(_selectedInputEmpIds).filter(function(k) { return _selectedInputEmpIds[k]; });
+  var count = selectedKeys.length;
   var bar = document.getElementById('inputBatchToolbar');
   var countDisplay = document.getElementById('inputSelectedCount');
   if (countDisplay) countDisplay.textContent = count;
   if (bar) {
     bar.style.display = count > 0 ? 'flex' : 'none';
   }
-  var allCbs = document.querySelectorAll('.input-row-checkbox');
   var master = document.getElementById('inputSelectAll');
   if (master) {
-    master.checked = (allCbs.length > 0 && count === allCbs.length);
+    var allFilteredCount = _lastFilteredInputEmpIds.length;
+    var selectedFilteredCount = _lastFilteredInputEmpIds.filter(function(id) { return _selectedInputEmpIds[id]; }).length;
+    master.checked = (allFilteredCount > 0 && selectedFilteredCount === allFilteredCount);
   }
 }
 
 function deselectAllInputRecords() {
+  _selectedInputEmpIds = {};
   var master = document.getElementById('inputSelectAll');
   if (master) master.checked = false;
   var cbs = document.querySelectorAll('.input-row-checkbox');
@@ -1671,8 +1838,7 @@ function batchDeleteInputRecords() {
     showToast('สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ลบข้อมูลประจำงวด', 'warning');
     return;
   }
-  var cbs = document.querySelectorAll('.input-row-checkbox:checked');
-  var empIds = Array.from(cbs).map(function(cb) { return cb.value; });
+  var empIds = Object.keys(_selectedInputEmpIds).filter(function(k) { return _selectedInputEmpIds[k]; });
   if (empIds.length === 0) {
     showToast('กรุณาเลือกรายการที่ต้องการลบอย่างน้อย 1 รายการ', 'warning');
     return;
@@ -1902,16 +2068,31 @@ function renderEmployeesTable() {
     }
   }
 
+  var empPaginationAnchor = cardsDiv || document.getElementById('empTableViewArea') || tbody.closest('.table-wrapper');
+  var empFilterSig = [currentEmpViewMode, currentEmpStatusFilter, selectedDept, q].join('|');
+  if (empFilterSig !== _empLastFilterSig) {
+    _empLastFilterSig = empFilterSig;
+    _empPage = 1;
+  }
+
   if (list.length === 0) {
     tbody.innerHTML = '<tr><td colspan="' + ((isGeneralUser || !canViewSalary) ? '9' : '10') + '" class="text-center text-muted" style="padding:32px">' + (q ? 'ไม่พบพนักงานที่ตรงกับคำค้นหา "' + esc(q) + '"' : 'ไม่มีรายการพนักงานในหมวดนี้') + '</td></tr>';
     if (cardsDiv) cardsDiv.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:36px;color:var(--text-muted);font-size:13px"><i class="fa-solid fa-users-slash" style="font-size:24px;margin-bottom:8px;display:block"></i>ไม่พบข้อมูลพนักงาน</div>';
+    renderTablePaginationBar('empPaginationBar', empPaginationAnchor, 0, 1, _empPageSize, 'goToEmpPage', 'changeEmpPageSize');
     return;
   }
+
+  var eTotal = list.length;
+  var eEffSize = (_empPageSize && _empPageSize > 0) ? _empPageSize : Math.max(1, eTotal);
+  var eMaxPage = Math.max(1, Math.ceil(eTotal / eEffSize));
+  if (_empPage > eMaxPage) _empPage = eMaxPage;
+  var eStart = (_empPage - 1) * eEffSize;
+  var pagedList = (_empPageSize && _empPageSize > 0) ? list.slice(eStart, eStart + eEffSize) : list;
 
   var hTable = '';
   var hCards = '';
 
-  list.forEach(function(e) {
+  pagedList.forEach(function(e) {
     var birthText = e.birthDate ? (formatDateThaiBE(e.birthDate) + (e.age ? ' (' + e.age + ' ปี)' : '')) : (e.age ? (e.age + ' ปี') : '-');
     var initials = (e.fullName || '').substring(0, 2);
 
@@ -1944,13 +2125,14 @@ function renderEmployeesTable() {
     var devUnlockBtn = (e.isDeviceBound && canUnlockDevice) ? ('<button type="button" class="btn-icon" style="background:#fef2f2;color:#dc2626;border-color:#fecaca;font-weight:700" onclick="remoteResetDevice(\'' + esc(e.empId) + '\')" title="ปลดล็อกเครื่องในระบบ PTN Time"><i class="fa-solid fa-unlock"></i> ปลดเครื่อง</button> ') : '';
 
     // Avatar HTML for Table & Card
-    var avatarTableHtml = e.photoUrl
-      ? ('<img src="' + esc(e.photoUrl) + '" alt="' + esc(e.fullName) + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid #cbd5e1;background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\\'>' + esc(initials) + '</div>\'">')
-      : ('<div style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>');
+    var resolvedEmpPhoto = e.photoUrl || (window._empPhotoCache && window._empPhotoCache[e.empId]) || '';
+    var avatarTableHtml = resolvedEmpPhoto
+      ? ('<img src="' + esc(resolvedEmpPhoto) + '" alt="' + esc(e.fullName) + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid #cbd5e1;background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\\'>' + esc(initials) + '</div>\'">')
+      : ('<div data-emp-avatar-box="' + esc(e.empId) + '" data-emp-name="' + esc(e.fullName) + '" data-emp-size="28" style="width:28px;height:28px;border-radius:50%;background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>');
 
-    var avatarCardHtml = e.photoUrl
-      ? ('<img src="' + esc(e.photoUrl) + '" alt="' + esc(e.fullName) + '" style="width:42px;height:42px;border-radius:12px;object-fit:cover;flex-shrink:0;border:1.5px solid #cbd5e1;box-shadow:0 2px 4px rgba(0,0,0,0.1);background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)\\\'>' + esc(initials) + '</div>\'">')
-      : ('<div style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)">' + esc(initials) + '</div>');
+    var avatarCardHtml = resolvedEmpPhoto
+      ? ('<img src="' + esc(resolvedEmpPhoto) + '" alt="' + esc(e.fullName) + '" style="width:42px;height:42px;border-radius:12px;object-fit:cover;flex-shrink:0;border:1.5px solid #cbd5e1;box-shadow:0 2px 4px rgba(0,0,0,0.1);background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)\\\'>' + esc(initials) + '</div>\'">')
+      : ('<div data-emp-avatar-box="' + esc(e.empId) + '" data-emp-name="' + esc(e.fullName) + '" data-emp-size="42" data-emp-card="1" style="width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)">' + esc(initials) + '</div>');
 
     var branchObj = (State.branches || []).find(function(b) { return b.branch_id === e.branchId; });
     var branchNameDisplay = branchObj ? branchObj.branch_name : (e.branchId === 'B02' ? 'สาขา 2' : (e.branchId === 'B03' ? 'สาขา 3' : (e.branchId === 'B04' ? 'สาขา 4' : 'สำนักงานใหญ่')));
@@ -2071,6 +2253,11 @@ function renderEmployeesTable() {
 
   tbody.innerHTML = hTable;
   if (cardsDiv) cardsDiv.innerHTML = hCards;
+  renderTablePaginationBar('empPaginationBar', empPaginationAnchor, eTotal, _empPage, _empPageSize, 'goToEmpPage', 'changeEmpPageSize');
+
+  if (typeof ensureEmployeePhotosLoaded === 'function') {
+    ensureEmployeePhotosLoaded(pagedList.map(function(x) { return x.empId; }));
+  }
 
   if (typeof renderResignedEmployeesTable === 'function') {
     renderResignedEmployeesTable();
@@ -2765,6 +2952,8 @@ var analyticsTrendChartInstance = null;
 var analyticsDeptChartInstance = null;
 var analyticsOtBarChartInstance = null;
 var cachedAllHistoryData = null;
+var cachedAllHistoryYear = null;
+var cachedAvailableHistoryYears = [];
 var cachedAnalyticsBranches = [];
 var cachedAdvanceStats = [];
 var cachedCurrentMatrixData = [];
@@ -2816,6 +3005,12 @@ function initAnalyticsYearDropdown() {
   var yearsSet = {};
   yearsSet[curYear] = true;
   yearsSet[curYear - 1] = true;
+
+  if (Array.isArray(cachedAvailableHistoryYears)) {
+    cachedAvailableHistoryYears.forEach(function(y) {
+      if (y) yearsSet[String(y)] = true;
+    });
+  }
 
   if (cachedAllHistoryData) {
     cachedAllHistoryData.forEach(function(r) {
@@ -2869,13 +3064,16 @@ function renderAnalyticsTab(silent) {
   loadAnalyticsData(silent);
 }
 
-function loadAnalyticsData(silent) {
+function loadAnalyticsData(silent, explicitYear) {
   var isTabActive = document.getElementById('tab-analytics') && document.getElementById('tab-analytics').classList.contains('active');
   if (!silent && isTabActive) {
     showToast('กำลังประมวลผลข้อมูลสถิติและการวิเคราะห์...', 'info');
   }
 
-  callApi('getAllEmployeeHistory')
+  var yrSel = document.getElementById('analyticsYearSelect');
+  var reqYear = explicitYear || (yrSel && yrSel.value) || String(new Date().getFullYear() + 543);
+
+  callApi('getAllEmployeeHistory', { year: reqYear })
     .then(function(r) {
       if (!r.success || !r.allHistory) {
         if (isTabActive) showToast(r.message || 'ไม่สามารถโหลดข้อมูลประวัติได้', 'error');
@@ -2883,11 +3081,16 @@ function loadAnalyticsData(silent) {
       }
 
       var combined = (r.allHistory || []).slice();
+      cachedAllHistoryYear = r.year || reqYear;
+      if (Array.isArray(r.availableYears) && r.availableYears.length > 0) {
+        cachedAvailableHistoryYears = r.availableYears;
+      }
 
       // Ensure current State.period / State.payrollList is integrated if not already in DB
       if (State.period && State.payrollList && State.payrollList.length > 0) {
+        var matchesReqYear = (reqYear === 'ALL') || periodMatchesYear(State.period, reqYear);
         var hasCurrentPeriod = combined.some(function(x) { return x.period === State.period; });
-        if (!hasCurrentPeriod) {
+        if (matchesReqYear && !hasCurrentPeriod) {
           State.payrollList.forEach(function(p) {
             var inp = (State.inputs || {})[p.empId] || {};
             combined.push({
@@ -3006,6 +3209,12 @@ function updateAnalyticsDepartmentDropdown(list) {
 }
 
 function onAnalyticsFilterChanged() {
+  var yrSel = document.getElementById('analyticsYearSelect');
+  var selYear = yrSel ? yrSel.value : '';
+  if (selYear && cachedAllHistoryYear !== 'ALL' && cachedAllHistoryYear !== selYear) {
+    loadAnalyticsData(false, selYear);
+    return;
+  }
   computeAndRenderAnalytics();
 }
 
@@ -3408,6 +3617,7 @@ function renderAnalyticsLeaderboard(allHistory, selYear, selBranch, selDept) {
     '</tr>';
   });
   tbody.innerHTML = h;
+  renderTablePaginationBar('payrollPaginationBar', paginationAnchor, pTotal, _payrollPage, _payrollPageSize, 'goToPayrollPage', 'changePayrollPageSize');
 }
 
 function renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLateDeduct, totalAbsent, attendanceRate, deptGross, deptOt, branchGross, branchOt, selBranch, selDept) {

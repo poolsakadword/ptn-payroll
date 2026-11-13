@@ -8,10 +8,8 @@ var activeReviewingIncidentId = null;
 var activeCreatingIncidentId = null;
 var incidentPhotoRegistry = {};
 
-function openIncidentPhotoLightbox(keyOrUrl, titleText) {
-  var photoUrl = incidentPhotoRegistry[keyOrUrl] || keyOrUrl;
+function renderIncidentPhotoSwalModal(photoUrl, titleText) {
   if (!photoUrl) return;
-
   if (typeof Swal !== 'undefined') {
     Swal.fire({
       title: titleText || '📷 รูปภาพหลักฐานความเสียหาย',
@@ -30,6 +28,48 @@ function openIncidentPhotoLightbox(keyOrUrl, titleText) {
   } else {
     window.open(photoUrl, '_blank');
   }
+}
+
+function openIncidentPhotoLightbox(keyOrUrl, titleText, explicitIncId) {
+  var strKey = String(keyOrUrl || '');
+  var photoUrl = incidentPhotoRegistry[strKey] || ((strKey.indexOf('data:') === 0 || strKey.indexOf('http') === 0) ? strKey : '');
+  if (photoUrl) {
+    renderIncidentPhotoSwalModal(photoUrl, titleText);
+    return;
+  }
+
+  var incId = explicitIncId || (strKey.match(/(\d+)$/) ? Number(RegExp.$1) : null);
+  if (!incId) return;
+
+  if (typeof Swal !== 'undefined') {
+    Swal.fire({
+      title: titleText || '📷 รูปภาพหลักฐานความเสียหาย',
+      html: '<div style="padding:32px;color:#64748b"><i class="fa-solid fa-spinner fa-spin" style="font-size:24px;margin-bottom:8px;display:block"></i>กำลังโหลดรูปภาพหลักฐาน...</div>',
+      showConfirmButton: false,
+      allowOutsideClick: true
+    });
+  }
+
+  callApi('getIncidentPhoto', { id: incId })
+    .then(function(r) {
+      var fetchedUrl = (r && r.success && r.evidence_photo_url) ? r.evidence_photo_url : '';
+      if (!fetchedUrl) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire('ไม่พบรูปภาพ', 'ไม่พบไฟล์รูปภาพหลักฐานสำหรับรายการนี้', 'info');
+        }
+        return;
+      }
+      incidentPhotoRegistry[strKey] = fetchedUrl;
+      incidentPhotoRegistry['inc_' + incId] = fetchedUrl;
+      var cachedItem = cachedIncidents.find(function(x) { return x.id === incId; });
+      if (cachedItem) cachedItem.evidence_photo_url = fetchedUrl;
+      renderIncidentPhotoSwalModal(fetchedUrl, titleText);
+    })
+    .catch(function(err) {
+      if (typeof Swal !== 'undefined') {
+        Swal.fire('เกิดข้อผิดพลาด', (err && err.message) || 'ไม่สามารถโหลดรูปภาพได้', 'error');
+      }
+    });
 }
 
 function getIncidentActiveUser() {
@@ -178,6 +218,7 @@ function renderIncidentsTable(list) {
     if (i.evidence_photo_url) {
       incidentPhotoRegistry['inc_' + i.id] = i.evidence_photo_url;
     }
+    var hasPhoto = Boolean(i.evidence_photo_url || i.has_evidence_photo);
 
     return (
       '<tr style="border-bottom:1px solid #e2e8f0;transition:background 0.2s">' +
@@ -191,7 +232,7 @@ function renderIncidentsTable(list) {
             '<span style="font-weight:700;color:#0f172a;font-size:13px">' + i.title + '</span>' +
           '</div>' +
           (i.description ? '<div style="font-size:11.5px;color:#64748b;margin-top:2px;line-height:1.4">' + i.description + '</div>' : '') +
-          (i.evidence_photo_url ? '<button type="button" onclick="openIncidentPhotoLightbox(\'inc_' + i.id + '\', \'' + (i.incident_code || '').replace(/'/g, '') + '\')" style="background:#eff6ff;border:1px solid #bfdbfe;padding:3px 9px;border-radius:6px;cursor:pointer;font-size:11px;color:#0284c7;font-weight:700;display:inline-flex;align-items:center;gap:4px;margin-top:5px;white-space:nowrap"><i class="fa-solid fa-camera"></i> ดูรูปหลักฐาน</button>' : '') +
+          (hasPhoto ? '<button type="button" onclick="openIncidentPhotoLightbox(\'inc_' + i.id + '\', \'' + (i.incident_code || '').replace(/'/g, '') + '\', ' + i.id + ')" style="background:#eff6ff;border:1px solid #bfdbfe;padding:3px 9px;border-radius:6px;cursor:pointer;font-size:11px;color:#0284c7;font-weight:700;display:inline-flex;align-items:center;gap:4px;margin-top:5px;white-space:nowrap"><i class="fa-solid fa-camera"></i> ดูรูปหลักฐาน</button>' : '') +
         '</td>' +
         '<td style="padding:12px 12px;vertical-align:middle;text-align:right;font-family:monospace;font-weight:800;color:#334155;white-space:nowrap;font-size:13px">฿' + (Number(i.total_incident_amount) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</td>' +
         '<td style="padding:12px 12px;vertical-align:middle;text-align:right;white-space:nowrap">' +
@@ -275,7 +316,20 @@ function openCreateIncidentModal(existingId) {
       document.getElementById('adminIncTotalAmount').value = existing.total_incident_amount;
       document.getElementById('adminIncCompanyAbsorbed').value = existing.company_absorbed_amount || 0;
       document.getElementById('adminIncDescription').value = existing.description || '';
-      document.getElementById('adminIncPhotoUrl').value = existing.evidence_photo_url || '';
+      var cachedPhoto = existing.evidence_photo_url || incidentPhotoRegistry['inc_' + existing.id] || '';
+      document.getElementById('adminIncPhotoUrl').value = cachedPhoto;
+      if (!cachedPhoto && existing.has_evidence_photo) {
+        callApi('getIncidentPhoto', { id: existing.id }).then(function(r) {
+          if (r && r.success && r.evidence_photo_url) {
+            existing.evidence_photo_url = r.evidence_photo_url;
+            incidentPhotoRegistry['inc_' + existing.id] = r.evidence_photo_url;
+            if (activeCreatingIncidentId === existing.id) {
+              var photoInput = document.getElementById('adminIncPhotoUrl');
+              if (photoInput && !photoInput.value) photoInput.value = r.evidence_photo_url;
+            }
+          }
+        }).catch(function() {});
+      }
 
       // Check involved staff
       var involvedIds = new Set((existing.schedules || []).map(function(s) { return s.emp_id; }));
@@ -478,17 +532,32 @@ function openReviewIncidentModal(id) {
   var photoImg = document.getElementById('revIncPhotoImg');
   var photoLink = document.getElementById('revIncPhotoLink');
   if (photoWrap && photoImg) {
-    if (inc.evidence_photo_url) {
-      incidentPhotoRegistry['rev_' + inc.id] = inc.evidence_photo_url;
-      photoImg.src = inc.evidence_photo_url;
+    var cachedRevPhoto = inc.evidence_photo_url || incidentPhotoRegistry['rev_' + inc.id] || incidentPhotoRegistry['inc_' + inc.id] || '';
+    if (cachedRevPhoto || inc.has_evidence_photo) {
       photoImg.style.cursor = 'pointer';
       if (photoLink) {
         photoLink.href = 'javascript:void(0)';
         photoLink.removeAttribute('target');
         photoLink.onclick = function(e) {
           e.preventDefault();
-          openIncidentPhotoLightbox('rev_' + inc.id, inc.incident_code || inc.title);
+          openIncidentPhotoLightbox('rev_' + inc.id, inc.incident_code || inc.title, inc.id);
         };
+      }
+      if (cachedRevPhoto) {
+        incidentPhotoRegistry['rev_' + inc.id] = cachedRevPhoto;
+        photoImg.src = cachedRevPhoto;
+      } else {
+        photoImg.src = '';
+        callApi('getIncidentPhoto', { id: inc.id }).then(function(r) {
+          if (r && r.success && r.evidence_photo_url) {
+            inc.evidence_photo_url = r.evidence_photo_url;
+            incidentPhotoRegistry['rev_' + inc.id] = r.evidence_photo_url;
+            incidentPhotoRegistry['inc_' + inc.id] = r.evidence_photo_url;
+            if (activeReviewingIncidentId === inc.id) {
+              photoImg.src = r.evidence_photo_url;
+            }
+          }
+        }).catch(function() {});
       }
       photoWrap.style.display = 'block';
     } else {
@@ -757,9 +826,11 @@ async function viewEmployeeIncidentBreakdown(empId, period) {
           data.items.map(function(it, idx) {
             var cat = catMap[it.category] || it.category;
             var instText = it.total_installments > 1 ? ('งวดที่ ' + it.installment_no + ' จาก ' + it.total_installments + ' งวด') : 'หักงวดเดียว';
+            var incIdForPhoto = it.incident_id || it.id;
             if (it.evidence_photo_url) {
-              incidentPhotoRegistry['brk_' + idx] = it.evidence_photo_url;
+              incidentPhotoRegistry['inc_' + incIdForPhoto] = it.evidence_photo_url;
             }
+            var hasPhoto = Boolean(it.evidence_photo_url || it.has_evidence_photo);
             return (
               '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px">' +
                 '<div style="display:flex;align-items:center;justify-content:space-between">' +
@@ -772,10 +843,10 @@ async function viewEmployeeIncidentBreakdown(empId, period) {
                   '<span style="font-family:monospace;font-weight:800;font-size:14px;color:#dc2626">฿' + (Number(it.amount) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 }) + '</span>' +
                 '</div>' +
                 (it.description ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0">' + it.description + '</div>' : '') +
-                (it.evidence_photo_url ? (
+                (hasPhoto ? (
                   '<div style="margin-top:4px;padding-top:6px;border-top:1px dashed #cbd5e1;display:flex;align-items:center;gap:10px">' +
-                    '<img src="' + it.evidence_photo_url + '" onclick="openIncidentPhotoLightbox(\'brk_' + idx + '\', \'' + (it.incident_code || '').replace(/'/g, '') + '\')" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #cbd5e1;cursor:pointer" title="คลิกเพื่อดูรูปขนาดใหญ่" />' +
-                    '<button type="button" onclick="openIncidentPhotoLightbox(\'brk_' + idx + '\', \'' + (it.incident_code || '').replace(/'/g, '') + '\')" style="background:#eff6ff;border:1px solid #bfdbfe;color:#0284c7;padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px">' +
+                    (it.evidence_photo_url ? '<img src="' + it.evidence_photo_url + '" onclick="openIncidentPhotoLightbox(\'inc_' + incIdForPhoto + '\', \'' + (it.incident_code || '').replace(/'/g, '') + '\', ' + incIdForPhoto + ')" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid #cbd5e1;cursor:pointer" title="คลิกเพื่อดูรูปขนาดใหญ่" />' : '') +
+                    '<button type="button" onclick="openIncidentPhotoLightbox(\'inc_' + incIdForPhoto + '\', \'' + (it.incident_code || '').replace(/'/g, '') + '\', ' + incIdForPhoto + ')" style="background:#eff6ff;border:1px solid #bfdbfe;color:#0284c7;padding:6px 12px;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px">' +
                       '<i class="fa-solid fa-camera"></i> ดูรูปภาพหลักฐานความเสียหาย' +
                     '</button>' +
                   '</div>'

@@ -261,7 +261,7 @@ function exportAllEmployeeHistory() {
     return;
   }
   showToast('กำลังเตรียมข้อมูลประวัติพนักงานทั้งหมด...', 'info');
-  callApi('getAllEmployeeHistory')
+  callApi('getAllEmployeeHistory', { year: 'ALL' })
     .then(function(r) {
       if (!r.success || !r.allHistory) {
         showToast(r.message || 'ไม่พบข้อมูลประวัติพนักงาน', 'error');
@@ -335,7 +335,7 @@ function printAllEmployeesBatch() {
   var yrSel = document.getElementById('histYearSelect');
   var yr = yrSel ? yrSel.value : 'ALL';
 
-  callApi('getAllEmployeeHistory')
+  callApi('getAllEmployeeHistory', { year: yr || 'ALL' })
     .then(function(r) {
       if (!r.success || !r.allHistory || r.allHistory.length === 0) {
         showToast('ไม่พบข้อมูลประวัติพนักงานสำหรับพิมพ์', 'warning');

@@ -15,9 +15,13 @@ export const backupHandlers = {
       await ensureBranchTables(db);
       await ensurePushTables(db);
 
+      const includePhotos = params.includePhotos === true;
       const settings = (await db.prepare('SELECT * FROM settings').all().catch(() => ({ results: [] }))).results || [];
       const users = (await db.prepare('SELECT username, password, role, permissions FROM users').all().catch(() => ({ results: [] }))).results || [];
-      const employees = (await db.prepare('SELECT * FROM employees').all().catch(() => ({ results: [] }))).results || [];
+      const employees_sql = includePhotos
+        ? 'SELECT * FROM employees'
+        : 'SELECT emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt, is_confidential FROM employees';
+      const employees = (await db.prepare(employees_sql).all().catch(() => ({ results: [] }))).results || [];
       const branches = (await db.prepare('SELECT * FROM branches').all().catch(() => ({ results: [] }))).results || [];
       const employee_devices = (await db.prepare('SELECT * FROM employee_devices').all().catch(() => ({ results: [] }))).results || [];
       const monthly_inputs = (await db.prepare('SELECT * FROM monthly_inputs').all().catch(() => ({ results: [] }))).results || [];
@@ -25,7 +29,6 @@ export const backupHandlers = {
       const push_subscriptions = (await db.prepare('SELECT * FROM push_subscriptions').all().catch(() => ({ results: [] }))).results || [];
       const activity_logs = (await db.prepare('SELECT * FROM activity_logs ORDER BY id DESC LIMIT 500').all().catch(() => ({ results: [] }))).results || [];
 
-      const includePhotos = params.includePhotos === true;
       // PTN Time tables (if present in D1)
       const time_logs_sql = includePhotos 
         ? 'SELECT * FROM time_logs' 

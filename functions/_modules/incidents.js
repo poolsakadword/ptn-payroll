@@ -2,7 +2,7 @@
  * Incident & Damage Deductions Management Module
  * บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด
  */
-import { logSystemActivity } from './db.js';
+import { logSystemActivity, executeBatch } from './db.js';
 import { isUserSuperAdmin, userHasPermission } from './security.js';
 import { getDefaultPeriod, getNextPeriodStr, normalizeDateToIso } from './date-utils.js';
 import { calculateAndSavePayroll } from './payroll.js';
@@ -15,7 +15,11 @@ export const incidentHandlers = {
     const branchFilter = params.branchId || 'ALL';
 
     let sql = `
-      SELECT i.*, b.branch_name
+      SELECT i.id, i.incident_code, i.incident_date, i.branch_id, i.category, i.title, i.description,
+             CASE WHEN i.evidence_photo_url IS NOT NULL AND i.evidence_photo_url != '' THEN 1 ELSE 0 END AS has_evidence_photo,
+             i.total_incident_amount, i.company_absorbed_amount, i.net_employee_amount, i.split_count,
+             i.status, i.reporter_username, i.approver_username, i.approved_at, i.created_at,
+             b.branch_name
       FROM incident_deductions i
       LEFT JOIN branches b ON i.branch_id = b.branch_id
       WHERE 1=1
@@ -34,16 +38,31 @@ export const incidentHandlers = {
     const incidentsRes = await db.prepare(sql).bind(...binds).all().catch(() => ({ results: [] }));
     const incidents = incidentsRes.results || [];
 
-    // Fetch all schedules for these incidents
-    const schedulesRes = await db.prepare(`
-      SELECT s.*, e.full_name, e.nickname, e.department
-      FROM incident_deduction_schedules s
-      LEFT JOIN employees e ON s.emp_id = e.emp_id
-      ORDER BY s.incident_id DESC, s.installment_no ASC
-    `).all().catch(() => ({ results: [] }));
+    // Fetch schedules only for returned incidents
+    let schedulesRows = [];
+    if (incidents.length > 0 && incidents.length <= 100) {
+      const incIds = incidents.map(i => i.id);
+      const placeholders = incIds.map(() => '?').join(',');
+      const schedulesRes = await db.prepare(`
+        SELECT s.*, e.full_name, e.nickname, e.department
+        FROM incident_deduction_schedules s
+        LEFT JOIN employees e ON s.emp_id = e.emp_id
+        WHERE s.incident_id IN (${placeholders})
+        ORDER BY s.incident_id DESC, s.installment_no ASC
+      `).bind(...incIds).all().catch(() => ({ results: [] }));
+      schedulesRows = schedulesRes.results || [];
+    } else if (incidents.length > 100) {
+      const schedulesRes = await db.prepare(`
+        SELECT s.*, e.full_name, e.nickname, e.department
+        FROM incident_deduction_schedules s
+        LEFT JOIN employees e ON s.emp_id = e.emp_id
+        ORDER BY s.incident_id DESC, s.installment_no ASC
+      `).all().catch(() => ({ results: [] }));
+      schedulesRows = schedulesRes.results || [];
+    }
 
     const schedMap = {};
-    for (const s of (schedulesRes.results || [])) {
+    for (const s of schedulesRows) {
       if (!schedMap[s.incident_id]) schedMap[s.incident_id] = [];
       schedMap[s.incident_id].push(s);
     }
@@ -156,6 +175,7 @@ export const incidentHandlers = {
         periodList.push(curPeriod);
       }
 
+      const schedStmts = [];
       for (const empId of involvedEmpIds) {
         let remaining = splitAmount;
         for (let instNo = 1; instNo <= installments; instNo++) {
@@ -168,12 +188,17 @@ export const incidentHandlers = {
             remaining -= instAmt;
           }
 
-          await db.prepare(`
-            INSERT INTO incident_deduction_schedules
-            (incident_id, emp_id, target_period, installment_no, total_installments, amount, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-          `).bind(savedIncidentId, empId, targetP, instNo, installments, instAmt, schedStatus).run();
+          schedStmts.push(
+            db.prepare(`
+              INSERT INTO incident_deduction_schedules
+              (incident_id, emp_id, target_period, installment_no, total_installments, amount, status)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `).bind(savedIncidentId, empId, targetP, instNo, installments, instAmt, schedStatus)
+          );
         }
+      }
+      if (schedStmts.length > 0) {
+        await executeBatch(db, schedStmts, 50);
       }
     }
 
@@ -245,6 +270,7 @@ export const incidentHandlers = {
       periodList.push(curPeriod);
     }
 
+    const approveStmts = [];
     for (const empId of involvedEmpIds) {
       let remaining = splitAmount;
       for (let instNo = 1; instNo <= installments; instNo++) {
@@ -257,12 +283,17 @@ export const incidentHandlers = {
           remaining -= instAmt;
         }
 
-        await db.prepare(`
-          INSERT INTO incident_deduction_schedules
-          (incident_id, emp_id, target_period, installment_no, total_installments, amount, status)
-          VALUES (?, ?, ?, ?, ?, ?, 'SCHEDULED')
-        `).bind(incId, empId, targetP, instNo, installments, instAmt).run();
+        approveStmts.push(
+          db.prepare(`
+            INSERT INTO incident_deduction_schedules
+            (incident_id, emp_id, target_period, installment_no, total_installments, amount, status)
+            VALUES (?, ?, ?, ?, ?, ?, 'SCHEDULED')
+          `).bind(incId, empId, targetP, instNo, installments, instAmt)
+        );
       }
+    }
+    if (approveStmts.length > 0) {
+      await executeBatch(db, approveStmts, 50);
     }
 
     await calculateAndSavePayroll(db, startPeriod).catch(() => {});
@@ -315,13 +346,26 @@ export const incidentHandlers = {
     return { success: true, message: 'ลบรายการความเสียหายเรียบร้อยแล้ว' };
   },
 
+  getIncidentPhoto: async (db, params) => {
+    const id = Number(params.id);
+    if (!id) return { success: false, message: 'ไม่พบรหัสรายการ' };
+    const row = await db.prepare('SELECT id, evidence_photo_url FROM incident_deductions WHERE id = ?').bind(id).first();
+    return {
+      success: true,
+      id,
+      evidence_photo_url: row?.evidence_photo_url || ''
+    };
+  },
+
   getEmployeeIncidentBreakdown: async (db, params) => {
     const empId = params.empId ? String(params.empId).trim() : '';
     const period = params.period ? String(params.period).trim() : getDefaultPeriod();
     if (!empId) return { success: false, message: 'ระบุ empId' };
 
     const rows = await db.prepare(`
-      SELECT s.*, i.incident_code, i.incident_date, i.branch_id, i.category, i.title, i.description, i.evidence_photo_url, b.branch_name
+      SELECT s.*, i.incident_code, i.incident_date, i.branch_id, i.category, i.title, i.description,
+             CASE WHEN i.evidence_photo_url IS NOT NULL AND i.evidence_photo_url != '' THEN 1 ELSE 0 END AS has_evidence_photo,
+             b.branch_name
       FROM incident_deduction_schedules s
       JOIN incident_deductions i ON s.incident_id = i.id
       LEFT JOIN branches b ON i.branch_id = b.branch_id

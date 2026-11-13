@@ -40,7 +40,7 @@ export const aiHandlers = {
       }
 
       // Gather Live Data Context from D1
-      const employees = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      const employees = (await db.prepare('SELECT emp_id, full_name, nickname, department, position, base_salary, status, join_date, branch_id FROM employees ORDER BY emp_id ASC').all()).results || [];
       const calcs = (await db.prepare('SELECT * FROM payroll_calcs WHERE period = ?').bind(currentPeriod).all()).results || [];
       const inputs = (await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(currentPeriod).all()).results || [];
       const compName = (await db.prepare('SELECT value FROM settings WHERE key = "CompanyName"').first())?.value || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';

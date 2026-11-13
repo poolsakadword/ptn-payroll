@@ -1,7 +1,7 @@
 /**
  * Employee Management Module
  */
-import { logSystemActivity } from './db.js';
+import { logSystemActivity, executeBatch } from './db.js';
 import { isUserSuperAdmin, userHasPermission } from './security.js';
 import { normalizeDateToIso, isPeriodLocked } from './date-utils.js';
 import { calculateAndSavePayroll } from './payroll.js';
@@ -19,6 +19,7 @@ export const employeeHandlers = {
       }
 
       let count = 0;
+      const batchStmts = [];
       for (const emp of list) {
         if (!emp.empId || !emp.fullName) continue;
         count++;
@@ -26,20 +27,26 @@ export const employeeHandlers = {
         if (isNaN(pfRate) || pfRate <= 0) pfRate = 0.05;
         if (pfRate > 1) pfRate = pfRate / 100; // e.g. 5 -> 0.05
 
-        await db.prepare(`
-          INSERT OR REPLACE INTO employees 
-          (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          String(emp.empId).trim(), String(emp.fullName).trim(), String(emp.nickname || '').trim(),
-          String(emp.citizenId || '').trim(), String(emp.phone || '').trim(), String(emp.address || '').trim(),
-          String(emp.department || '').trim(), String(emp.position || '').trim(),
-          Number(emp.baseSalary) || 0,
-          String(emp.bankName || 'กสิกรไทย (KBANK)').trim(), String(emp.bankAccount || '').trim(),
-          normalizeDateToIso(emp.birthDate || ''), Number(emp.age) || 0, normalizeDateToIso(emp.joinDate || ''),
-          pfRate, (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750,
-          Number(emp.defaultTax) || 0, String(emp.remark || '').trim()
-        ).run();
+        batchStmts.push(
+          db.prepare(`
+            INSERT OR REPLACE INTO employees 
+            (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            String(emp.empId).trim(), String(emp.fullName).trim(), String(emp.nickname || '').trim(),
+            String(emp.citizenId || '').trim(), String(emp.phone || '').trim(), String(emp.address || '').trim(),
+            String(emp.department || '').trim(), String(emp.position || '').trim(),
+            Number(emp.baseSalary) || 0,
+            String(emp.bankName || 'กสิกรไทย (KBANK)').trim(), String(emp.bankAccount || '').trim(),
+            normalizeDateToIso(emp.birthDate || ''), Number(emp.age) || 0, normalizeDateToIso(emp.joinDate || ''),
+            pfRate, (emp.defaultSso !== null && emp.defaultSso !== undefined && !isNaN(Number(emp.defaultSso))) ? Number(emp.defaultSso) : 750,
+            Number(emp.defaultTax) || 0, String(emp.remark || '').trim()
+          )
+        );
+      }
+
+      if (batchStmts.length > 0) {
+        await executeBatch(db, batchStmts, 50);
       }
 
       await calculateAndSavePayroll(db, period);
@@ -94,7 +101,7 @@ export const employeeHandlers = {
       const statusVal = emp.status || 'Active';
 
       let photoUrlVal = emp.photoUrl;
-      if (photoUrlVal === undefined && (origId || emp.empId)) {
+      if ((!photoUrlVal && !emp.photoRemoved) && (origId || emp.empId)) {
         const existingEmp = await db.prepare('SELECT photo_url FROM employees WHERE emp_id = ?').bind(origId || emp.empId).first();
         photoUrlVal = existingEmp?.photo_url || '';
       } else {
@@ -321,5 +328,20 @@ export const employeeHandlers = {
           totalPf: totalPf
         }
       };
+  },
+
+  getEmployeePhotos: async (db, params) => {
+    const rawIds = Array.isArray(params.empIds) ? params.empIds : (params.empId ? [params.empId] : []);
+    const empIds = rawIds.map(x => String(x || '').trim()).filter(Boolean).slice(0, 100);
+    if (empIds.length === 0) return { success: true, photos: {} };
+    const placeholders = empIds.map(() => '?').join(',');
+    const rows = await db.prepare(
+      `SELECT emp_id, photo_url FROM employees WHERE emp_id IN (${placeholders}) AND photo_url IS NOT NULL AND photo_url != ''`
+    ).bind(...empIds).all().catch(() => ({ results: [] }));
+    const photos = {};
+    for (const r of (rows.results || [])) {
+      if (r.emp_id && r.photo_url) photos[r.emp_id] = r.photo_url;
+    }
+    return { success: true, photos };
   }
 };

@@ -11,6 +11,16 @@ import {
   isPeriodLocked, getPeriodSortKey, normalizeDateToIso
 } from './date-utils.js';
 
+export const EMPLOYEE_LIST_COLS = `
+  emp_id, full_name, nickname, citizen_id, phone, address, department, position,
+  base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate,
+  default_sso, default_tax, remark, status, probation_days, probation_end_date,
+  branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt,
+  diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt,
+  is_confidential,
+  CASE WHEN photo_url IS NOT NULL AND photo_url != '' THEN 1 ELSE 0 END AS has_photo
+`;
+
 export function mapPayrollCalcHistoryRecord(c, inputMap, empMap) {
   const inp = (inputMap && inputMap[`${c.period}_${c.emp_id}`]) || (inputMap && inputMap[c.period]) || {};
   const emp = (empMap && empMap[c.emp_id]) || {};
@@ -308,7 +318,7 @@ export const payrollHandlers = {
 
       const branchRows = await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }));
 
-      const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
+      const empQuery = await db.prepare(`SELECT ${EMPLOYEE_LIST_COLS} FROM employees ORDER BY emp_id ASC`).all();
       const confidentialEmpIdSet = new Set(
         (empQuery.results || [])
           .filter(e => (e.is_confidential === 1 || e.is_confidential === '1' || e.is_confidential === 'true'))
@@ -323,7 +333,8 @@ export const payrollHandlers = {
         empId: e.emp_id,
         fullName: e.full_name || '',
         nickname: e.nickname || '',
-        photoUrl: e.photo_url || '',
+        photoUrl: '',
+        hasPhoto: Boolean(e.has_photo),
         citizenId: e.citizen_id || '',
         phone: e.phone || '',
         address: e.address || '',
@@ -370,11 +381,17 @@ export const payrollHandlers = {
       const uniqueNos = new Set(rawInputs.map(r => r.no));
       if (rawInputs.length > 1 && (uniqueNos.size === 1 || rawInputs.some(r => !r.no || Number(r.no) <= 0))) {
         // Auto-heal duplicate or corrupted sequence numbers in DB sequentially 1..N by emp_id
+        const healStmts = [];
         for (let idx = 0; idx < rawInputs.length; idx++) {
           const correctNo = idx + 1;
           rawInputs[idx].no = correctNo;
-          await db.prepare('UPDATE monthly_inputs SET no = ? WHERE period = ? AND emp_id = ?')
-            .bind(correctNo, period, rawInputs[idx].emp_id).run().catch(() => {});
+          healStmts.push(
+            db.prepare('UPDATE monthly_inputs SET no = ? WHERE period = ? AND emp_id = ?')
+              .bind(correctNo, period, rawInputs[idx].emp_id)
+          );
+        }
+        if (healStmts.length > 0) {
+          await executeBatch(db, healStmts, 50).catch(() => {});
         }
       }
       const inputRecords = rawInputs.map((i, idx) => ({
@@ -816,7 +833,7 @@ export const payrollHandlers = {
         return { success: false, message: `งวดประจำเดือน ${period} ถูกปิดและล็อคแล้ว ไม่อนุญาตให้ดึงพนักงานเข้างวด กรุณาปลดล็อคงวดก่อนดำเนินการ` };
       }
 
-      const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
+      const empQuery = await db.prepare(`SELECT ${EMPLOYEE_LIST_COLS} FROM employees ORDER BY emp_id ASC`).all();
       const employees = empQuery.results || [];
       if (employees.length === 0) {
         return { success: false, message: 'ไม่พบข้อมูลในทะเบียนพนักงาน กรุณาเพิ่มพนักงานก่อน' };
@@ -859,6 +876,10 @@ export const payrollHandlers = {
         SELECT DISTINCT emp_id FROM time_logs WHERE date BETWEEN ? AND ?
       `).bind(dates.startDate, dates.endDate).all().catch(() => ({ results: [] }));
       const activeLogsEmpSet = new Set((activeLogsQuery.results || []).map(r => r.emp_id));
+
+      const defOtRow = await db.prepare('SELECT value FROM settings WHERE key = "DefaultOtRate"').first().catch(() => null);
+      const fallbackOtRate = (defOtRow && defOtRow.value && !isNaN(Number(defOtRow.value))) ? Number(defOtRow.value) : 40;
+      const insertStmts = [];
 
       let added = 0;
       let nextNo = 0;
@@ -909,8 +930,6 @@ export const payrollHandlers = {
         const lateMins = Number(exist.late_minutes) || 0;
         const lateCnt = Number(exist.late_count) || 0;
         const otHours = Number(exist.ot_hours) || 0;
-        const defOtRow = await db.prepare('SELECT value FROM settings WHERE key = "DefaultOtRate"').first().catch(() => null);
-        const fallbackOtRate = (defOtRow && defOtRow.value && !isNaN(Number(defOtRow.value))) ? Number(defOtRow.value) : 40;
         const otRate = (exist.ot_rate !== null && exist.ot_rate !== undefined && !isNaN(Number(exist.ot_rate))) ? Number(exist.ot_rate) : fallbackOtRate;
         const allowance = Number(exist.allowance) || 0;
         const bonus = Number(exist.bonus) || 0;
@@ -922,14 +941,20 @@ export const payrollHandlers = {
           ? Number(exist.carried_debt)
           : (prevDebtMap[emp.emp_id] || 0);
 
-        await db.prepare(`
-          INSERT OR REPLACE INTO monthly_inputs
-          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, carried_debt, sso, tax)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-          absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, lateMins, lateCnt, otHours, otRate, allowance, bonus, advDed, othDed, carriedDebt, sso, tax
-        ).run();
+        insertStmts.push(
+          db.prepare(`
+            INSERT OR REPLACE INTO monthly_inputs
+            (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, carried_debt, sso, tax)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
+            absentDays, leaveDays, sickLeaveDays, unpaidSickLeaveDays, lateDeduct, lateMins, lateCnt, otHours, otRate, allowance, bonus, advDed, othDed, carriedDebt, sso, tax
+          )
+        );
+      }
+
+      if (insertStmts.length > 0) {
+        await executeBatch(db, insertStmts, 50);
       }
 
       await calculateAndSavePayroll(db, period);
@@ -978,7 +1003,7 @@ export const payrollHandlers = {
       const calcs = (bindings.length > 0 ? await db.prepare(calcsQuery).bind(...bindings).all() : await db.prepare(calcsQuery).all()).results || [];
       const inputs = (bindings.length > 0 ? await db.prepare(inputsQuery).bind(...bindings).all() : await db.prepare(inputsQuery).all()).results || [];
       const isSuperUser = (await isUserSuperAdmin(db, callerUser));
-      let emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      let emps = (await db.prepare(`SELECT ${EMPLOYEE_LIST_COLS} FROM employees ORDER BY emp_id ASC`).all()).results || [];
       if (!isSuperUser) {
         const confIds = new Set(emps.filter(e => e.is_confidential === 1 || e.is_confidential === '1').map(e => e.emp_id));
         emps = emps.filter(e => !confIds.has(e.emp_id));
@@ -999,7 +1024,8 @@ export const payrollHandlers = {
           empId: e.emp_id,
           fullName: e.full_name,
           nickname: e.nickname || '',
-          photoUrl: e.photo_url || '',
+          photoUrl: '',
+          hasPhoto: Boolean(e.has_photo),
           department: e.department || '',
           position: e.position || '',
           bankName: e.bank_name || '',
@@ -1036,7 +1062,8 @@ export const payrollHandlers = {
             empId: c.emp_id,
             fullName: c.full_name || emp.full_name || '',
             nickname: emp.nickname || '',
-            photoUrl: emp.photo_url || '',
+            photoUrl: '',
+            hasPhoto: Boolean(emp.has_photo),
             department: c.department || emp.department || '',
             position: c.position || emp.position || '',
             bankName: c.bank_name || emp.bank_name || '',
@@ -1130,20 +1157,43 @@ export const payrollHandlers = {
       const allowed = (await userHasPermission(db, callerUser, 'view_history')) || (await userHasPermission(db, callerUser, 'view_payroll')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูประวัติเงินเดือนย้อนหลัง' };
 
-      const calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY emp_id ASC').all()).results || [];
-      const inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY emp_id ASC').all()).results || [];
+      const yearFilter = params.year ? String(params.year).trim() : '';
+      const periodRows = (await db.prepare('SELECT DISTINCT period FROM payroll_calcs').all().catch(() => ({ results: [] }))).results || [];
+      const availableYearsSet = new Set();
+      for (const pr of periodRows) {
+        const m = String(pr.period || '').match(/\d{4}/);
+        if (m) availableYearsSet.add(m[0]);
+      }
+      const availableYears = Array.from(availableYearsSet).sort().reverse();
+
+      let calcs = [];
+      let inputs = [];
+      let advanceStats = [];
+      if (yearFilter && yearFilter !== 'ALL') {
+        const numY = Number(yearFilter);
+        const altYear = !isNaN(numY) ? (numY > 2400 ? String(numY - 543) : String(numY + 543)) : yearFilter;
+        const like1 = `%${yearFilter}%`;
+        const like2 = `%${altYear}%`;
+        calcs = (await db.prepare('SELECT * FROM payroll_calcs WHERE period LIKE ? OR period LIKE ? ORDER BY emp_id ASC').bind(like1, like2).all()).results || [];
+        inputs = (await db.prepare('SELECT * FROM monthly_inputs WHERE period LIKE ? OR period LIKE ? ORDER BY emp_id ASC').bind(like1, like2).all()).results || [];
+        try {
+          advanceStats = (await db.prepare('SELECT emp_id, amount, status, request_date, period FROM advance_requests WHERE period LIKE ? OR period LIKE ? OR request_date LIKE ? OR request_date LIKE ?').bind(like1, like2, `${yearFilter}%`, `${altYear}%`).all()).results || [];
+        } catch (e) {}
+      } else {
+        calcs = (await db.prepare('SELECT * FROM payroll_calcs ORDER BY emp_id ASC').all()).results || [];
+        inputs = (await db.prepare('SELECT * FROM monthly_inputs ORDER BY emp_id ASC').all()).results || [];
+        try {
+          advanceStats = (await db.prepare('SELECT emp_id, amount, status, request_date, period FROM advance_requests').all()).results || [];
+        } catch (e) {}
+      }
+
       const isSuperUser = (await isUserSuperAdmin(db, callerUser));
-      let emps = (await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all()).results || [];
+      let emps = (await db.prepare(`SELECT ${EMPLOYEE_LIST_COLS} FROM employees ORDER BY emp_id ASC`).all()).results || [];
       if (!isSuperUser) {
         const confIds = new Set(emps.filter(e => e.is_confidential === 1 || e.is_confidential === '1').map(e => e.emp_id));
         emps = emps.filter(e => !confIds.has(e.emp_id));
       }
       const branches = (await db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] }))).results || [];
-
-      let advanceStats = [];
-      try {
-        advanceStats = (await db.prepare('SELECT emp_id, amount, status, request_date, period FROM advance_requests').all()).results || [];
-      } catch(e) {}
 
       const empMap = {};
       for (const e of emps) empMap[e.emp_id] = e;
@@ -1160,7 +1210,7 @@ export const payrollHandlers = {
         return String(a.empId || '').localeCompare(String(b.empId || ''));
       });
 
-      return { success: true, allHistory: allRecords, branches, advanceStats };
+      return { success: true, year: yearFilter || 'ALL', availableYears, allHistory: allRecords, branches, advanceStats };
   },
 
   getEmployeeHistory: async (db, params) => {

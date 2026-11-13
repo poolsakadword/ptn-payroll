@@ -4,6 +4,84 @@
  * ==============================================================================
  */
 
+window._empPhotoCache = window._empPhotoCache || {};
+window._empPhotoPending = window._empPhotoPending || {};
+window._empPhotoExplicitlyRemoved = false;
+
+function buildEmployeeAvatarImgHtml(photoUrl, empName, size, isCard) {
+  var s = Number(size) || 28;
+  var radius = isCard ? '12px' : '50%';
+  var initials = (empName || '').substring(0, 2);
+  if (isCard) {
+    return '<img src="' + esc(photoUrl) + '" alt="' + esc(empName) + '" style="width:' + s + 'px;height:' + s + 'px;border-radius:' + radius + ';object-fit:cover;flex-shrink:0;border:1.5px solid #cbd5e1;box-shadow:0 2px 4px rgba(0,0,0,0.1);background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:' + s + 'px;height:' + s + 'px;border-radius:' + radius + ';background:linear-gradient(135deg, #2563eb, #4f46e5);color:#ffffff;font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 6px -1px rgba(37,99,235,0.25)\\\'>' + esc(initials) + '</div>\'">';
+  }
+  return '<img src="' + esc(photoUrl) + '" alt="' + esc(empName) + '" style="width:' + s + 'px;height:' + s + 'px;border-radius:' + radius + ';object-fit:cover;flex-shrink:0;border:1px solid #cbd5e1;background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:' + s + 'px;height:' + s + 'px;border-radius:' + radius + ';background:#e0e7ff;color:#3730a3;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\\'>' + esc(initials) + '</div>\'">';
+}
+
+function applyEmployeePhotoToDom(empId, photoUrl) {
+  if (!empId || !photoUrl) return;
+  var nodes = document.querySelectorAll('[data-emp-avatar-box="' + empId + '"]');
+  nodes.forEach(function(box) {
+    var empName = box.getAttribute('data-emp-name') || empId;
+    var size = Number(box.getAttribute('data-emp-size')) || 28;
+    var isCard = box.getAttribute('data-emp-card') === '1';
+    box.outerHTML = buildEmployeeAvatarImgHtml(photoUrl, empName, size, isCard);
+  });
+}
+
+function ensureEmployeePhotosLoaded(empIds, callback) {
+  var list = Array.isArray(empIds) ? empIds : [];
+  var missingIds = [];
+  var empMap = {};
+  (State.employees || []).forEach(function(e) {
+    if (e.empId) empMap[e.empId] = e;
+  });
+
+  list.forEach(function(id) {
+    if (!id) return;
+    var emp = empMap[id];
+    var cached = window._empPhotoCache[id];
+    if (cached) {
+      if (emp && !emp.photoUrl) emp.photoUrl = cached;
+      applyEmployeePhotoToDom(id, cached);
+      return;
+    }
+    if (emp && emp.photoUrl) {
+      window._empPhotoCache[id] = emp.photoUrl;
+      applyEmployeePhotoToDom(id, emp.photoUrl);
+      return;
+    }
+    if (emp && emp.hasPhoto && !window._empPhotoPending[id]) {
+      window._empPhotoPending[id] = true;
+      missingIds.push(id);
+    }
+  });
+
+  if (missingIds.length === 0) {
+    if (typeof callback === 'function') callback();
+    return;
+  }
+
+  var chunk = missingIds.slice(0, 80);
+  callApi('getEmployeePhotos', { empIds: chunk })
+    .then(function(r) {
+      var photos = (r && r.success && r.photos) ? r.photos : {};
+      chunk.forEach(function(id) {
+        delete window._empPhotoPending[id];
+        if (photos[id]) {
+          window._empPhotoCache[id] = photos[id];
+          if (empMap[id]) empMap[id].photoUrl = photos[id];
+          applyEmployeePhotoToDom(id, photos[id]);
+        }
+      });
+      if (typeof callback === 'function') callback();
+    })
+    .catch(function() {
+      chunk.forEach(function(id) { delete window._empPhotoPending[id]; });
+      if (typeof callback === 'function') callback();
+    });
+}
+
 // RENDER RESIGNED EMPLOYEES ARCHIVE TABLE
 function renderResignedEmployeesTable() {
   var tbody = document.getElementById('resignedEmployeesTableBody');
@@ -68,9 +146,10 @@ function renderResignedEmployeesTable() {
   var html = '';
   list.forEach(function(e) {
     var initials = (e.fullName || '').substring(0, 2);
-    var avatarHtml = e.photoUrl
-      ? ('<img src="' + esc(e.photoUrl) + '" alt="' + esc(e.fullName) + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid #cbd5e1;background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:32px;height:32px;border-radius:50%;background:#fee2e2;color:#991b1b;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\\'>' + esc(initials) + '</div>\'">')
-      : ('<div style="width:32px;height:32px;border-radius:50%;background:#fee2e2;color:#991b1b;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>');
+    var resolvedPhoto = e.photoUrl || window._empPhotoCache[e.empId] || '';
+    var avatarHtml = resolvedPhoto
+      ? ('<img src="' + esc(resolvedPhoto) + '" alt="' + esc(e.fullName) + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;border:1px solid #cbd5e1;background:#f1f5f9" onerror="this.onerror=null;this.outerHTML=\'<div style=\\\'width:32px;height:32px;border-radius:50%;background:#fee2e2;color:#991b1b;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0\\\'>' + esc(initials) + '</div>\'">')
+      : ('<div data-emp-avatar-box="' + esc(e.empId) + '" data-emp-name="' + esc(e.fullName) + '" data-emp-size="32" style="width:32px;height:32px;border-radius:50%;background:#fee2e2;color:#991b1b;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0">' + esc(initials) + '</div>');
 
     var branchObj = (State.branches || []).find(function(b) { return b.branch_id === e.branchId; });
     var branchNameDisplay = branchObj ? branchObj.branch_name : (e.branchId === 'B02' ? 'สาขา 2' : (e.branchId === 'B03' ? 'สาขา 3' : (e.branchId === 'B04' ? 'สาขา 4' : 'สำนักงานใหญ่')));
@@ -119,6 +198,7 @@ function renderResignedEmployeesTable() {
   });
 
   tbody.innerHTML = html;
+  ensureEmployeePhotosLoaded(list.map(function(x) { return x.empId; }));
 }
 
 // SHORTCUT TO CERTIFICATE MODAL FOR RESIGNED EMPLOYEE
@@ -144,10 +224,19 @@ function openRehireModal(empId) {
 
   var avEl = document.getElementById('rehireAvatarContainer');
   if (avEl) {
-    if (emp.photoUrl) {
-      avEl.innerHTML = '<img src="' + esc(emp.photoUrl) + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover">';
+    var rehirePhoto = emp.photoUrl || window._empPhotoCache[emp.empId] || '';
+    if (rehirePhoto) {
+      avEl.innerHTML = '<img src="' + esc(rehirePhoto) + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover">';
     } else {
       avEl.textContent = (emp.fullName || emp.empId).substring(0, 2);
+      if (emp.hasPhoto) {
+        ensureEmployeePhotosLoaded([empId], function() {
+          var loadedPhoto = emp.photoUrl || window._empPhotoCache[empId] || '';
+          if (loadedPhoto && document.getElementById('rehireEmpId') && document.getElementById('rehireEmpId').value === empId) {
+            avEl.innerHTML = '<img src="' + esc(loadedPhoto) + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover">';
+          }
+        });
+      }
     }
   }
 
@@ -574,10 +663,12 @@ function updateEmployeePhotoPreview(url) {
 }
 
 function removeEmployeePhoto() {
+  window._empPhotoExplicitlyRemoved = true;
   updateEmployeePhotoPreview('');
 }
 
 function handleEmployeePhotoSelect(e) {
+  window._empPhotoExplicitlyRemoved = false;
   var file = e.target.files && e.target.files[0];
   if (!file) return;
 
@@ -870,6 +961,7 @@ function getNextEmployeeId() {
 }
 
 function openAddEmployeeModal() {
+  window._empPhotoExplicitlyRemoved = false;
   var isGeneralUser = (State.currentUser && String(State.currentUser.role).trim().toLowerCase() === 'user');
   var finSection = document.getElementById('empModalFinancialSection');
   if (finSection) finSection.style.display = isGeneralUser ? 'none' : 'block';
@@ -938,6 +1030,7 @@ function openAddEmployeeModal() {
 }
 
 function openEditEmployeeModal(empId) {
+  window._empPhotoExplicitlyRemoved = false;
   var e = State.employees.find(function(x) { return x.empId === empId; });
   if (!e) return;
 
@@ -985,7 +1078,16 @@ function openEditEmployeeModal(empId) {
   document.getElementById('mBankAccount').value = e.bankAccount || '';
   document.getElementById('mJoinDate').value = e.joinDate || '';
   document.getElementById('mRemark').value = e.remark || '';
-  updateEmployeePhotoPreview(e.photoUrl || '');
+  var resolvedEditPhoto = e.photoUrl || window._empPhotoCache[e.empId] || '';
+  updateEmployeePhotoPreview(resolvedEditPhoto);
+  if (!resolvedEditPhoto && e.hasPhoto) {
+    ensureEmployeePhotosLoaded([e.empId], function() {
+      var loadedPhoto = e.photoUrl || window._empPhotoCache[e.empId] || '';
+      if (loadedPhoto && document.getElementById('mEmpId') && document.getElementById('mEmpId').value === e.empId) {
+        updateEmployeePhotoPreview(loadedPhoto);
+      }
+    });
+  }
   if (document.getElementById('mStatus')) document.getElementById('mStatus').value = e.status || 'Active';
   if (document.getElementById('mProbationDays')) document.getElementById('mProbationDays').value = e.probationDays || 119;
   if (document.getElementById('mProbationEndDate')) document.getElementById('mProbationEndDate').value = e.probationEndDate || '';
@@ -1050,6 +1152,7 @@ function saveEmployeeForm(e, openPayslipAfter) {
     fullName: document.getElementById('mFullName').value.trim(),
     nickname: document.getElementById('mNickname').value.trim(),
     photoUrl: document.getElementById('mPhotoUrl') ? document.getElementById('mPhotoUrl').value : '',
+    photoRemoved: Boolean(window._empPhotoExplicitlyRemoved),
     birthDate: document.getElementById('mBirthDate').value,
     age: Number(document.getElementById('mAge').value) || 0,
     citizenId: document.getElementById('mCitizenId').value.trim(),
@@ -1085,6 +1188,11 @@ function saveEmployeeForm(e, openPayslipAfter) {
   };
 
   if (!d.empId || !d.fullName) { showToast('กรุณากรอกรหัสและชื่อพนักงาน', 'error'); return; }
+  if (d.photoUrl) {
+    window._empPhotoCache[d.empId] = d.photoUrl;
+  } else if (d.photoRemoved) {
+    delete window._empPhotoCache[d.empId];
+  }
   var orig = document.getElementById('empOrigId').value;
 
   callApi('saveEmployee', { employee: d, origId: orig })
@@ -1394,8 +1502,16 @@ function renderEmpPrintModal() {
     }
 
     var initials = (emp.fullName || '').substring(0, 2);
-    var avatarHtml = emp.photoUrl
-      ? '<img src="' + esc(emp.photoUrl) + '" alt="' + esc(emp.fullName) + '" style="width: 110px; height: 130px; object-fit: cover; border-radius: 8px; border: 1.5px solid #cbd5e1; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">'
+    var resolvedPrintPhoto = emp.photoUrl || window._empPhotoCache[emp.empId] || '';
+    if (!resolvedPrintPhoto && emp.hasPhoto) {
+      ensureEmployeePhotosLoaded([emp.empId], function() {
+        if (_empPrintMode === 'profile' && (emp.photoUrl || window._empPhotoCache[emp.empId])) {
+          renderEmpPrintModal();
+        }
+      });
+    }
+    var avatarHtml = resolvedPrintPhoto
+      ? '<img src="' + esc(resolvedPrintPhoto) + '" alt="' + esc(emp.fullName) + '" style="width: 110px; height: 130px; object-fit: cover; border-radius: 8px; border: 1.5px solid #cbd5e1; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">'
       : '<div style="width: 110px; height: 130px; border-radius: 8px; border: 1.5px solid #cbd5e1; background: #e0e7ff; color: #3730a3; display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 800;">' + esc(initials) + '</div>';
 
     var tenureStr = calculateTenureString(emp.joinDate, emp.resignDate);
