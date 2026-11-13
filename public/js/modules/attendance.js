@@ -2595,9 +2595,20 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
       // Missing clock out anomaly check & half-day absence check
       var missingOutAnomaly = '';
       var inTimeStr = l.clock_in ? l.clock_in.substring(0, 5) : '';
+      var hasLeaveOnDay = !!(l.has_leave_conflict || (l.remark && (l.remark.indexOf('มีใบลา') !== -1 || l.remark.indexOf('ลาครึ่งเช้า') !== -1 || l.remark.indexOf('ลากิจครึ่งเช้า') !== -1 || l.remark.indexOf('ลาป่วยครึ่งเช้า') !== -1)));
       if (inTimeStr && inTimeStr >= '13:00') {
-        missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="เข้างานหลังเวลาพักเที่ยง ถือเป็นขาดงานครึ่งเช้า 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>เข้างานบ่าย (ขาดงานครึ่งเช้า 0.5 วัน)</span></div>';
-      } else if (l.clock_in && (!l.clock_out || l.clock_out.trim() === '') && l.date < bangkokToday && !l.has_leave_conflict) {
+        if (hasLeaveOnDay) {
+          var lvType = (l.leave_conflict_info && l.leave_conflict_info.leave_type) ? String(l.leave_conflict_info.leave_type).toUpperCase() : '';
+          var lvMorningLabel = lvType === 'BUSINESS' ? 'ลากิจครึ่งเช้า' : (lvType === 'SICK' ? 'ลาป่วยครึ่งเช้า' : (lvType === 'VACATION' ? 'ลาพักร้อนครึ่งเช้า' : 'มีใบลาครึ่งเช้า'));
+          if (!lvType && l.remark) {
+            if (l.remark.indexOf('ลากิจ') !== -1) lvMorningLabel = 'ลากิจครึ่งเช้า';
+            else if (l.remark.indexOf('ลาป่วย') !== -1) lvMorningLabel = 'ลาป่วยครึ่งเช้า';
+          }
+          missingOutAnomaly = '<div style="font-size:10px;color:#6d28d9;background:#f5f3ff;border:1px solid #ddd6fe;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="พนักงานมีใบลาที่อนุมัติไว้สำหรับช่วงเช้า และสแกนเข้าทำงานช่วงบ่ายตามปกติ (ไม่ถือว่าขาดงานครึ่งเช้า และไม่คิดนาทีสายเช้า)"><i class="fa-solid fa-calendar-check"></i> <span>' + lvMorningLabel + ' (เข้างานบ่าย)</span></div>';
+        } else {
+          missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="เข้างานหลังเวลาพักเที่ยง ถือเป็นขาดงานครึ่งเช้า 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>เข้างานบ่าย (ขาดงานครึ่งเช้า 0.5 วัน)</span></div>';
+        }
+      } else if (l.clock_in && (!l.clock_out || l.clock_out.trim() === '') && l.date < bangkokToday && !hasLeaveOnDay) {
         missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="ไม่ลงเวลาออกงาน/ค้างเวลาพัก ถือเป็นขาดงานครึ่งบ่าย 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>ไม่สแกนออก (ขาดงานครึ่งบ่าย 0.5 วัน)</span></div>';
       }
 
@@ -2617,7 +2628,7 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
           '<div style="font-size:11px;color:#64748b">' + (l.position || '-') + '</div>' +
           (l.break_out ? '<div style="font-size:10.5px;color:#b45309;font-weight:700;margin-top:2px"><i class="fa-solid fa-mug-hot"></i> พัก ' + l.break_out + (l.break_in ? ' - ' + l.break_in : ' (กำลังพัก)') + (l.break_minutes > 0 ? ' (' + l.break_minutes + 'น.)' : '') + '</div>' : '') +
           missingOutAnomaly +
-          (l.has_leave_conflict ? '<div style="font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px" title="พนักงานมีใบลาที่อนุมัติไว้ในวันนี้ แต่มาทำงานจริง ระบบตรวจจับอัตโนมัติและยกเว้นการหักวันลา"><i class="fa-solid fa-shield-halved text-amber"></i> <span>มีใบลาอนุมัติไว้แต่วันนี้มาทำงานจริง (ระบบบันทึกเวลาทำงานปกติ ไม่หักวันลา)</span></div>' : '') +
+          ((l.has_leave_conflict && !(inTimeStr && inTimeStr >= '13:00')) ? '<div style="font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px" title="พนักงานมีใบลาที่อนุมัติไว้ในวันนี้ แต่มาทำงานจริง ระบบตรวจจับอัตโนมัติและยกเว้นการหักวันลา"><i class="fa-solid fa-shield-halved text-amber"></i> <span>มีใบลาอนุมัติไว้แต่วันนี้มาทำงานจริง (ระบบบันทึกเวลาทำงานปกติ ไม่หักวันลา)</span></div>' : '') +
           ((l.remark && l.remark.includes('สิทธิ์ประจำตำแหน่ง')) ? '<div style="font-size:10px;color:#6b21a8;background:#faf5ff;border:1px solid #d8b4fe;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="สิทธิ์ประจำตำแหน่ง: ยกเว้นการหักเงินชั่วโมงออกก่อนให้อัตโนมัติ (หากเข้าสายหักตามปกติ)"><i class="fa-solid fa-sparkles text-purple"></i> <span>✨ สิทธิ์เต็มวัน (ไม่หักออกก่อน)</span></div>' : ((l.is_full_pay === 1 || l.is_full_pay === '1' || (l.remark && l.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) ? '<div style="font-size:10px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="ได้รับอนุมัติเลิกงานก่อนเนื่องจากงานเสร็จ ได้รับค่าแรงเต็มวัน ไม่หักเงิน"><i class="fa-solid fa-circle-check text-green"></i> <span>งานเสร็จ-จ่ายเต็มวัน (ไม่หักเงิน)</span></div>' : '')) +
         '</td>' +
         '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
@@ -3938,7 +3949,15 @@ function autoCalculateAttendanceHours(isUserAction) {
 
   // 1. Late minutes & status
   var lateMin = 0;
-  if (inMin > (workStartMin + graceMin)) {
+  var editRemarkVal = document.getElementById('editAttRemark') ? document.getElementById('editAttRemark').value : '';
+  var activeEditHasLeave = !!((_activeAttendanceEditLog && _activeAttendanceEditLog.has_leave_conflict) || (editRemarkVal && (editRemarkVal.indexOf('มีใบลา') !== -1 || editRemarkVal.indexOf('ลาครึ่งเช้า') !== -1 || editRemarkVal.indexOf('ลากิจครึ่งเช้า') !== -1 || editRemarkVal.indexOf('ลาป่วยครึ่งเช้า') !== -1)));
+  if (activeEditHasLeave) {
+    if (inMin >= lunchStartMin) {
+      lateMin = (inMin > (lunchEndMin + graceMin)) ? (inMin - lunchEndMin) : 0;
+    } else {
+      lateMin = 0;
+    }
+  } else if (inMin > (workStartMin + graceMin)) {
     lateMin = inMin - workStartMin;
   }
 
@@ -3995,8 +4014,13 @@ function autoCalculateAttendanceHours(isUserAction) {
 
   if (isFullPay) {
     // Approved full pay for completing work early
-    workHrs = Math.max(0, Math.round(((workEndMin - workStartMin - breakMin) / 60) * 10) / 10);
-    if (workHrs <= 0) workHrs = 8.5;
+    if (inMin >= lunchStartMin) {
+      var effAfternoonIn = Math.max(inMin, lunchEndMin);
+      workHrs = Math.max(0, Math.round(((workEndMin - effAfternoonIn) / 60) * 10) / 10) || 5.0;
+    } else {
+      var fullDayBreak = breakMin > 0 ? breakMin : 60;
+      workHrs = Math.max(0, Math.round(((workEndMin - workStartMin - fullDayBreak) / 60) * 10) / 10) || 8.5;
+    }
   } else if (isSunday) {
     // Sunday work: all counts as OT/Sunday work
     var totalSunMin = Math.max(0, outMin - effectiveInMin - breakMin);
@@ -5006,7 +5030,13 @@ function onAddAttendanceTimeChanged() {
     }
 
     if (isFullPay) {
-      workHrs = Math.max(0, Math.round(((endMin - startMin - breakMin) / 60) * 10) / 10) || 8.5;
+      if (inMin >= lunchStart) {
+        var effAfternoonIn = Math.max(inMin, lunchEnd);
+        workHrs = Math.max(0, Math.round(((endMin - effAfternoonIn) / 60) * 10) / 10) || 5.0;
+      } else {
+        var fullDayBreak = breakMin > 0 ? breakMin : 60;
+        workHrs = Math.max(0, Math.round(((endMin - startMin - fullDayBreak) / 60) * 10) / 10) || 8.5;
+      }
     } else if (isSunday) {
       var sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - breakMin);
       otHrs = Math.floor(sunMin / 30) * 0.5;

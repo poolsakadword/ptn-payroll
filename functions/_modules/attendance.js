@@ -465,12 +465,19 @@ export const attendanceHandlers = {
               const tl = logsByEmpDate[`${lrEmpId}_${dStr}`] || logsByEmpDate[`${lr.emp_id}_${dStr}`];
               if (tl && tl.clock_in) {
                 const branch = branchMap[tl.branch_id] || (emp ? branchMap[emp.branch_id] : null);
-                const shiftHours = getShiftHoursForBranch(branch);
-                const wHours = Number(tl.work_hours) || 0;
+                const sessions = getBranchShiftSessions(branch);
+                const shiftHours = sessions.totalHours;
+                const inM = timeStringToMinutes(tl.clock_in);
+                const isAfternoonClockIn = (inM !== null && inM >= sessions.lunchStartMin);
+                let wHours = Number(tl.work_hours) || 0;
+                // Cap afternoon clock-in work hours to afternoon shift hours so early-dismissal full-pay doesn't masquerade as 8.5h/9.5h full-day work
+                if (isAfternoonClockIn && wHours > sessions.afternoonHours) {
+                  wHours = sessions.afternoonHours;
+                }
 
-                // FULL WORK DAY: clocked out with sufficient hours, or work_hours >= (shiftHours - 1.0), or work_hours >= 6
-                if ((tl.clock_out && wHours >= Math.max(6.0, shiftHours - 1.0)) || (tl.clock_out && wHours >= shiftHours * 0.75)) {
-                  daysDeductedDueToWork += 1.0;
+                // FULL WORK DAY: only when clocked in during the morning (not afternoon) and worked full shift
+                if (!isAfternoonClockIn && ((tl.clock_out && wHours >= Math.max(6.0, shiftHours - 1.0)) || (tl.clock_out && wHours >= shiftHours * 0.75))) {
+                  daysDeductedDueToWork += origDays;
                   overriddenDatesByEmp[`${lrEmpId}_${dStr}`] = 'FULL';
                   overriddenDatesByEmp[`${lr.emp_id}_${dStr}`] = 'FULL';
                   autoAdjustedLeaves.push({
@@ -482,12 +489,13 @@ export const attendanceHandlers = {
                     workHours: wHours,
                     shiftHours: shiftHours,
                     originalDays: origDays,
-                    adjustedDeduction: 1.0,
+                    adjustedDeduction: origDays,
                     note: `มีใบลา ${lr.leave_type} แต่วันนี้มาทำงานจริง ${wHours} ชม. (เต็มกะ)`
                   });
                 } else if (wHours >= 3.5 && (Number(lr.days_count) || 1.0) > 0.5) {
-                  // HALF WORK DAY: worked at least half day (3.5+ hrs) for a full-day leave
-                  daysDeductedDueToWork += 0.5;
+                  // HALF WORK DAY: worked at least half day (3.5+ hrs) on a FULL-DAY leave request
+                  const deductPart = isAfternoonClockIn ? sessions.afternoonFraction : sessions.morningFraction;
+                  daysDeductedDueToWork += deductPart;
                   overriddenDatesByEmp[`${lrEmpId}_${dStr}`] = 'HALF';
                   overriddenDatesByEmp[`${lr.emp_id}_${dStr}`] = 'HALF';
                   autoAdjustedLeaves.push({
@@ -499,7 +507,7 @@ export const attendanceHandlers = {
                     workHours: wHours,
                     shiftHours: shiftHours,
                     originalDays: origDays,
-                    adjustedDeduction: 0.5,
+                    adjustedDeduction: deductPart,
                     note: `มีใบลา ${lr.leave_type} แต่วันนี้มาทำงานจริง ${wHours} ชม. (ครึ่งวัน)`
                   });
                 }
@@ -1469,6 +1477,15 @@ export const attendanceHandlers = {
 
       const reqFilters = buildAttendanceRequestFilters({ ...params, requestEmpId: reqEmpFilter, requestPeriod: reqPeriod }, reqCutoff);
 
+      let minLeaveQueryDate = targetDate;
+      let maxLeaveQueryDate = targetDate;
+      for (const l of logsToday) {
+        if (l.date) {
+          if (l.date < minLeaveQueryDate) minLeaveQueryDate = l.date;
+          if (l.date > maxLeaveQueryDate) maxLeaveQueryDate = l.date;
+        }
+      }
+
       // 3. EXECUTE INDEPENDENT QUERIES IN PARALLEL FOR HIGH PERFORMANCE
       const [
         branchRows,
@@ -1480,7 +1497,7 @@ export const attendanceHandlers = {
       ] = await Promise.all([
         db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] })),
         fetchAttendanceRequests(db, reqFilters, reqFilters.reqLimit),
-        db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) IN ('APPROVED', 'PENDING') AND ? >= substr(lr.start_date, 1, 10) AND ? <= substr(lr.end_date, 1, 10)`).bind(targetDate, targetDate).all().catch(() => ({ results: [] })),
+        db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) IN ('APPROVED', 'PENDING') AND substr(lr.start_date, 1, 10) <= ? AND substr(lr.end_date, 1, 10) >= ?`).bind(maxLeaveQueryDate, minLeaveQueryDate).all().catch(() => ({ results: [] })),
         db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 })),
         db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] })),
         db.prepare('SELECT holiday_name, holiday_type FROM company_holidays WHERE date = ?').bind(targetDate).first().catch(() => null)
@@ -1494,21 +1511,35 @@ export const attendanceHandlers = {
       const targetHoliday = targetHolidayRow || null;
       const isSunday = (new Date(targetDate + 'T00:00:00').getDay() === 0);
 
-      // 4. Map approved leaves on targetDate and check conflicts
+      // 4. Map approved leaves on targetDate and check conflicts for each log's own date
+      const allWindowLeaves = approvedLeavesOnDate.results || [];
       const leaveOnTargetDateMap = {};
-      for (const lr of (approvedLeavesOnDate.results || [])) {
-        const k = String(lr.emp_id || '').trim();
-        if (k) leaveOnTargetDateMap[k] = lr;
-        leaveOnTargetDateMap[lr.emp_id] = lr;
+      for (const lr of allWindowLeaves) {
+        const sD = String(lr.start_date || '').substring(0, 10);
+        const eD = String(lr.end_date || '').substring(0, 10);
+        if (targetDate >= sD && targetDate <= eD) {
+          const k = String(lr.emp_id || '').trim();
+          if (k) leaveOnTargetDateMap[k] = lr;
+          leaveOnTargetDateMap[lr.emp_id] = lr;
+        }
       }
       for (const l of logsToday) {
-        if (leaveOnTargetDateMap[l.emp_id]) {
-          const lr = leaveOnTargetDateMap[l.emp_id];
+        const lEmp = String(l.emp_id || '').trim();
+        const lDate = String(l.date || targetDate).substring(0, 10);
+        const matchedLr = allWindowLeaves.find(lr => {
+          const k = String(lr.emp_id || '').trim();
+          const sD = String(lr.start_date || '').substring(0, 10);
+          const eD = String(lr.end_date || '').substring(0, 10);
+          return (k === lEmp || lr.emp_id === l.emp_id) && lDate >= sD && lDate <= eD;
+        });
+        if (matchedLr) {
           l.has_leave_conflict = true;
           l.leave_conflict_info = {
-            leave_type: lr.leave_type,
-            days_count: lr.days_count,
-            reason: lr.reason || ''
+            leave_type: matchedLr.leave_type,
+            days_count: matchedLr.days_count,
+            time_slot: matchedLr.time_slot || 'FULL',
+            status: matchedLr.status,
+            reason: matchedLr.reason || ''
           };
         }
       }
@@ -2994,11 +3025,34 @@ export const attendanceHandlers = {
         return { results: [] };
       });
 
+      const rangeLogs = query.results || [];
+      const rangeLeaves = leavesQuery.results || [];
+      for (const l of rangeLogs) {
+        const lEmp = String(l.emp_id || '').trim();
+        const lDate = String(l.date || '').substring(0, 10);
+        const matchedLr = rangeLeaves.find(lr => {
+          const k = String(lr.emp_id || '').trim();
+          const sD = String(lr.start_date || '').substring(0, 10);
+          const eD = String(lr.end_date || '').substring(0, 10);
+          return (k === lEmp || lr.emp_id === l.emp_id) && lDate >= sD && lDate <= eD;
+        });
+        if (matchedLr) {
+          l.has_leave_conflict = true;
+          l.leave_conflict_info = {
+            leave_type: matchedLr.leave_type,
+            days_count: matchedLr.days_count,
+            time_slot: matchedLr.time_slot || 'FULL',
+            status: matchedLr.status,
+            reason: matchedLr.reason || ''
+          };
+        }
+      }
+
       return {
         success: !query.error,
         error: query.error || undefined,
-        logs: query.results || [],
-        leaves: leavesQuery.results || [],
+        logs: rangeLogs,
+        leaves: rangeLeaves,
         advances: advancesQuery.results || [],
         holidays: holidaysQuery.results || [],
         startDate,
@@ -3138,7 +3192,13 @@ export const attendanceHandlers = {
               }
 
               if (isFullPayVal === 1) {
-                finalWorkHours = Math.max(0, Math.round(((endMin - startMin - finalBreakMinutes) / 60) * 10) / 10) || 8.5;
+                if (inMin !== null && inMin >= lunchStart) {
+                  const effAfternoonIn = Math.max(inMin, lunchEnd);
+                  finalWorkHours = Math.max(0, Math.round(((endMin - effAfternoonIn) / 60) * 10) / 10) || 5.0;
+                } else {
+                  const fullDayBreak = finalBreakMinutes > 0 ? finalBreakMinutes : 60;
+                  finalWorkHours = Math.max(0, Math.round(((endMin - startMin - fullDayBreak) / 60) * 10) / 10) || 8.5;
+                }
               } else if (isSunday) {
                 const sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - finalBreakMinutes);
                 finalOtHours = Math.floor(sunMin / 30) * 0.5;
@@ -3319,7 +3379,13 @@ export const attendanceHandlers = {
             }
 
             if (isFullPayVal === 1) {
-              finalWorkHours = Math.max(0, Math.round(((endMin - startMin - finalBreakMinutes) / 60) * 10) / 10) || 8.5;
+              if (inMin !== null && inMin >= lunchStart) {
+                const effAfternoonIn = Math.max(inMin, lunchEnd);
+                finalWorkHours = Math.max(0, Math.round(((endMin - effAfternoonIn) / 60) * 10) / 10) || 5.0;
+              } else {
+                const fullDayBreak = finalBreakMinutes > 0 ? finalBreakMinutes : 60;
+                finalWorkHours = Math.max(0, Math.round(((endMin - startMin - fullDayBreak) / 60) * 10) / 10) || 8.5;
+              }
             } else if (isSunday) {
               const sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - finalBreakMinutes);
               finalOtHours = Math.floor(sunMin / 30) * 0.5;
@@ -3462,9 +3528,19 @@ export const attendanceHandlers = {
           const lStart = timeStringToMinutes(branch.lunch_start_time || '13:00') || 780;
           const lEnd = timeStringToMinutes(branch.lunch_end_time || '14:00') || 840;
           const breakMin = (lEnd > lStart) ? (lEnd - lStart) : 60;
-          const fullShiftHours = Math.max(0, Math.round(((eMin - sMin - breakMin) / 60) * 10) / 10) || 8.5;
+          const logInMin = timeStringToMinutes(log.clock_in);
 
-          const newWorkHours = Math.max(Number(log.work_hours) || 0, fullShiftHours);
+          let fullShiftHours;
+          if (logInMin !== null && logInMin >= lStart) {
+            const effAfternoonIn = Math.max(logInMin, lEnd);
+            fullShiftHours = Math.max(0, Math.round(((eMin - effAfternoonIn) / 60) * 10) / 10) || 5.0;
+          } else {
+            fullShiftHours = Math.max(0, Math.round(((eMin - sMin - breakMin) / 60) * 10) / 10) || 8.5;
+          }
+
+          const newWorkHours = (logInMin !== null && logInMin >= lStart)
+            ? fullShiftHours
+            : Math.max(Number(log.work_hours) || 0, fullShiftHours);
 
           await db.prepare('UPDATE time_logs SET is_full_pay = 1, work_hours = ?, remark = ? WHERE id = ?')
             .bind(newWorkHours, curRemark, id).run();
