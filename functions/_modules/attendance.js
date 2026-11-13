@@ -1,7 +1,7 @@
 /**
  * Time Attendance, Requests & Biometric Logging Module
  */
-import { ensureBranchTables, ensureTimeAttendanceTables, logSystemActivity } from './db.js';
+import { ensureBranchTables, ensureTimeAttendanceTables, logSystemActivity, executeBatch } from './db.js';
 import { getMasterUnlockToken, isUserSuperAdmin, userHasPermission } from './security.js';
 import { getBranchShiftSessions } from './branches.js';
 import { sendPushToEmployee, sendPushToAdmins, broadcastPushNotification } from './notifications.js';
@@ -180,9 +180,18 @@ export async function fetchAttendanceRequests(db, filterObj, customLimit) {
   const { reqType, reqLimit, leaveWhere, leaveBinds, otWhere, otBinds, advWhere, advBinds } = filterObj;
   const limit = customLimit || reqLimit || 150;
 
+  const leaveSelectCols = `
+    lr.id, lr.emp_id, lr.leave_type, lr.start_date, lr.end_date,
+    COALESCE(lr.days_count, 1) AS days_count, COALESCE(lr.time_slot, 'FULL') AS time_slot,
+    lr.reason, lr.status, lr.approver_id, lr.approved_at, lr.rejection_reason,
+    CASE WHEN lr.medical_cert_url IS NOT NULL AND lr.medical_cert_url != '' THEN 1 ELSE 0 END AS has_medical_cert,
+    datetime(lr.created_at, '+7 hours') AS created_at,
+    e.full_name, e.nickname, e.department
+  `;
+
   const [leavesQuery, otsQuery, advQuery] = await Promise.all([
     (reqType === 'ALL' || reqType === 'LEAVE')
-      ? db.prepare(`SELECT lr.*, datetime(lr.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT ${limit}`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
+      ? db.prepare(`SELECT ${leaveSelectCols} FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id ${leaveWhere} ORDER BY lr.created_at DESC LIMIT ${limit}`).bind(...leaveBinds).all().catch(() => ({ results: [] }))
       : Promise.resolve({ results: [] }),
     (reqType === 'ALL' || reqType === 'OT')
       ? db.prepare(`SELECT ot.*, datetime(ot.created_at, '+7 hours') AS created_at, e.full_name, e.nickname, e.department FROM ot_requests ot LEFT JOIN employees e ON ot.emp_id = e.emp_id ${otWhere} ORDER BY ot.created_at DESC LIMIT ${limit}`).bind(...otBinds).all().catch(() => ({ results: [] }))
@@ -259,12 +268,13 @@ export const attendanceHandlers = {
         return netMins > 0 ? Math.round((netMins / 60) * 100) / 100 : 8.5;
       }
 
-      // 0.2 Load employees and existing monthly inputs upfront
+      // 0.2 Load employees and existing monthly inputs upfront (exclude Base64 photo_url)
       let employees = [];
       let existingMap = {};
+      const syncEmpCols = "emp_id, full_name, nickname, department, position, branch_id, base_salary, pf_rate, default_sso, default_tax, is_ot_eligible, diligence_allowance, status, join_date, resign_date, is_attendance_exempt, is_break_exempt, is_undertime_exempt, is_confidential";
 
       if (targetEmpId) {
-        const singleEmp = await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(targetEmpId).first();
+        const singleEmp = await db.prepare(`SELECT ${syncEmpCols} FROM employees WHERE emp_id = ?`).bind(targetEmpId).first();
         if (!singleEmp) {
           return { success: false, message: `ไม่พบข้อมูลพนักงานรหัส ${targetEmpId}` };
         }
@@ -272,7 +282,7 @@ export const attendanceHandlers = {
         const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ? AND emp_id = ?').bind(period, targetEmpId).first();
         if (existingInput) existingMap[targetEmpId] = existingInput;
       } else {
-        const empQuery = await db.prepare('SELECT * FROM employees ORDER BY emp_id ASC').all();
+        const empQuery = await db.prepare(`SELECT ${syncEmpCols} FROM employees ORDER BY emp_id ASC`).all();
         employees = empQuery.results || [];
         const existingInput = await db.prepare('SELECT * FROM monthly_inputs WHERE period = ?').bind(period).all();
         for (const row of (existingInput.results || [])) existingMap[row.emp_id] = row;
@@ -409,7 +419,8 @@ export const attendanceHandlers = {
         pendingLeavesCount = penRes ? (Number(penRes.count) || 0) : 0;
 
         let detSql = `
-          SELECT id, emp_id, start_date, end_date, COALESCE(days_count, 1) as days_count, COALESCE(time_slot, 'FULL') as time_slot, leave_type, reason, medical_cert_url
+          SELECT id, emp_id, start_date, end_date, COALESCE(days_count, 1) as days_count, COALESCE(time_slot, 'FULL') as time_slot, leave_type, reason,
+                 CASE WHEN medical_cert_url IS NOT NULL AND medical_cert_url != '' THEN 1 ELSE 0 END as has_medical_cert
           FROM leave_requests
           WHERE UPPER(TRIM(status)) = 'APPROVED'
             AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))
@@ -525,7 +536,7 @@ export const attendanceHandlers = {
               leaveMap[lr.emp_id] = leaveMap[lrEmpId];
             }
             totalLeaveCount += effectiveDays;
-            const cat = categorizeLeaveType(lr.leave_type, lr.medical_cert_url);
+            const cat = categorizeLeaveType(lr.leave_type, lr.has_medical_cert || lr.medical_cert_url);
             if (cat === 'SICK_WITH_CERT') {
               leaveMap[lrEmpId].sickCert += effectiveDays;
             } else if (cat === 'SICK_NO_CERT') {
@@ -756,6 +767,7 @@ export const attendanceHandlers = {
         if (r.emp_id && Number(r.carried_debt) > 0) prevDebtMap[r.emp_id] = Number(r.carried_debt);
       }
 
+      const syncInputStmts = [];
       for (const emp of employees) {
         // Determine resignation date (from employee profile or auto-detect from last clock-in in this period)
         let resignDateStr = emp.resign_date ? normalizeDateToIso(emp.resign_date) : '';
@@ -1063,19 +1075,25 @@ export const attendanceHandlers = {
           allowance = Number(exist.allowance) || 0;
         }
 
-        await db.prepare(`
-          INSERT OR REPLACE INTO monthly_inputs
-          (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, carried_debt, sso, tax)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
-          Math.round(absentDays * 100) / 100,
-          Math.round(leaveDays * 100) / 100,
-          Math.round(sickLeaveDays * 100) / 100,
-          Math.round(unpaidSickLeaveDays * 100) / 100,
-          lateDeduct, lateMins, lateCnt,
-          otHours, otRate, allowance, bonus, advDed, othDed, carriedDebt, sso, tax
-        ).run();
+        syncInputStmts.push(
+          db.prepare(`
+            INSERT OR REPLACE INTO monthly_inputs
+            (period, no, emp_id, emp_name, base_salary, pf_rate, pf_amount, absent_days, leave_days, sick_leave_days, unpaid_sick_leave_days, late_deduct, late_minutes, late_count, ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct, carried_debt, sso, tax)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            period, nextNo, emp.emp_id, emp.full_name || '', baseSal, pfRate, pfAmt,
+            Math.round(absentDays * 100) / 100,
+            Math.round(leaveDays * 100) / 100,
+            Math.round(sickLeaveDays * 100) / 100,
+            Math.round(unpaidSickLeaveDays * 100) / 100,
+            lateDeduct, lateMins, lateCnt,
+            otHours, otRate, allowance, bonus, advDed, othDed, carriedDebt, sso, tax
+          )
+        );
+      }
+
+      if (syncInputStmts.length > 0) {
+        await executeBatch(db, syncInputStmts, 50);
       }
 
       await calculateAndSavePayroll(db, period, periodWorkDays);
@@ -1261,6 +1279,62 @@ export const attendanceHandlers = {
       };
   },
 
+  getAttendanceLogPhotos: async (db, params) => {
+      const callerUser = params.username || 'Admin';
+      const isAllowed = (await userHasPermission(db, callerUser, 'view_attendance')) ||
+                        (await userHasPermission(db, callerUser, 'approve_attendance')) ||
+                        (await isUserSuperAdmin(db, callerUser));
+      if (!isAllowed) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูรูปภาพลงเวลา' };
+      }
+      const logId = Number(params.id || params.logId);
+      if (!logId) {
+        return { success: false, message: 'กรุณาระบุรหัสรายการลงเวลา (id)' };
+      }
+      const photoType = String(params.type || 'all').toLowerCase();
+      let cols = 'id, in_photo_url, out_photo_url, break_out_photo_url, break_in_photo_url';
+      if (photoType === 'in') cols = 'id, in_photo_url';
+      else if (photoType === 'out') cols = 'id, out_photo_url';
+      else if (photoType === 'break_out') cols = 'id, break_out_photo_url';
+      else if (photoType === 'break_in') cols = 'id, break_in_photo_url';
+
+      const row = await db.prepare(`SELECT ${cols} FROM time_logs WHERE id = ?`).bind(logId).first().catch(() => null);
+      if (!row) {
+        return { success: false, message: 'ไม่พบข้อมูลการลงเวลา' };
+      }
+      return {
+        success: true,
+        id: row.id,
+        in_photo_url: row.in_photo_url || null,
+        out_photo_url: row.out_photo_url || null,
+        break_out_photo_url: row.break_out_photo_url || null,
+        break_in_photo_url: row.break_in_photo_url || null
+      };
+  },
+
+  getLeaveMedicalCert: async (db, params) => {
+      const callerUser = params.username || 'Admin';
+      const isAllowed = (await userHasPermission(db, callerUser, 'view_attendance')) ||
+                        (await userHasPermission(db, callerUser, 'approve_attendance')) ||
+                        (await isUserSuperAdmin(db, callerUser));
+      if (!isAllowed) {
+        return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูใบรับรองแพทย์' };
+      }
+      const leaveId = Number(params.id || params.leaveId);
+      if (!leaveId) {
+        return { success: false, message: 'กรุณาระบุรหัสใบลา (id)' };
+      }
+      const row = await db.prepare('SELECT id, medical_cert_url FROM leave_requests WHERE id = ?').bind(leaveId).first().catch(() => null);
+      if (!row) {
+        return { success: false, message: 'ไม่พบข้อมูลใบลา' };
+      }
+      return {
+        success: true,
+        id: row.id,
+        medical_cert_url: row.medical_cert_url || null
+      };
+  },
+
   getTimeAttendanceDashboard: async (db, params) => {
     let period = params.period;
       const callerUser = params.username || 'Admin';
@@ -1343,16 +1417,29 @@ export const attendanceHandlers = {
         dateBinds = [cutoffInfo.startDate, cutoffInfo.endDate];
       }
 
+      const lightLogCols = `
+        l.id, l.emp_id, l.date, l.clock_in, l.clock_out, l.break_out, l.break_in,
+        l.in_lat, l.in_lng, l.out_lat, l.out_lng,
+        l.break_out_lat, l.break_out_lng, l.break_in_lat, l.break_in_lng,
+        l.late_minutes, l.break_minutes, l.overbreak_minutes,
+        l.work_hours, l.ot_hours, l.status, l.remark, l.branch_id, l.is_full_pay, l.created_at,
+        CASE WHEN l.in_photo_url IS NOT NULL AND l.in_photo_url != '' THEN 1 ELSE 0 END AS has_in_photo,
+        CASE WHEN l.out_photo_url IS NOT NULL AND l.out_photo_url != '' THEN 1 ELSE 0 END AS has_out_photo,
+        CASE WHEN l.break_out_photo_url IS NOT NULL AND l.break_out_photo_url != '' THEN 1 ELSE 0 END AS has_break_out_photo,
+        CASE WHEN l.break_in_photo_url IS NOT NULL AND l.break_in_photo_url != '' THEN 1 ELSE 0 END AS has_break_in_photo,
+        e.full_name, e.nickname, e.department, e.position, e.phone, e.branch_id as emp_branch_id, b.branch_name
+      `;
+
       let logsQuery;
       if (isIndividual) {
-        selectedEmp = employeeList.find(e => e.emp_id === empFilter) || (await db.prepare('SELECT * FROM employees WHERE emp_id = ?').bind(empFilter).first().catch(() => null));
+        selectedEmp = employeeList.find(e => e.emp_id === empFilter) || (await db.prepare('SELECT emp_id, full_name, nickname, department, position, branch_id, phone, status, resign_date, is_attendance_exempt FROM employees WHERE emp_id = ?').bind(empFilter).first().catch(() => null));
         if (selectedEmp) {
           selectedEmp.name = selectedEmp.name || selectedEmp.full_name;
           selectedEmp.full_name = selectedEmp.full_name || selectedEmp.name;
         }
         
         logsQuery = await db.prepare(`
-          SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.phone, e.photo_url, e.branch_id as emp_branch_id, b.branch_name
+          SELECT ${lightLogCols}
           FROM time_logs l
           LEFT JOIN employees e ON l.emp_id = e.emp_id
           LEFT JOIN branches b ON b.branch_id = COALESCE(l.branch_id, e.branch_id)
@@ -1363,23 +1450,23 @@ export const attendanceHandlers = {
       } else {
         if (branchFilter && branchFilter !== 'ALL') {
           logsQuery = await db.prepare(`
-            SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.phone, e.photo_url, e.branch_id as emp_branch_id, b.branch_name
+            SELECT ${lightLogCols}
             FROM time_logs l
             LEFT JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN branches b ON b.branch_id = COALESCE(l.branch_id, e.branch_id)
             WHERE ${dateClause} AND (l.branch_id = ? OR (l.branch_id IS NULL AND e.branch_id = ?)) ${!isCallerSuper ? 'AND (e.is_confidential IS NULL OR e.is_confidential = 0)' : ''}
             ORDER BY l.date DESC, l.clock_in DESC
-            LIMIT 500
+            LIMIT 10000
           `).bind(...dateBinds, branchFilter, branchFilter).all().catch(() => ({ results: [] }));
         } else {
           logsQuery = await db.prepare(`
-            SELECT l.*, e.full_name, e.nickname, e.department, e.position, e.phone, e.photo_url, e.branch_id as emp_branch_id, b.branch_name
+            SELECT ${lightLogCols}
             FROM time_logs l
             LEFT JOIN employees e ON l.emp_id = e.emp_id
             LEFT JOIN branches b ON b.branch_id = COALESCE(l.branch_id, e.branch_id)
             WHERE ${dateClause} ${!isCallerSuper ? 'AND (e.is_confidential IS NULL OR e.is_confidential = 0)' : ''}
             ORDER BY l.date DESC, l.clock_in DESC
-            LIMIT 500
+            LIMIT 10000
           `).bind(...dateBinds).all().catch(() => ({ results: [] }));
         }
       }
@@ -1486,6 +1573,8 @@ export const attendanceHandlers = {
         }
       }
 
+      const skipRequests = (params.skipRequests === true || params.skipRequests === 'true' || params.skipRequests === 1);
+
       // 3. EXECUTE INDEPENDENT QUERIES IN PARALLEL FOR HIGH PERFORMANCE
       const [
         branchRows,
@@ -1496,8 +1585,10 @@ export const attendanceHandlers = {
         targetHolidayRow
       ] = await Promise.all([
         db.prepare('SELECT * FROM branches ORDER BY branch_id ASC').all().catch(() => ({ results: [] })),
-        fetchAttendanceRequests(db, reqFilters, reqFilters.reqLimit),
-        db.prepare(`SELECT lr.*, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) IN ('APPROVED', 'PENDING') AND substr(lr.start_date, 1, 10) <= ? AND substr(lr.end_date, 1, 10) >= ?`).bind(maxLeaveQueryDate, minLeaveQueryDate).all().catch(() => ({ results: [] })),
+        skipRequests
+          ? Promise.resolve({ pendingLeaves: [], pendingOts: [], pendingAdvances: [] })
+          : fetchAttendanceRequests(db, reqFilters, reqFilters.reqLimit),
+        db.prepare(`SELECT lr.id, lr.emp_id, lr.leave_type, lr.start_date, lr.end_date, COALESCE(lr.days_count, 1) AS days_count, COALESCE(lr.time_slot, 'FULL') AS time_slot, lr.reason, lr.status, CASE WHEN lr.medical_cert_url IS NOT NULL AND lr.medical_cert_url != '' THEN 1 ELSE 0 END AS has_medical_cert, e.full_name, e.nickname, e.phone FROM leave_requests lr LEFT JOIN employees e ON lr.emp_id = e.emp_id WHERE UPPER(TRIM(lr.status)) IN ('APPROVED', 'PENDING') AND substr(lr.start_date, 1, 10) <= ? AND substr(lr.end_date, 1, 10) >= ?`).bind(maxLeaveQueryDate, minLeaveQueryDate).all().catch(() => ({ results: [] })),
         db.prepare(`SELECT (SELECT COUNT(*) FROM leave_requests WHERE status = 'PENDING') + (SELECT COUNT(*) FROM ot_requests WHERE status = 'PENDING' AND (COALESCE(reason, '') NOT LIKE '%OT งานเสร็จประจำวัน%' AND COALESCE(reason, '') NOT LIKE '%(Admin ปรับปรุงเวลา)%' AND COALESCE(reason, '') NOT LIKE '%(HR ลงเวลาแทน)%')) + (SELECT COUNT(*) FROM advance_requests WHERE status = 'PENDING') as total_pending`).first().catch(() => ({ total_pending: 0 })),
         db.prepare('SELECT key, value FROM attendance_settings').all().catch(() => ({ results: [] })),
         db.prepare('SELECT holiday_name, holiday_type FROM company_holidays WHERE date = ?').bind(targetDate).first().catch(() => null)
@@ -1578,8 +1669,10 @@ export const attendanceHandlers = {
             branchName: log.branch_name || (branchMap[log.branch_id || log.emp_branch_id]?.branch_name) || '',
             clockIn: log.clock_in || '',
             clockOut: log.clock_out || '',
-            inPhotoUrl: log.in_photo_url || '',
-            outPhotoUrl: log.out_photo_url || '',
+            hasInPhoto: Number(log.has_in_photo || 0),
+            hasOutPhoto: Number(log.has_out_photo || 0),
+            inPhotoUrl: '',
+            outPhotoUrl: '',
             workHours: Number(log.work_hours || 0),
             lateMinutes: totalLateToday,
             morningLateMinutes: morningLate,
@@ -1657,7 +1750,8 @@ export const attendanceHandlers = {
             leaveReason: lr ? (lr.reason || '') : null,
             leaveDays: lr ? (lr.days_count || 1) : 0,
             leaveSlot: lr ? (lr.time_slot || 'FULL') : 'FULL',
-            medicalCertUrl: lr ? (lr.medical_cert_url || null) : null,
+            hasMedicalCert: Boolean(lr && lr.has_medical_cert),
+            medicalCertUrl: null,
             statusType: statusType,
             holidayName: targetHoliday ? targetHoliday.holiday_name : null,
             type: lr ? 'LEAVE' : (statusType === 'ABSENT' ? 'ABSENT' : 'NO_EXCUSE')
@@ -1852,8 +1946,8 @@ export const attendanceHandlers = {
       const tlQuery = await db.prepare(tlSql).bind(startDate, endDate).all().catch(() => ({ results: [] }));
       const allLogs = tlQuery.results || [];
 
-      // Load Approved Leaves
-      let lvSql = "SELECT id, emp_id, start_date, end_date, COALESCE(days_count, 1) as days_count, COALESCE(time_slot, 'FULL') as time_slot, leave_type, reason, medical_cert_url FROM leave_requests WHERE UPPER(TRIM(status)) = 'APPROVED' AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))";
+      // Load Approved Leaves (exclude Base64 medical_cert_url)
+      let lvSql = "SELECT id, emp_id, start_date, end_date, COALESCE(days_count, 1) as days_count, COALESCE(time_slot, 'FULL') as time_slot, leave_type, reason, CASE WHEN medical_cert_url IS NOT NULL AND medical_cert_url != '' THEN 1 ELSE 0 END as has_medical_cert FROM leave_requests WHERE UPPER(TRIM(status)) = 'APPROVED' AND ((substr(start_date, 1, 10) BETWEEN ? AND ?) OR (substr(end_date, 1, 10) BETWEEN ? AND ?) OR (substr(start_date, 1, 10) <= ? AND substr(end_date, 1, 10) >= ?))";
       const lvQuery = await db.prepare(lvSql).bind(startDate, endDate, startDate, endDate, startDate, endDate).all().catch(e => { console.error('lvQuery error in getAttendancePeriodSummary:', e); return { results: [] }; });
       const allLeaves = lvQuery.results || [];
 
@@ -2120,7 +2214,7 @@ export const attendanceHandlers = {
                 statusColor = '#ea580c';
               } else if (matchingLeave) {
                 isLeave = true;
-                const cat = categorizeLeaveType(matchingLeave.leave_type, matchingLeave.medical_cert_url);
+                const cat = categorizeLeaveType(matchingLeave.leave_type, matchingLeave.has_medical_cert || matchingLeave.medical_cert_url);
                 const baseLeaveName = cat === 'SICK_WITH_CERT' ? 'ลาป่วย (มีใบ)' : (cat === 'SICK_NO_CERT' ? 'ลาป่วย (ไม่มีใบ)' : (cat === 'ANNUAL' ? 'ลาพักร้อน' : 'ลากิจ'));
                 const slotText = leaveTimeSlot === 'MORNING' ? ' (เช้า 0.5)' : (leaveTimeSlot === 'AFTERNOON' ? ' (บ่าย 0.5)' : ' (0.5)');
                 statusText = baseLeaveName + slotText;
@@ -2154,7 +2248,7 @@ export const attendanceHandlers = {
             // Check approved leaves
             if (matchingLeave) {
               isLeave = true;
-              const cat = categorizeLeaveType(matchingLeave.leave_type, matchingLeave.medical_cert_url);
+              const cat = categorizeLeaveType(matchingLeave.leave_type, matchingLeave.has_medical_cert || matchingLeave.medical_cert_url);
               const baseLeaveName = cat === 'SICK_WITH_CERT' ? 'ลาป่วย (มีใบ)' : (cat === 'SICK_NO_CERT' ? 'ลาป่วย (ไม่มีใบ)' : (cat === 'ANNUAL' ? 'ลาพักร้อน' : 'ลากิจ'));
 
               if (coversMorning && coversAfternoon) {
@@ -2334,7 +2428,7 @@ export const attendanceHandlers = {
           }
 
           if (daysInCutoff > 0) {
-            const cat = categorizeLeaveType(lr.leave_type, lr.medical_cert_url);
+            const cat = categorizeLeaveType(lr.leave_type, lr.has_medical_cert || lr.medical_cert_url);
             if (cat === 'SICK_WITH_CERT') {
               sickWithCertDays += daysInCutoff;
               sickWithCertTimes++;
@@ -2968,13 +3062,14 @@ export const attendanceHandlers = {
       });
       const holidaysQuery = await db.prepare('SELECT * FROM company_holidays WHERE date BETWEEN ? AND ? ORDER BY date ASC').bind(startDate, endDate).all().catch(() => ({ results: [] }));
 
-      // Query approved leave requests in date range
+      // Query approved leave requests in date range (exclude Base64 medical_cert_url)
       let lvSql = `
         SELECT 
           lr.id, lr.emp_id, lr.leave_type, lr.start_date, lr.end_date,
           COALESCE(lr.days_count, 1) as days_count,
           COALESCE(lr.time_slot, 'FULL') as time_slot,
-          lr.reason, lr.status, lr.medical_cert_url,
+          lr.reason, lr.status,
+          CASE WHEN lr.medical_cert_url IS NOT NULL AND lr.medical_cert_url != '' THEN 1 ELSE 0 END as has_medical_cert,
           e.full_name, e.nickname, e.department, e.position
         FROM leave_requests lr
         LEFT JOIN employees e ON lr.emp_id = e.emp_id
@@ -3478,11 +3573,9 @@ export const attendanceHandlers = {
       const ids = Array.isArray(params.ids) ? params.ids : [];
       if (ids.length === 0) return { success: false, message: 'กรุณาเลือกรายการที่ต้องการลบ' };
 
-      let deletedCount = 0;
-      for (const id of ids) {
-        const res = await db.prepare('DELETE FROM time_logs WHERE id = ?').bind(id).run().catch(() => {});
-        if (res) deletedCount++;
-      }
+      const delStmts = ids.map(id => db.prepare('DELETE FROM time_logs WHERE id = ?').bind(id));
+      await executeBatch(db, delStmts, 50);
+      const deletedCount = delStmts.length;
 
       await logSystemActivity(db, callerUser, 'BATCH_DELETE_TIME_LOGS', `ลบข้อมูลการลงเวลาจำนวน ${deletedCount} รายการ`);
       return { success: true, count: deletedCount, message: `ลบข้อมูลการลงเวลาสำเร็จ ${deletedCount} รายการ` };
@@ -3504,17 +3597,25 @@ export const attendanceHandlers = {
       if (ids.length === 0) return { success: false, message: 'กรุณาเลือกรายการที่ต้องการดำเนินการ' };
 
       const enabled = (params.enabled === true || params.enabled === 'true' || params.enabled === 1 || params.enabled === '1') ? 1 : 0;
-      let updatedCount = 0;
 
       // Load branch settings to calculate shift work hours
       const branchesRes = await db.prepare('SELECT branch_id, work_start_time, work_end_time, lunch_start_time, lunch_end_time FROM branches').all().catch(() => ({ results: [] }));
       const bMap = {};
       (branchesRes.results || []).forEach(b => { bMap[b.branch_id] = b; });
 
-      for (const id of ids) {
-        const log = await db.prepare('SELECT * FROM time_logs WHERE id = ?').bind(id).first();
-        if (!log) continue;
+      // Fetch target logs in chunks without Base64 photo columns
+      const targetLogs = [];
+      const chunkSize = 50;
+      for (let i = 0; i < ids.length; i += chunkSize) {
+        const chunkIds = ids.slice(i, i + chunkSize).map(x => Number(x)).filter(Boolean);
+        if (chunkIds.length === 0) continue;
+        const placeholders = chunkIds.map(() => '?').join(',');
+        const q = await db.prepare(`SELECT id, branch_id, clock_in, work_hours, remark FROM time_logs WHERE id IN (${placeholders})`).bind(...chunkIds).all().catch(() => ({ results: [] }));
+        if (q.results) targetLogs.push(...q.results);
+      }
 
+      const updateStmts = [];
+      for (const log of targetLogs) {
         let curRemark = String(log.remark || '').trim();
         const tag = 'งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน';
 
@@ -3542,18 +3643,25 @@ export const attendanceHandlers = {
             ? fullShiftHours
             : Math.max(Number(log.work_hours) || 0, fullShiftHours);
 
-          await db.prepare('UPDATE time_logs SET is_full_pay = 1, work_hours = ?, remark = ? WHERE id = ?')
-            .bind(newWorkHours, curRemark, id).run();
-          updatedCount++;
+          updateStmts.push(
+            db.prepare('UPDATE time_logs SET is_full_pay = 1, work_hours = ?, remark = ? WHERE id = ?')
+              .bind(newWorkHours, curRemark, log.id)
+          );
         } else {
           // Turn off: remove tag
           curRemark = curRemark.replace(new RegExp('\s*\|\s*' + tag, 'g'), '')
                                .replace(new RegExp(tag, 'g'), '').trim();
-          await db.prepare('UPDATE time_logs SET is_full_pay = 0, remark = ? WHERE id = ?')
-            .bind(curRemark, id).run();
-          updatedCount++;
+          updateStmts.push(
+            db.prepare('UPDATE time_logs SET is_full_pay = 0, remark = ? WHERE id = ?')
+              .bind(curRemark, log.id)
+          );
         }
       }
+
+      if (updateStmts.length > 0) {
+        await executeBatch(db, updateStmts, 50);
+      }
+      const updatedCount = updateStmts.length;
 
       const actionText = enabled === 1 ? 'อนุมัติโหมดงานเสร็จ (จ่ายเต็มวัน)' : 'ยกเลิกโหมดงานเสร็จ';
       await logSystemActivity(db, callerUser, 'BATCH_EARLY_DISMISSAL', `${actionText} จำนวน ${updatedCount} รายการ`);
@@ -3578,8 +3686,8 @@ export const attendanceHandlers = {
         return { success: false, message: 'ไม่พบรายการข้อมูลที่ต้องการนำเข้า' };
       }
 
-      const emps = (await db.prepare('SELECT * FROM employees').all()).results || [];
-      let importedCount = 0;
+      const emps = (await db.prepare('SELECT emp_id, full_name, base_salary, pf_rate, default_sso, default_tax FROM employees').all()).results || [];
+      const importStmts = [];
 
       for (const r of records) {
         const empId = (r.empId || '').trim();
@@ -3592,22 +3700,27 @@ export const attendanceHandlers = {
         const sso = (r.sso !== undefined && r.sso !== '') ? Number(r.sso) : (emp.default_sso !== undefined ? Number(emp.default_sso) : 750);
         const tax = (r.tax !== undefined && r.tax !== '') ? Number(r.tax) : (Number(emp.default_tax) || 0);
 
-        await db.prepare(`
-          INSERT OR REPLACE INTO monthly_inputs (
-            period, emp_id, emp_name, base_salary, pf_rate, pf_amount,
-            absent_days, leave_days, sick_leave_days, late_deduct,
-            ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct,
-            sso, tax
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          period, empId, empName, baseSal, pfRate, pfAmt,
-          Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
-          Number(r.otHours) || 0, Number(r.otRate) || 40, Number(r.allowance) || 0, Number(r.bonus) || 0,
-          Number(r.advanceDeduct) || 0, Number(r.otherDeduct) || 0, sso, tax
-        ).run();
-
-        importedCount++;
+        importStmts.push(
+          db.prepare(`
+            INSERT OR REPLACE INTO monthly_inputs (
+              period, emp_id, emp_name, base_salary, pf_rate, pf_amount,
+              absent_days, leave_days, sick_leave_days, late_deduct,
+              ot_hours, ot_rate, allowance, bonus, advance_deduct, other_deduct,
+              sso, tax
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            period, empId, empName, baseSal, pfRate, pfAmt,
+            Number(r.absentDays) || 0, Number(r.leaveDays) || 0, Number(r.sickLeaveDays) || 0, Number(r.lateDeduct) || 0,
+            Number(r.otHours) || 0, Number(r.otRate) || 40, Number(r.allowance) || 0, Number(r.bonus) || 0,
+            Number(r.advanceDeduct) || 0, Number(r.otherDeduct) || 0, sso, tax
+          )
+        );
       }
+
+      if (importStmts.length > 0) {
+        await executeBatch(db, importStmts, 50);
+      }
+      const importedCount = importStmts.length;
 
       await calculateAndSavePayroll(db, period);
       await logSystemActivity(db, params.username || 'Admin', 'ATTENDANCE_IMPORT', `นำเข้าข้อมูลเวลาทำงาน ${importedCount} รายการ งวด ${period}`);

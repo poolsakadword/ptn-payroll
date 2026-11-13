@@ -1122,7 +1122,9 @@ function calcHaversineDistanceMeters(lat1, lon1, lat2, lon2) {
 }
 
 var _loadAttendanceReqSeq = 0;
-function loadTimeAttendanceDashboard() {
+var _hasLoadedInitialAttendanceRequests = false;
+function loadTimeAttendanceDashboard(opts) {
+  opts = opts || {};
   var currentReqSeq = ++_loadAttendanceReqSeq;
   if (!isSuperAdmin() && !hasPermission('view_attendance')) {
     var defSubTab = getDefaultAuthorizedAttendanceSubTab();
@@ -1134,6 +1136,11 @@ function loadTimeAttendanceDashboard() {
     }
     renderBranchEarlyDismissalBar();
     return;
+  }
+
+  if (!opts.preservePage) {
+    _attTablePage = 1;
+    _selectedAttendanceLogIds = {};
   }
 
   var filterInput = document.getElementById('attFilterDate');
@@ -1159,9 +1166,11 @@ function loadTimeAttendanceDashboard() {
   var reqStartDate = (document.getElementById('attReqStartDate') && document.getElementById('attReqStartDate').value) || _currentAttendanceRequestStartDate || '';
   var reqEndDate = (document.getElementById('attReqEndDate') && document.getElementById('attReqEndDate').value) || _currentAttendanceRequestEndDate || '';
 
+  var shouldSkipRequests = Boolean(_hasLoadedInitialAttendanceRequests && _activeAttendanceSubTab === 'logs' && !opts.includeRequests);
+
   var logsBody = document.getElementById('attLogsTableBody');
   if (logsBody) {
-    logsBody.innerHTML = '<tr><td colspan="14" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงานและรูปถ่าย...</td></tr>';
+    logsBody.innerHTML = '<tr><td colspan="14" class="text-center text-muted" style="padding:24px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดข้อมูลเวลาทำงาน...</td></tr>';
   }
 
   callApi('getTimeAttendanceDashboard', {
@@ -1173,6 +1182,7 @@ function loadTimeAttendanceDashboard() {
     period: filterPeriod,
     startDate: filterStartDate,
     endDate: filterEndDate,
+    skipRequests: shouldSkipRequests,
     requestStatus: _currentAttendanceRequestStatus,
     requestType: _currentAttendanceRequestType,
     requestDateMode: reqDateMode,
@@ -1242,27 +1252,32 @@ function loadTimeAttendanceDashboard() {
         if (elIn) elIn.innerHTML = (r.kpi.clockedIn || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
         if (elNot) elNot.innerHTML = (r.kpi.notClockedIn || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
         if (elLate) elLate.innerHTML = (r.kpi.late || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
-        if (elPend) elPend.innerHTML = (r.kpi.pendingApprovals || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">รายการ</span>';
         if (elTot) elTot.innerHTML = (r.kpi.totalEmployees || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">คน</span>';
-        var subBadge = document.getElementById('attSubTabBadgeApprovals');
-        if (subBadge) {
-          var pCount = (r.kpi && r.kpi.pendingApprovals) || 0;
-          if (pCount > 0) {
-            subBadge.textContent = pCount;
-            subBadge.style.display = 'inline-block';
-          } else {
-            subBadge.style.display = 'none';
+        if (!shouldSkipRequests) {
+          if (elPend) elPend.innerHTML = (r.kpi.pendingApprovals || 0) + ' <span style="font-size:12px;font-weight:400;color:var(--text-muted)">รายการ</span>';
+          var subBadge = document.getElementById('attSubTabBadgeApprovals');
+          if (subBadge) {
+            var pCount = (r.kpi && r.kpi.pendingApprovals) || 0;
+            if (pCount > 0) {
+              subBadge.textContent = pCount;
+              subBadge.style.display = 'inline-block';
+            } else {
+              subBadge.style.display = 'none';
+            }
           }
         }
       }
 
       // Cache breakdown & pending datasets for clickable dashboard modal
       State.attendanceBreakdown = r.attendanceBreakdown || null;
-      State.attendancePendingData = {
-        leaves: r.pendingLeaves || [],
-        ots: r.pendingOts || [],
-        advances: r.pendingAdvances || []
-      };
+      if (!shouldSkipRequests) {
+        _hasLoadedInitialAttendanceRequests = true;
+        State.attendancePendingData = {
+          leaves: r.pendingLeaves || [],
+          ots: r.pendingOts || [],
+          advances: r.pendingAdvances || []
+        };
+      }
       State.attendanceDateDisplay = r.dateDisplay || r.date || r.today || '';
 
       // 2. Subtitle & Individual Summary Bar
@@ -1472,7 +1487,9 @@ function loadTimeAttendanceDashboard() {
 
       // 4. Render Tables & Approvals
       renderTimeAttendanceTodayLogs(_currentAttendanceLogs, _currentAttendanceIsIndividual);
-      renderTimeAttendanceApprovals(r.pendingLeaves || [], r.pendingOts || [], r.pendingAdvances || []);
+      if (!shouldSkipRequests) {
+        renderTimeAttendanceApprovals(r.pendingLeaves || [], r.pendingOts || [], r.pendingAdvances || []);
+      }
       renderBranchManagerTable();
 
       var kpiModal = document.getElementById('modalAttendanceKpiDetails');
@@ -2317,9 +2334,132 @@ function setAttendanceFilterToday() {
 }
 
 var _currentAttendanceTableFilter = 'ALL';
+var _attTablePage = 1;
+var _attTablePageSize = 50;
+var _currentFilteredAttendanceLogIds = [];
+var _selectedAttendanceLogIds = {};
+var _attLogPhotoCache = {};
+var _attLeaveCertCache = {};
+
+function fetchAttendanceLogPhotosCached(logId, type) {
+  var idNum = Number(logId);
+  if (!idNum) return Promise.resolve(null);
+  var reqType = type || 'all';
+  var cached = _attLogPhotoCache[idNum] || {};
+  if (cached._loadedAll) return Promise.resolve(cached);
+  if (reqType === 'in' && cached.in_photo_url) return Promise.resolve(cached);
+  if (reqType === 'out' && cached.out_photo_url) return Promise.resolve(cached);
+  if (reqType === 'break_out' && cached.break_out_photo_url) return Promise.resolve(cached);
+  if (reqType === 'break_in' && cached.break_in_photo_url) return Promise.resolve(cached);
+
+  return callApi('getAttendanceLogPhotos', { id: idNum, type: reqType })
+    .then(function(r) {
+      if (!r || !r.success) return null;
+      var entry = _attLogPhotoCache[idNum] || {};
+      if (r.in_photo_url !== undefined) entry.in_photo_url = r.in_photo_url;
+      if (r.out_photo_url !== undefined) entry.out_photo_url = r.out_photo_url;
+      if (r.break_out_photo_url !== undefined) entry.break_out_photo_url = r.break_out_photo_url;
+      if (r.break_in_photo_url !== undefined) entry.break_in_photo_url = r.break_in_photo_url;
+      if (reqType === 'all') entry._loadedAll = true;
+      _attLogPhotoCache[idNum] = entry;
+
+      var logRef = (_currentAttendanceLogs || []).find(function(x) { return Number(x.id) === idNum; });
+      if (logRef) {
+        if (entry.in_photo_url) logRef.in_photo_url = entry.in_photo_url;
+        if (entry.out_photo_url) logRef.out_photo_url = entry.out_photo_url;
+        if (entry.break_out_photo_url) logRef.break_out_photo_url = entry.break_out_photo_url;
+        if (entry.break_in_photo_url) logRef.break_in_photo_url = entry.break_in_photo_url;
+      }
+      return entry;
+    });
+}
+
+function viewAttendanceLogPhotoOnDemand(logId, photoType, title, sub) {
+  var idNum = Number(logId);
+  var pType = photoType || 'in';
+  var fieldMap = {
+    'in': 'in_photo_url',
+    'out': 'out_photo_url',
+    'break_out': 'break_out_photo_url',
+    'break_in': 'break_in_photo_url'
+  };
+  var field = fieldMap[pType] || 'in_photo_url';
+
+  var cached = _attLogPhotoCache[idNum];
+  if (cached && cached[field]) {
+    previewAttendancePhoto(cached[field], title, sub);
+    return;
+  }
+  var logRef = (_currentAttendanceLogs || []).find(function(x) { return Number(x.id) === idNum; });
+  if (logRef && logRef[field]) {
+    previewAttendancePhoto(logRef[field], title, sub);
+    return;
+  }
+
+  showToast('กำลังโหลดรูปถ่าย...', 'info');
+  fetchAttendanceLogPhotosCached(idNum, pType)
+    .then(function(res) {
+      var url = res && res[field];
+      if (url) {
+        previewAttendancePhoto(url, title, sub);
+      } else {
+        showToast('ไม่พบรูปถ่ายในระบบ', 'warning');
+      }
+    })
+    .catch(function(err) {
+      showToast('โหลดรูปถ่ายไม่สำเร็จ: ' + (err.message || err), 'error');
+    });
+}
+
+function fetchLeaveMedicalCertCached(leaveId) {
+  var idNum = Number(leaveId);
+  if (!idNum) return Promise.resolve(null);
+  if (_attLeaveCertCache[idNum]) return Promise.resolve(_attLeaveCertCache[idNum]);
+  return callApi('getLeaveMedicalCert', { id: idNum })
+    .then(function(r) {
+      if (r && r.success && r.medical_cert_url) {
+        _attLeaveCertCache[idNum] = r.medical_cert_url;
+        return r.medical_cert_url;
+      }
+      return null;
+    });
+}
+
+function viewLeaveMedicalCertOnDemand(leaveId, title, sub) {
+  var idNum = Number(leaveId);
+  if (_attLeaveCertCache[idNum]) {
+    previewAttendancePhoto(_attLeaveCertCache[idNum], title, sub);
+    return;
+  }
+  showToast('กำลังโหลดเอกสารแนบ / ใบรับรองแพทย์...', 'info');
+  fetchLeaveMedicalCertCached(idNum)
+    .then(function(url) {
+      if (url) {
+        previewAttendancePhoto(url, title, sub);
+      } else {
+        showToast('ไม่พบเอกสารแนบหรือใบรับรองแพทย์', 'warning');
+      }
+    })
+    .catch(function(err) {
+      showToast('โหลดเอกสารแนบไม่สำเร็จ: ' + (err.message || err), 'error');
+    });
+}
+
+function setAttendanceTablePage(page) {
+  _attTablePage = Math.max(1, Number(page) || 1);
+  renderTimeAttendanceTodayLogs(_currentAttendanceLogs, _currentAttendanceIsIndividual);
+}
+
+function setAttendanceTablePageSize(size) {
+  _attTablePageSize = Number(size) || 50;
+  _attTablePage = 1;
+  renderTimeAttendanceTodayLogs(_currentAttendanceLogs, _currentAttendanceIsIndividual);
+}
 
 function setAttendanceTableFilter(filter) {
   _currentAttendanceTableFilter = filter || 'ALL';
+  _attTablePage = 1;
+  _selectedAttendanceLogIds = {};
   var btnAll = document.getElementById('btnAttFilter_ALL');
   var btnPresent = document.getElementById('btnAttFilter_PRESENT');
   var btnLate = document.getElementById('btnAttFilter_LATE');
@@ -2382,6 +2522,7 @@ function openLeaveDetailModal(leaveId, empId) {
     var lObj = leaves.find(function(x) { return leaveId && String(x.id) === String(leaveId); });
     if (lObj) {
       match = {
+        leaveId: lObj.id,
         name: lObj.full_name || lObj.emp_id,
         nickname: lObj.nickname || '',
         empId: lObj.emp_id,
@@ -2391,7 +2532,8 @@ function openLeaveDetailModal(leaveId, empId) {
         leaveDays: lObj.days_count || 1,
         leaveSlot: lObj.time_slot || 'FULL',
         leaveReason: lObj.reason || 'ไม่ได้ระบุเหตุผล',
-        medicalCertUrl: lObj.medical_cert_url || null
+        hasMedicalCert: Boolean(lObj.has_medical_cert || lObj.medical_cert_url),
+        medicalCertUrl: lObj.medical_cert_url || _attLeaveCertCache[Number(lObj.id)] || null
       };
     }
   }
@@ -2400,6 +2542,11 @@ function openLeaveDetailModal(leaveId, empId) {
     showToast('ไม่พบข้อมูลคำขอลางาน', 'info');
     return;
   }
+
+  var resolvedLeaveId = match.leaveId || leaveId;
+  var cachedCert = resolvedLeaveId ? _attLeaveCertCache[Number(resolvedLeaveId)] : null;
+  var certUrl = match.medicalCertUrl || cachedCert || null;
+  var hasCert = Boolean(certUrl || match.hasMedicalCert);
 
   var slotText = match.leaveSlot === 'MORNING' ? 'ครึ่งวันเช้า' : (match.leaveSlot === 'AFTERNOON' ? 'ครึ่งวันบ่าย' : 'เต็มวัน');
   var stLabel = match.leaveStatus === 'APPROVED' ? '<span style="color:#059669;font-weight:700">✓ อนุมัติแล้ว</span>' : (match.leaveStatus === 'PENDING' ? '<span style="color:#d97706;font-weight:700">⏳ รออนุมัติ</span>' : '<span style="color:#dc2626;font-weight:700">✕ ปฏิเสธ</span>');
@@ -2411,17 +2558,21 @@ function openLeaveDetailModal(leaveId, empId) {
     '<div style="margin-bottom:8px"><strong>สถานะคำขอ:</strong> ' + stLabel + '</div>' +
     '<div style="margin-bottom:12px"><strong>เหตุผลการลา:</strong> <div style="background:#f8fafc;padding:8px 10px;border-radius:6px;border:1px dashed #cbd5e1;margin-top:4px">' + esc(match.leaveReason || 'ไม่ได้ระบุเหตุผล') + '</div></div>';
 
-  if (match.medicalCertUrl) {
+  if (hasCert) {
+    var certTitleStr = 'เอกสารแนบการลา: ' + esc(match.name);
+    var certSubStr = 'ประเภท: ' + esc(match.leaveType) + ' (' + (match.leaveDays || 1) + ' วัน)';
     html += '<div style="margin-top:12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:10px">' +
       '<div style="font-weight:700;color:#166534;font-size:12px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between">' +
         '<span><i class="fa-solid fa-file-medical"></i> เอกสารแนบ / ใบรับรองแพทย์:</span>' +
-        '<span style="font-size:11px;color:#15803d"><i class="fa-solid fa-magnifying-glass-plus"></i> แตะที่รูปเพื่อซูมขยาย</span>' +
+        '<span style="font-size:11px;color:#15803d"><i class="fa-solid fa-magnifying-glass-plus"></i> คลิกเพื่อดูรูปขยาย</span>' +
       '</div>' +
-      '<div style="text-align:center;position:relative">' +
-        '<img src="' + match.medicalCertUrl + '" style="max-width:100%;max-height:220px;border-radius:8px;border:2px solid #86efac;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.1);display:inline-block" onclick="previewAttendancePhoto(\'' + match.medicalCertUrl + '\', \'เอกสารแนบการลา: ' + esc(match.name) + '\', \'ประเภท: ' + esc(match.leaveType) + ' (' + (match.leaveDays || 1) + ' วัน)\')" title="คลิกเพื่อดูรูปขยายขนาดใหญ่">' +
+      '<div id="leaveDetailCertPreviewBox" style="text-align:center;position:relative">' +
+        (certUrl
+          ? '<img src="' + certUrl + '" style="max-width:100%;max-height:220px;border-radius:8px;border:2px solid #86efac;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.1);display:inline-block" onclick="previewAttendancePhoto(\'' + certUrl + '\', \'' + certTitleStr + '\', \'' + certSubStr + '\')" title="คลิกเพื่อดูรูปขยายขนาดใหญ่">'
+          : '<div style="padding:14px;color:#15803d;font-size:12px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดรูปใบรับรองแพทย์...</div>') +
       '</div>' +
       '<div style="text-align:center;margin-top:8px">' +
-        '<button type="button" class="btn btn-sm btn-green" onclick="previewAttendancePhoto(\'' + match.medicalCertUrl + '\', \'เอกสารแนบการลา: ' + esc(match.name) + '\', \'ประเภท: ' + esc(match.leaveType) + ' (' + (match.leaveDays || 1) + ' วัน)\')" style="font-size:11px;padding:5px 14px;font-weight:700;display:inline-flex;align-items:center;gap:6px">' +
+        '<button type="button" class="btn btn-sm btn-green" onclick="viewLeaveMedicalCertOnDemand(' + Number(resolvedLeaveId || 0) + ', \'' + certTitleStr + '\', \'' + certSubStr + '\')" style="font-size:11px;padding:5px 14px;font-weight:700;display:inline-flex;align-items:center;gap:6px">' +
           '<i class="fa-solid fa-magnifying-glass-plus"></i> เปิดดูรูปขยายเต็มจอ &amp; ซูมอ่านเอกสาร' +
         '</button>' +
       '</div>' +
@@ -2435,6 +2586,20 @@ function openLeaveDetailModal(leaveId, empId) {
     confirmButtonText: 'ปิดหน้าต่าง',
     confirmButtonColor: '#2563eb'
   });
+
+  if (hasCert && !certUrl && resolvedLeaveId) {
+    fetchLeaveMedicalCertCached(resolvedLeaveId).then(function(loadedUrl) {
+      var box = document.getElementById('leaveDetailCertPreviewBox');
+      if (!box) return;
+      if (loadedUrl) {
+        var cTitle = 'เอกสารแนบการลา: ' + esc(match.name);
+        var cSub = 'ประเภท: ' + esc(match.leaveType) + ' (' + (match.leaveDays || 1) + ' วัน)';
+        box.innerHTML = '<img src="' + loadedUrl + '" style="max-width:100%;max-height:220px;border-radius:8px;border:2px solid #86efac;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,0.1);display:inline-block" onclick="previewAttendancePhoto(\'' + loadedUrl + '\', \'' + cTitle + '\', \'' + cSub + '\')" title="คลิกเพื่อดูรูปขยายขนาดใหญ่">';
+      } else {
+        box.innerHTML = '<div style="padding:8px;color:#64748b;font-size:11.5px">ไม่พบรูปเอกสารแนบ</div>';
+      }
+    });
+  }
 }
 
 function renderTimeAttendanceTodayLogs(logs, isIndividual) {
@@ -2446,6 +2611,7 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
   if (thDate) thDate.style.display = isIndiv ? '' : 'none';
 
   var filterBar = document.getElementById('attDailyFilterBar');
+  var paginationBar = document.getElementById('attLogsPaginationBar');
   var dateMode = (document.getElementById('attFilterDateMode') && document.getElementById('attFilterDateMode').value) || _currentAttendanceDateMode || 'SINGLE';
   var isDailyMode = (!isIndiv && dateMode === 'SINGLE');
 
@@ -2530,26 +2696,47 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
     });
   }
 
+  _currentFilteredAttendanceLogIds = itemsToRender
+    .filter(function(it) { return it.kind === 'LOG' && it.data && it.data.id; })
+    .map(function(it) { return Number(it.data.id); });
+
   if (itemsToRender.length === 0) {
     tbody.innerHTML = '<tr><td colspan="14" class="text-center text-muted" style="padding:28px"><i class="fa-solid fa-clock-rotate-left" style="font-size:24px;margin-bottom:8px;display:block;opacity:0.4"></i>ไม่พบข้อมูลการลงเวลาหรือพนักงานตามเงื่อนไขที่เลือก</td></tr>';
+    if (paginationBar) paginationBar.style.display = 'none';
+    updateAttendanceBatchToolbar();
     return;
   }
 
+  // Pagination slice (50 / 100 / 200 per page)
+  var totalItems = itemsToRender.length;
+  var pageSize = Number(_attTablePageSize) || 50;
+  var totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  if (_attTablePage > totalPages) _attTablePage = totalPages;
+  if (_attTablePage < 1) _attTablePage = 1;
+  var startIdx = (_attTablePage - 1) * pageSize;
+  var endIdx = Math.min(startIdx + pageSize, totalItems);
+  var pagedItems = itemsToRender.slice(startIdx, endIdx);
+
   var html = '';
-  var rowIdx = 1;
+  var rowIdx = startIdx + 1;
   var filterDateVal = (document.getElementById('attFilterDate') && document.getElementById('attFilterDate').value) || bangkokToday;
 
-  itemsToRender.forEach(function(item) {
+  pagedItems.forEach(function(item) {
     if (item.kind === 'LOG') {
       var l = item.data;
+      var hasInPhoto = Boolean(l.in_photo_url || l.has_in_photo);
+      var hasOutPhoto = Boolean(l.out_photo_url || l.has_out_photo);
+      var inSubMeta = 'เวลาเข้า: ' + (l.clock_in || '-') + ' น. | พิกัด: ' + (l.in_lat ? Number(l.in_lat).toFixed(4) + ', ' + Number(l.in_lng).toFixed(4) : '-');
+      var outSubMeta = 'เวลาออก: ' + (l.clock_out || '-') + ' น. | พิกัด: ' + (l.out_lat ? Number(l.out_lat).toFixed(4) + ', ' + Number(l.out_lng).toFixed(4) : '-');
+
       var inPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
-      if (l.in_photo_url) {
-        inPhotoHtml = '<img src="' + l.in_photo_url + '" alt="IN" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #10b981;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + esc(l.full_name || l.emp_id) + '\', \'เวลาเข้า: ' + (l.clock_in || '-') + ' น. | พิกัด: ' + (l.in_lat ? l.in_lat.toFixed(4) + ', ' + l.in_lng.toFixed(4) : '-') + '\')" title="คลิกเพื่อดูรูปขยาย">';
+      if (hasInPhoto) {
+        inPhotoHtml = '<button type="button" onclick="viewAttendanceLogPhotoOnDemand(' + l.id + ', \'in\', \'รูปถ่ายเข้างาน: ' + esc(l.full_name || l.emp_id) + '\', \'' + esc(inSubMeta) + '\')" style="background:#ecfdf5;color:#047857;border:1.5px solid #6ee7b7;border-radius:7px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;box-shadow:0 1px 2px rgba(16,185,129,0.12)" title="คลิกเพื่อโหลดและดูรูปถ่ายเข้างาน"><i class="fa-solid fa-camera"></i> ดูรูป</button>';
       }
 
       var outPhotoHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
-      if (l.out_photo_url) {
-        outPhotoHtml = '<img src="' + l.out_photo_url + '" alt="OUT" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #ef4444;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + l.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + esc(l.full_name || l.emp_id) + '\', \'เวลาออก: ' + (l.clock_out || '-') + ' น. | พิกัด: ' + (l.out_lat ? l.out_lat.toFixed(4) + ', ' + l.out_lng.toFixed(4) : '-') + '\')" title="คลิกเพื่อดูรูปขยาย">';
+      if (hasOutPhoto) {
+        outPhotoHtml = '<button type="button" onclick="viewAttendanceLogPhotoOnDemand(' + l.id + ', \'out\', \'รูปถ่ายออกงาน: ' + esc(l.full_name || l.emp_id) + '\', \'' + esc(outSubMeta) + '\')" style="background:#fef2f2;color:#b91c1c;border:1.5px solid #fca5a5;border-radius:7px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap;box-shadow:0 1px 2px rgba(239,68,68,0.12)" title="คลิกเพื่อโหลดและดูรูปถ่ายออกงาน"><i class="fa-solid fa-camera"></i> ดูรูป</button>';
       }
 
       var lateBadge = '';
@@ -2612,9 +2799,11 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
         missingOutAnomaly = '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;font-weight:700;display:inline-flex;align-items:center;gap:3px" title="ไม่ลงเวลาออกงาน/ค้างเวลาพัก ถือเป็นขาดงานครึ่งบ่าย 0.5 วัน (หัก 1.5 เท่า)"><i class="fa-solid fa-triangle-exclamation"></i> <span>ไม่สแกนออก (ขาดงานครึ่งบ่าย 0.5 วัน)</span></div>';
       }
 
+      var isRowChecked = Boolean(_selectedAttendanceLogIds[Number(l.id)]);
+
       html += '<tr id="attLogRow_' + l.id + '">' +
         '<td class="text-center" style="padding:4px">' +
-          '<input type="checkbox" class="att-log-checkbox" value="' + l.id + '" onchange="onAttendanceCheckboxChanged()" style="cursor:pointer;accent-color:#2563eb;width:15px;height:15px">' +
+          '<input type="checkbox" class="att-log-checkbox" value="' + l.id + '" ' + (isRowChecked ? 'checked ' : '') + 'onchange="onAttendanceCheckboxChanged(this)" style="cursor:pointer;accent-color:#2563eb;width:15px;height:15px">' +
         '</td>' +
         '<td class="text-center font-bold" style="color:#64748b">' + (rowIdx++) + '</td>' +
         dateColHtml +
@@ -2686,8 +2875,8 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
       var leaveStatusBadge = '<span style="background:' + leaveBg + ';color:' + leaveColor + ';font-weight:700;font-size:11px;padding:2px 8px;border-radius:4px;border:1px solid ' + leaveBorder + '">' + leaveIcon + ' ' + esc(leaveTypeLabel) + ' (' + leaveStatusText + ')</span>';
 
       var certPreviewHtml = '<span style="color:#94a3b8;font-size:11px">-</span>';
-      if (u.medicalCertUrl) {
-        certPreviewHtml = '<img src="' + u.medicalCertUrl + '" alt="CERT" style="width:36px;height:36px;border-radius:8px;object-fit:cover;border:2px solid #3b82f6;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:inline-block;vertical-align:middle" onclick="previewAttendancePhoto(\'' + u.medicalCertUrl + '\', \'เอกสาร/ใบรับรองแพทย์: ' + esc(u.name || u.empId) + '\', \'ประเภท: ' + esc(leaveTypeLabel) + ' | ' + (u.leaveDays || 1) + ' วัน\')" title="คลิกดูใบรับรองแพทย์/เอกสารแนบ">';
+      if (u.medicalCertUrl || u.hasMedicalCert) {
+        certPreviewHtml = '<button type="button" onclick="viewLeaveMedicalCertOnDemand(' + Number(u.leaveId || 0) + ', \'เอกสาร/ใบรับรองแพทย์: ' + esc(u.name || u.empId) + '\', \'ประเภท: ' + esc(leaveTypeLabel) + ' | ' + (u.leaveDays || 1) + ' วัน\')" style="background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:7px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;white-space:nowrap" title="คลิกดูใบรับรองแพทย์/เอกสารแนบ"><i class="fa-solid fa-file-medical"></i> ดูใบรับรอง</button>';
       } else {
         certPreviewHtml = '<div style="width:36px;height:36px;border-radius:8px;background:' + leaveBg + ';border:1px solid ' + leaveBorder + ';color:' + leaveColor + ';display:inline-flex;align-items:center;justify-content:center;font-size:15px" title="' + esc(leaveTypeLabel) + '">' + leaveIcon + '</div>';
       }
@@ -2792,6 +2981,35 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
   });
 
   tbody.innerHTML = html;
+
+  if (paginationBar) {
+    paginationBar.style.display = 'flex';
+    var prevDisabled = (_attTablePage <= 1);
+    var nextDisabled = (_attTablePage >= totalPages);
+    paginationBar.innerHTML =
+      '<div style="font-size:12px;color:#475569;font-weight:600">' +
+        'แสดง <strong style="color:#0f172a">' + (startIdx + 1) + ' - ' + endIdx + '</strong> จากทั้งหมด <strong style="color:#1e40af">' + totalItems + '</strong> รายการ' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">' +
+        '<div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:#475569">' +
+          '<span>แสดงหน้าละ:</span>' +
+          '<select onchange="setAttendanceTablePageSize(this.value)" style="padding:3px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11.5px;font-weight:700;color:#0f172a;background:#fff;cursor:pointer">' +
+            '<option value="50"' + (pageSize === 50 ? ' selected' : '') + '>50 รายการ</option>' +
+            '<option value="100"' + (pageSize === 100 ? ' selected' : '') + '>100 รายการ</option>' +
+            '<option value="200"' + (pageSize === 200 ? ' selected' : '') + '>200 รายการ</option>' +
+          '</select>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:4px">' +
+          '<button type="button" class="btn btn-sm btn-slate" ' + (prevDisabled ? 'disabled ' : '') + 'onclick="setAttendanceTablePage(1)" style="padding:3px 8px;font-size:11.5px;' + (prevDisabled ? 'opacity:0.45;cursor:not-allowed' : '') + '" title="หน้าแรก">«</button>' +
+          '<button type="button" class="btn btn-sm btn-slate" ' + (prevDisabled ? 'disabled ' : '') + 'onclick="setAttendanceTablePage(' + (_attTablePage - 1) + ')" style="padding:3px 10px;font-size:11.5px;' + (prevDisabled ? 'opacity:0.45;cursor:not-allowed' : '') + '">‹ ก่อนหน้า</button>' +
+          '<span style="font-size:12px;font-weight:700;color:#1e293b;padding:0 8px">หน้า ' + _attTablePage + ' / ' + totalPages + '</span>' +
+          '<button type="button" class="btn btn-sm btn-slate" ' + (nextDisabled ? 'disabled ' : '') + 'onclick="setAttendanceTablePage(' + (_attTablePage + 1) + ')" style="padding:3px 10px;font-size:11.5px;' + (nextDisabled ? 'opacity:0.45;cursor:not-allowed' : '') + '">ถัดไป ›</button>' +
+          '<button type="button" class="btn btn-sm btn-slate" ' + (nextDisabled ? 'disabled ' : '') + 'onclick="setAttendanceTablePage(' + totalPages + ')" style="padding:3px 8px;font-size:11.5px;' + (nextDisabled ? 'opacity:0.45;cursor:not-allowed' : '') + '" title="หน้าสุดท้าย">»</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  updateAttendanceBatchToolbar();
 }
 
 // ==============================================================================
@@ -3572,35 +3790,105 @@ function printIndividualAttendanceTimesheet() {
 }
 
 // BATCH OPERATIONS & CHECKBOXES
+function getSelectedAttendanceLogIds() {
+  return Object.keys(_selectedAttendanceLogIds || {})
+    .filter(function(k) { return Boolean(_selectedAttendanceLogIds[k]); })
+    .map(function(k) { return Number(k); })
+    .filter(function(n) { return n > 0; });
+}
+
 function toggleSelectAllAttendanceLogs(master) {
   var cbs = document.querySelectorAll('.att-log-checkbox');
+  var isChecked = Boolean(master && master.checked);
+  if (!isChecked) {
+    _selectedAttendanceLogIds = {};
+  }
   cbs.forEach(function(cb) {
-    cb.checked = master.checked;
+    cb.checked = isChecked;
+    var idVal = Number(cb.value);
+    if (idVal) {
+      if (isChecked) _selectedAttendanceLogIds[idVal] = true;
+      else delete _selectedAttendanceLogIds[idVal];
+    }
   });
   updateAttendanceBatchToolbar();
 }
 
-function onAttendanceCheckboxChanged() {
+function selectAllFilteredAttendanceLogs() {
+  (_currentFilteredAttendanceLogIds || []).forEach(function(id) {
+    if (id) _selectedAttendanceLogIds[Number(id)] = true;
+  });
+  var cbs = document.querySelectorAll('.att-log-checkbox');
+  cbs.forEach(function(cb) {
+    cb.checked = true;
+  });
+  updateAttendanceBatchToolbar();
+}
+
+function onAttendanceCheckboxChanged(cb) {
+  if (cb && cb.value) {
+    var idVal = Number(cb.value);
+    if (cb.checked) _selectedAttendanceLogIds[idVal] = true;
+    else delete _selectedAttendanceLogIds[idVal];
+  } else {
+    var allCbs = document.querySelectorAll('.att-log-checkbox');
+    allCbs.forEach(function(el) {
+      var idVal2 = Number(el.value);
+      if (idVal2) {
+        if (el.checked) _selectedAttendanceLogIds[idVal2] = true;
+        else delete _selectedAttendanceLogIds[idVal2];
+      }
+    });
+  }
   updateAttendanceBatchToolbar();
 }
 
 function updateAttendanceBatchToolbar() {
-  var cbs = document.querySelectorAll('.att-log-checkbox:checked');
-  var count = cbs.length;
+  var selectedIds = getSelectedAttendanceLogIds();
+  var count = selectedIds.length;
   var bar = document.getElementById('attBatchToolbar');
   var countDisplay = document.getElementById('attSelectedCount');
+  var banner = document.getElementById('attBatchSelectAllPagesBanner');
   if (countDisplay) countDisplay.textContent = count;
   if (bar) {
     bar.style.display = count > 0 ? 'flex' : 'none';
   }
   var allCbs = document.querySelectorAll('.att-log-checkbox');
+  var checkedPageCbs = document.querySelectorAll('.att-log-checkbox:checked');
+  var allPageSelected = (allCbs.length > 0 && checkedPageCbs.length === allCbs.length);
   var master = document.getElementById('attSelectAllLogs');
   if (master) {
-    master.checked = (allCbs.length > 0 && count === allCbs.length);
+    master.checked = allPageSelected;
+  }
+  if (banner) {
+    var totalFilteredLogs = (_currentFilteredAttendanceLogIds || []).length;
+    if (allPageSelected && totalFilteredLogs > count) {
+      banner.style.display = 'inline-flex';
+      banner.style.alignItems = 'center';
+      banner.style.gap = '6px';
+      banner.style.marginLeft = '8px';
+      banner.style.fontSize = '11.5px';
+      banner.style.color = '#1e40af';
+      banner.innerHTML = '<span>(เลือกหน้านี้ ' + checkedPageCbs.length + ' รายการ)</span> ' +
+        '<button type="button" onclick="selectAllFilteredAttendanceLogs()" style="background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">' +
+        '✨ เลือกทั้ง ' + totalFilteredLogs + ' รายการทุกหน้า (ตามตัวกรองปัจจุบัน)</button>';
+    } else if (totalFilteredLogs > allCbs.length && count === totalFilteredLogs && totalFilteredLogs > 0) {
+      banner.style.display = 'inline-flex';
+      banner.style.alignItems = 'center';
+      banner.style.marginLeft = '8px';
+      banner.style.fontSize = '11.5px';
+      banner.style.fontWeight = '700';
+      banner.style.color = '#047857';
+      banner.innerHTML = '✅ เลือกครบทั้ง ' + totalFilteredLogs + ' รายการจากทุกหน้าแล้ว';
+    } else {
+      banner.style.display = 'none';
+      banner.innerHTML = '';
+    }
   }
 }
 
 function deselectAllAttendanceLogs() {
+  _selectedAttendanceLogIds = {};
   var master = document.getElementById('attSelectAllLogs');
   if (master) master.checked = false;
   var cbs = document.querySelectorAll('.att-log-checkbox');
@@ -3609,8 +3897,7 @@ function deselectAllAttendanceLogs() {
 }
 
 function batchSetEarlyDismissal(enabled) {
-  var cbs = document.querySelectorAll('.att-log-checkbox:checked');
-  var ids = Array.from(cbs).map(function(cb) { return Number(cb.value); });
+  var ids = getSelectedAttendanceLogIds();
   if (ids.length === 0) {
     showToast('กรุณาเลือกรายการที่ต้องการดำเนินการอย่างน้อย 1 รายการ', 'warning');
     return;
@@ -3631,7 +3918,7 @@ function batchSetEarlyDismissal(enabled) {
       if (r && r.success) {
         showToast(r.message || 'บันทึกสถานะเรียบร้อยแล้ว');
         deselectAllAttendanceLogs();
-        loadTimeAttendanceDashboard();
+        loadTimeAttendanceDashboard({ preservePage: true });
       } else {
         showToast((r && r.message) || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล', 'error');
       }
@@ -3642,8 +3929,7 @@ function batchSetEarlyDismissal(enabled) {
 }
 
 function batchDeleteAttendanceLogs() {
-  var cbs = document.querySelectorAll('.att-log-checkbox:checked');
-  var ids = Array.from(cbs).map(function(cb) { return Number(cb.value); });
+  var ids = getSelectedAttendanceLogIds();
   if (ids.length === 0) {
     showToast('กรุณาเลือกรายการที่ต้องการลบอย่างน้อย 1 รายการ', 'warning');
     return;
@@ -3657,6 +3943,7 @@ function batchDeleteAttendanceLogs() {
   })
     .then(function(r) {
       showToast(r.message || 'ลบรายการลงเวลาเรียบร้อยแล้ว');
+      deselectAllAttendanceLogs();
       loadTimeAttendanceDashboard();
     })
     .catch(function(err) {
@@ -3674,7 +3961,7 @@ function deleteSingleAttendanceLog(id, name) {
     .then(function(r) {
       showToast(r.message || 'ลบรายการบันทึกเวลาเรียบร้อยแล้ว');
       closeModal('modalAttendanceDetail');
-      loadTimeAttendanceDashboard();
+      loadTimeAttendanceDashboard({ preservePage: true });
     })
     .catch(function(err) {
       showToast(err.message || 'เกิดข้อผิดพลาดในการลบรายการ', 'error');
@@ -3724,11 +4011,25 @@ function viewAttendanceLogDetail(id) {
     exemptBox.style.display = isExempt ? 'block' : 'none';
   }
 
+  var cachedPhotos = _attLogPhotoCache[Number(log.id)] || {};
+  var inPhotoUrl = log.in_photo_url || cachedPhotos.in_photo_url || null;
+  var outPhotoUrl = log.out_photo_url || cachedPhotos.out_photo_url || null;
+  var breakOutPhotoUrl = log.break_out_photo_url || cachedPhotos.break_out_photo_url || null;
+  var breakInPhotoUrl = log.break_in_photo_url || cachedPhotos.break_in_photo_url || null;
+
+  var needsOnDemandPhotoFetch =
+    (!inPhotoUrl && log.has_in_photo) ||
+    (!outPhotoUrl && log.has_out_photo) ||
+    (!breakOutPhotoUrl && log.has_break_out_photo) ||
+    (!breakInPhotoUrl && log.has_break_in_photo);
+
   // 2. In section
   document.getElementById('dtlClockInTime').textContent = log.clock_in ? log.clock_in + ' น.' : 'ยังไม่บันทึก';
   var inPhotoBox = document.getElementById('dtlInPhotoContainer');
-  if (log.in_photo_url) {
-    inPhotoBox.innerHTML = '<img src="' + log.in_photo_url + '" alt="IN" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + log.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + esc(nameDisplay) + '\', \'เวลาเข้า: ' + (log.clock_in || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+  if (inPhotoUrl) {
+    inPhotoBox.innerHTML = '<img src="' + inPhotoUrl + '" alt="IN" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + inPhotoUrl + '\', \'รูปถ่ายเข้างาน: ' + esc(nameDisplay) + '\', \'เวลาเข้า: ' + (log.clock_in || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+  } else if (log.has_in_photo) {
+    inPhotoBox.innerHTML = '<span style="color:#047857;font-size:12px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดรูปเข้างาน...</span>';
   } else {
     inPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:12px">ไม่มีรูปถ่ายเข้างาน</span>';
   }
@@ -3747,8 +4048,10 @@ function viewAttendanceLogDetail(id) {
   // 3. Out section
   document.getElementById('dtlClockOutTime').textContent = log.clock_out ? log.clock_out + ' น.' : 'ยังไม่บันทึก';
   var outPhotoBox = document.getElementById('dtlOutPhotoContainer');
-  if (log.out_photo_url) {
-    outPhotoBox.innerHTML = '<img src="' + log.out_photo_url + '" alt="OUT" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + log.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + esc(nameDisplay) + '\', \'เวลาออก: ' + (log.clock_out || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+  if (outPhotoUrl) {
+    outPhotoBox.innerHTML = '<img src="' + outPhotoUrl + '" alt="OUT" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + outPhotoUrl + '\', \'รูปถ่ายออกงาน: ' + esc(nameDisplay) + '\', \'เวลาออก: ' + (log.clock_out || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+  } else if (log.has_out_photo) {
+    outPhotoBox.innerHTML = '<span style="color:#b91c1c;font-size:12px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดรูปออกงาน...</span>';
   } else {
     outPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:12px">ไม่มีรูปถ่ายออกงาน</span>';
   }
@@ -3801,16 +4104,20 @@ function viewAttendanceLogDetail(id) {
     }
 
     if (bOutPhotoBox) {
-      if (log.break_out_photo_url) {
-        bOutPhotoBox.innerHTML = '<img src="' + log.break_out_photo_url + '" alt="BREAK_OUT" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + log.break_out_photo_url + '\', \'รูปถ่ายออกพัก: ' + esc(nameDisplay) + '\', \'เวลาออกพัก: ' + (log.break_out || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+      if (breakOutPhotoUrl) {
+        bOutPhotoBox.innerHTML = '<img src="' + breakOutPhotoUrl + '" alt="BREAK_OUT" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + breakOutPhotoUrl + '\', \'รูปถ่ายออกพัก: ' + esc(nameDisplay) + '\', \'เวลาออกพัก: ' + (log.break_out || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+      } else if (log.has_break_out_photo) {
+        bOutPhotoBox.innerHTML = '<span style="color:#b45309;font-size:11px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดรูป...</span>';
       } else {
         bOutPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:11px">ไม่มีรูปถ่ายออกพัก</span>';
       }
     }
 
     if (bInPhotoBox) {
-      if (log.break_in_photo_url) {
-        bInPhotoBox.innerHTML = '<img src="' + log.break_in_photo_url + '" alt="BREAK_IN" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + log.break_in_photo_url + '\', \'รูปถ่ายเข้าหลังพัก: ' + esc(nameDisplay) + '\', \'เวลาเข้าหลังพัก: ' + (log.break_in || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+      if (breakInPhotoUrl) {
+        bInPhotoBox.innerHTML = '<img src="' + breakInPhotoUrl + '" alt="BREAK_IN" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + breakInPhotoUrl + '\', \'รูปถ่ายเข้าหลังพัก: ' + esc(nameDisplay) + '\', \'เวลาเข้าหลังพัก: ' + (log.break_in || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+      } else if (log.has_break_in_photo) {
+        bInPhotoBox.innerHTML = '<span style="color:#0f766e;font-size:11px"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดรูป...</span>';
       } else {
         bInPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:11px">ไม่มีรูปถ่ายเข้าหลังพัก</span>';
       }
@@ -3837,6 +4144,40 @@ function viewAttendanceLogDetail(id) {
     }
   } else {
     if (breakSec) breakSec.style.display = 'none';
+  }
+
+  if (needsOnDemandPhotoFetch) {
+    fetchAttendanceLogPhotosCached(log.id, 'all').then(function(loaded) {
+      if (!loaded) return;
+      if (inPhotoBox && log.has_in_photo) {
+        if (loaded.in_photo_url) {
+          inPhotoBox.innerHTML = '<img src="' + loaded.in_photo_url + '" alt="IN" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + loaded.in_photo_url + '\', \'รูปถ่ายเข้างาน: ' + esc(nameDisplay) + '\', \'เวลาเข้า: ' + (log.clock_in || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+        } else {
+          inPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:12px">ไม่มีรูปถ่ายเข้างาน</span>';
+        }
+      }
+      if (outPhotoBox && log.has_out_photo) {
+        if (loaded.out_photo_url) {
+          outPhotoBox.innerHTML = '<img src="' + loaded.out_photo_url + '" alt="OUT" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + loaded.out_photo_url + '\', \'รูปถ่ายออกงาน: ' + esc(nameDisplay) + '\', \'เวลาออก: ' + (log.clock_out || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+        } else {
+          outPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:12px">ไม่มีรูปถ่ายออกงาน</span>';
+        }
+      }
+      if (bOutPhotoBox && log.has_break_out_photo) {
+        if (loaded.break_out_photo_url) {
+          bOutPhotoBox.innerHTML = '<img src="' + loaded.break_out_photo_url + '" alt="BREAK_OUT" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + loaded.break_out_photo_url + '\', \'รูปถ่ายออกพัก: ' + esc(nameDisplay) + '\', \'เวลาออกพัก: ' + (log.break_out || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+        } else {
+          bOutPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:11px">ไม่มีรูปถ่ายออกพัก</span>';
+        }
+      }
+      if (bInPhotoBox && log.has_break_in_photo) {
+        if (loaded.break_in_photo_url) {
+          bInPhotoBox.innerHTML = '<img src="' + loaded.break_in_photo_url + '" alt="BREAK_IN" style="width:100%;height:100%;object-fit:cover;cursor:pointer" onclick="previewAttendancePhoto(\'' + loaded.break_in_photo_url + '\', \'รูปถ่ายเข้าหลังพัก: ' + esc(nameDisplay) + '\', \'เวลาเข้าหลังพัก: ' + (log.break_in || '-') + '\')" title="คลิกเพื่อดูรูปขนาดใหญ่">';
+        } else {
+          bInPhotoBox.innerHTML = '<span style="color:#94a3b8;font-size:11px">ไม่มีรูปถ่ายเข้าหลังพัก</span>';
+        }
+      }
+    });
   }
 
   // 4. Summary strip
@@ -4413,19 +4754,18 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + formatDateThaiBE(item.start_date) + '</b> ถึง <b>' + formatDateThaiBE(item.end_date) + '</b> (' + (item.days_count || 1) + ' วัน' + (item.time_slot === 'MORNING' ? ' <span style="font-size:10.5px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:700">🌅 ครึ่งวันเช้า</span>' : (item.time_slot === 'AFTERNOON' ? ' <span style="font-size:10.5px;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;font-weight:700">🌆 ครึ่งวันบ่าย</span>' : '')) + ')</div>' +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
-      (item.medical_cert_url ? 
+      ((item.medical_cert_url || item.has_medical_cert) ? 
         '<div style="margin:8px 0;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
-          '<div style="position:relative;cursor:pointer;flex-shrink:0" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" title="คลิกดูรูปขยายขนาดใหญ่">' +
-            '<img src="' + esc(item.medical_cert_url) + '" alt="Cert" style="width:54px;height:54px;border-radius:8px;object-fit:cover;border:2px solid #16a34a;box-shadow:0 2px 4px rgba(0,0,0,0.1);display:block;transition:transform 0.15s ease" onmouseover="this.style.transform=\'scale(1.06)\'" onmouseout="this.style.transform=\'scale(1)\'">' +
-            '<span style="position:absolute;bottom:-4px;right:-4px;background:#16a34a;color:#fff;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;box-shadow:0 1px 3px rgba(0,0,0,0.2)"><i class="fa-solid fa-magnifying-glass-plus"></i></span>' +
+          '<div style="width:44px;height:44px;border-radius:8px;background:#dcfce7;border:1.5px solid #16a34a;color:#15803d;display:flex;align-items:center;justify-content:center;font-size:18px;cursor:pointer;flex-shrink:0" onclick="viewLeaveMedicalCertOnDemand(' + Number(item.id || 0) + ', \'ใบรับรองแพทย์: ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" title="คลิกดูรูปขยายขนาดใหญ่">' +
+            '<i class="fa-solid fa-file-medical"></i>' +
           '</div>' +
           '<div style="flex:1;min-width:180px">' +
             '<div style="font-weight:700;font-size:12px;color:#166534;display:flex;align-items:center;gap:6px">' +
               '<i class="fa-solid fa-file-medical"></i> มีเอกสารแนบ / ใบรับรองแพทย์' +
             '</div>' +
-            '<div style="font-size:11px;color:#15803d;margin-top:2px">คลิกที่รูปหรือปุ่มเพื่อดูภาพขยายขนาดใหญ่ ซูม หมุน และดาวน์โหลด</div>' +
+            '<div style="font-size:11px;color:#15803d;margin-top:2px">คลิกที่ปุ่มเพื่อโหลดและดูภาพขยายขนาดใหญ่ ซูม หมุน และดาวน์โหลด</div>' +
           '</div>' +
-          '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medical_cert_url) + '\', \'ใบรับรองแพทย์: ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" style="background:#16a34a;color:#fff;border:none;font-size:11.5px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.1);white-space:nowrap">' +
+          '<button type="button" class="btn btn-sm" onclick="viewLeaveMedicalCertOnDemand(' + Number(item.id || 0) + ', \'ใบรับรองแพทย์: ' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + '\', \'วันที่ลา: ' + esc(formatDateThaiBE(item.start_date)) + ' ถึง ' + esc(formatDateThaiBE(item.end_date)) + ' (' + esc(item.leave_type || '') + ')\')" style="background:#16a34a;color:#fff;border:none;font-size:11.5px;font-weight:700;padding:6px 14px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.1);white-space:nowrap">' +
             '<i class="fa-solid fa-magnifying-glass-plus"></i> คลิกดูรูปขยาย' +
           '</button>' +
         '</div>' : '') +
@@ -5650,8 +5990,8 @@ function renderAttendanceKpiModalList() {
     } else {
       html = list.map(function(item) {
         var photoBtn = '';
-        if (item.inPhotoUrl) {
-          photoBtn = '<button type="button" class="btn btn-slate btn-xs" onclick="previewAttendancePhoto(\'' + esc(item.inPhotoUrl) + '\', \'เข้างาน: ' + esc(item.name) + '\', \'เวลา ' + esc(item.clockIn) + ' น.\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px"><i class="fa-solid fa-camera text-blue"></i> ดูรูปเซลฟี่</button>';
+        if (item.inPhotoUrl || item.hasInPhoto) {
+          photoBtn = '<button type="button" class="btn btn-slate btn-xs" onclick="viewAttendanceLogPhotoOnDemand(' + Number(item.logId || 0) + ', \'in\', \'เข้างาน: ' + esc(item.name) + '\', \'เวลา ' + esc(item.clockIn) + ' น.\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px"><i class="fa-solid fa-camera text-blue"></i> ดูรูปเซลฟี่</button>';
         }
         var initials = (item.nickname || item.name || 'P').substring(0, 2);
         return '<div style="padding:12px 14px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:space-between;gap:12px;transition:border-color 0.2s" onmouseover="this.style.borderColor=\'#10b981\'" onmouseout="this.style.borderColor=\'#e2e8f0\'">' +
@@ -5744,7 +6084,7 @@ function renderAttendanceKpiModalList() {
           '</div>' +
           '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">' +
             badgeHtml +
-            (item.medicalCertUrl ? '<button type="button" class="btn btn-xs" onclick="previewAttendancePhoto(\'' + esc(item.medicalCertUrl) + '\', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'คำขอลา: ' + esc(item.leaveType || '') + '\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-weight:700;cursor:pointer"><i class="fa-solid fa-file-medical text-amber" style="margin-right:3px"></i> ดูใบรับรองแพทย์</button>' : '') +
+            ((item.medicalCertUrl || item.hasMedicalCert) ? '<button type="button" class="btn btn-xs" onclick="viewLeaveMedicalCertOnDemand(' + Number(item.leaveId || 0) + ', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'คำขอลา: ' + esc(item.leaveType || '') + '\')" style="font-size:10.5px;padding:3px 8px;border-radius:6px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;font-weight:700;cursor:pointer"><i class="fa-solid fa-file-medical text-amber" style="margin-right:3px"></i> ดูใบรับรองแพทย์</button>' : '') +
             phoneBtn +
           '</div>' +
         '</div>';
@@ -5813,6 +6153,7 @@ function renderAttendanceKpiModalList() {
         sub: 'วันที่: ' + formatDateThaiBE(l.start_date) + ' ถึง ' + formatDateThaiBE(l.end_date) + ' (' + (l.days_count || 1) + ' วัน)',
         reason: l.reason || '-',
         color: '#7c3aed',
+        hasMedicalCert: Boolean(l.has_medical_cert || l.medical_cert_url || l.cert_photo_url),
         medicalCertUrl: l.medical_cert_url || l.cert_photo_url || null,
         createdAt: l.created_at
       });
@@ -5879,17 +6220,16 @@ function renderAttendanceKpiModalList() {
           '<div style="font-size:11.5px;color:#334155;background:#fff;padding:8px 10px;border-radius:8px;border:1px solid #e2e8f0">' +
             '<strong>เหตุผล:</strong> ' + esc(item.reason) +
           '</div>' +
-          (item.medicalCertUrl ? 
+          ((item.medicalCertUrl || item.hasMedicalCert) ? 
             '<div style="margin:4px 0;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
-              '<div style="position:relative;cursor:pointer;flex-shrink:0" onclick="previewAttendancePhoto(\'' + esc(item.medicalCertUrl) + '\', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'' + esc(item.title) + ' (' + esc(item.sub) + ')\')" title="คลิกดูรูปขยาย">' +
-                '<img src="' + esc(item.medicalCertUrl) + '" alt="Cert" style="width:48px;height:48px;border-radius:8px;object-fit:cover;border:2px solid #16a34a;box-shadow:0 2px 4px rgba(0,0,0,0.1);display:block">' +
-                '<span style="position:absolute;bottom:-4px;right:-4px;background:#16a34a;color:#fff;border-radius:50%;width:18px;height:18px;display:flex;align-items:center;justify-content:center;font-size:9px"><i class="fa-solid fa-magnifying-glass-plus"></i></span>' +
+              '<div style="width:40px;height:40px;border-radius:8px;background:#dcfce7;border:1.5px solid #16a34a;color:#15803d;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;flex-shrink:0" onclick="viewLeaveMedicalCertOnDemand(' + Number(item.id || 0) + ', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'' + esc(item.title) + ' (' + esc(item.sub) + ')\')" title="คลิกดูรูปขยาย">' +
+                '<i class="fa-solid fa-file-medical"></i>' +
               '</div>' +
               '<div style="flex:1;min-width:140px">' +
                 '<div style="font-weight:700;font-size:11.5px;color:#166534"><i class="fa-solid fa-file-medical"></i> มีเอกสารแนบ / ใบรับรองแพทย์</div>' +
-                '<div style="font-size:10.5px;color:#15803d;margin-top:1px">คลิกที่รูปหรือปุ่มเพื่อดูรูปขยาย ซูม และดาวน์โหลด</div>' +
+                '<div style="font-size:10.5px;color:#15803d;margin-top:1px">คลิกที่ปุ่มเพื่อโหลดและดูรูปขยาย ซูม และดาวน์โหลด</div>' +
               '</div>' +
-              '<button type="button" class="btn btn-sm" onclick="previewAttendancePhoto(\'' + esc(item.medicalCertUrl) + '\', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'' + esc(item.title) + ' (' + esc(item.sub) + ')\')" style="background:#16a34a;color:#fff;border:none;font-size:11px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap">' +
+              '<button type="button" class="btn btn-sm" onclick="viewLeaveMedicalCertOnDemand(' + Number(item.id || 0) + ', \'ใบรับรองแพทย์: ' + esc(item.name) + '\', \'' + esc(item.title) + ' (' + esc(item.sub) + ')\')" style="background:#16a34a;color:#fff;border:none;font-size:11px;font-weight:700;padding:5px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap">' +
                 '<i class="fa-solid fa-magnifying-glass-plus"></i> คลิกดูรูปขยาย' +
               '</button>' +
             '</div>' : '') +

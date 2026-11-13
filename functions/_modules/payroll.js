@@ -1,7 +1,7 @@
 /**
  * Payroll Engine & Calculation Module
  */
-import { ensureBranchTables, ensureTimeAttendanceTables, logSystemActivity } from './db.js';
+import { ensureBranchTables, ensureTimeAttendanceTables, logSystemActivity, executeBatch } from './db.js';
 import { isUserSuperAdmin, userHasPermission, getDefaultRolePermissions } from './security.js';
 import { getBranchShiftSessions } from './branches.js';
 import {
@@ -86,7 +86,7 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   }
   if (!workDays || workDays <= 0) workDays = 26;
 
-  const empQuery = await db.prepare('SELECT * FROM employees').all();
+  const empQuery = await db.prepare('SELECT emp_id, full_name, nickname, department, position, branch_id, bank_name, bank_account, base_salary, pf_rate, default_sso, default_tax, join_date, resign_date, status FROM employees').all();
   const empMap = {};
   for (const emp of empQuery.results || []) empMap[emp.emp_id] = emp;
 
@@ -114,8 +114,6 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     }
   }
 
-  await db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period).run();
-
   // Load active scheduled incident deductions for this period
   const incidentSchedules = await db.prepare(`
     SELECT emp_id, SUM(amount) as total_sched_deduct
@@ -129,6 +127,10 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   }
 
   let count = 0;
+  const calcBatchStmts = [
+    db.prepare('DELETE FROM payroll_calcs WHERE period = ?').bind(period)
+  ];
+
   for (const inp of inputList) {
     count++;
     const empId = inp.emp_id;
@@ -203,21 +205,29 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
       netPay = Math.ceil(rawNetPay);
     }
 
-    await db.prepare(`
-      INSERT OR REPLACE INTO payroll_calcs
-      (period, emp_id, full_name, department, position, bank_name, bank_account, base_salary, ot_hours, ot_rate, ot_pay, allowance, bonus, leave_deduction, gross_pay, sso, pf, tax, advance_deduct, other_deduct, carried_debt, total_deductions, net_pay)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      period, empId, inp.emp_name || emp.full_name || empId,
-      emp.department || '', emp.position || '', emp.bank_name || '', emp.bank_account || '',
-      baseSal, Number(inp.ot_hours) || 0, otRate, otPay,
-      allowance, bonus,
-      leaveDed, grossPay, sso, pf, tax, advDed, othDed, carriedDebtOut, totalDed, netPay
-    ).run();
+    calcBatchStmts.push(
+      db.prepare(`
+        INSERT OR REPLACE INTO payroll_calcs
+        (period, emp_id, full_name, department, position, bank_name, bank_account, base_salary, ot_hours, ot_rate, ot_pay, allowance, bonus, leave_deduction, gross_pay, sso, pf, tax, advance_deduct, other_deduct, carried_debt, total_deductions, net_pay)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        period, empId, inp.emp_name || emp.full_name || empId,
+        emp.department || '', emp.position || '', emp.bank_name || '', emp.bank_account || '',
+        baseSal, Number(inp.ot_hours) || 0, otRate, otPay,
+        allowance, bonus,
+        leaveDed, grossPay, sso, pf, tax, advDed, othDed, carriedDebtOut, totalDed, netPay
+      )
+    );
 
     if (carriedDebtOut > 0) {
-      await db.prepare('UPDATE monthly_inputs SET carried_debt = ? WHERE period = ? AND emp_id = ?').bind(carriedDebtOut, period, empId).run().catch(() => {});
+      calcBatchStmts.push(
+        db.prepare('UPDATE monthly_inputs SET carried_debt = ? WHERE period = ? AND emp_id = ?').bind(carriedDebtOut, period, empId)
+      );
     }
+  }
+
+  if (calcBatchStmts.length > 0) {
+    await executeBatch(db, calcBatchStmts, 50);
   }
 
   return count;
