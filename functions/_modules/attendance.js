@@ -603,9 +603,8 @@ export const attendanceHandlers = {
         const bOutMin = timeStringToMinutes(row.break_out);
         const bInMin = timeStringToMinutes(row.break_in);
         const workHours = Number(row.work_hours) || 0;
-        const morningLateMins = Number(row.late_minutes) || 0;
+        let morningLateMins = Number(row.late_minutes) || 0;
         const overBreakMins = countOverbreakAsLate ? (Number(row.overbreak_minutes) || 0) : 0;
-        const totalDayLateMins = morningLateMins + overBreakMins;
 
         const leaveInfo = getLeaveInfoOnDate(row.emp_id, row.date);
         const approvedLeaveDays = leaveInfo.days;
@@ -619,6 +618,19 @@ export const attendanceHandlers = {
         }
 
         if (coversMorning && coversAfternoon) continue; // Fully covered by approved leave
+
+        // If morning is covered by approved leave, employee is NOT late for the morning shift!
+        if (coversMorning) {
+          if (inMin !== null && inMin >= lunchStart) {
+            const graceMin = branch ? Number(branch.grace_minutes || 0) : 0;
+            morningLateMins = (lunchEnd && inMin > (lunchEnd + graceMin))
+              ? (inMin - lunchEnd)
+              : 0;
+          } else {
+            morningLateMins = 0;
+          }
+        }
+        const totalDayLateMins = morningLateMins + overBreakMins;
 
         const coveredHours = approvedLeaveDays * shiftHours;
         const targetHours = Math.max(0, shiftHours - coveredHours);
@@ -2049,6 +2061,16 @@ export const attendanceHandlers = {
                 curLateMins = 0;
               } else {
                 morningLateMins = Number(log.late_minutes) || 0;
+                if (coversMorning) {
+                  if (inMin !== null && inMin >= lunchStart) {
+                    const graceMin = branch ? Number(branch.grace_minutes || 0) : 0;
+                    morningLateMins = (lunchEnd && inMin > (lunchEnd + graceMin))
+                      ? (inMin - lunchEnd)
+                      : 0;
+                  } else {
+                    morningLateMins = 0;
+                  }
+                }
                 overBreakMins = countOverbreakAsLate ? (Number(log.overbreak_minutes) || 0) : 0;
                 curLateMins = morningLateMins + overBreakMins;
               }
@@ -3066,11 +3088,37 @@ export const attendanceHandlers = {
           const startMin = toMin(branchRow && branchRow.work_start_time) || (9 * 60 + 30);
           const graceMin = Number(branchRow && branchRow.grace_minutes) || 0;
 
-          if (inMin !== null) {
-            if (inMin > (startMin + graceMin)) {
-              finalLateMinutes = inMin - startMin;
-            } else {
-              finalLateMinutes = 0;
+          if (lateMinutes === undefined || lateMinutes === null) {
+            if (inMin !== null) {
+              let hasMorningLeave = false;
+              try {
+                const lv = await db.prepare(`
+                  SELECT id, leave_type, days_count, time_slot FROM leave_requests
+                  WHERE emp_id = ? AND status = 'APPROVED' AND ? >= start_date AND ? <= end_date
+                `).bind(empId, date, date).first();
+                if (lv) {
+                  const lvDays = Number(lv.days_count) || 1;
+                  const lvSlot = lv.time_slot || 'FULL';
+                  const lStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
+                  if ((lvSlot === 'FULL' && lvDays >= 1.0) || lvSlot === 'MORNING' || (inMin >= lStart)) {
+                    hasMorningLeave = true;
+                  }
+                }
+              } catch(e) {}
+
+              const lEnd = toMin(branchRow && branchRow.lunch_end_time) || (14 * 60);
+              const lStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
+              if (hasMorningLeave) {
+                if (inMin >= lStart) {
+                  finalLateMinutes = (inMin > (lEnd + graceMin)) ? (inMin - lEnd) : 0;
+                } else {
+                  finalLateMinutes = 0;
+                }
+              } else if (inMin > (startMin + graceMin)) {
+                finalLateMinutes = inMin - startMin;
+              } else {
+                finalLateMinutes = 0;
+              }
             }
           }
 
@@ -3211,12 +3259,38 @@ export const attendanceHandlers = {
       const startMin = toMin(branchRow && branchRow.work_start_time) || (9 * 60 + 30);
       const graceMin = Number(branchRow && branchRow.grace_minutes) || 0;
 
-      // Recalculate late minutes dynamically if clockIn is provided
-      if (inMin !== null) {
-        if (inMin > (startMin + graceMin)) {
-          finalLateMinutes = inMin - startMin;
-        } else {
-          finalLateMinutes = 0;
+      // Only recalculate late minutes dynamically if lateMinutes was NOT explicitly passed by caller
+      if (lateMinutes === undefined || lateMinutes === null) {
+        if (inMin !== null) {
+          let hasMorningLeave = false;
+          try {
+            const lv = await db.prepare(`
+              SELECT id, leave_type, days_count, time_slot FROM leave_requests
+              WHERE emp_id = ? AND status = 'APPROVED' AND ? >= start_date AND ? <= end_date
+            `).bind(existing.emp_id, existing.date, existing.date).first();
+            if (lv) {
+              const lvDays = Number(lv.days_count) || 1;
+              const lvSlot = lv.time_slot || 'FULL';
+              const lStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
+              if ((lvSlot === 'FULL' && lvDays >= 1.0) || lvSlot === 'MORNING' || (inMin >= lStart)) {
+                hasMorningLeave = true;
+              }
+            }
+          } catch(e) {}
+
+          const lEnd = toMin(branchRow && branchRow.lunch_end_time) || (14 * 60);
+          const lStart = toMin(branchRow && branchRow.lunch_start_time) || (13 * 60);
+          if (hasMorningLeave) {
+            if (inMin >= lStart) {
+              finalLateMinutes = (inMin > (lEnd + graceMin)) ? (inMin - lEnd) : 0;
+            } else {
+              finalLateMinutes = 0;
+            }
+          } else if (inMin > (startMin + graceMin)) {
+            finalLateMinutes = inMin - startMin;
+          } else {
+            finalLateMinutes = 0;
+          }
         }
       }
 
