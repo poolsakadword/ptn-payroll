@@ -216,7 +216,7 @@ export async function executeDeleteAttendanceRequest(db, type, id, callerUser) {
 export const attendanceHandlers = {
   syncFromPtnTime: async (db, params) => {
     let period = params.period;
-      const callerUser = params.username || '';
+      const callerUser = params.username || 'Admin';
       const allowed = (await userHasPermission(db, callerUser, 'sync_ptn_time')) || (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดึงข้อมูลจากระบบ PTN Time' };
       if (await isPeriodLocked(db, period)) {
