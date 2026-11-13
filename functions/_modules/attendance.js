@@ -3345,17 +3345,17 @@ export const attendanceHandlers = {
         SET clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, overbreak_minutes = ?, late_minutes = ?, work_hours = ?, ot_hours = ?, status = ?, remark = ?, is_full_pay = ?
         WHERE id = ?
       `).bind(
-        clockIn || null,
-        clockOut || null,
-        breakOut || null,
-        breakIn || null,
+        clockIn !== undefined ? (clockIn || null) : existing.clock_in,
+        clockOut !== undefined ? (clockOut || null) : existing.clock_out,
+        breakOut !== undefined ? (breakOut || null) : existing.break_out,
+        breakIn !== undefined ? (breakIn || null) : existing.break_in,
         finalBreakMinutes,
-        overbreakMinutes !== undefined && overbreakMinutes !== null ? Number(overbreakMinutes) : 0,
+        overbreakMinutes !== undefined && overbreakMinutes !== null ? Number(overbreakMinutes) : (Number(existing.overbreak_minutes) || 0),
         finalLateMinutes,
         finalWorkHours,
         finalOtHours,
         finalStatus,
-        remark || '',
+        remark !== undefined ? remark : (existing.remark || ''),
         isFullPayVal,
         id
       ).run();
