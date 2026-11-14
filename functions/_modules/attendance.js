@@ -817,7 +817,10 @@ export const attendanceHandlers = {
 
         const pfRate = (emp.pf_rate !== null && emp.pf_rate !== undefined && !isNaN(Number(emp.pf_rate))) ? Number(emp.pf_rate) : 0.05;
         const pfAmt = pfRate > 0 ? Math.round(baseSal * pfRate * 100) / 100 : 0;
-        const sso = (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 0;
+        const empDefaultSso = (emp.default_sso !== null && emp.default_sso !== undefined && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 0;
+        const sso = empDefaultSso <= 0
+          ? 0
+          : ((exist.sso !== null && exist.sso !== undefined && !isNaN(Number(exist.sso))) ? Number(exist.sso) : empDefaultSso);
         const tax = Number(emp.default_tax) || 0;
 
         const bonus = Number(exist.bonus) || 0;

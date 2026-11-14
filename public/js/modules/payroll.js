@@ -1051,7 +1051,7 @@ function openInspector(empId) {
     var eBase = (payroll.earnedBaseSalary !== undefined) ? Number(payroll.earnedBaseSalary) : Math.round(dRate * elDays * 100) / 100;
     var eGross = (payroll.earnedGrossPay !== undefined) ? Number(payroll.earnedGrossPay) : Math.round((eBase + otPay + allowance + bonus - leaveDeduct) * 100) / 100;
     var eNet = (payroll.earnedNetPay !== undefined) ? Number(payroll.earnedNetPay) : netPay;
-    var eSso = (payroll.earnedSso !== undefined) ? Number(payroll.earnedSso) : Math.min(750, Math.round(eBase * 0.05 * 100) / 100);
+    var eSso = (payroll.earnedSso !== undefined) ? Number(payroll.earnedSso) : (sso > 0 ? Math.min(sso, Math.round(eBase * 0.05 * 100) / 100) : 0);
     var ePf = (payroll.earnedPf !== undefined) ? Number(payroll.earnedPf) : 0;
     var asOfThai = formatDateThaiBE(payroll.asOfDate || State.asOfDate);
 

@@ -484,7 +484,8 @@ export const payrollHandlers = {
           const earnedGrossPay = Math.round((earnedBaseSalary + otPay + allowance + bonus - leaveDeduction) * 100) / 100;
 
           // Statutory & Mid-Period Deductions to-date
-          const earnedSso = Math.min(Number(c.sso) || 750, Math.round(earnedBaseSalary * 0.05 * 100) / 100);
+          const fullSso = (c.sso !== null && c.sso !== undefined && !isNaN(Number(c.sso))) ? Number(c.sso) : 0;
+          const earnedSso = fullSso > 0 ? Math.min(fullSso, Math.round(earnedBaseSalary * 0.05 * 100) / 100) : 0;
           const pfRate = (Number(c.pf) > 0 && contractBaseSal > 0) ? (Number(c.pf) / contractBaseSal) : (Number(emp.pfRate) || 0);
           const earnedPf = Math.round(earnedBaseSalary * pfRate * 100) / 100;
           const earnedTax = Math.round((Number(c.tax) || 0) * empElapsed.ratio * 100) / 100;

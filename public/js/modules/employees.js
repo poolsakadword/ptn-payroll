@@ -1021,7 +1021,9 @@ function openAddEmployeeModal() {
   var isSuperOrAdmin = (typeof isSuperAdmin === 'function' && isSuperAdmin());
   if (confWrapper) confWrapper.style.display = isSuperOrAdmin ? 'block' : 'none';
   if (isConfCheck) isConfCheck.checked = false;
+  if (document.getElementById('mStatus')) document.getElementById('mStatus').value = 'Active';
   if (document.getElementById('mResignDate')) document.getElementById('mResignDate').value = '';
+  onEmployeeStatusChanged(true);
   updateBirthDateThaiHint();
   updateJoinDateThaiHint();
   updateProbEndDateThaiHint();
@@ -1092,7 +1094,7 @@ function openEditEmployeeModal(empId) {
   if (document.getElementById('mProbationDays')) document.getElementById('mProbationDays').value = e.probationDays || 119;
   if (document.getElementById('mProbationEndDate')) document.getElementById('mProbationEndDate').value = e.probationEndDate || '';
   if (document.getElementById('mResignDate')) document.getElementById('mResignDate').value = e.resignDate || '';
-  onEmployeeStatusChanged();
+  onEmployeeStatusChanged(true);
   updateBirthDateThaiHint();
   updateJoinDateThaiHint();
   updateProbEndDateThaiHint();
@@ -1913,7 +1915,7 @@ function getProbationDaysRemaining(emp) {
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 }
 
-function onEmployeeStatusChanged() {
+function onEmployeeStatusChanged(isInit) {
   var st = document.getElementById('mStatus') ? document.getElementById('mStatus').value : 'Active';
   var sec = document.getElementById('probationConfigSection');
   if (sec) {
@@ -1922,6 +1924,18 @@ function onEmployeeStatusChanged() {
   var resSec = document.getElementById('resignedConfigSection');
   if (resSec) {
     resSec.style.display = (st === 'Resigned') ? 'block' : 'none';
+  }
+  if (!isInit && st === 'Probation') {
+    var hasSsoChk = document.getElementById('mHasSso');
+    if (hasSsoChk) {
+      hasSsoChk.checked = false;
+      onEmpHasSsoChanged();
+    }
+    var hasPfChk = document.getElementById('mHasPf');
+    if (hasPfChk) {
+      hasPfChk.checked = false;
+      onEmpHasPfChanged();
+    }
   }
   if (st === 'Probation') {
     calculateProbationEndDate();
