@@ -3617,7 +3617,6 @@ function renderAnalyticsLeaderboard(allHistory, selYear, selBranch, selDept) {
     '</tr>';
   });
   tbody.innerHTML = h;
-  renderTablePaginationBar('payrollPaginationBar', paginationAnchor, pTotal, _payrollPage, _payrollPageSize, 'goToPayrollPage', 'changePayrollPageSize');
 }
 
 function renderAnalyticsInsights(totalGross, totalOtPay, totalOtHours, totalLateDeduct, totalAbsent, attendanceRate, deptGross, deptOt, branchGross, branchOt, selBranch, selDept) {
