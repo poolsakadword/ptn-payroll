@@ -2031,4 +2031,329 @@ function exportKtbPayrollTxt() {
   showToast('ดาวน์โหลดไฟล์โอนเงินเดือน KTB (TXT) สำเร็จ');
 }
 
+// ==============================================================================
+// SHARED HELPERS FOR EMPLOYMENT CONTRACT & RESIGNATION LETTER
+// ==============================================================================
+function getDocCenterSelectedEmployee(targetEmpId) {
+  if (!hasPermission('view_salary') && !hasPermission('view_documents') && !hasPermission('all') && !isSuperAdmin()) {
+    showToast('คุณไม่มีสิทธิ์ออกเอกสารบุคคล', 'warning');
+    return null;
+  }
+  var sel = document.getElementById('docCertEmpSelect');
+  if (targetEmpId && sel) {
+    sel.value = targetEmpId;
+  }
+  var empId = targetEmpId || (sel ? sel.value : (State.employees && State.employees[0] ? State.employees[0].empId : ''));
+  if (!empId) {
+    showToast('กรุณาเลือกพนักงานก่อนสร้างเอกสาร', 'warning');
+    return null;
+  }
+  var emp = (State.employees || []).find(function(e) { return e.empId === empId; });
+  if (!emp) {
+    showToast('ไม่พบข้อมูลพนักงานรหัส ' + empId, 'error');
+    return null;
+  }
+  return { empId: empId, emp: emp };
+}
+
+function formatDocThaiFullDate(isoStr) {
+  if (!isoStr) return '....................';
+  var s = String(isoStr).trim().substring(0, 10);
+  var p = s.split('-');
+  if (p.length !== 3) return isoStr;
+  var y = parseInt(p[0], 10);
+  var m = parseInt(p[1], 10);
+  var d = parseInt(p[2], 10);
+  if (isNaN(y) || isNaN(m) || isNaN(d)) return isoStr;
+  var thaiMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+  var beYear = y < 2400 ? y + 543 : y;
+  return d + ' ' + (thaiMonths[m - 1] || '') + ' ' + beYear;
+}
+
+function printDocCenterModal(printClass) {
+  clearAllPrintClasses();
+  document.body.classList.add(printClass);
+  setTimeout(function() {
+    window.print();
+    setTimeout(clearAllPrintClasses, 1500);
+  }, 100);
+}
+
+// ==============================================================================
+// EMPLOYMENT CONTRACT CONTROLLER (A4 EDITABLE)
+// ==============================================================================
+function openEmploymentContractModal(targetEmpId) {
+  var picked = getDocCenterSelectedEmployee(targetEmpId);
+  if (!picked) return;
+  var emp = picked.emp;
+
+  var typeSel = document.getElementById('modalContractType');
+  if (typeSel) typeSel.value = 'PROBATION';
+
+  var startInput = document.getElementById('modalContractStartDate');
+  var todayIso = new Date().toISOString().substring(0, 10);
+  if (startInput) startInput.value = emp.joinDate ? String(emp.joinDate).substring(0, 10) : todayIso;
+
+  var probInput = document.getElementById('modalContractProbDays');
+  if (probInput) probInput.value = Number(emp.probationDays) || 119;
+
+  var endInput = document.getElementById('modalContractEndDate');
+  if (endInput && !endInput.value) {
+    var baseD = new Date((startInput && startInput.value ? startInput.value : todayIso) + 'T00:00:00');
+    baseD.setFullYear(baseD.getFullYear() + 1);
+    baseD.setDate(baseD.getDate() - 1);
+    endInput.value = baseD.toISOString().substring(0, 10);
+  }
+
+  var dateInput = document.getElementById('modalContractDate');
+  if (dateInput) dateInput.value = formatDocThaiFullDate(todayIso);
+
+  var signName = document.getElementById('modalContractSignName');
+  var signTitle = document.getElementById('modalContractSignTitle');
+  if (signName) signName.value = State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง';
+  if (signTitle) signTitle.value = State.company.signatoryTitle || 'ผู้จัดการฝ่ายทรัพยากรบุคคล';
+
+  onContractParamChanged();
+  openModal('employmentContractModal');
+}
+
+function onContractParamChanged() {
+  var cType = document.getElementById('modalContractType') ? document.getElementById('modalContractType').value : 'PROBATION';
+  var probGrp = document.getElementById('contractProbDaysGroup');
+  var endGrp = document.getElementById('contractEndDateGroup');
+  if (probGrp) probGrp.style.display = (cType === 'PROBATION') ? 'flex' : 'none';
+  if (endGrp) endGrp.style.display = (cType === 'FIXED_TERM') ? 'flex' : 'none';
+  renderContractModalPaper();
+}
+
+function renderContractModalPaper(targetEmpId) {
+  var paper = document.getElementById('contractPaper');
+  if (!paper) return;
+  var picked = getDocCenterSelectedEmployee(targetEmpId);
+  if (!picked) return;
+  var emp = picked.emp;
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var compAddress = State.company.address || '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110';
+  var compTaxId = State.company.taxId || '0105559876543';
+  var compPhone = State.company.phone || '02-123-4567';
+
+  var cType = document.getElementById('modalContractType') ? document.getElementById('modalContractType').value : 'PROBATION';
+  var startIso = document.getElementById('modalContractStartDate') ? document.getElementById('modalContractStartDate').value : (emp.joinDate || '');
+  var probDays = Number(document.getElementById('modalContractProbDays') ? document.getElementById('modalContractProbDays').value : (emp.probationDays || 119)) || 119;
+  var endIso = document.getElementById('modalContractEndDate') ? document.getElementById('modalContractEndDate').value : '';
+  var contractDateStr = (document.getElementById('modalContractDate') && document.getElementById('modalContractDate').value) ? document.getElementById('modalContractDate').value : formatDocThaiFullDate(new Date().toISOString().substring(0, 10));
+  var signName = (document.getElementById('modalContractSignName') && document.getElementById('modalContractSignName').value) ? document.getElementById('modalContractSignName').value : (State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง');
+  var signTitle = (document.getElementById('modalContractSignTitle') && document.getElementById('modalContractSignTitle').value) ? document.getElementById('modalContractSignTitle').value : (State.company.signatoryTitle || 'ผู้จัดการฝ่ายทรัพยากรบุคคล');
+
+  var branch = (State.branches || []).find(function(b) { return b.branch_id === emp.branchId; }) || {};
+  var branchLabel = branch.branch_name ? (branch.branch_name + ' (' + (emp.branchId || 'B01') + ')') : (emp.branchId || 'สำนักงานใหญ่');
+  var workStart = branch.work_start_time || '09:30';
+  var workEnd = branch.work_end_time || '19:00';
+
+  var startTh = formatDocThaiFullDate(startIso);
+  var endTh = formatDocThaiFullDate(endIso);
+  var probEndIso = '';
+  if (startIso && probDays > 0) {
+    var dProb = new Date(startIso + 'T00:00:00');
+    if (!isNaN(dProb.getTime())) {
+      dProb.setDate(dProb.getDate() + probDays);
+      probEndIso = dProb.toISOString().substring(0, 10);
+    }
+  }
+  var probEndTh = formatDocThaiFullDate(probEndIso);
+
+  var baseSal = Number(emp.baseSalary) || 0;
+  var salaryText = baseSal > 0 ? ('เดือนละ ' + fmt(baseSal) + ' บาท') : 'ตามอัตราที่ตกลงกัน';
+
+  var titleText = (cType === 'FIXED_TERM')
+    ? 'สัญญาจ้างแรงงาน (แบบมีกำหนดระยะเวลา)'
+    : 'หนังสือสัญญาการจ้างงาน';
+
+  var clause2Html = (cType === 'FIXED_TERM')
+    ? '<p style="margin:6px 0"><strong>ข้อ 2. ระยะเวลาการจ้าง:</strong> สัญญานี้มีกำหนดระยะเวลาตั้งแต่วันที่ <strong>' + esc(startTh) + '</strong> ถึงวันที่ <strong>' + esc(endTh) + '</strong> เว้นแต่คู่สัญญาจะตกลงต่ออายุสัญญาเป็นลายลักษณ์อักษร</p>'
+    : '<p style="margin:6px 0"><strong>ข้อ 2. วันเริ่มงานและการทดลองงาน:</strong> ลูกจ้างตกลงเข้าเริ่มปฏิบัติงานตั้งแต่วันที่ <strong>' + esc(startTh) + '</strong> โดยมีระยะเวลาทดลองงาน <strong>' + probDays + ' วัน</strong> (ถึงวันที่ <strong>' + esc(probEndTh) + '</strong>) หากผ่านเกณฑ์การประเมินของบริษัทจะปรับสถานะเป็นพนักงานประจำต่อไป</p>';
+
+  paper.innerHTML = '' +
+    '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:18px">' +
+      '<div style="font-size:18px;font-weight:800;color:#0f172a">' + esc(compName) + '</div>' +
+      '<div style="font-size:11px;color:#475569;margin-top:3px">เลขประจำตัวผู้เสียภาษีอากร: <strong style="font-family:monospace">' + esc(compTaxId) + '</strong> | โทรศัพท์: ' + esc(compPhone) + '</div>' +
+      '<div style="font-size:11px;color:#64748b">' + esc(compAddress) + '</div>' +
+    '</div>' +
+    '<div style="text-align:center;margin:14px 0 18px">' +
+      '<h2 contenteditable="true" spellcheck="false" style="font-size:18px;font-weight:800;color:#0f172a;margin:0">' + titleText + '</h2>' +
+    '</div>' +
+    '<div id="contractPaperBody" contenteditable="true" spellcheck="false" style="font-size:13px;line-height:1.85;color:#1e293b;text-align:justify">' +
+      '<p style="text-align:right;margin:0 0 12px">ทำที่ <strong>' + esc(compName) + '</strong><br>วันที่ <strong>' + esc(contractDateStr) + '</strong></p>' +
+      '<p style="margin:6px 0">สัญญาฉบับนี้ทำขึ้นระหว่าง <strong>' + esc(compName) + '</strong> สำนักงานตั้งอยู่เลขที่ ' + esc(compAddress) + ' โดย <strong>' + esc(signName) + '</strong> ตำแหน่ง ' + esc(signTitle) + ' ผู้มีอำนาจลงนาม ซึ่งต่อไปในสัญญานี้เรียกว่า <strong>"นายจ้าง"</strong> ฝ่ายหนึ่ง กับ</p>' +
+      '<p style="margin:6px 0;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">' +
+        '<strong>' + esc(emp.fullName) + '</strong> (รหัสพนักงาน: <strong style="font-family:monospace">' + esc(emp.empId) + '</strong>)<br>' +
+        'เลขประจำตัวประชาชน: <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong> | โทรศัพท์: ' + esc(emp.phone || '-') + '<br>' +
+        'ที่อยู่: ' + esc(emp.address || '-') + ' ซึ่งต่อไปในสัญญานี้เรียกว่า <strong>"ลูกจ้าง"</strong> อีกฝ่ายหนึ่ง' +
+      '</p>' +
+      '<p style="margin:8px 0">คู่สัญญาทั้งสองฝ่ายตกลงทำสัญญากันโดยมีข้อความดังต่อไปนี้</p>' +
+      '<p style="margin:6px 0"><strong>ข้อ 1. ตำแหน่งและสถานที่ปฏิบัติงาน:</strong> นายจ้างตกลงจ้างลูกจ้างในตำแหน่ง <strong>' + esc(emp.position || '-') + '</strong> แผนก <strong>' + esc(emp.department || '-') + '</strong> ประจำสาขา <strong>' + esc(branchLabel) + '</strong> โดยลูกจ้างยินยอมปฏิบัติงานตามสถานที่หรือสาขาที่นายจ้างมอบหมายตามความเหมาะสม</p>' +
+      clause2Html +
+      '<p style="margin:6px 0"><strong>ข้อ 3. ค่าจ้างและการจ่ายเงิน:</strong> นายจ้างตกลงจ่ายค่าจ้างให้แก่ลูกจ้างในอัตรา <strong>' + esc(salaryText) + '</strong> โดยจะจ่ายเป็นรายเดือนผ่านบัญชีธนาคาร ' + esc(emp.bankName || '-') + ' เลขที่บัญชี ' + esc(emp.bankAccount || '-') + ' และหักภาษี ณ ที่จ่าย ประกันสังคม หรือเงินสมทบกองทุนตามเงื่อนไขและกฎหมายที่กำหนด</p>' +
+      '<p style="margin:6px 0"><strong>ข้อ 4. เวลาทำงานปกติ:</strong> ลูกจ้างต้องปฏิบัติงานตามเวลาทำการของสาขา คือเวลา <strong>' + esc(workStart) + ' น. ถึง ' + esc(workEnd) + ' น.</strong> (พักระหว่างวัน 1 ชั่วโมง) และมีวันหยุดประจำสัปดาห์/วันหยุดตามประกาศบริษัท</p>' +
+      '<p style="margin:6px 0"><strong>ข้อ 5. วินัยและการรักษาความลับ:</strong> ลูกจ้างตกลงปฏิบัติตามระเบียบข้อบังคับเกี่ยวกับการทำงานของบริษัทอย่างเคร่งครัด และจะเก็บรักษาข้อมูลทางธุรกิจ สูตรยา ข้อมูลลูกค้า และค่าตอบแทนของบริษัทไว้เป็นความลับ</p>' +
+      '<p style="margin:6px 0"><strong>ข้อ 6. การเลิกสัญญา:</strong> หากฝ่ายใดฝ่ายหนึ่งประสงค์จะบอกเลิกสัญญา ให้บอกกล่าวล่วงหน้าเป็นลายลักษณ์อักษรไม่น้อยกว่า 1 งวดการจ่ายค่าจ้าง หรือตามที่กฎหมายแรงงานกำหนด</p>' +
+      '<p style="margin:10px 0 18px">สัญญานี้ทำขึ้นเป็นสองฉบับมีข้อความถูกต้องตรงกัน คู่สัญญาได้อ่านและเข้าใจข้อความโดยตลอดแล้ว จึงลงลายมือชื่อไว้เป็นหลักฐานต่อหน้าพยาน</p>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:26px;font-size:12.5px;page-break-inside:avoid">' +
+      '<div style="text-align:center">' +
+        '<div style="height:44px;border-bottom:1px solid #475569;margin-bottom:6px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ <strong>( ' + esc(signName) + ' )</strong></div>' +
+        '<div style="font-size:11.5px;color:#475569" contenteditable="true" spellcheck="false">นายจ้าง / ' + esc(signTitle) + '</div>' +
+      '</div>' +
+      '<div style="text-align:center">' +
+        '<div style="height:44px;border-bottom:1px solid #475569;margin-bottom:6px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ <strong>( ' + esc(emp.fullName) + ' )</strong></div>' +
+        '<div style="font-size:11.5px;color:#475569">ลูกจ้าง / ผู้รับจ้าง</div>' +
+      '</div>' +
+      '<div style="text-align:center">' +
+        '<div style="height:36px;border-bottom:1px dashed #94a3b8;margin-bottom:6px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ ( ................................................ ) พยาน</div>' +
+      '</div>' +
+      '<div style="text-align:center">' +
+        '<div style="height:36px;border-bottom:1px dashed #94a3b8;margin-bottom:6px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ ( ................................................ ) พยาน</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function resetContractModalPaper() {
+  if (!confirm('ต้องการคืนค่าข้อความสัญญาจ้างกลับเป็นค่าเริ่มต้นใช่หรือไม่?')) return;
+  renderContractModalPaper();
+  showToast('คืนค่าข้อความสัญญาจ้างเรียบร้อยแล้ว', 'info');
+}
+
+function printEmploymentContract() {
+  printDocCenterModal('printing-employment-contract');
+}
+
+// ==============================================================================
+// RESIGNATION LETTER CONTROLLER (A4 EDITABLE)
+// ==============================================================================
+function openResignationLetterModal(targetEmpId) {
+  var picked = getDocCenterSelectedEmployee(targetEmpId);
+  if (!picked) return;
+  var emp = picked.emp;
+
+  var todayIso = new Date().toISOString().substring(0, 10);
+  var subInput = document.getElementById('modalResignSubmitDate');
+  if (subInput) subInput.value = todayIso;
+
+  var effInput = document.getElementById('modalResignEffectiveDate');
+  if (effInput) effInput.value = emp.resignDate ? String(emp.resignDate).substring(0, 10) : todayIso;
+
+  var reasonInput = document.getElementById('modalResignReason');
+  if (reasonInput && !reasonInput.value) reasonInput.value = 'ภารกิจส่วนตัว / มีความจำเป็นส่วนตัว';
+
+  var signName = document.getElementById('modalResignSignName');
+  var signTitle = document.getElementById('modalResignSignTitle');
+  if (signName) signName.value = State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง';
+  if (signTitle) signTitle.value = State.company.signatoryTitle || 'ผู้จัดการฝ่ายทรัพยากรบุคคล';
+
+  renderResignationModalPaper();
+  openModal('resignationLetterModal');
+}
+
+function onResignationParamChanged() {
+  renderResignationModalPaper();
+}
+
+function renderResignationModalPaper(targetEmpId) {
+  var paper = document.getElementById('resignationPaper');
+  if (!paper) return;
+  var picked = getDocCenterSelectedEmployee(targetEmpId);
+  if (!picked) return;
+  var emp = picked.emp;
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var compAddress = State.company.address || '123/45 ถนนสุขุมวิท แขวงคลองเตย เขตคลองเตย กรุงเทพมหานคร 10110';
+  var compPhone = State.company.phone || '02-123-4567';
+
+  var subIso = document.getElementById('modalResignSubmitDate') ? document.getElementById('modalResignSubmitDate').value : '';
+  var effIso = document.getElementById('modalResignEffectiveDate') ? document.getElementById('modalResignEffectiveDate').value : (emp.resignDate || '');
+  var reasonText = (document.getElementById('modalResignReason') && document.getElementById('modalResignReason').value.trim()) ? document.getElementById('modalResignReason').value.trim() : 'ภารกิจส่วนตัว';
+  var signName = (document.getElementById('modalResignSignName') && document.getElementById('modalResignSignName').value) ? document.getElementById('modalResignSignName').value : (State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง');
+  var signTitle = (document.getElementById('modalResignSignTitle') && document.getElementById('modalResignSignTitle').value) ? document.getElementById('modalResignSignTitle').value : (State.company.signatoryTitle || 'ผู้จัดการฝ่ายทรัพยากรบุคคล');
+
+  var branch = (State.branches || []).find(function(b) { return b.branch_id === emp.branchId; }) || {};
+  var branchLabel = branch.branch_name ? branch.branch_name : (emp.branchId || 'สำนักงานใหญ่');
+
+  var subTh = formatDocThaiFullDate(subIso);
+  var effTh = formatDocThaiFullDate(effIso);
+  var joinTh = emp.joinDate ? formatDocThaiFullDate(emp.joinDate) : '-';
+
+  paper.innerHTML = '' +
+    '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:18px">' +
+      '<div style="font-size:18px;font-weight:800;color:#0f172a">' + esc(compName) + '</div>' +
+      '<div style="font-size:11px;color:#64748b;margin-top:2px">' + esc(compAddress) + ' | โทร: ' + esc(compPhone) + '</div>' +
+    '</div>' +
+    '<div style="text-align:center;margin:14px 0 20px">' +
+      '<h2 contenteditable="true" spellcheck="false" style="font-size:18px;font-weight:800;color:#0f172a;margin:0">หนังสือขอลาออกจากการเป็นพนักงาน</h2>' +
+    '</div>' +
+    '<div id="resignationPaperBody" contenteditable="true" spellcheck="false" style="font-size:13.5px;line-height:1.95;color:#1e293b;text-align:justify">' +
+      '<p style="text-align:right;margin:0 0 14px">เขียนที่ <strong>' + esc(compName) + '</strong><br>วันที่ <strong>' + esc(subTh) + '</strong></p>' +
+      '<p style="margin:6px 0"><strong>เรื่อง:</strong> ขอลาออกจากการเป็นพนักงาน</p>' +
+      '<p style="margin:6px 0 14px"><strong>เรียน:</strong> ' + esc(signTitle) + ' / กรรมการผู้จัดการ ' + esc(compName) + '</p>' +
+      '<p style="text-indent:2.5rem;margin:8px 0">' +
+        'ข้าพเจ้า <strong>' + esc(emp.fullName) + '</strong> (รหัสพนักงาน <strong style="font-family:monospace">' + esc(emp.empId) + '</strong>) ' +
+        'เลขประจำตัวประชาชน <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong> ' +
+        'ตำแหน่ง <strong>' + esc(emp.position || '-') + '</strong> แผนก <strong>' + esc(emp.department || '-') + '</strong> ประจำสาขา <strong>' + esc(branchLabel) + '</strong> ' +
+        '(เริ่มปฏิบัติงานเมื่อวันที่ ' + esc(joinTh) + ')' +
+      '</p>' +
+      '<p style="text-indent:2.5rem;margin:8px 0">' +
+        'มีความประสงค์ขอลาออกจากการเป็นพนักงานของ <strong>' + esc(compName) + '</strong> เนื่องจาก <strong>' + esc(reasonText) + '</strong> ' +
+        'โดยขอให้มีผลตั้งแต่วันทำงานวันสุดท้ายคือวันที่ <strong>' + esc(effTh) + '</strong> เป็นต้นไป' +
+      '</p>' +
+      '<p style="text-indent:2.5rem;margin:8px 0 18px">' +
+        'ทั้งนี้ ข้าพเจ้ายินดีส่งมอบงานที่รับผิดชอบ เอกสาร และทรัพย์สินทั้งหมดของบริษัทให้เรียบร้อยก่อนวันพ้นสภาพ จึงเรียนมาเพื่อโปรดพิจารณาอนุมัติ' +
+      '</p>' +
+    '</div>' +
+    '<div style="display:flex;justify-content:flex-end;margin:16px 0 24px;page-break-inside:avoid">' +
+      '<div style="text-align:center;min-width:250px;font-size:13px">' +
+        '<div style="margin-bottom:6px">ขอแสดงความนับถือ</div>' +
+        '<div style="height:44px;border-bottom:1px solid #475569;margin-bottom:6px"></div>' +
+        '<div contenteditable="true" spellcheck="false">( <strong>' + esc(emp.fullName) + '</strong> )</div>' +
+        '<div style="font-size:11.5px;color:#64748b">ผู้ขอลาออก / วันที่ ........./........./.........</div>' +
+      '</div>' +
+    '</div>' +
+    '<div contenteditable="true" spellcheck="false" style="border:1.5px solid #cbd5e1;border-radius:8px;padding:14px 16px;background:#f8fafc;font-size:12.5px;line-height:1.8;page-break-inside:avoid">' +
+      '<div style="font-weight:800;color:#0f172a;border-bottom:1px solid #cbd5e1;padding-bottom:6px;margin-bottom:10px">' +
+        'ส่วนสำหรับหัวหน้างาน / ฝ่ายทรัพยากรบุคคล (การส่งมอบงานและรับทราบ)' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-bottom:16px">' +
+        '<div>[ &nbsp; ] ส่งมอบงานคงค้างเรียบร้อยแล้ว</div>' +
+        '<div>[ &nbsp; ] คืนกุญแจ / บัตรพนักงาน / อุปกรณ์บริษัทแล้ว</div>' +
+        '<div>[ &nbsp; ] เคลียร์ยอดเงินเบิกล่วงหน้า / หนี้คงค้างแล้ว</div>' +
+        '<div>[ &nbsp; ] อื่นๆ: ....................................................</div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;text-align:center;margin-top:12px">' +
+        '<div>' +
+          '<div style="height:40px;border-bottom:1px dashed #64748b;margin-bottom:6px"></div>' +
+          '<div>ลงชื่อ ( ................................................ )</div>' +
+          '<div style="font-size:11px;color:#475569">หัวหน้าแผนก / ผู้รับมอบงาน (วันที่ ...../...../.....)</div>' +
+        '</div>' +
+        '<div>' +
+          '<div style="height:40px;border-bottom:1px dashed #64748b;margin-bottom:6px"></div>' +
+          '<div>ลงชื่อ ( <strong>' + esc(signName) + '</strong> )</div>' +
+          '<div style="font-size:11px;color:#475569">' + esc(signTitle) + ' / ผู้อนุมัติ (วันที่ ...../...../.....)</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function resetResignationModalPaper() {
+  if (!confirm('ต้องการคืนค่าข้อความใบลาออกกลับเป็นค่าเริ่มต้นใช่หรือไม่?')) return;
+  renderResignationModalPaper();
+  showToast('คืนค่าข้อความใบลาออกเรียบร้อยแล้ว', 'info');
+}
+
+function printResignationLetter() {
+  printDocCenterModal('printing-resignation-letter');
+}
+
 // ==========================================

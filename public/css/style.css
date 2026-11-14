@@ -1012,15 +1012,21 @@ footer {
   }
 
   /* ------------------------------------------------------------------------
-     A2. SALARY & EMPLOYMENT CERTIFICATE MODAL PRINT (A4 PORTRAIT)
+     A2. SALARY & EMPLOYMENT CERTIFICATE / CONTRACT / RESIGNATION MODAL PRINT (A4 PORTRAIT)
      ------------------------------------------------------------------------ */
-  body.printing-salary-cert > *:not(#salaryCertModal) {
+  body.printing-salary-cert > *:not(#salaryCertModal),
+  body.printing-employment-contract > *:not(#employmentContractModal),
+  body.printing-resignation-letter > *:not(#resignationLetterModal) {
     display: none !important;
   }
-  body.printing-salary-cert .modal-overlay:not(#salaryCertModal) {
+  body.printing-salary-cert .modal-overlay:not(#salaryCertModal),
+  body.printing-employment-contract .modal-overlay:not(#employmentContractModal),
+  body.printing-resignation-letter .modal-overlay:not(#resignationLetterModal) {
     display: none !important;
   }
-  body.printing-salary-cert #salaryCertModal {
+  body.printing-salary-cert #salaryCertModal,
+  body.printing-employment-contract #employmentContractModal,
+  body.printing-resignation-letter #resignationLetterModal {
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -1033,7 +1039,9 @@ footer {
     border: none !important;
     box-shadow: none !important;
   }
-  body.printing-salary-cert #salaryCertModal .modal-card {
+  body.printing-salary-cert #salaryCertModal .modal-card,
+  body.printing-employment-contract #employmentContractModal .modal-card,
+  body.printing-resignation-letter #resignationLetterModal .modal-card {
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -1049,10 +1057,22 @@ footer {
   body.printing-salary-cert #salaryCertModal .cert-controls-bar,
   body.printing-salary-cert #salaryCertModal .modal-footer,
   body.printing-salary-cert #salaryCertModal .no-print,
-  body.printing-salary-cert #salaryCertModal .modal-card > *:not(.modal-body) {
+  body.printing-salary-cert #salaryCertModal .modal-card > *:not(.modal-body),
+  body.printing-employment-contract #employmentContractModal .modal-header,
+  body.printing-employment-contract #employmentContractModal .cert-controls-bar,
+  body.printing-employment-contract #employmentContractModal .modal-footer,
+  body.printing-employment-contract #employmentContractModal .no-print,
+  body.printing-employment-contract #employmentContractModal .modal-card > *:not(.modal-body),
+  body.printing-resignation-letter #resignationLetterModal .modal-header,
+  body.printing-resignation-letter #resignationLetterModal .cert-controls-bar,
+  body.printing-resignation-letter #resignationLetterModal .modal-footer,
+  body.printing-resignation-letter #resignationLetterModal .no-print,
+  body.printing-resignation-letter #resignationLetterModal .modal-card > *:not(.modal-body) {
     display: none !important;
   }
-  body.printing-salary-cert #salaryCertModal .modal-body {
+  body.printing-salary-cert #salaryCertModal .modal-body,
+  body.printing-employment-contract #employmentContractModal .modal-body,
+  body.printing-resignation-letter #resignationLetterModal .modal-body {
     display: block !important;
     background: #ffffff !important;
     padding: 0 !important;
@@ -1062,10 +1082,14 @@ footer {
     border: none !important;
     box-shadow: none !important;
   }
-  body.printing-salary-cert #salaryCertModal .modal-body > *:not(#salaryCertPaper) {
+  body.printing-salary-cert #salaryCertModal .modal-body > *:not(#salaryCertPaper),
+  body.printing-employment-contract #employmentContractModal .modal-body > *:not(#contractPaper),
+  body.printing-resignation-letter #resignationLetterModal .modal-body > *:not(#resignationPaper) {
     display: none !important;
   }
-  body.printing-salary-cert #salaryCertPaper {
+  body.printing-salary-cert #salaryCertPaper,
+  body.printing-employment-contract #contractPaper,
+  body.printing-resignation-letter #resignationPaper {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -1076,15 +1100,23 @@ footer {
     box-shadow: none !important;
     border-radius: 0 !important;
     background: #ffffff !important;
+    font-size: 13.5px !important;
+    line-height: 1.8 !important;
+  }
+  body.printing-salary-cert #salaryCertPaper {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     font-size: 14px !important;
     line-height: 1.9 !important;
   }
-  body.printing-salary-cert #salaryCertPaper * {
+  body.printing-salary-cert #salaryCertPaper *,
+  body.printing-employment-contract #contractPaper *,
+  body.printing-resignation-letter #resignationPaper * {
     visibility: visible !important;
   }
-  body.printing-salary-cert .salary-cert-paper [contenteditable="true"] {
+  body.printing-salary-cert .salary-cert-paper [contenteditable="true"],
+  body.printing-employment-contract .salary-cert-paper [contenteditable="true"],
+  body.printing-resignation-letter .salary-cert-paper [contenteditable="true"] {
     outline: none !important;
     background: transparent !important;
     box-shadow: none !important;

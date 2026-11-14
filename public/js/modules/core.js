@@ -10,6 +10,8 @@
 var ALL_PRINT_CLASSES = [
   'printing-payslip',
   'printing-salary-cert',
+  'printing-employment-contract',
+  'printing-resignation-letter',
   'printing-50twi',
   'printing-payroll-summary',
   'printing-history',
@@ -62,6 +64,8 @@ window.addEventListener('afterprint', clearAllPrintClasses);
 // Auto-detect active modal when user presses Ctrl+P or triggers browser print
 window.addEventListener('beforeprint', function() {
   var salaryCertModal = document.getElementById('salaryCertModal');
+  var employmentContractModal = document.getElementById('employmentContractModal');
+  var resignationLetterModal = document.getElementById('resignationLetterModal');
   var payslipModal = document.getElementById('payslipModal');
   var twi50Modal = document.getElementById('twi50Modal');
   var payrollSignoffModal = document.getElementById('payrollSignoffModal');
@@ -70,6 +74,12 @@ window.addEventListener('beforeprint', function() {
   if (salaryCertModal && salaryCertModal.classList.contains('active')) {
     clearAllPrintClasses();
     document.body.classList.add('printing-salary-cert');
+  } else if (employmentContractModal && employmentContractModal.classList.contains('active')) {
+    clearAllPrintClasses();
+    document.body.classList.add('printing-employment-contract');
+  } else if (resignationLetterModal && resignationLetterModal.classList.contains('active')) {
+    clearAllPrintClasses();
+    document.body.classList.add('printing-resignation-letter');
   } else if (payslipModal && payslipModal.classList.contains('active')) {
     clearAllPrintClasses();
     document.body.classList.add('printing-payslip');
