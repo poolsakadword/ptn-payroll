@@ -2819,6 +2819,7 @@ function renderTimeAttendanceTodayLogs(logs, isIndividual) {
           missingOutAnomaly +
           ((l.has_leave_conflict && !(inTimeStr && inTimeStr >= '13:00')) ? '<div style="font-size:10px;color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px" title="พนักงานมีใบลาที่อนุมัติไว้ในวันนี้ แต่มาทำงานจริง ระบบตรวจจับอัตโนมัติและยกเว้นการหักวันลา"><i class="fa-solid fa-shield-halved text-amber"></i> <span>มีใบลาอนุมัติไว้แต่วันนี้มาทำงานจริง (ระบบบันทึกเวลาทำงานปกติ ไม่หักวันลา)</span></div>' : '') +
           ((l.remark && l.remark.includes('สิทธิ์ประจำตำแหน่ง')) ? '<div style="font-size:10px;color:#6b21a8;background:#faf5ff;border:1px solid #d8b4fe;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="สิทธิ์ประจำตำแหน่ง: ยกเว้นการหักเงินชั่วโมงออกก่อนให้อัตโนมัติ (หากเข้าสายหักตามปกติ)"><i class="fa-solid fa-sparkles text-purple"></i> <span>✨ สิทธิ์เต็มวัน (ไม่หักออกก่อน)</span></div>' : ((l.is_full_pay === 1 || l.is_full_pay === '1' || (l.remark && l.remark.includes('งานเสร็จเลิกงานก่อน-จ่ายเต็มวัน'))) ? '<div style="font-size:10px;color:#047857;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="ได้รับอนุมัติเลิกงานก่อนเนื่องจากงานเสร็จ ได้รับค่าแรงเต็มวัน ไม่หักเงิน"><i class="fa-solid fa-circle-check text-green"></i> <span>งานเสร็จ-จ่ายเต็มวัน (ไม่หักเงิน)</span></div>' : '')) +
+          ((l.disqualify_diligence === 1 || l.disqualify_diligence === '1') ? '<div style="font-size:10px;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:4px;padding:2px 6px;margin-top:3px;display:inline-flex;align-items:center;gap:4px;font-weight:700" title="ขอกลับก่อนวันมี OT: ตัดสิทธิ์เบี้ยขยันงวดนี้ (เฉพาะ PTN Payroll ไม่แสดงใน PTN Time และไม่หักเงินเดือนปกติ)"><i class="fa-solid fa-ban text-red"></i> <span>ตัดเบี้ยขยัน (กลับก่อนวันมี OT)</span></div>' : '') +
         '</td>' +
         '<td><span class="period-pill" style="font-size:10.5px">' + (l.department || '-') + '</span></td>' +
         '<td><span class="period-pill" style="font-size:10.5px;background:#e0f2fe;color:#0369a1;border-color:#bae6fd;font-weight:700"><i class="fa-solid fa-store" style="margin-right:3px"></i>' + esc(branchDisplay) + '</span></td>' +
@@ -4445,6 +4446,10 @@ function openEditAttendanceLogModal(id) {
   if (document.getElementById('editAttIsFullPay')) {
     document.getElementById('editAttIsFullPay').checked = !!isFullPay;
   }
+  var disqualifyDiligence = (log.disqualify_diligence === 1 || log.disqualify_diligence === '1' || log.disqualify_diligence === true);
+  if (document.getElementById('editAttDisqualifyDiligence')) {
+    document.getElementById('editAttDisqualifyDiligence').checked = !!disqualifyDiligence;
+  }
 
   // If clock_in and clock_out are present, but work_hours is 0 or was not calculated, auto calculate immediately!
   if (log.clock_in && log.clock_out && (Number(log.work_hours) === 0 || !log.work_hours)) {
@@ -4487,6 +4492,7 @@ function saveAttendanceLogEditForm(e) {
   var status = document.getElementById('editAttStatus').value;
   var remark = document.getElementById('editAttRemark').value.trim();
   var isFullPay = (document.getElementById('editAttIsFullPay') && document.getElementById('editAttIsFullPay').checked) ? 1 : 0;
+  var disqualifyDiligence = (document.getElementById('editAttDisqualifyDiligence') && document.getElementById('editAttDisqualifyDiligence').checked) ? 1 : 0;
 
   // Auto-calculate derived fields (late minutes, status, work hours, OT) if clockIn is present
   if (clockIn) {
@@ -4511,6 +4517,7 @@ function saveAttendanceLogEditForm(e) {
     status: status,
     remark: remark,
     isFullPay: isFullPay,
+    disqualifyDiligence: disqualifyDiligence,
     username: (State.currentUser && State.currentUser.username) || 'Admin'
   })
     .then(function(r) {

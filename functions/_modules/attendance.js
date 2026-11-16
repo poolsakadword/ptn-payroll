@@ -361,7 +361,7 @@ export const attendanceHandlers = {
       let empLateCount = {};
       try {
         let tlSql = `
-          SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, break_minutes, overbreak_minutes, status, branch_id, is_full_pay, remark
+          SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, break_minutes, overbreak_minutes, status, branch_id, is_full_pay, disqualify_diligence, remark
           FROM time_logs
           WHERE date BETWEEN ? AND ?
         `;
@@ -1047,6 +1047,13 @@ export const attendanceHandlers = {
               empDisqualifyReasons.push(`ไม่สแกนออกพัก ${empMissingBreakCount} ครั้ง (เกินเกณฑ์ 1 ครั้ง)`);
             }
             // In 'ALERT_ONLY' mode (Option 1): alert only, diligence allowance is NOT disqualified
+
+            const otLeaveEarlyDates = empLogs
+              .filter(l => l.disqualify_diligence === 1 || l.disqualify_diligence === '1' || l.disqualify_diligence === true)
+              .map(l => `วันที่ ${String(l.date || '').substring(8)}`);
+            if (otLeaveEarlyDates.length > 0) {
+              empDisqualifyReasons.push(`ขอกลับก่อนวันมี OT (${otLeaveEarlyDates.join(', ')})`);
+            }
           }
 
           const targetAllowance = (emp.diligence_allowance !== null && emp.diligence_allowance !== undefined && !isNaN(Number(emp.diligence_allowance)) && Number(emp.diligence_allowance) > 0)
@@ -1425,7 +1432,7 @@ export const attendanceHandlers = {
         l.in_lat, l.in_lng, l.out_lat, l.out_lng,
         l.break_out_lat, l.break_out_lng, l.break_in_lat, l.break_in_lng,
         l.late_minutes, l.break_minutes, l.overbreak_minutes,
-        l.work_hours, l.ot_hours, l.status, l.remark, l.branch_id, l.is_full_pay, l.created_at,
+        l.work_hours, l.ot_hours, l.status, l.remark, l.branch_id, l.is_full_pay, l.disqualify_diligence, l.created_at,
         CASE WHEN l.in_photo_url IS NOT NULL AND l.in_photo_url != '' THEN 1 ELSE 0 END AS has_in_photo,
         CASE WHEN l.out_photo_url IS NOT NULL AND l.out_photo_url != '' THEN 1 ELSE 0 END AS has_out_photo,
         CASE WHEN l.break_out_photo_url IS NOT NULL AND l.break_out_photo_url != '' THEN 1 ELSE 0 END AS has_break_out_photo,
@@ -1945,7 +1952,7 @@ export const attendanceHandlers = {
       const employees = empQuery.results || [];
 
       // Load Time Logs in Cutoff Window
-      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, break_minutes, overbreak_minutes, status, branch_id, is_full_pay, remark, in_lat, in_lng, out_lat, out_lng, break_out_lat, break_out_lng, break_in_lat, break_in_lng FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
+      let tlSql = "SELECT id, emp_id, date, clock_in, clock_out, break_out, break_in, work_hours, ot_hours, late_minutes, break_minutes, overbreak_minutes, status, branch_id, is_full_pay, disqualify_diligence, remark, in_lat, in_lng, out_lat, out_lng, break_out_lat, break_out_lng, break_in_lat, break_in_lng FROM time_logs WHERE date BETWEEN ? AND ? ORDER BY date ASC, clock_in ASC";
       const tlQuery = await db.prepare(tlSql).bind(startDate, endDate).all().catch(() => ({ results: [] }));
       const allLogs = tlQuery.results || [];
 
@@ -2500,6 +2507,16 @@ export const attendanceHandlers = {
             } else if (missingBreakPenaltyMode === 'DILIGENCE_DISQUALIFY_EXCEED' && missingBreakOccurrences > 1) {
               disqualifyReasons.push(`ไม่สแกนออกพัก ${missingBreakOccurrences} ครั้ง (เกินโควตา 1 ครั้ง)`);
             }
+
+            const otEarlyDisqDates = Object.keys(empLogs).sort()
+              .filter(dKey => {
+                const lg = empLogs[dKey];
+                return lg && (lg.disqualify_diligence === 1 || lg.disqualify_diligence === '1' || lg.disqualify_diligence === true);
+              })
+              .map(dKey => `วันที่ ${dKey.substring(8)}`);
+            if (otEarlyDisqDates.length > 0) {
+              disqualifyReasons.push(`ขอกลับก่อนวันมี OT (${otEarlyDisqDates.join(', ')})`);
+            }
           }
 
           if (disqualifyReasons.length > 0) {
@@ -3038,7 +3055,7 @@ export const attendanceHandlers = {
           l.id, l.emp_id, l.date, l.clock_in, l.clock_out, l.break_out, l.break_in,
           l.work_hours, l.ot_hours,
           l.late_minutes, l.break_minutes, l.overbreak_minutes,
-          l.status, l.remark, l.branch_id, l.is_full_pay,
+          l.status, l.remark, l.branch_id, l.is_full_pay, l.disqualify_diligence,
           l.in_lat, l.in_lng, l.out_lat, l.out_lng,
           e.full_name, e.nickname, e.department, e.position, e.branch_id as emp_branch_id
         FROM time_logs l
@@ -3389,10 +3406,11 @@ export const attendanceHandlers = {
                       (await isUserSuperAdmin(db, callerUser));
       if (!allowed) return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์แก้ไขข้อมูลลงเวลา' };
 
-      const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, otHours, status, remark, isFullPay } = params;
+      const { id, clockIn, clockOut, breakOut, breakIn, breakMinutes, overbreakMinutes, lateMinutes, workHours, otHours, status, remark, isFullPay, disqualifyDiligence } = params;
       if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการแก้ไข' };
 
       const isFullPayVal = (isFullPay === 1 || isFullPay === '1' || isFullPay === true || isFullPay === 'true') ? 1 : 0;
+      const disqualifyDiligenceVal = (disqualifyDiligence === 1 || disqualifyDiligence === '1' || disqualifyDiligence === true || disqualifyDiligence === 'true') ? 1 : 0;
 
       // Fetch existing log to verify or auto-calculate if workHours is 0
       const existing = await db.prepare('SELECT * FROM time_logs WHERE id = ?').bind(id).first().catch(() => null);
@@ -3506,7 +3524,7 @@ export const attendanceHandlers = {
 
       await db.prepare(`
         UPDATE time_logs
-        SET clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, overbreak_minutes = ?, late_minutes = ?, work_hours = ?, ot_hours = ?, status = ?, remark = ?, is_full_pay = ?
+        SET clock_in = ?, clock_out = ?, break_out = ?, break_in = ?, break_minutes = ?, overbreak_minutes = ?, late_minutes = ?, work_hours = ?, ot_hours = ?, status = ?, remark = ?, is_full_pay = ?, disqualify_diligence = ?
         WHERE id = ?
       `).bind(
         clockIn !== undefined ? (clockIn || null) : existing.clock_in,
@@ -3521,6 +3539,7 @@ export const attendanceHandlers = {
         finalStatus,
         remark !== undefined ? remark : (existing.remark || ''),
         isFullPayVal,
+        disqualifyDiligenceVal,
         id
       ).run();
 

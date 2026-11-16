@@ -162,6 +162,7 @@ export async function ensureGlobalSchemas(db) {
     await db.prepare('ALTER TABLE payroll_calcs ADD COLUMN carried_debt REAL DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE branches ADD COLUMN early_dismissal_full_pay INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare('ALTER TABLE time_logs ADD COLUMN is_full_pay INTEGER DEFAULT 0').run().catch(() => {});
+    await db.prepare('ALTER TABLE time_logs ADD COLUMN disqualify_diligence INTEGER DEFAULT 0').run().catch(() => {});
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS employee_devices (
         emp_id TEXT PRIMARY KEY,
