@@ -988,34 +988,49 @@ function triggerPhotoRetentionCleanup() {
   showToast('กำลังตรวจสอบข้อมูลรูปภาพในระบบ...', 'info');
   callApi('getPhotoStorageStats', {})
     .then(function(r) {
-      var cutoff = r.cutoffDate || '24 เดือนก่อน';
-      var eligibleCount = r.eligibleOldPhotosCount || 0;
-      var r2Status = r.hasR2Binding ? '✅ เปิดใช้งาน Cloudflare R2' : 'ℹ️ โหมดจัดเก็บแบบ Local Optimized';
-      var textMsg = 'ระบบจะทำการค้นหาและล้างเฉพาะรูปถ่ายสแกนเวลาเข้า-ออกงานที่บันทึกก่อนวันที่ ' + cutoff + ' (เก่าเกิน 24 เดือน / 2 ปี)\n\n' +
-                    '📊 ข้อมูลพื้นที่และการจัดเก็บ:\n' +
-                    '• สถานะ Storage: ' + r2Status + '\n' +
-                    '• รูปสแกนเวลาเก่าที่พร้อมล้าง: ' + eligibleCount + ' รายการ\n' +
-                    '• ประวัติวัน-เวลาทำงาน, OT, และสถิติเงินเดือน: คงอยู่ครบถ้วน 100% ไม่ถูกลบ\n\n' +
-                    'คุณต้องการดำเนินการล้างรูปภาพเพื่อประหยัดพื้นที่ฐานข้อมูลหรือไม่?';
+      var b = r.breakdown || { m1: 0, m3: 0, m6: 0, m12: 0, m24: r.eligibleOldPhotosCount || 0 };
+      var totalPhotos = r.totalWithPhotos !== undefined ? r.totalWithPhotos : (r.recentPhotosCount || 0);
+      var r2Status = r.hasR2Binding ? '✅ เปิดใช้งาน Cloudflare R2' : '⚠️ เก็บในฐานข้อมูล D1 โดยตรง (ยังไม่ได้ผูก R2)';
+      var defaultMonths = b.m3 > 0 ? 3 : (b.m1 > 0 ? 1 : 24);
 
       if (typeof Swal !== 'undefined') {
         Swal.fire({
-          title: 'ยืนยันล้างรูปสแกนเวลาเก่า (> 24 เดือน)',
-          text: textMsg,
+          title: 'ล้างรูปถ่ายสแกนเวลาเก่า (ประหยัดพื้นที่ D1)',
+          html:
+            '<div style="text-align:left;font-size:13px;line-height:1.65;color:#334155">' +
+              '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:12px">' +
+                '<div><b>สถานะ Storage:</b> ' + r2Status + '</div>' +
+                '<div><b>รายการลงเวลาที่มีรูปภาพทั้งหมด:</b> <span style="color:#1d4ed8;font-weight:700">' + totalPhotos.toLocaleString() + '</span> รายการ</div>' +
+                '<div style="font-size:11.5px;color:#059669;margin-top:4px">✓ ลบเฉพาะไฟล์รูปถ่าย — ประวัติเวลาเข้า-ออก, OT และเงินเดือนยังอยู่ครบ 100%</div>' +
+              '</div>' +
+              '<label style="display:block;font-weight:700;color:#0f172a;margin-bottom:6px">เลือกระยะเวลาที่ต้องการล้างรูปถ่าย:</label>' +
+              '<select id="swalPhotoRetentionMonths" style="width:100%;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:8px;font-size:13px;font-weight:700;background:#fff">' +
+                '<option value="1"' + (defaultMonths === 1 ? ' selected' : '') + '>เก่ากว่า 1 เดือน (' + b.m1.toLocaleString() + ' รายการ)</option>' +
+                '<option value="3"' + (defaultMonths === 3 ? ' selected' : '') + '>เก่ากว่า 3 เดือน (' + b.m3.toLocaleString() + ' รายการ) — แนะนำ</option>' +
+                '<option value="6"' + (defaultMonths === 6 ? ' selected' : '') + '>เก่ากว่า 6 เดือน (' + b.m6.toLocaleString() + ' รายการ)</option>' +
+                '<option value="12"' + (defaultMonths === 12 ? ' selected' : '') + '>เก่ากว่า 12 เดือน (' + b.m12.toLocaleString() + ' รายการ)</option>' +
+                '<option value="24"' + (defaultMonths === 24 ? ' selected' : '') + '>เก่ากว่า 24 เดือน (' + b.m24.toLocaleString() + ' รายการ)</option>' +
+              '</select>' +
+            '</div>',
           icon: 'warning',
           showCancelButton: true,
           confirmButtonColor: '#10b981',
           cancelButtonColor: '#64748b',
           confirmButtonText: 'ยืนยันล้างรูปเก่า',
-          cancelButtonText: 'ยกเลิก'
+          cancelButtonText: 'ยกเลิก',
+          preConfirm: function() {
+            var sel = document.getElementById('swalPhotoRetentionMonths');
+            return sel ? Number(sel.value) || 3 : 3;
+          }
         }).then(function(result) {
           if (result.isConfirmed) {
-            executePhotoRetentionCleanup();
+            executePhotoRetentionCleanup(result.value || defaultMonths);
           }
         });
       } else {
+        var textMsg = 'ต้องการล้างรูปถ่ายสแกนเวลาเก่ากว่า ' + defaultMonths + ' เดือน เพื่อประหยัดพื้นที่ D1 หรือไม่? (ประวัติเวลาทำงานและเงินเดือนยังอยู่ครบ 100%)';
         if (confirm(textMsg)) {
-          executePhotoRetentionCleanup();
+          executePhotoRetentionCleanup(defaultMonths);
         }
       }
     })
@@ -1024,9 +1039,11 @@ function triggerPhotoRetentionCleanup() {
     });
 }
 
-function executePhotoRetentionCleanup() {
-  showToast('กำลังดำเนินการตาม Retention Policy ล้างรูปภาพเก่า...', 'info');
+function executePhotoRetentionCleanup(retentionMonths) {
+  var months = Number(retentionMonths) || 3;
+  showToast('กำลังล้างรูปภาพเก่ากว่า ' + months + ' เดือน...', 'info');
   callApi('cleanupOldAttendancePhotos', {
+    retentionMonths: months,
     username: (State.currentUser && State.currentUser.username) || 'Admin'
   })
   .then(function(res) {

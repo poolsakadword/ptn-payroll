@@ -86,51 +86,63 @@ export const storageHandlers = {
    * Photo Storage Statistics & Retention Audit
    */
   getPhotoStorageStats: async (db, params, period, env) => {
-    // Cutoff date for 24 months retention policy
-    const now = new Date();
-    const cutoffDateObj = new Date(now.getFullYear(), now.getMonth() - 24, now.getDate());
-    const cutoffDate = cutoffDateObj.toISOString().substring(0, 10);
+    const months = Math.max(1, Math.min(60, parseInt(params && params.retentionMonths, 10) || 24));
+    const calcCutoff = (m) => {
+      const now = new Date();
+      return new Date(now.getFullYear(), now.getMonth() - m, now.getDate()).toISOString().substring(0, 10);
+    };
+    const cutoffDate = calcCutoff(months);
+    const c1 = calcCutoff(1);
+    const c3 = calcCutoff(3);
+    const c6 = calcCutoff(6);
+    const c12 = calcCutoff(12);
+    const c24 = calcCutoff(24);
 
     const r2 = env && (env.PHOTOS_BUCKET || env.R2 || env.BUCKET);
     const hasR2Binding = Boolean(r2 && typeof r2.put === 'function');
 
-    // Count time_logs photos before 24 months cutoff
-    const oldRow = await db.prepare(`
-      SELECT COUNT(*) as count 
-      FROM time_logs 
-      WHERE date < ? 
-        AND (
-          (in_photo_url IS NOT NULL AND in_photo_url != '') OR 
-          (out_photo_url IS NOT NULL AND out_photo_url != '') OR
-          (break_out_photo_url IS NOT NULL AND break_out_photo_url != '') OR
-          (break_in_photo_url IS NOT NULL AND break_in_photo_url != '')
-        )
-    `).bind(cutoffDate).first().catch(() => ({ count: 0 }));
+    const hasAnyPhotoCond = `(
+      (in_photo_url IS NOT NULL AND in_photo_url != '') OR
+      (out_photo_url IS NOT NULL AND out_photo_url != '') OR
+      (break_out_photo_url IS NOT NULL AND break_out_photo_url != '') OR
+      (break_in_photo_url IS NOT NULL AND break_in_photo_url != '')
+    )`;
 
-    // Count active recent photos
-    const recentRow = await db.prepare(`
-      SELECT COUNT(*) as count 
-      FROM time_logs 
-      WHERE date >= ? 
-        AND (
-          (in_photo_url IS NOT NULL AND in_photo_url != '') OR 
-          (out_photo_url IS NOT NULL AND out_photo_url != '')
-        )
-    `).bind(cutoffDate).first().catch(() => ({ count: 0 }));
+    const statsRow = await db.prepare(`
+      SELECT
+        SUM(CASE WHEN date < ? THEN 1 ELSE 0 END) AS eligible_count,
+        SUM(CASE WHEN date >= ? THEN 1 ELSE 0 END) AS recent_count,
+        SUM(CASE WHEN date < ? THEN 1 ELSE 0 END) AS m1,
+        SUM(CASE WHEN date < ? THEN 1 ELSE 0 END) AS m3,
+        SUM(CASE WHEN date < ? THEN 1 ELSE 0 END) AS m6,
+        SUM(CASE WHEN date < ? THEN 1 ELSE 0 END) AS m12,
+        SUM(CASE WHEN date < ? THEN 1 ELSE 0 END) AS m24,
+        COUNT(*) AS total_with_photos
+      FROM time_logs
+      WHERE ${hasAnyPhotoCond}
+    `).bind(cutoffDate, cutoffDate, c1, c3, c6, c12, c24).first().catch(() => null);
 
     return {
       success: true,
       hasR2Binding,
-      retentionMonths: 24,
+      retentionMonths: months,
       cutoffDate,
-      eligibleOldPhotosCount: oldRow ? Number(oldRow.count) : 0,
-      recentPhotosCount: recentRow ? Number(recentRow.count) : 0,
-      policyNotice: 'นโยบายการจัดเก็บรูปถ่าย: เก็บรูปถ่ายสแกนเวลาเข้า-ออกงานไว้ 24 เดือน (2 ปี) และล้างเฉพาะไฟล์รูปที่เก่ากว่านั้นเพื่อประหยัดพื้นที่ โดยคงประวัติเวลาทำงานครบถ้วน 100%'
+      eligibleOldPhotosCount: statsRow ? Number(statsRow.eligible_count) || 0 : 0,
+      recentPhotosCount: statsRow ? Number(statsRow.recent_count) || 0 : 0,
+      totalWithPhotos: statsRow ? Number(statsRow.total_with_photos) || 0 : 0,
+      breakdown: {
+        m1: statsRow ? Number(statsRow.m1) || 0 : 0,
+        m3: statsRow ? Number(statsRow.m3) || 0 : 0,
+        m6: statsRow ? Number(statsRow.m6) || 0 : 0,
+        m12: statsRow ? Number(statsRow.m12) || 0 : 0,
+        m24: statsRow ? Number(statsRow.m24) || 0 : 0
+      },
+      policyNotice: 'นโยบายการจัดเก็บรูปถ่าย: สามารถเลือกช่วงเวลาล้างเฉพาะไฟล์รูปถ่ายสแกนเวลาเก่าเพื่อประหยัดพื้นที่ฐานข้อมูล D1 โดยคงประวัติวัน-เวลาทำงาน, OT และเงินเดือนไว้ครบถ้วน 100%'
     };
   },
 
   /**
-   * Retention Policy Cleanup: Remove Attendance Photos older than 24 months
+   * Retention Policy Cleanup: Remove Attendance Photos older than N months (default 24)
    */
   cleanupOldAttendancePhotos: async (db, params, period, env) => {
     const callerUser = params.username || params.currentUsername || 'Admin';
@@ -139,9 +151,9 @@ export const storageHandlers = {
       return { success: false, message: 'สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะผู้มีสิทธิ์จัดการระบบหรือ Super Admin เท่านั้น' };
     }
 
-    // 24 Months Cutoff
+    const months = Math.max(1, Math.min(60, parseInt(params && params.retentionMonths, 10) || 24));
     const now = new Date();
-    const cutoffDateObj = new Date(now.getFullYear(), now.getMonth() - 24, now.getDate());
+    const cutoffDateObj = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
     const cutoffDate = cutoffDateObj.toISOString().substring(0, 10);
 
     const r2 = env && (env.PHOTOS_BUCKET || env.R2 || env.BUCKET);
@@ -190,22 +202,32 @@ export const storageHandlers = {
           break_out_photo_url = NULL, 
           break_in_photo_url = NULL 
       WHERE date < ?
+        AND (
+          (in_photo_url IS NOT NULL AND in_photo_url != '') OR
+          (out_photo_url IS NOT NULL AND out_photo_url != '') OR
+          (break_out_photo_url IS NOT NULL AND break_out_photo_url != '') OR
+          (break_in_photo_url IS NOT NULL AND break_in_photo_url != '')
+        )
     `).bind(cutoffDate).run().catch(() => null);
 
-    const cleanedCount = logs.length;
+    const cleanedCount = (updateResult && updateResult.meta && typeof updateResult.meta.changes === 'number')
+      ? updateResult.meta.changes
+      : logs.length;
+
     await logSystemActivity(
       db, 
       callerUser, 
       'PHOTO_RETENTION_CLEANUP', 
-      `ดำเนินการตาม Retention Policy: ล้างรูปถ่ายสแกนเวลาที่เก่ากว่า 24 เดือน (ก่อนวันที่ ${cutoffDate}) จำนวน ${cleanedCount} รายการ (ลบจาก R2 ${r2DeletedCount} ไฟล์)`
+      `ล้างรูปถ่ายสแกนเวลาที่เก่ากว่า ${months} เดือน (ก่อนวันที่ ${cutoffDate}) จำนวน ${cleanedCount} รายการ (ลบจาก R2 ${r2DeletedCount} ไฟล์)`
     );
 
     return {
       success: true,
+      retentionMonths: months,
       cutoffDate,
       cleanedCount,
       r2DeletedCount,
-      message: `ดำเนินการตาม Retention Policy ล้างรูปถ่ายสแกนเวลาเก่าเกิน 24 เดือน (ก่อนวันที่ ${cutoffDate}) เรียบร้อยแล้ว จำนวน ${cleanedCount} รายการ โดยยังคงประวัติการลงเวลาและสถิติเงินเดือนไว้ครบถ้วน 100%`
+      message: `ล้างรูปถ่ายสแกนเวลาที่เก่ากว่า ${months} เดือน (ก่อนวันที่ ${cutoffDate}) เรียบร้อยแล้ว จำนวน ${cleanedCount} รายการ โดยยังคงประวัติการลงเวลาและสถิติเงินเดือนไว้ครบถ้วน 100%`
     };
   }
 };
