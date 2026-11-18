@@ -13,6 +13,18 @@ import {
   getElapsedWorkingDaysInCutoff, getCompanyHolidayDatesSet, isPeriodLocked
 } from './date-utils.js';
 
+function roundOtHoursByMode(otMinutes, roundingMode) {
+  const mins = Math.max(0, Number(otMinutes) || 0);
+  if (roundingMode === 'HALF_HOUR') return Math.floor(mins / 30) * 0.5;
+  if (roundingMode === 'QUARTER_HOUR') return Math.floor(mins / 15) * 0.25;
+  return Math.round((mins / 60) * 100) / 100;
+}
+
+async function getOtRoundingMode(db) {
+  const row = await db.prepare("SELECT value FROM settings WHERE key = 'ot_rounding_mode'").first().catch(() => null);
+  return (row && row.value) ? String(row.value) : 'HALF_HOUR';
+}
+
 export function categorizeLeaveType(leaveType, medicalCertUrl) {
   const raw = String(leaveType || '').trim();
   const rawUpper = raw.toUpperCase();
@@ -3315,8 +3327,9 @@ export const attendanceHandlers = {
                   finalWorkHours = Math.max(0, Math.round(((endMin - startMin - fullDayBreak) / 60) * 10) / 10) || 8.5;
                 }
               } else if (isSunday) {
+                const otRoundingMode = await getOtRoundingMode(db);
                 const sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - finalBreakMinutes);
-                finalOtHours = Math.floor(sunMin / 30) * 0.5;
+                finalOtHours = roundOtHoursByMode(sunMin, otRoundingMode);
                 finalWorkHours = 0;
               } else {
                 const effIn = Math.max(inMin, startMin);
@@ -3325,7 +3338,8 @@ export const attendanceHandlers = {
                 finalWorkHours = Math.round((normMin / 60) * 10) / 10;
 
                 if (outMin > otStartMin) {
-                  finalOtHours = Math.floor((outMin - otStartMin) / 30) * 0.5;
+                  const otRoundingMode = await getOtRoundingMode(db);
+                  finalOtHours = roundOtHoursByMode(outMin - otStartMin, otRoundingMode);
                 }
               }
             }
@@ -3503,8 +3517,9 @@ export const attendanceHandlers = {
                 finalWorkHours = Math.max(0, Math.round(((endMin - startMin - fullDayBreak) / 60) * 10) / 10) || 8.5;
               }
             } else if (isSunday) {
+              const otRoundingMode = await getOtRoundingMode(db);
               const sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - finalBreakMinutes);
-              finalOtHours = Math.floor(sunMin / 30) * 0.5;
+              finalOtHours = roundOtHoursByMode(sunMin, otRoundingMode);
               finalWorkHours = 0;
             } else {
               const effIn = Math.max(inMin, startMin);
@@ -3513,7 +3528,8 @@ export const attendanceHandlers = {
               finalWorkHours = Math.round((normMin / 60) * 10) / 10;
 
               if (outMin > otStartMin) {
-                finalOtHours = Math.floor((outMin - otStartMin) / 30) * 0.5;
+                const otRoundingMode = await getOtRoundingMode(db);
+                finalOtHours = roundOtHoursByMode(outMin - otStartMin, otRoundingMode);
               }
             }
           }

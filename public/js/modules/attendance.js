@@ -1405,7 +1405,10 @@ function loadTimeAttendanceDashboard(opts) {
         if (setOtStart && (r.settings.ot_start_time || r.settings.shift_end || r.settings.work_end_time)) {
           setOtStart.value = r.settings.ot_start_time || r.settings.shift_end || r.settings.work_end_time;
         }
-        if (setOtRounding && r.settings.ot_rounding_mode) setOtRounding.value = r.settings.ot_rounding_mode;
+        if (setOtRounding && r.settings.ot_rounding_mode) {
+          setOtRounding.value = r.settings.ot_rounding_mode;
+          window._attOtRoundingMode = r.settings.ot_rounding_mode;
+        }
         if (setQrMode && r.settings.qr_mode) setQrMode.value = r.settings.qr_mode;
         var setBreakMode = document.getElementById('attSetBreakMode');
         var setBreakDuration = document.getElementById('attSetBreakDuration');
@@ -4366,7 +4369,7 @@ function autoCalculateAttendanceHours(isUserAction) {
   } else if (isSunday) {
     // Sunday work: all counts as OT/Sunday work
     var totalSunMin = Math.max(0, outMin - effectiveInMin - breakMin);
-    otHrs = Math.floor(totalSunMin / 30) * 0.5;
+    otHrs = roundOtHoursByMode(totalSunMin);
     workHrs = 0;
   } else {
     // Normal workday
@@ -4377,7 +4380,7 @@ function autoCalculateAttendanceHours(isUserAction) {
     // OT after otStartMin
     if (outMin > otStartMin) {
       var otMin = outMin - otStartMin;
-      otHrs = Math.floor(otMin / 30) * 0.5;
+      otHrs = roundOtHoursByMode(otMin);
     }
   }
 
@@ -5376,6 +5379,15 @@ function onAddAttendanceTimeChanged() {
       breakMin = 60;
     }
 
+function roundOtHoursByMode(otMinutes) {
+  var mins = Math.max(0, Number(otMinutes) || 0);
+  var sel = document.getElementById('attSetOtRounding');
+  var mode = (sel && sel.value) || window._attOtRoundingMode || 'HALF_HOUR';
+  if (mode === 'HALF_HOUR') return Math.floor(mins / 30) * 0.5;
+  if (mode === 'QUARTER_HOUR') return Math.floor(mins / 15) * 0.25;
+  return Math.round((mins / 60) * 100) / 100;
+}
+
     if (isFullPay) {
       if (inMin >= lunchStart) {
         var effAfternoonIn = Math.max(inMin, lunchEnd);
@@ -5386,7 +5398,7 @@ function onAddAttendanceTimeChanged() {
       }
     } else if (isSunday) {
       var sunMin = Math.max(0, outMin - Math.max(inMin, startMin) - breakMin);
-      otHrs = Math.floor(sunMin / 30) * 0.5;
+      otHrs = roundOtHoursByMode(sunMin);
       workHrs = 0;
     } else {
       var effIn = Math.max(inMin, startMin);
@@ -5395,7 +5407,7 @@ function onAddAttendanceTimeChanged() {
       workHrs = Math.round((normMin / 60) * 10) / 10;
 
       if (outMin > otStartMin) {
-        otHrs = Math.floor((outMin - otStartMin) / 30) * 0.5;
+        otHrs = roundOtHoursByMode(outMin - otStartMin);
       }
     }
   }
