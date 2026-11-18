@@ -3658,9 +3658,14 @@
                   จัดเก็บรูปถ่ายด้วย Cloudflare R2 Object Storage และมีนโยบายล้างเฉพาะรูปถ่ายสแกนเวลาเข้า-ออกงานที่เก่าเกิน 24 เดือน (2 ปี) อัตโนมัติ เพื่อป้องกันฐานข้อมูลบวม โดยประวัติเวลาและยอดเงินเดือนยังคงอยู่ครบถ้วน 100%
                 </div>
               </div>
-              <button type="button" class="btn btn-primary" onclick="triggerPhotoRetentionCleanup()" style="white-space:nowrap;padding:10px 18px;font-weight:700;background:#059669;border-color:#059669">
-                <i class="fa-solid fa-broom"></i> ตรวจสอบ & ล้างรูปเก่า (> 24 เดือน)
-              </button>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+                <button type="button" class="btn btn-primary" onclick="triggerMigratePhotosToR2()" style="white-space:nowrap;padding:10px 16px;font-weight:700;background:#0284c7;border-color:#0284c7">
+                  <i class="fa-solid fa-cloud-arrow-up"></i> ย้ายรูป D1 → R2
+                </button>
+                <button type="button" class="btn btn-primary" onclick="triggerPhotoRetentionCleanup()" style="white-space:nowrap;padding:10px 18px;font-weight:700;background:#059669;border-color:#059669">
+                  <i class="fa-solid fa-broom"></i> ตรวจสอบ &amp; ล้างรูปเก่า
+                </button>
+              </div>
             </div>
 
             <!-- System Activity Audit Trail Card -->

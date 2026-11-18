@@ -1067,3 +1067,123 @@ function executePhotoRetentionCleanup(retentionMonths) {
     showToast('Error: ' + e.message, 'error');
   });
 }
+
+function triggerMigratePhotosToR2() {
+  if (!isSuperAdmin() && !hasPermission('manage_company')) {
+    showToast('สิทธิ์ไม่เพียงพอ: สงวนสิทธิ์เฉพาะ Super Admin หรือผู้จัดการระบบ', 'error');
+    return;
+  }
+
+  showToast('กำลังตรวจสอบจำนวนรูปถ่ายที่ค้างอยู่ใน D1...', 'info');
+  callApi('getPhotoStorageStats', {})
+    .then(function(r) {
+      if (!r.hasR2Binding) {
+        showToast('ยังไม่ได้ผูก Cloudflare R2 Bucket (PHOTOS_BUCKET)', 'error');
+        return;
+      }
+      var pendingRows = Number(r.base64TimeLogsCount) || 0;
+      var alreadyR2 = Number(r.r2TimeLogsCount) || 0;
+      if (pendingRows === 0) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'success',
+            title: 'ย้ายรูปขึ้น R2 ครบหมดแล้ว',
+            text: 'ไม่มีรูป Base64 ค้างอยู่ในตาราง time_logs ของ D1 แล้ว (อยู่บน R2 แล้ว ' + alreadyR2.toLocaleString() + ' รายการ)'
+          });
+        } else {
+          showToast('ไม่มีรูป Base64 ค้างอยู่ใน D1 แล้ว', 'success');
+        }
+        return;
+      }
+
+      var msg = 'ตรวจพบรายการลงเวลาที่ยังเก็บรูป Base64 ในฐานข้อมูล D1 จำนวน ' + pendingRows.toLocaleString() + ' รายการ' +
+        ' (อยู่บน R2 แล้ว ' + alreadyR2.toLocaleString() + ' รายการ)\n\n' +
+        'ระบบจะย้ายรูปภาพทั้งหมดขึ้น Cloudflare R2 (ptn-photos) ทีละชุดอัตโนมัติ โดยไม่ลบข้อมูลหรือรูปถ่ายใดๆ';
+
+      if (typeof Swal !== 'undefined') {
+        Swal.fire({
+          title: 'ย้ายรูปถ่ายจาก D1 ขึ้น Cloudflare R2',
+          text: msg,
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#0284c7',
+          cancelButtonColor: '#64748b',
+          confirmButtonText: 'เริ่มย้ายขึ้น R2 ทันที',
+          cancelButtonText: 'ยกเลิก'
+        }).then(function(res) {
+          if (res.isConfirmed) {
+            runMigratePhotosToR2Loop(pendingRows);
+          }
+        });
+      } else if (confirm(msg)) {
+        runMigratePhotosToR2Loop(pendingRows);
+      }
+    })
+    .catch(function(err) {
+      showToast('ตรวจสอบข้อมูลไม่สำเร็จ: ' + err.message, 'error');
+    });
+}
+
+function runMigratePhotosToR2Loop(totalInitialRows) {
+  var totalMigratedRows = 0;
+  var totalMigratedPhotos = 0;
+  var username = (State.currentUser && State.currentUser.username) || 'Admin';
+
+  if (typeof Swal !== 'undefined') {
+    Swal.fire({
+      title: 'กำลังย้ายรูปขึ้น Cloudflare R2...',
+      html: '<div id="r2MigrateProgressText" style="font-size:13px;color:#334155">เตรียมย้ายข้อมูล...</div>',
+      allowOutsideClick: false,
+      allowEscapeKey: false,
+      didOpen: function() {
+        Swal.showLoading();
+      }
+    });
+  }
+
+  function step() {
+    callApi('migrateD1PhotosToR2', { limit: 10, username: username })
+      .then(function(r) {
+        if (!r || !r.success) {
+          throw new Error((r && r.message) || 'เกิดข้อผิดพลาดระหว่างย้ายรูป');
+        }
+        totalMigratedRows += (Number(r.migratedRows) || 0);
+        totalMigratedPhotos += (Number(r.migratedPhotos) || 0);
+        var remaining = Number(r.remaining) || 0;
+        var pct = totalInitialRows > 0 ? Math.min(100, Math.round((totalMigratedRows / totalInitialRows) * 100)) : 100;
+
+        var progEl = document.getElementById('r2MigrateProgressText');
+        if (progEl) {
+          progEl.innerHTML = 'ย้ายแล้ว <b>' + totalMigratedRows.toLocaleString() + '</b> / ' + totalInitialRows.toLocaleString() + ' รายการ (' + totalMigratedPhotos.toLocaleString() + ' รูป) — <b>' + pct + '%</b><br><span style="font-size:11.5px;color:#64748b">เหลืออีก ' + remaining.toLocaleString() + ' รายการ</span>';
+        }
+
+        if (remaining > 0 && (Number(r.migratedRows) || 0) > 0) {
+          step();
+        } else {
+          if (typeof Swal !== 'undefined') {
+            Swal.fire({
+              icon: 'success',
+              title: 'ย้ายรูปขึ้น R2 สำเร็จแล้ว!',
+              text: 'ย้ายรูปถ่ายสแกนเวลาจาก D1 ขึ้น Cloudflare R2 เรียบร้อย ' + totalMigratedRows.toLocaleString() + ' รายการ (' + totalMigratedPhotos.toLocaleString() + ' รูป)'
+            });
+          } else {
+            showToast('ย้ายรูปขึ้น R2 สำเร็จ ' + totalMigratedRows + ' รายการ', 'success');
+          }
+          loadAppData();
+        }
+      })
+      .catch(function(err) {
+        if (typeof Swal !== 'undefined') {
+          Swal.fire({
+            icon: 'error',
+            title: 'ย้ายรูปหยุดชั่วคราว',
+            text: (err.message || err) + ' (ย้ายไปแล้ว ' + totalMigratedRows + ' รายการ สามารถกดเริ่มใหม่เพื่อทำต่อได้)'
+          });
+        } else {
+          showToast('Error: ' + err.message, 'error');
+        }
+      });
+  }
+
+  step();
+}
