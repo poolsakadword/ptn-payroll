@@ -2747,7 +2747,7 @@ function exportToCSV(type) {
     var isUserRole = (State.currentUser && State.currentUser.role === 'User');
     var activeStaffList = (State.employees || []).filter(function(e) { return (e.status || '') !== 'Resigned'; });
     if (isUserRole) {
-      csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,วันเกิด,อายุ,บัตรประชาชน,เบอร์โทร,ที่อยู่,แผนก,ตำแหน่ง,ธนาคาร,เลขบัญชี,วันเริ่มงาน\n';
+      csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,วันเกิด,อายุ,บัตรประชาชน,เบอร์โทร,ที่อยู่,แผนก,ตำแหน่ง,ธนาคาร,เลขบัญชี,วันเริ่มงาน,ระดับการศึกษา,วุฒิ/สาขาวิชา,สถานศึกษา,ผู้ติดต่อฉุกเฉิน,ความสัมพันธ์,เบอร์โทรฉุกเฉิน,ประเภทใบอนุญาต,เลขที่ใบอนุญาต,วันหมดอายุใบอนุญาต,อีเมล,รพ.ประกันสังคม,กรุ๊ปเลือด,โรคประจำตัว/แพ้ยา\n';
       activeStaffList.forEach(function(e) {
         csv += [
           e.empId,
@@ -2762,11 +2762,24 @@ function exportToCSV(type) {
           '"' + (e.position || '').replace(/"/g, '""') + '"',
           '"' + (e.bankName || '').replace(/"/g, '""') + '"',
           '"' + (e.bankAccount || '').replace(/"/g, '""') + '"',
-          e.joinDate || ''
+          e.joinDate || '',
+          '"' + (e.educationLevel || '').replace(/"/g, '""') + '"',
+          '"' + (e.educationDegree || '').replace(/"/g, '""') + '"',
+          '"' + (e.educationInstitution || '').replace(/"/g, '""') + '"',
+          '"' + (e.emergencyContactName || '').replace(/"/g, '""') + '"',
+          '"' + (e.emergencyContactRelation || '').replace(/"/g, '""') + '"',
+          '"' + (e.emergencyContactPhone || '').replace(/"/g, '""') + '"',
+          '"' + (e.licenseType || '').replace(/"/g, '""') + '"',
+          '"' + (e.licenseNumber || '').replace(/"/g, '""') + '"',
+          e.licenseExpiry || '',
+          '"' + (e.email || '').replace(/"/g, '""') + '"',
+          '"' + (e.ssoHospital || '').replace(/"/g, '""') + '"',
+          '"' + (e.bloodType || '').replace(/"/g, '""') + '"',
+          '"' + (e.medicalNotes || '').replace(/"/g, '""') + '"'
         ].join(',') + '\n';
       });
     } else {
-      csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร,หมายเหตุ\n';
+      csv += 'รหัส,ชื่อ-นามสกุล,ชื่อเล่น,ที่อยู่,แผนก,ตำแหน่ง,เงินเดือนฐาน,PF%,SSODefault,TaxDefault,ธนาคาร,เลขบัญชี,วันเกิด,อายุ,วันเริ่มงาน,บัตรประชาชน,เบอร์โทร,หมายเหตุ,ระดับการศึกษา,วุฒิ/สาขาวิชา,สถานศึกษา,ผู้ติดต่อฉุกเฉิน,ความสัมพันธ์,เบอร์โทรฉุกเฉิน,ประเภทใบอนุญาต,เลขที่ใบอนุญาต,วันหมดอายุใบอนุญาต,อีเมล,รพ.ประกันสังคม,กรุ๊ปเลือด,โรคประจำตัว/แพ้ยา\n';
       activeStaffList.forEach(function(e) {
         csv += [
           e.empId,
@@ -2786,7 +2799,20 @@ function exportToCSV(type) {
           e.joinDate || '',
           '"' + (e.citizenId || '').replace(/"/g, '""') + '"',
           '"' + (e.phone || '').replace(/"/g, '""') + '"',
-          '"' + (e.remark || '').replace(/"/g, '""') + '"'
+          '"' + (e.remark || '').replace(/"/g, '""') + '"',
+          '"' + (e.educationLevel || '').replace(/"/g, '""') + '"',
+          '"' + (e.educationDegree || '').replace(/"/g, '""') + '"',
+          '"' + (e.educationInstitution || '').replace(/"/g, '""') + '"',
+          '"' + (e.emergencyContactName || '').replace(/"/g, '""') + '"',
+          '"' + (e.emergencyContactRelation || '').replace(/"/g, '""') + '"',
+          '"' + (e.emergencyContactPhone || '').replace(/"/g, '""') + '"',
+          '"' + (e.licenseType || '').replace(/"/g, '""') + '"',
+          '"' + (e.licenseNumber || '').replace(/"/g, '""') + '"',
+          e.licenseExpiry || '',
+          '"' + (e.email || '').replace(/"/g, '""') + '"',
+          '"' + (e.ssoHospital || '').replace(/"/g, '""') + '"',
+          '"' + (e.bloodType || '').replace(/"/g, '""') + '"',
+          '"' + (e.medicalNotes || '').replace(/"/g, '""') + '"'
         ].join(',') + '\n';
       });
     }

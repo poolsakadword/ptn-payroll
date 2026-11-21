@@ -18,6 +18,10 @@ export const EMPLOYEE_LIST_COLS = `
   branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt,
   diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt,
   is_confidential,
+  education_level, education_degree, education_institution,
+  emergency_contact_name, emergency_contact_relation, emergency_contact_phone,
+  license_type, license_number, license_expiry,
+  email, sso_hospital, blood_type, medical_notes,
   CASE WHEN photo_url IS NOT NULL AND photo_url != '' THEN 1 ELSE 0 END AS has_photo
 `;
 
@@ -361,6 +365,19 @@ export const payrollHandlers = {
         probationEndDate: e.probation_end_date || '',
         remark: e.remark || '',
         resignDate: e.resign_date || '',
+        educationLevel: e.education_level || '',
+        educationDegree: e.education_degree || '',
+        educationInstitution: e.education_institution || '',
+        emergencyContactName: e.emergency_contact_name || '',
+        emergencyContactRelation: e.emergency_contact_relation || '',
+        emergencyContactPhone: e.emergency_contact_phone || '',
+        licenseType: e.license_type || '',
+        licenseNumber: e.license_number || '',
+        licenseExpiry: e.license_expiry || '',
+        email: e.email || '',
+        ssoHospital: e.sso_hospital || '',
+        bloodType: e.blood_type || '',
+        medicalNotes: e.medical_notes || '',
         diligenceAllowance: canViewSalary ? ((e.diligence_allowance !== null && e.diligence_allowance !== undefined && !isNaN(Number(e.diligence_allowance))) ? Number(e.diligence_allowance) : null) : null,
         isDeviceBound: !!deviceMap[e.emp_id],
         boundDevice: deviceMap[e.emp_id] || null

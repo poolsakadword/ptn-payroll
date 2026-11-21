@@ -128,10 +128,12 @@ export const employeeHandlers = {
         isConfidentialVal = (existingConf && (existingConf.is_confidential === 1 || existingConf.is_confidential === '1')) ? 1 : 0;
       }
 
+      const cleanLicenseExpiry = emp.licenseExpiry ? normalizeDateToIso(emp.licenseExpiry) : '';
+
       await db.prepare(`
         INSERT OR REPLACE INTO employees 
-        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt, is_confidential)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, photo_url, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt, is_confidential, education_level, education_degree, education_institution, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, license_type, license_number, license_expiry, email, sso_hospital, blood_type, medical_notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         emp.empId, emp.fullName, emp.nickname || '', emp.citizenId || '', emp.phone || '', emp.address || '',
         emp.department || '', emp.position || '', baseSalaryVal,
@@ -148,7 +150,20 @@ export const employeeHandlers = {
         isAttendanceExemptVal,
         cleanResignDate,
         isBreakExemptVal,
-        isConfidentialVal
+        isConfidentialVal,
+        String(emp.educationLevel || '').trim(),
+        String(emp.educationDegree || '').trim(),
+        String(emp.educationInstitution || '').trim(),
+        String(emp.emergencyContactName || '').trim(),
+        String(emp.emergencyContactRelation || '').trim(),
+        String(emp.emergencyContactPhone || '').trim(),
+        String(emp.licenseType || '').trim(),
+        String(emp.licenseNumber || '').trim(),
+        cleanLicenseExpiry,
+        String(emp.email || '').trim(),
+        String(emp.ssoHospital || '').trim(),
+        String(emp.bloodType || '').trim(),
+        String(emp.medicalNotes || '').trim()
       ).run();
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period and period is not locked

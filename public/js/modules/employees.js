@@ -960,6 +960,44 @@ function getNextEmployeeId() {
   return 'EMP' + (nextNum < 1000 ? String(nextNum).padStart(3, '0') : String(nextNum));
 }
 
+function switchEmpModalTab(tab) {
+  var isHr = (tab === 'hr');
+  var panelBasic = document.getElementById('empModalTabBasic');
+  var panelHr = document.getElementById('empModalTabHr');
+  var btnBasic = document.getElementById('empModalTabBasicBtn');
+  var btnHr = document.getElementById('empModalTabHrBtn');
+  if (panelBasic) panelBasic.style.display = isHr ? 'none' : 'block';
+  if (panelHr) panelHr.style.display = isHr ? 'block' : 'none';
+  if (btnBasic) {
+    btnBasic.style.color = isHr ? '#64748b' : '#2563eb';
+    btnBasic.style.borderBottomColor = isHr ? 'transparent' : '#2563eb';
+    btnBasic.style.fontWeight = isHr ? '600' : '700';
+  }
+  if (btnHr) {
+    btnHr.style.color = isHr ? '#2563eb' : '#64748b';
+    btnHr.style.borderBottomColor = isHr ? '#2563eb' : 'transparent';
+    btnHr.style.fontWeight = isHr ? '700' : '600';
+  }
+}
+
+function setEmpModalHrFields(e) {
+  var src = e || {};
+  var setVal = function(id, v) { var el = document.getElementById(id); if (el) el.value = v || ''; };
+  setVal('mEducationLevel', src.educationLevel || src.education_level || '');
+  setVal('mEducationDegree', src.educationDegree || src.education_degree || '');
+  setVal('mEducationInstitution', src.educationInstitution || src.education_institution || '');
+  setVal('mEmergencyContactName', src.emergencyContactName || src.emergency_contact_name || '');
+  setVal('mEmergencyContactRelation', src.emergencyContactRelation || src.emergency_contact_relation || '');
+  setVal('mEmergencyContactPhone', src.emergencyContactPhone || src.emergency_contact_phone || '');
+  setVal('mLicenseType', src.licenseType || src.license_type || '');
+  setVal('mLicenseNumber', src.licenseNumber || src.license_number || '');
+  setVal('mLicenseExpiry', src.licenseExpiry || src.license_expiry || '');
+  setVal('mEmail', src.email || '');
+  setVal('mSsoHospital', src.ssoHospital || src.sso_hospital || '');
+  setVal('mBloodType', src.bloodType || src.blood_type || '');
+  setVal('mMedicalNotes', src.medicalNotes || src.medical_notes || '');
+}
+
 function openAddEmployeeModal() {
   window._empPhotoExplicitlyRemoved = false;
   var isGeneralUser = (State.currentUser && String(State.currentUser.role).trim().toLowerCase() === 'user');
@@ -1028,6 +1066,8 @@ function openAddEmployeeModal() {
   updateJoinDateThaiHint();
   updateProbEndDateThaiHint();
   updateResignDateThaiHint();
+  setEmpModalHrFields(null);
+  switchEmpModalTab('basic');
   openModal('empModal');
 }
 
@@ -1129,6 +1169,8 @@ function openEditEmployeeModal(empId) {
   if (document.getElementById('mDiligenceAllowance')) {
     document.getElementById('mDiligenceAllowance').value = (e.diligenceAllowance !== undefined && e.diligenceAllowance !== null) ? e.diligenceAllowance : '';
   }
+  setEmpModalHrFields(e);
+  switchEmpModalTab('basic');
   openModal('empModal');
 }
 
@@ -1186,7 +1228,20 @@ function saveEmployeeForm(e, openPayslipAfter) {
     pfRate: pfRate,
     defaultSso: ssoVal,
     defaultTax: taxVal,
-    diligenceAllowance: diligenceVal
+    diligenceAllowance: diligenceVal,
+    educationLevel: (document.getElementById('mEducationLevel') ? document.getElementById('mEducationLevel').value.trim() : ''),
+    educationDegree: (document.getElementById('mEducationDegree') ? document.getElementById('mEducationDegree').value.trim() : ''),
+    educationInstitution: (document.getElementById('mEducationInstitution') ? document.getElementById('mEducationInstitution').value.trim() : ''),
+    emergencyContactName: (document.getElementById('mEmergencyContactName') ? document.getElementById('mEmergencyContactName').value.trim() : ''),
+    emergencyContactRelation: (document.getElementById('mEmergencyContactRelation') ? document.getElementById('mEmergencyContactRelation').value.trim() : ''),
+    emergencyContactPhone: (document.getElementById('mEmergencyContactPhone') ? document.getElementById('mEmergencyContactPhone').value.trim() : ''),
+    licenseType: (document.getElementById('mLicenseType') ? document.getElementById('mLicenseType').value.trim() : ''),
+    licenseNumber: (document.getElementById('mLicenseNumber') ? document.getElementById('mLicenseNumber').value.trim() : ''),
+    licenseExpiry: (document.getElementById('mLicenseExpiry') ? document.getElementById('mLicenseExpiry').value : ''),
+    email: (document.getElementById('mEmail') ? document.getElementById('mEmail').value.trim() : ''),
+    ssoHospital: (document.getElementById('mSsoHospital') ? document.getElementById('mSsoHospital').value.trim() : ''),
+    bloodType: (document.getElementById('mBloodType') ? document.getElementById('mBloodType').value.trim() : ''),
+    medicalNotes: (document.getElementById('mMedicalNotes') ? document.getElementById('mMedicalNotes').value.trim() : '')
   };
 
   if (!d.empId || !d.fullName) { showToast('กรุณากรอกรหัสและชื่อพนักงาน', 'error'); return; }
@@ -1578,7 +1633,7 @@ function renderEmpPrintModal() {
         '</div>' +
       '</div>' +
 
-      '<div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; margin-bottom: 20px; font-size: 11.5px;">' +
+      '<div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; font-size: 11.5px;">' +
         '<div style="font-size: 12px; font-weight: 700; color: #d97706; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 8px;">' +
           '<i class="fa-solid fa-clock"></i> 3. นโยบายการลงเวลาและเงื่อนไขการทำงาน (PTN Time Configuration)' +
         '</div>' +
@@ -1588,6 +1643,50 @@ function renderEmpPrintModal() {
           '<div><span style="color: #64748b;">การลงเวลาเข้า-ออก:</span> <span>' + esc(attText) + '</span></div>' +
           '<div><span style="color: #64748b;">การผูกเครื่องลงเวลา:</span> <span style="color: #2563eb;">' + esc(devStatus) + '</span></div>' +
           (emp.remark ? ('<div style="grid-column: 1 / -1;"><span style="color: #64748b;">หมายเหตุฝ่ายบุคคล:</span> <span style="color: #0f172a;">' + esc(emp.remark) + '</span></div>') : '') +
+        '</div>' +
+      '</div>' +
+
+      '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; font-size: 11.5px; page-break-inside: avoid; break-inside: avoid;">' +
+        '<div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 10px 14px;">' +
+          '<div style="font-size: 11.5px; font-weight: 700; color: #1e3a8a; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">' +
+            '<i class="fa-solid fa-graduation-cap"></i> 4. ข้อมูลการศึกษา' +
+          '</div>' +
+          '<div style="display: flex; flex-direction: column; gap: 4px;">' +
+            '<div><span style="color: #64748b;">ระดับการศึกษา:</span> <b style="color: #0f172a;">' + esc(emp.educationLevel || '-') + '</b></div>' +
+            '<div><span style="color: #64748b;">วุฒิ / สาขาวิชา:</span> <span>' + esc(emp.educationDegree || '-') + '</span></div>' +
+            '<div><span style="color: #64748b;">สถานศึกษา:</span> <span>' + esc(emp.educationInstitution || '-') + '</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="background: #ffffff; border: 1.5px solid #fecaca; border-radius: 10px; padding: 10px 14px;">' +
+          '<div style="font-size: 11.5px; font-weight: 700; color: #b91c1c; border-bottom: 1px solid #fee2e2; padding-bottom: 4px; margin-bottom: 6px;">' +
+            '<i class="fa-solid fa-phone-volume"></i> 5. ผู้ติดต่อกรณีฉุกเฉิน' +
+          '</div>' +
+          '<div style="display: flex; flex-direction: column; gap: 4px;">' +
+            '<div><span style="color: #64748b;">ชื่อผู้ติดต่อ:</span> <b style="color: #0f172a;">' + esc(emp.emergencyContactName || '-') + '</b></div>' +
+            '<div><span style="color: #64748b;">ความสัมพันธ์:</span> <span>' + esc(emp.emergencyContactRelation || '-') + '</span></div>' +
+            '<div><span style="color: #64748b;">เบอร์โทรฉุกเฉิน:</span> <span style="font-family: monospace; font-weight: 600;">' + esc(emp.emergencyContactPhone || '-') + '</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="background: #ffffff; border: 1.5px solid #bbf7d0; border-radius: 10px; padding: 10px 14px;">' +
+          '<div style="font-size: 11.5px; font-weight: 700; color: #15803d; border-bottom: 1px solid #dcfce7; padding-bottom: 4px; margin-bottom: 6px;">' +
+            '<i class="fa-solid fa-certificate"></i> 6. ใบประกอบวิชาชีพ / ใบอนุญาต' +
+          '</div>' +
+          '<div style="display: flex; flex-direction: column; gap: 4px;">' +
+            '<div><span style="color: #64748b;">ประเภท:</span> <b style="color: #0f172a;">' + esc(emp.licenseType || '-') + '</b></div>' +
+            '<div><span style="color: #64748b;">เลขที่ใบอนุญาต:</span> <span style="font-family: monospace; font-weight: 600;">' + esc(emp.licenseNumber || '-') + '</span></div>' +
+            '<div><span style="color: #64748b;">วันหมดอายุ:</span> <span style="font-family: monospace;">' + (emp.licenseExpiry ? formatDateThaiBE(emp.licenseExpiry) : '-') + '</span></div>' +
+          '</div>' +
+        '</div>' +
+        '<div style="background: #ffffff; border: 1.5px solid #fde68a; border-radius: 10px; padding: 10px 14px;">' +
+          '<div style="font-size: 11.5px; font-weight: 700; color: #b45309; border-bottom: 1px solid #fef3c7; padding-bottom: 4px; margin-bottom: 6px;">' +
+            '<i class="fa-solid fa-heart-pulse"></i> 7. ข้อมูลส่วนตัว &amp; สวัสดิการเพิ่มเติม' +
+          '</div>' +
+          '<div style="display: flex; flex-direction: column; gap: 4px;">' +
+            '<div><span style="color: #64748b;">อีเมล:</span> <span>' + esc(emp.email || '-') + '</span></div>' +
+            '<div><span style="color: #64748b;">รพ.ประกันสังคม:</span> <span>' + esc(emp.ssoHospital || '-') + '</span></div>' +
+            '<div><span style="color: #64748b;">กรุ๊ปเลือด:</span> <b style="color: #0f172a;">' + esc(emp.bloodType || '-') + '</b></div>' +
+            '<div><span style="color: #64748b;">โรคประจำตัว/แพ้ยา:</span> <span>' + esc(emp.medicalNotes || '-') + '</span></div>' +
+          '</div>' +
         '</div>' +
       '</div>' +
 

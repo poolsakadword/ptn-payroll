@@ -20,7 +20,7 @@ export const backupHandlers = {
       const users = (await db.prepare('SELECT username, password, role, permissions FROM users').all().catch(() => ({ results: [] }))).results || [];
       const employees_sql = includePhotos
         ? 'SELECT * FROM employees'
-        : 'SELECT emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt, is_confidential FROM employees';
+        : 'SELECT emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, remark, status, probation_days, probation_end_date, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, diligence_allowance, is_attendance_exempt, resign_date, is_break_exempt, is_confidential, education_level, education_degree, education_institution, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, license_type, license_number, license_expiry, email, sso_hospital, blood_type, medical_notes FROM employees';
       const employees = (await db.prepare(employees_sql).all().catch(() => ({ results: [] }))).results || [];
       const branches = (await db.prepare('SELECT * FROM branches').all().catch(() => ({ results: [] }))).results || [];
       const employee_devices = (await db.prepare('SELECT * FROM employee_devices').all().catch(() => ({ results: [] }))).results || [];
@@ -227,6 +227,19 @@ export const backupHandlers = {
         await db.prepare("ALTER TABLE employees ADD COLUMN is_undertime_exempt TEXT DEFAULT 'false'").run().catch(() => {});
         await db.prepare("ALTER TABLE employees ADD COLUMN is_attendance_exempt TEXT DEFAULT 'false'").run().catch(() => {});
         await db.prepare("ALTER TABLE employees ADD COLUMN is_break_exempt TEXT DEFAULT 'false'").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN education_level TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN education_degree TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN education_institution TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN emergency_contact_name TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN emergency_contact_relation TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN emergency_contact_phone TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN license_type TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN license_number TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN license_expiry TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN email TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN sso_hospital TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN blood_type TEXT DEFAULT ''").run().catch(() => {});
+        await db.prepare("ALTER TABLE employees ADD COLUMN medical_notes TEXT DEFAULT ''").run().catch(() => {});
 
         if (!opts.selectiveMode) {
           await db.prepare('DELETE FROM employees').run().catch(() => {});
@@ -236,8 +249,8 @@ export const backupHandlers = {
           if (e.emp_id && e.full_name) {
             stmts.push(db.prepare(`
               INSERT OR REPLACE INTO employees 
-              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, is_attendance_exempt, is_break_exempt)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              (emp_id, full_name, nickname, citizen_id, phone, address, department, position, base_salary, bank_name, bank_account, birth_date, age, join_date, pf_rate, default_sso, default_tax, status, probation_days, probation_end_date, photo_url, remark, branch_id, allow_all_branches, is_ot_eligible, is_undertime_exempt, is_attendance_exempt, is_break_exempt, education_level, education_degree, education_institution, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, license_type, license_number, license_expiry, email, sso_hospital, blood_type, medical_notes)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).bind(
               e.emp_id, e.full_name, e.nickname || '', e.citizen_id || '', e.phone || '', e.address || '',
               e.department || '', e.position || '', Number(e.base_salary) || 0,
@@ -256,7 +269,20 @@ export const backupHandlers = {
               String(e.is_ot_eligible !== undefined && e.is_ot_eligible !== null ? e.is_ot_eligible : 'true'),
               String(e.is_undertime_exempt !== undefined && e.is_undertime_exempt !== null ? e.is_undertime_exempt : 'false'),
               String(e.is_attendance_exempt !== undefined && e.is_attendance_exempt !== null ? e.is_attendance_exempt : 'false'),
-              String(e.is_break_exempt !== undefined && e.is_break_exempt !== null ? e.is_break_exempt : 'false')
+              String(e.is_break_exempt !== undefined && e.is_break_exempt !== null ? e.is_break_exempt : 'false'),
+              e.education_level || '',
+              e.education_degree || '',
+              e.education_institution || '',
+              e.emergency_contact_name || '',
+              e.emergency_contact_relation || '',
+              e.emergency_contact_phone || '',
+              e.license_type || '',
+              e.license_number || '',
+              e.license_expiry || '',
+              e.email || '',
+              e.sso_hospital || '',
+              e.blood_type || '',
+              e.medical_notes || ''
             ));
           }
         }
