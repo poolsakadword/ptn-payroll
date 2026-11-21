@@ -4418,89 +4418,163 @@
         <button type="button" class="modal-close-btn" onclick="closeModal('payslipModal')"><i class="fa-solid fa-xmark"></i></button>
       </div>
       <div class="modal-body" id="payslipContentArea">
-        <div style="background:#fff;padding:10px">
-          <div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:14px">
-            <h2 id="psCompName" style="font-size:17px;font-weight:700;margin:0 0 4px">-</h2>
-            <p id="psCompAddr" style="font-size:11px;color:#475569;margin:2px 0">-</p>
-            <p id="psCompTax" style="font-size:11px;color:#475569;margin:2px 0">-</p>
-            <div style="display:inline-block;background:#f1f5f9;border:1px solid #cbd5e1;padding:3px 14px;border-radius:16px;font-size:11px;font-weight:700;margin:6px 0">
-              ใบแจ้งยอดเงินเดือนประจำงวด: <span id="psPeriod" style="color:#2563eb">-</span>
+        <div style="background:#ffffff;border:2px solid #1e293b;border-radius:4px;padding:22px 26px;color:#0f172a;font-family:inherit">
+          <!-- Header -->
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding-bottom:14px;border-bottom:1px solid #cbd5e1">
+            <div>
+              <h2 id="psCompName" style="font-size:19px;font-weight:800;color:#0f172a;margin:0;line-height:1.25">-</h2>
+              <p id="psCompAddr" style="font-size:11.5px;color:#475569;margin:4px 0 0;line-height:1.4">-</p>
+              <p id="psCompTax" style="font-size:11.5px;color:#475569;margin:2px 0 0;line-height:1.4">-</p>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="display:inline-block;border:2px solid #0f172a;padding:5px 16px;font-size:13.5px;font-weight:800;color:#0f172a;letter-spacing:0.3px">
+                ใบจ่ายเงินเดือน / PAYSLIP
+              </div>
+              <div style="font-size:12px;color:#334155;margin-top:8px">
+                งวดประจำเดือน: <strong id="psPeriod" style="color:#0f172a">-</strong>
+              </div>
+              <div style="font-size:11.5px;color:#475569;margin-top:2px">
+                วันที่จ่าย: <span id="psPayDate">-</span>
+              </div>
             </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:14px;font-size:11.5px">
-            <div><span style="color:#64748b">รหัสพนักงาน:</span> <strong id="psEmpId">-</strong></div>
-            <div><span style="color:#64748b">ชื่อ-นามสกุล:</span> <strong id="psEmpName">-</strong></div>
-            <div><span style="color:#64748b">แผนก/ตำแหน่ง:</span> <strong id="psDeptPos">-</strong></div>
-            <div><span style="color:#64748b">ธนาคาร/เลขที่บัญชี:</span> <strong id="psBankAcc">-</strong></div>
+          <!-- Employee Info Grid Table (2 Columns, Unmasked Bank Account) -->
+          <div style="margin-top:14px;border:1px solid #cbd5e1;border-radius:2px;overflow:hidden;font-size:12px">
+            <div style="display:grid;grid-template-columns:115px 1fr 115px 1fr;border-bottom:1px solid #e2e8f0">
+              <div style="background:#f8fafc;padding:7px 10px;color:#475569;border-right:1px solid #e2e8f0">รหัสพนักงาน:</div>
+              <div style="padding:7px 10px;font-weight:700;color:#0f172a;border-right:1px solid #e2e8f0" id="psEmpId">-</div>
+              <div style="background:#f8fafc;padding:7px 10px;color:#475569;border-right:1px solid #e2e8f0">ชื่อ-นามสกุล:</div>
+              <div style="padding:7px 10px;font-weight:700;color:#0f172a" id="psEmpName">-</div>
+            </div>
+            <div style="display:grid;grid-template-columns:115px 1fr 115px 1fr;border-bottom:1px solid #e2e8f0">
+              <div style="background:#f8fafc;padding:7px 10px;color:#475569;border-right:1px solid #e2e8f0">ตำแหน่ง:</div>
+              <div style="padding:7px 10px;color:#1e293b;border-right:1px solid #e2e8f0" id="psPosition">-</div>
+              <div style="background:#f8fafc;padding:7px 10px;color:#475569;border-right:1px solid #e2e8f0">แผนก/สาขา:</div>
+              <div style="padding:7px 10px;color:#1e293b" id="psDeptBranch">-</div>
+            </div>
+            <div style="display:grid;grid-template-columns:115px 1fr 115px 1fr">
+              <div style="background:#f8fafc;padding:7px 10px;color:#475569;border-right:1px solid #e2e8f0">การจ่ายเงิน:</div>
+              <div style="padding:7px 10px;color:#1e293b;border-right:1px solid #e2e8f0" id="psBankName">-</div>
+              <div style="background:#f8fafc;padding:7px 10px;color:#475569;border-right:1px solid #e2e8f0">เลขที่บัญชี:</div>
+              <div style="padding:7px 10px;font-family:monospace;font-weight:700;color:#0f172a" id="psBankAccount">-</div>
+            </div>
           </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-            <!-- Earnings -->
-            <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
-              <div style="background:#eff6ff;padding:8px 12px;font-size:11.5px;font-weight:700;color:#1e40af;display:flex;justify-content:space-between">
-                <span>รายการเงินได้ (Earnings)</span><span>จำนวนเงิน (บาท)</span>
+          <!-- Earnings & Deductions Table -->
+          <div style="margin-top:14px;border:1.5px solid #1e293b;border-radius:2px;overflow:hidden;font-size:12px">
+            <div style="display:grid;grid-template-columns:1fr 1fr;background:#e2e8f0;border-bottom:1px solid #94a3b8;font-weight:700;color:#0f172a;text-align:center">
+              <div style="padding:7px 10px;border-right:1px solid #94a3b8">รายการได้ (EARNINGS)</div>
+              <div style="padding:7px 10px">รายการหัก (DEDUCTIONS)</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr">
+              <!-- Earnings -->
+              <div style="padding:12px 14px;border-right:1px solid #cbd5e1;display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">เงินเดือนพื้นฐาน</span>
+                  <span id="psBaseSalary" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">ค่าล่วงเวลา (OT) <span id="psOtDetail" style="font-size:11px;color:#64748b"></span></span>
+                  <span id="psOtPay" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">เบี้ยขยัน</span>
+                  <span id="psAllowance" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">โบนัส / เงินพิเศษ</span>
+                  <span id="psBonus" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
               </div>
-              <div style="padding:10px 12px;font-size:11.5px;display:flex;flex-direction:column;gap:5px">
-                <div style="display:flex;justify-content:space-between"><span>เงินเดือนฐาน</span><span id="psBaseSalary" class="font-mono">0.00</span></div>
-                <div style="display:flex;justify-content:space-between"><span>ค่าล่วงเวลา (OT <span id="psOtHours">0</span> ชม. @<span id="psOtRate">40</span>฿)</span><span id="psOtPay" class="font-mono text-blue font-bold">0.00</span></div>
-                <div style="display:flex;justify-content:space-between"><span>เบี้ยขยัน</span><span id="psAllowance" class="font-mono text-green font-bold">0.00</span></div>
-                <div style="display:flex;justify-content:space-between"><span>โบนัส / อื่นๆ</span><span id="psBonus" class="font-mono">0.00</span></div>
-                <div style="display:flex;justify-content:space-between"><span>หัก ขาด/ลา/สาย</span><span id="psLeaveDed" class="font-mono text-red">0.00</span></div>
-              </div>
-              <div style="background:#eff6ff;padding:8px 12px;display:flex;justify-content:space-between;font-weight:700;color:#1e40af;border-top:1px solid #e2e8f0">
-                <span>รวมเงินได้ (Gross Pay)</span><span id="psGrossPay" class="font-mono">0.00</span>
+
+              <!-- Deductions -->
+              <div style="padding:12px 14px;display:flex;flex-direction:column;gap:7px">
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">ภาษีหัก ณ ที่จ่าย</span>
+                  <span id="psTax" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">เงินสมทบประกันสังคม (SSO)</span>
+                  <span id="psSso" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">กองทุนสำรองเลี้ยงชีพ (PF)</span>
+                  <span id="psPf" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">หักเงินเบิกล่วงหน้า (Advance)</span>
+                  <span id="psAdvDed" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">หักมาสาย / ออกก่อนเวลา</span>
+                  <span id="psLateDed" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">หักลากิจ / ขาดงาน</span>
+                  <span id="psAbsentLeaveDed" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div id="psOtherDedRow" style="display:none;justify-content:space-between;gap:8px">
+                  <span style="color:#334155">หักอื่นๆ (กู้, เช่า, น้ำ, ไฟ)</span>
+                  <span id="psOtherDed" class="font-mono" style="color:#0f172a">0.00</span>
+                </div>
+                <div id="psCarriedDebtDeductRow" style="display:none;justify-content:space-between;gap:8px">
+                  <span style="color:#991b1b;font-weight:600">หนี้ค้างยกยอดจากงวดก่อน</span>
+                  <span id="psCarriedDebtDeduct" class="font-mono" style="color:#991b1b;font-weight:700">0.00</span>
+                </div>
               </div>
             </div>
 
-            <!-- Deductions -->
-            <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden">
-              <div style="background:#fef2f2;padding:8px 12px;font-size:11.5px;font-weight:700;color:#991b1b;display:flex;justify-content:space-between">
-                <span>รายการหัก (Deductions)</span><span>จำนวนเงิน (บาท)</span>
+            <!-- Totals Row -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;border-top:1.5px solid #1e293b;background:#f8fafc;font-weight:700;color:#0f172a">
+              <div style="display:flex;justify-content:space-between;padding:8px 14px;border-right:1px solid #cbd5e1">
+                <span>รวมเงินได้ทั้งสิ้น</span>
+                <span id="psGrossPay" class="font-mono" style="font-size:13px">0.00</span>
               </div>
-              <div style="padding:10px 12px;font-size:11.5px;display:flex;flex-direction:column;gap:5px">
-                <div style="display:flex;justify-content:space-between"><span>ประกันสังคม (SSO)</span><span id="psSso" class="font-mono text-red">0.00</span></div>
-                <div style="display:flex;justify-content:space-between"><span>กองทุนสำรองเลี้ยงชีพ (PF)</span><span id="psPf" class="font-mono text-blue font-bold">0.00</span></div>
-                <div style="display:flex;justify-content:space-between"><span>ภาษีหัก ณ ที่จ่าย</span><span id="psTax" class="font-mono">0.00</span></div>
-                <div style="display:flex;justify-content:space-between"><span>หักเงินเบิกล่วงหน้า</span><span id="psAdvDed" class="font-mono text-red">0.00</span></div>
-                <div style="display:flex;justify-content:space-between"><span>หักอื่นๆ (กู้, เช่า, น้ำ, ไฟ)</span><span id="psOtherDed" class="font-mono text-red">0.00</span></div>
-                <div id="psCarriedDebtDeductRow" style="display:none;justify-content:space-between"><span>หนี้ค้างยกยอดจากงวดก่อน</span><span id="psCarriedDebtDeduct" class="font-mono text-red font-bold">0.00</span></div>
-              </div>
-              <div style="background:#fef2f2;padding:8px 12px;display:flex;justify-content:space-between;font-weight:700;color:#991b1b;border-top:1px solid #e2e8f0">
-                <span>รวมรายการหัก</span><span id="psTotalDed" class="font-mono">0.00</span>
+              <div style="display:flex;justify-content:space-between;padding:8px 14px">
+                <span>รวมรายการหักทั้งสิ้น</span>
+                <span id="psTotalDed" class="font-mono" style="font-size:13px">0.00</span>
               </div>
             </div>
           </div>
 
           <!-- Net Pay Box -->
-          <div style="background:#ecfdf5;border:2px solid #10b981;border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+          <div style="margin-top:14px;border:1.5px solid #1e293b;border-radius:2px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;background:#f8fafc">
             <div>
-              <div style="font-size:11px;font-weight:700;color:#065f46;text-transform:uppercase">เงินเดือนสุทธิ (NET PAY)</div>
+              <div style="font-size:11px;color:#475569">จำนวนเงินสุทธิ (ตัวอักษร):</div>
+              <div id="psNetPayText" style="font-size:12.5px;font-weight:800;color:#0f172a;margin-top:2px">(ศูนย์บาทถ้วน)</div>
             </div>
-            <div id="psNetPay" style="font-size:24px;font-weight:700;font-family:monospace;color:#059669">฿0.00</div>
+            <div style="display:flex;align-items:baseline;gap:10px;text-align:right;flex-shrink:0">
+              <span style="font-size:12px;font-weight:700;color:#334155">เงินได้สุทธิ (Net Pay):</span>
+              <span id="psNetPay" style="font-size:21px;font-weight:800;font-family:monospace;color:#0f172a;border-bottom:3px double #0f172a;padding-bottom:2px">฿ 0.00</span>
+            </div>
           </div>
 
           <!-- Carried Debt Notice Banner -->
-          <div id="psCarriedDebtNotice" style="display:none;background:#fef2f2;border:1.5px solid #ef4444;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#991b1b">
+          <div id="psCarriedDebtNotice" style="display:none;background:#fef2f2;border:1.5px solid #ef4444;border-radius:6px;padding:10px 14px;margin-top:12px;font-size:12px;color:#991b1b">
             <div style="font-weight:700;display:flex;align-items:center;gap:6px">
-              <i class="fa-solid fa-triangle-exclamation text-red-600"></i> ยอดหักเกินรายได้รวม (หนี้ค้างชำระยกยอดไปงวดถัดไป)
+              <i class="fa-solid fa-triangle-exclamation"></i> ยอดหักเกินรายได้รวม (หนี้ค้างชำระยกยอดไปงวดถัดไป)
             </div>
             <div style="margin-top:4px;color:#b91c1c" id="psCarriedDebtDesc">
               ยอดเงินได้สุทธิติดลบ บริษัทปรับยอดรับสุทธิเป็น ฿0.00 และบันทึกยอดหนี้คงค้าง <strong id="psCarriedDebtAmount" class="font-mono">฿0.00</strong> เพื่อนำไปหักในรอบบิลถัดไป
             </div>
           </div>
 
-          <!-- Signature row -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:20px;padding-top:14px;border-top:1px dashed #cbd5e1;text-align:center;font-size:11px;color:#64748b">
+          <!-- Stats & Timestamp Footer Strip -->
+          <div style="margin-top:14px;padding-top:8px;border-top:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:11px;color:#64748b">
+            <div id="psStatsLine">สถิติประจำงวด: ขาดงาน 0 วัน | ลากิจ 0 วัน | ลาป่วย 0 วัน</div>
+            <div id="psPrintTimestamp" class="font-mono">-</div>
+          </div>
+
+          <!-- Signature Row -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:28px;text-align:center;font-size:11.5px;color:#475569">
             <div>
-              <div style="height:36px"></div>
-              <div style="border-top:1px solid #94a3b8;padding-top:6px">ลงชื่อผู้มีอำนาจจ่ายเงิน</div>
-              <div style="font-size:10px;color:#94a3b8">( ................................................... )</div>
+              <div>ลงชื่อ ............................................................</div>
+              <div style="margin-top:8px">( พนักงานผู้รับเงิน )</div>
             </div>
             <div>
-              <div style="height:36px"></div>
-              <div style="border-top:1px solid #94a3b8;padding-top:6px">ลงชื่อพนักงานผู้รับเงิน</div>
-              <div style="font-size:10px;color:#94a3b8">( ................................................... )</div>
+              <div>ลงชื่อ ............................................................</div>
+              <div style="margin-top:8px">( ผู้มีอำนาจจ่ายเงิน / ฝ่ายการเงิน )</div>
             </div>
           </div>
         </div>

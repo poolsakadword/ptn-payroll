@@ -1736,65 +1736,130 @@ function executePrintEmployees() {
 }
 
 function populatePayslipModal(row) {
+  var fmtNum = function(n) {
+    var v = Number(n);
+    if (isNaN(v)) v = 0;
+    return v.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  var setEl = function(id, text) {
+    var el = document.getElementById(id);
+    if (el) el.textContent = text;
+  };
+
   var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
   var compAddr = State.company.address || '';
   var compPhone = State.company.phone || '';
   var compTax = State.company.taxId || '';
 
-  document.getElementById('psCompName').textContent = compName;
-  document.getElementById('psCompAddr').textContent = compAddr ? 'ที่อยู่: ' + compAddr : '';
-  document.getElementById('psCompTax').textContent = (compTax ? 'เลขประจำตัวผู้เสียภาษี: ' + compTax + ' ' : '') + (compPhone ? 'โทร: ' + compPhone : '');
+  setEl('psCompName', compName);
+  setEl('psCompAddr', compAddr || '');
+  setEl('psCompTax', (compTax ? 'เลขประจำตัวผู้เสียภาษี: ' + compTax : '') + (compPhone ? (compTax ? ' | ' : '') + 'โทร: ' + compPhone : ''));
+
   var isEarned = (State.payrollCalcMode === 'EARNED' && (row.isMidPeriod || State.isMidPeriod));
   var asOfThai = formatDateThaiBE(row.asOfDate || State.asOfDate);
-  document.getElementById('psPeriod').innerHTML = esc(row.period || State.period) + (isEarned ? ' <span style="font-size:10.5px;font-weight:700;background:#eff6ff;color:#1e40af;padding:2px 6px;border-radius:4px;border:1px solid #bfdbfe;white-space:nowrap"><i class="fa-solid fa-chart-line"></i> ยอดสะสมถึงวันที่ ' + esc(asOfThai) + '</span>' : '');
-  document.getElementById('psEmpId').textContent = row.empId;
+  var psPeriodEl = document.getElementById('psPeriod');
+  if (psPeriodEl) {
+    psPeriodEl.innerHTML = esc(row.period || State.period) + (isEarned ? ' <span style="font-size:10.5px;font-weight:700;background:#eff6ff;color:#1e40af;padding:1px 6px;border-radius:4px;border:1px solid #bfdbfe;white-space:nowrap">ยอดสะสมถึง ' + esc(asOfThai) + '</span>' : '');
+  }
+
+  var now = new Date();
+  var dd = String(now.getDate()).padStart(2, '0');
+  var mm = String(now.getMonth() + 1).padStart(2, '0');
+  var yyyyBE = now.getFullYear() + 543;
+  var hh = String(now.getHours()).padStart(2, '0');
+  var mi = String(now.getMinutes()).padStart(2, '0');
+  var ss = String(now.getSeconds()).padStart(2, '0');
+  var todayThaiSlash = dd + '/' + mm + '/' + yyyyBE;
+  setEl('psPayDate', todayThaiSlash);
+  setEl('psPrintTimestamp', todayThaiSlash + ' ' + hh + ':' + mi + ':' + ss);
+
   var empRowMatch = State.employees.find(function(e) { return e.empId === row.empId; });
   var psNick = row.nickname || (empRowMatch && empRowMatch.nickname) || getEmpNickname(row.empId);
-  document.getElementById('psEmpName').textContent = row.name + (psNick ? ' (' + psNick + ')' : '');
-  document.getElementById('psDeptPos').textContent = (row.department || '-') + ' / ' + (row.position || '-');
-  document.getElementById('psBankAcc').textContent = (row.bankName || '-') + ' ' + (row.bankAccount || '-');
+  var deptText = row.department || (empRowMatch && empRowMatch.department) || '-';
+  var posText = row.position || (empRowMatch && empRowMatch.position) || '-';
+  var bankNameText = row.bankName || (empRowMatch && empRowMatch.bankName) || '-';
+  var bankAccText = row.bankAccount || (empRowMatch && empRowMatch.bankAccount) || '-';
 
-  var displayBase = (isEarned && row.earnedBaseSalary !== undefined) ? Number(row.earnedBaseSalary) : Number(row.baseSalary);
-  var displayGross = (isEarned && row.earnedGrossPay !== undefined) ? Number(row.earnedGrossPay) : Number(row.grossPay);
-  var displaySso = (isEarned && row.earnedSso !== undefined) ? Number(row.earnedSso) : Number(row.sso);
-  var displayPf = (isEarned && row.earnedPf !== undefined) ? Number(row.earnedPf) : Number(row.pf);
-  var displayTax = (isEarned && row.earnedTax !== undefined) ? Number(row.earnedTax) : Number(row.tax);
-  var displayTotalDed = (isEarned && row.earnedTotalDeductions !== undefined) ? Number(row.earnedTotalDeductions) : Number(row.totalDeductions);
-  var displayNet = (isEarned && row.earnedNetPay !== undefined) ? Number(row.earnedNetPay) : Number(row.netPay);
+  setEl('psEmpId', row.empId || '-');
+  setEl('psEmpName', (row.name || '-') + (psNick ? ' (' + psNick + ')' : ''));
+  setEl('psPosition', posText);
+  setEl('psDeptBranch', deptText);
+  setEl('psBankName', bankNameText);
+  setEl('psBankAccount', bankAccText);
 
-  document.getElementById('psBaseSalary').textContent = fmt(displayBase);
-  document.getElementById('psOtHours').textContent = row.otHours || 0;
-  if (document.getElementById('psOtRate')) {
-    var rOtRate = (row.otRate !== null && row.otRate !== undefined && !isNaN(Number(row.otRate))) ? Number(row.otRate) : ((State.payrollDefaults && State.payrollDefaults.defaultOtRate) ? State.payrollDefaults.defaultOtRate : 40);
-    document.getElementById('psOtRate').textContent = rOtRate;
+  var displayBase = (isEarned && row.earnedBaseSalary !== undefined) ? Number(row.earnedBaseSalary) : (Number(row.baseSalary) || 0);
+  var otPayVal = Number(row.otPay) || 0;
+  var allowanceVal = Number(row.allowance) || 0;
+  var bonusVal = Number(row.bonus) || 0;
+  var leaveDedTotal = Number(row.leaveDeduction) || 0;
+  var displaySso = (isEarned && row.earnedSso !== undefined) ? Number(row.earnedSso) : (Number(row.sso) || 0);
+  var displayPf = (isEarned && row.earnedPf !== undefined) ? Number(row.earnedPf) : (Number(row.pf) || 0);
+  var displayTax = (isEarned && row.earnedTax !== undefined) ? Number(row.earnedTax) : (Number(row.tax) || 0);
+  var advDedVal = Number(row.advanceDeduct) || 0;
+  var otherDedVal = Number(row.otherDeduct) || 0;
+  var displayTotalDedRaw = (isEarned && row.earnedTotalDeductions !== undefined) ? Number(row.earnedTotalDeductions) : (Number(row.totalDeductions) || 0);
+  var displayNet = (isEarned && row.earnedNetPay !== undefined) ? Number(row.earnedNetPay) : (Number(row.netPay) || 0);
+
+  var inputRec = State.inputRecords.find(function(x) { return x.empId === row.empId; });
+  var lateDedVal = inputRec ? (Number(inputRec.lateDeduct) || 0) : 0;
+  if (lateDedVal > leaveDedTotal) lateDedVal = leaveDedTotal;
+  var absentLeaveDedVal = Math.max(0, Math.round((leaveDedTotal - lateDedVal) * 100) / 100);
+
+  // Align Earnings & Deductions totals with PTN Time layout (leave/late shown under Deductions)
+  var totalEarningsDisplay = Math.round((displayBase + otPayVal + allowanceVal + bonusVal) * 100) / 100;
+  var totalDedDisplay = Math.round((displayTotalDedRaw + leaveDedTotal) * 100) / 100;
+
+  setEl('psBaseSalary', fmtNum(displayBase));
+  var otHrs = Number(row.otHours) || 0;
+  var rOtRate = (row.otRate !== null && row.otRate !== undefined && !isNaN(Number(row.otRate)))
+    ? Number(row.otRate)
+    : ((State.payrollDefaults && State.payrollDefaults.defaultOtRate) ? State.payrollDefaults.defaultOtRate : 40);
+  setEl('psOtDetail', otHrs > 0 ? '(' + otHrs + ' ชม. × ฿' + rOtRate + ')' : '');
+  setEl('psOtPay', fmtNum(otPayVal));
+  setEl('psAllowance', fmtNum(allowanceVal));
+  setEl('psBonus', fmtNum(bonusVal));
+  setEl('psGrossPay', fmtNum(totalEarningsDisplay));
+
+  setEl('psTax', fmtNum(displayTax));
+  setEl('psSso', fmtNum(displaySso));
+  setEl('psPf', fmtNum(displayPf));
+  setEl('psAdvDed', fmtNum(advDedVal));
+  setEl('psLateDed', fmtNum(lateDedVal));
+  setEl('psAbsentLeaveDed', fmtNum(absentLeaveDedVal));
+
+  var otherDedRow = document.getElementById('psOtherDedRow');
+  if (otherDedRow) {
+    if (otherDedVal > 0) {
+      otherDedRow.style.display = 'flex';
+      setEl('psOtherDed', fmtNum(otherDedVal));
+    } else {
+      otherDedRow.style.display = 'none';
+    }
   }
-  document.getElementById('psOtPay').textContent = fmt(row.otPay);
-  document.getElementById('psAllowance').textContent = fmt(row.allowance);
-  document.getElementById('psBonus').textContent = fmt(row.bonus);
-  document.getElementById('psLeaveDed').textContent = fmt(row.leaveDeduction);
-  document.getElementById('psGrossPay').textContent = fmt(displayGross);
-
-  document.getElementById('psSso').textContent = fmt(displaySso);
-  document.getElementById('psPf').textContent = fmt(displayPf);
-  document.getElementById('psTax').textContent = fmt(displayTax);
-  document.getElementById('psAdvDed').textContent = fmt(row.advanceDeduct);
-  document.getElementById('psOtherDed').textContent = fmt(row.otherDeduct);
-  document.getElementById('psTotalDed').textContent = fmt(displayTotalDed);
-  document.getElementById('psNetPay').textContent = fmt(displayNet);
 
   // Carried debt deduction from previous period (if any)
-  var inputRec = State.inputRecords.find(function(x) { return x.empId === row.empId; });
   var carriedDebtIn = inputRec ? (Number(inputRec.carriedDebt) || 0) : 0;
   var carriedDebtRow = document.getElementById('psCarriedDebtDeductRow');
   if (carriedDebtRow) {
     if (carriedDebtIn > 0) {
       carriedDebtRow.style.display = 'flex';
-      if (document.getElementById('psCarriedDebtDeduct')) {
-        document.getElementById('psCarriedDebtDeduct').textContent = fmt(carriedDebtIn);
-      }
+      setEl('psCarriedDebtDeduct', fmtNum(carriedDebtIn));
     } else {
       carriedDebtRow.style.display = 'none';
     }
+  }
+
+  setEl('psTotalDed', fmtNum(totalDedDisplay));
+  setEl('psNetPay', '฿ ' + fmtNum(displayNet));
+  var netThaiWords = (typeof bahtText === 'function') ? bahtText(displayNet) : '';
+  setEl('psNetPayText', netThaiWords ? '(' + netThaiWords + ')' : '');
+
+  var absentDaysVal = inputRec ? (Number(inputRec.absentDays) || 0) : 0;
+  var leaveDaysVal = inputRec ? (Number(inputRec.leaveDays) || 0) : 0;
+  var sickDaysVal = inputRec ? ((Number(inputRec.sickLeaveDays) || 0) + (Number(inputRec.unpaidSickLeaveDays) || 0)) : 0;
+  var statsEl = document.getElementById('psStatsLine');
+  if (statsEl) {
+    statsEl.innerHTML = 'สถิติประจำงวด: ขาดงาน <b style="color:#0f172a">' + absentDaysVal + '</b> วัน | ลากิจ <b style="color:#0f172a">' + leaveDaysVal + '</b> วัน | ลาป่วย <b style="color:#0f172a">' + sickDaysVal + '</b> วัน';
   }
 
   // Carried debt ending deficit to next period (if net pay would have been negative)
@@ -1803,9 +1868,7 @@ function populatePayslipModal(row) {
   if (noticeEl) {
     if (debtEndingAmt > 0) {
       noticeEl.style.display = 'block';
-      if (document.getElementById('psCarriedDebtAmount')) {
-        document.getElementById('psCarriedDebtAmount').textContent = fmt(debtEndingAmt);
-      }
+      setEl('psCarriedDebtAmount', fmt(debtEndingAmt));
     } else {
       noticeEl.style.display = 'none';
     }
