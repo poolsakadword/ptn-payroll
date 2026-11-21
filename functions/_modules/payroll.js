@@ -128,16 +128,23 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     }
   }
 
-  // Load active scheduled incident deductions for this period
+  // Load active scheduled incident / advance / loan deductions for this period
   const incidentSchedules = await db.prepare(`
-    SELECT emp_id, SUM(amount) as total_sched_deduct
-    FROM incident_deduction_schedules
-    WHERE target_period = ? AND status = 'SCHEDULED'
-    GROUP BY emp_id
+    SELECT s.emp_id, i.category, SUM(s.amount) as total_sched_deduct
+    FROM incident_deduction_schedules s
+    LEFT JOIN incident_deductions i ON s.incident_id = i.id
+    WHERE s.target_period = ? AND s.status = 'SCHEDULED'
+    GROUP BY s.emp_id, i.category
   `).bind(period).all().catch(() => ({ results: [] }));
-  const incidentSchedMap = {};
+  const incidentAdvMap = {};
+  const incidentOthMap = {};
   for (const row of (incidentSchedules.results || [])) {
-    incidentSchedMap[row.emp_id] = Number(row.total_sched_deduct) || 0;
+    const amt = Number(row.total_sched_deduct) || 0;
+    if (String(row.category || '').toUpperCase() === 'SALARY_ADVANCE') {
+      incidentAdvMap[row.emp_id] = Math.round(((incidentAdvMap[row.emp_id] || 0) + amt) * 100) / 100;
+    } else {
+      incidentOthMap[row.emp_id] = Math.round(((incidentOthMap[row.emp_id] || 0) + amt) * 100) / 100;
+    }
   }
 
   let count = 0;
@@ -200,9 +207,11 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
     const sso = (inp.sso !== undefined && inp.sso !== null && !isNaN(Number(inp.sso))) ? Number(inp.sso) : ((emp.default_sso !== undefined && emp.default_sso !== null && !isNaN(Number(emp.default_sso))) ? Number(emp.default_sso) : 0);
     const pf = pfAmt;
     const tax = Number(inp.tax !== undefined ? inp.tax : (emp.default_tax || 0));
-    const advDed = Number(inp.advance_deduct) || 0;
+    const manualAdvDed = Number(inp.advance_deduct) || 0;
+    const incidentAdvDed = incidentAdvMap[empId] || 0;
+    const advDed = Math.round((manualAdvDed + incidentAdvDed) * 100) / 100;
     const manualOthDed = Number(inp.other_deduct) || 0;
-    const incidentOthDed = incidentSchedMap[empId] || 0;
+    const incidentOthDed = incidentOthMap[empId] || 0;
     const othDed = Math.round((manualOthDed + incidentOthDed) * 100) / 100;
     const carriedDebtIn = Number(inp.carried_debt) || 0;
     const totalDed = Math.round((sso + pf + tax + advDed + othDed + carriedDebtIn) * 100) / 100;

@@ -1016,17 +1016,23 @@ footer {
      ------------------------------------------------------------------------ */
   body.printing-salary-cert > *:not(#salaryCertModal),
   body.printing-employment-contract > *:not(#employmentContractModal),
-  body.printing-resignation-letter > *:not(#resignationLetterModal) {
+  body.printing-resignation-letter > *:not(#resignationLetterModal),
+  body.printing-salary-advance > *:not(#salaryAdvanceModal),
+  body.printing-staff-loan > *:not(#staffLoanModal) {
     display: none !important;
   }
   body.printing-salary-cert .modal-overlay:not(#salaryCertModal),
   body.printing-employment-contract .modal-overlay:not(#employmentContractModal),
-  body.printing-resignation-letter .modal-overlay:not(#resignationLetterModal) {
+  body.printing-resignation-letter .modal-overlay:not(#resignationLetterModal),
+  body.printing-salary-advance .modal-overlay:not(#salaryAdvanceModal),
+  body.printing-staff-loan .modal-overlay:not(#staffLoanModal) {
     display: none !important;
   }
   body.printing-salary-cert #salaryCertModal,
   body.printing-employment-contract #employmentContractModal,
-  body.printing-resignation-letter #resignationLetterModal {
+  body.printing-resignation-letter #resignationLetterModal,
+  body.printing-salary-advance #salaryAdvanceModal,
+  body.printing-staff-loan #staffLoanModal {
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -1041,7 +1047,9 @@ footer {
   }
   body.printing-salary-cert #salaryCertModal .modal-card,
   body.printing-employment-contract #employmentContractModal .modal-card,
-  body.printing-resignation-letter #resignationLetterModal .modal-card {
+  body.printing-resignation-letter #resignationLetterModal .modal-card,
+  body.printing-salary-advance #salaryAdvanceModal .modal-card,
+  body.printing-staff-loan #staffLoanModal .modal-card {
     display: block !important;
     position: static !important;
     width: 100% !important;
@@ -1067,12 +1075,24 @@ footer {
   body.printing-resignation-letter #resignationLetterModal .cert-controls-bar,
   body.printing-resignation-letter #resignationLetterModal .modal-footer,
   body.printing-resignation-letter #resignationLetterModal .no-print,
-  body.printing-resignation-letter #resignationLetterModal .modal-card > *:not(.modal-body) {
+  body.printing-resignation-letter #resignationLetterModal .modal-card > *:not(.modal-body),
+  body.printing-salary-advance #salaryAdvanceModal .modal-header,
+  body.printing-salary-advance #salaryAdvanceModal .cert-controls-bar,
+  body.printing-salary-advance #salaryAdvanceModal .modal-footer,
+  body.printing-salary-advance #salaryAdvanceModal .no-print,
+  body.printing-salary-advance #salaryAdvanceModal .modal-card > *:not(.modal-body),
+  body.printing-staff-loan #staffLoanModal .modal-header,
+  body.printing-staff-loan #staffLoanModal .cert-controls-bar,
+  body.printing-staff-loan #staffLoanModal .modal-footer,
+  body.printing-staff-loan #staffLoanModal .no-print,
+  body.printing-staff-loan #staffLoanModal .modal-card > *:not(.modal-body) {
     display: none !important;
   }
   body.printing-salary-cert #salaryCertModal .modal-body,
   body.printing-employment-contract #employmentContractModal .modal-body,
-  body.printing-resignation-letter #resignationLetterModal .modal-body {
+  body.printing-resignation-letter #resignationLetterModal .modal-body,
+  body.printing-salary-advance #salaryAdvanceModal .modal-body,
+  body.printing-staff-loan #staffLoanModal .modal-body {
     display: block !important;
     background: #ffffff !important;
     padding: 0 !important;
@@ -1084,12 +1104,16 @@ footer {
   }
   body.printing-salary-cert #salaryCertModal .modal-body > *:not(#salaryCertPaper),
   body.printing-employment-contract #employmentContractModal .modal-body > *:not(#contractPaper),
-  body.printing-resignation-letter #resignationLetterModal .modal-body > *:not(#resignationPaper) {
+  body.printing-resignation-letter #resignationLetterModal .modal-body > *:not(#resignationPaper),
+  body.printing-salary-advance #salaryAdvanceModal .modal-body > *:not(#salaryAdvancePaper),
+  body.printing-staff-loan #staffLoanModal .modal-body > *:not(#staffLoanPaper) {
     display: none !important;
   }
   body.printing-salary-cert #salaryCertPaper,
   body.printing-employment-contract #contractPaper,
-  body.printing-resignation-letter #resignationPaper {
+  body.printing-resignation-letter #resignationPaper,
+  body.printing-salary-advance #salaryAdvancePaper,
+  body.printing-staff-loan #staffLoanPaper {
     display: block !important;
     width: 100% !important;
     max-width: 100% !important;
@@ -1111,12 +1135,16 @@ footer {
   }
   body.printing-salary-cert #salaryCertPaper *,
   body.printing-employment-contract #contractPaper *,
-  body.printing-resignation-letter #resignationPaper * {
+  body.printing-resignation-letter #resignationPaper *,
+  body.printing-salary-advance #salaryAdvancePaper *,
+  body.printing-staff-loan #staffLoanPaper * {
     visibility: visible !important;
   }
   body.printing-salary-cert .salary-cert-paper [contenteditable="true"],
   body.printing-employment-contract .salary-cert-paper [contenteditable="true"],
-  body.printing-resignation-letter .salary-cert-paper [contenteditable="true"] {
+  body.printing-resignation-letter .salary-cert-paper [contenteditable="true"],
+  body.printing-salary-advance .salary-cert-paper [contenteditable="true"],
+  body.printing-staff-loan .salary-cert-paper [contenteditable="true"] {
     outline: none !important;
     background: transparent !important;
     box-shadow: none !important;

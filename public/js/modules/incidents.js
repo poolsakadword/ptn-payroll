@@ -171,7 +171,9 @@ function renderIncidentsTable(list) {
   if (!tbody) return;
 
   var searchQ = (document.getElementById('incSearchInput')?.value || '').trim().toLowerCase();
+  var catFilter = (document.getElementById('incFilterCategory')?.value || 'ALL');
   var filtered = list.filter(function(i) {
+    if (catFilter && catFilter !== 'ALL' && i.category !== catFilter) return false;
     if (!searchQ) return true;
     return (
       (i.incident_code || '').toLowerCase().includes(searchQ) ||
@@ -183,11 +185,13 @@ function renderIncidentsTable(list) {
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8"><i class="fa-regular fa-folder-open" style="font-size:24px;display:block;margin-bottom:8px"></i>ไม่พบรายการเหตุการณ์ความเสียหายตามเงื่อนไขที่เลือก</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:#94a3b8"><i class="fa-regular fa-folder-open" style="font-size:24px;display:block;margin-bottom:8px"></i>ไม่พบรายการตามเงื่อนไขที่เลือก</td></tr>';
     return;
   }
 
   var catMap = {
+    SALARY_ADVANCE: { label: '💳 เบิกเงินเดือนล่วงหน้า', color: '#059669', bg: '#ecfdf5', border: '#a7f3d0' },
+    STAFF_LOAN: { label: '🏦 เงินกู้ยืมพนักงาน', color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe' },
     CASH_SHORT: { label: '💵 เงินสดขาด', color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
     GOODS_DAMAGE: { label: '📦 สินค้าเสียหาย', color: '#d97706', bg: '#fffbeb', border: '#fde68a' },
     STOCK_LOSS: { label: '🔍 สต็อกหาย', color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe' },
@@ -253,6 +257,11 @@ function renderIncidentsTable(list) {
         '</td>' +
         '<td style="padding:12px 14px;vertical-align:middle;text-align:center;white-space:nowrap">' +
           '<div style="display:inline-flex;gap:4px">' +
+            ((i.category === 'SALARY_ADVANCE' || i.category === 'STAFF_LOAN') ? (
+              '<button type="button" class="btn btn-xs" onclick="openIncidentDocument(' + i.id + ')" title="' + (i.category === 'SALARY_ADVANCE' ? 'พิมพ์ใบขอเบิกเงินล่วงหน้า (A4)' : 'พิมพ์สัญญากู้ยืมเงิน (A4)') + '" style="background:' + (i.category === 'SALARY_ADVANCE' ? '#ecfdf5;color:#059669;border:1px solid #a7f3d0' : '#eef2ff;color:#4f46e5;border:1px solid #c7d2fe') + ';font-weight:700">' +
+                '<i class="fa-solid fa-print"></i> ' + (i.category === 'SALARY_ADVANCE' ? 'ใบเบิก' : 'สัญญากู้') +
+              '</button>'
+            ) : '') +
             '<button type="button" class="btn btn-xs ' + (i.status === 'PENDING' ? 'btn-primary' : 'btn-outline') + '" onclick="openReviewIncidentModal(' + i.id + ')" title="ตรวจสอบรายละเอียดและอนุมัติ">' +
               '<i class="fa-solid fa-magnifying-glass"></i> ' + (i.status === 'PENDING' ? 'อนุมัติ' : 'ดูข้อมูล') +
             '</button>' +
@@ -814,6 +823,8 @@ async function viewEmployeeIncidentBreakdown(empId, period) {
 
     if (data && data.success && Array.isArray(data.items) && data.items.length > 0) {
       var catMap = {
+        SALARY_ADVANCE: '💳 เบิกเงินเดือนล่วงหน้า',
+        STAFF_LOAN: '🏦 เงินกู้ยืมพนักงาน',
         CASH_SHORT: '💵 เงินสดขาด',
         GOODS_DAMAGE: '📦 สินค้าเสียหาย',
         STOCK_LOSS: '🔍 สต็อกหาย',
@@ -869,5 +880,35 @@ async function viewEmployeeIncidentBreakdown(empId, period) {
   } catch (err) {
     console.error('viewEmployeeIncidentBreakdown error:', err);
     if (contentEl) contentEl.innerHTML = '<div style="text-align:center;padding:20px;color:#dc2626">เกิดข้อผิดพลาดในการโหลดข้อมูล</div>';
+  }
+}
+
+function openIncidentDocument(incId) {
+  var inc = (cachedIncidents || []).find(function(x) { return Number(x.id) === Number(incId); });
+  if (!inc) return;
+  var scheds = Array.isArray(inc.schedules) ? inc.schedules : [];
+  var firstSched = scheds[0] || {};
+  var empId = firstSched.emp_id || '';
+  var empCount = inc.involvedEmpCount || 1;
+  var netAmt = Number(inc.net_employee_amount) || Number(inc.total_incident_amount) || 0;
+  var perPerson = Math.round((netAmt / empCount) * 100) / 100;
+  var installments = Number(firstSched.total_installments) || 1;
+  var startPeriod = firstSched.target_period || (State && State.period) || '';
+
+  var prefill = {
+    empId: empId,
+    refCode: inc.incident_code || '',
+    date: inc.incident_date || new Date().toISOString().substring(0, 10),
+    amount: perPerson,
+    installments: installments,
+    startPeriod: startPeriod,
+    reason: inc.title + (inc.description ? ' (' + inc.description + ')' : ''),
+    schedules: scheds.filter(function(s) { return !empId || s.emp_id === empId; })
+  };
+
+  if (inc.category === 'SALARY_ADVANCE' && typeof openSalaryAdvanceDocModal === 'function') {
+    openSalaryAdvanceDocModal(empId, prefill);
+  } else if (inc.category === 'STAFF_LOAN' && typeof openStaffLoanDocModal === 'function') {
+    openStaffLoanDocModal(empId, prefill);
   }
 }

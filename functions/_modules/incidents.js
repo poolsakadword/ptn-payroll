@@ -148,9 +148,10 @@ export const incidentHandlers = {
       ).run();
     } else {
       const ym = incidentDate.replace(/-/g, '').substring(0, 6);
-      const countRow = await db.prepare('SELECT COUNT(*) as c FROM incident_deductions WHERE incident_date LIKE ?').bind(incidentDate.substring(0, 7) + '%').first().catch(() => ({ c: 0 }));
+      const codePrefix = category === 'SALARY_ADVANCE' ? 'ADV' : (category === 'STAFF_LOAN' ? 'LOAN' : 'INC');
+      const countRow = await db.prepare('SELECT COUNT(*) as c FROM incident_deductions WHERE incident_code LIKE ?').bind(`${codePrefix}-${ym}-%`).first().catch(() => ({ c: 0 }));
       const nextNum = (countRow?.c || 0) + 1;
-      const code = `INC-${ym}-${String(nextNum).padStart(3, '0')}`;
+      const code = `${codePrefix}-${ym}-${String(nextNum).padStart(3, '0')}`;
 
       const insertRes = await db.prepare(`
         INSERT INTO incident_deductions

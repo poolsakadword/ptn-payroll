@@ -2356,4 +2356,325 @@ function printResignationLetter() {
   printDocCenterModal('printing-resignation-letter');
 }
 
+// ==============================================================================
+// SALARY ADVANCE REQUEST & RECEIPT CONTROLLER (A4 EDITABLE)
+// ==============================================================================
+var _activeAdvDocEmpId = null;
+
+function openSalaryAdvanceDocModal(targetEmpId, prefill) {
+  var picked = getDocCenterSelectedEmployee(targetEmpId || (prefill && prefill.empId));
+  if (!picked) return;
+  _activeAdvDocEmpId = picked.emp.empId;
+
+  var p = prefill || {};
+  var todayIso = p.date || new Date().toISOString().substring(0, 10);
+  var ym = todayIso.replace(/-/g, '').substring(0, 6);
+
+  var refEl = document.getElementById('modalAdvRefCode');
+  if (refEl) refEl.value = p.refCode || ('ADV-' + ym + '-001');
+
+  var dateEl = document.getElementById('modalAdvDate');
+  if (dateEl) dateEl.value = todayIso;
+
+  var amtEl = document.getElementById('modalAdvAmount');
+  if (amtEl) amtEl.value = (p.amount !== undefined && p.amount > 0) ? p.amount : 3000;
+
+  var periodEl = document.getElementById('modalAdvDeductPeriod');
+  if (periodEl) periodEl.value = p.startPeriod || (State && State.period) || '';
+
+  var reasonEl = document.getElementById('modalAdvReason');
+  if (reasonEl) reasonEl.value = p.reason || 'มีความจำเป็นส่วนตัวเร่งด่วน';
+
+  var signEl = document.getElementById('modalAdvSignName');
+  if (signEl) signEl.value = State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง';
+
+  renderSalaryAdvanceModalPaper(_activeAdvDocEmpId);
+  openModal('salaryAdvanceModal');
+}
+
+function renderSalaryAdvanceModalPaper(targetEmpId) {
+  var paper = document.getElementById('salaryAdvancePaper');
+  if (!paper) return;
+  var picked = getDocCenterSelectedEmployee(targetEmpId || _activeAdvDocEmpId);
+  if (!picked) return;
+  var emp = picked.emp;
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var compAddress = State.company.address || '';
+  var compPhone = State.company.phone || '';
+  var compTax = State.company.taxId || '';
+
+  var refCode = (document.getElementById('modalAdvRefCode')?.value || '').trim() || '-';
+  var dateIso = document.getElementById('modalAdvDate')?.value || new Date().toISOString().substring(0, 10);
+  var amountVal = Math.max(0, Number(document.getElementById('modalAdvAmount')?.value) || 0);
+  var deductPeriod = (document.getElementById('modalAdvDeductPeriod')?.value || '').trim() || (State && State.period) || '-';
+  var reasonText = (document.getElementById('modalAdvReason')?.value || '').trim() || 'มีความจำเป็นส่วนตัว';
+  var signName = (document.getElementById('modalAdvSignName')?.value || '').trim() || (State.company.signatoryName || 'ผู้มีอำนาจอนุมัติ');
+  var signTitle = State.company.signatoryTitle || 'ผู้จัดการ / ผู้มีอำนาจอนุมัติ';
+
+  var branch = (State.branches || []).find(function(b) { return b.branch_id === emp.branchId; }) || {};
+  var branchLabel = branch.branch_name || emp.branchId || 'สำนักงานใหญ่';
+  var dateTh = formatDocThaiFullDate(dateIso);
+  var amtFormatted = amountVal.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var amtWords = (typeof bahtText === 'function') ? bahtText(amountVal) : '';
+
+  paper.innerHTML = '' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:12px;margin-bottom:18px">' +
+      '<div>' +
+        '<div style="font-size:17px;font-weight:800;color:#0f172a">' + esc(compName) + '</div>' +
+        (compAddress ? '<div style="font-size:11px;color:#475569;margin-top:2px">' + esc(compAddress) + '</div>' : '') +
+        '<div style="font-size:11px;color:#475569;margin-top:1px">' + (compTax ? 'เลขประจำตัวผู้เสียภาษี: ' + esc(compTax) : '') + (compPhone ? ' | โทร: ' + esc(compPhone) : '') + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;font-size:11.5px;color:#334155">' +
+        '<div style="font-weight:800;border:1.5px solid #0f172a;padding:3px 10px;display:inline-block;margin-bottom:4px">ใบเบิกเงินล่วงหน้า</div>' +
+        '<div>เลขที่: <strong style="font-family:monospace">' + esc(refCode) + '</strong></div>' +
+        '<div>วันที่: <strong>' + esc(dateTh) + '</strong></div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="text-align:center;margin:10px 0 18px">' +
+      '<h2 contenteditable="true" spellcheck="false" style="font-size:17.5px;font-weight:800;color:#0f172a;margin:0">ใบคำขอเบิกเงินเดือนล่วงหน้า และใบสำคัญรับเงิน</h2>' +
+      '<div style="font-size:11.5px;color:#64748b;margin-top:2px">(Salary Advance Request &amp; Payment Receipt)</div>' +
+    '</div>' +
+
+    '<div id="salaryAdvancePaperBody" contenteditable="true" spellcheck="false" style="font-size:13.5px;line-height:1.9;color:#1e293b;text-align:justify">' +
+      '<p style="text-indent:2.2rem;margin:6px 0">' +
+        'ข้าพเจ้า <strong>' + esc(emp.fullName) + '</strong> (รหัสพนักงาน <strong style="font-family:monospace">' + esc(emp.empId) + '</strong>) ' +
+        'เลขประจำตัวประชาชน <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong> ' +
+        'ตำแหน่ง <strong>' + esc(emp.position || '-') + '</strong> แผนก <strong>' + esc(emp.department || '-') + '</strong> ประจำสาขา <strong>' + esc(branchLabel) + '</strong> ' +
+        'เบอร์โทรศัพท์ <strong style="font-family:monospace">' + esc(emp.phone || '-') + '</strong>' +
+      '</p>' +
+      '<p style="text-indent:2.2rem;margin:8px 0">' +
+        'มีความประสงค์ขอเบิกเงินเดือนล่วงหน้าจาก <strong>' + esc(compName) + '</strong> เป็นจำนวนเงินทั้งสิ้น ' +
+        '<strong style="font-family:monospace;font-size:15px;color:#0f172a">฿' + amtFormatted + ' บาท</strong> ' +
+        '(<strong>' + esc(amtWords) + '</strong>) เนื่องจาก <strong>' + esc(reasonText) + '</strong>' +
+      '</p>' +
+      '<div style="margin:14px 0;padding:12px 16px;background:#f8fafc;border:1.5px solid #cbd5e1;border-radius:6px;font-size:13px;line-height:1.8">' +
+        '<div style="font-weight:800;color:#0f172a;margin-bottom:4px">หนังสือยินยอมให้หักค่าจ้าง (ตาม พ.ร.บ. คุ้มครองแรงงาน มาตรา 76)</div>' +
+        '<div>ข้าพเจ้าตกลงและยินยอมให้บริษัทฯ หักเงินเดือนหรือค่าจ้างของข้าพเจ้าเพื่อชำระคืนเงินเบิกล่วงหน้าจำนวน <strong>฿' + amtFormatted + ' บาท</strong> ในงวดเงินเดือนประจำเดือน <strong>' + esc(deductPeriod) + '</strong> ' +
+        'และหากข้าพเจ้าพ้นสภาพจากการเป็นพนักงานไม่ว่าด้วยเหตุใดก่อนชำระคืนครบถ้วน ข้าพเจ้ายินยอมให้บริษัทฯ หักชดใช้จากค่าจ้างค้างจ่ายหรือเงินอื่นใดที่พึงได้รับได้ทันที</div>' +
+      '</div>' +
+      '<div style="margin:12px 0;padding:10px 14px;border:1px dashed #94a3b8;border-radius:6px;font-size:12.5px">' +
+        '<strong>ช่องทางการรับเงิน:</strong> [ &nbsp; ] เงินสด &nbsp;&nbsp;&nbsp; [ &nbsp; ] โอนเข้าบัญชีธนาคาร <strong>' + esc(emp.bankName || '-') + '</strong> เลขที่บัญชี <strong style="font-family:monospace">' + esc(emp.bankAccount || '-') + '</strong>' +
+      '</div>' +
+      '<p style="margin:10px 0 0;font-size:12.5px;color:#334155">ข้าพเจ้าได้รับเงินจำนวน <strong>฿' + amtFormatted + ' บาท (' + esc(amtWords) + ')</strong> ไว้ครบถ้วนถูกต้องแล้ว จึงลงลายมือชื่อไว้เป็นหลักฐาน</p>' +
+    '</div>' +
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:34px;text-align:center;font-size:12.5px;page-break-inside:avoid">' +
+      '<div>' +
+        '<div style="height:44px;border-bottom:1px solid #475569;margin-bottom:6px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ ( <strong>' + esc(emp.fullName) + '</strong> )</div>' +
+        '<div style="font-size:11px;color:#64748b">ผู้ขอเบิก / ผู้รับเงิน • วันที่ ......../......../........</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="height:44px;border-bottom:1px solid #475569;margin-bottom:6px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ ( <strong>' + esc(signName) + '</strong> )</div>' +
+        '<div style="font-size:11px;color:#64748b">' + esc(signTitle) + ' • วันที่ ......../......../........</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function resetSalaryAdvanceModalPaper() {
+  if (!confirm('ต้องการคืนค่าข้อความใบขอเบิกเงินล่วงหน้ากลับเป็นค่าเริ่มต้นใช่หรือไม่?')) return;
+  renderSalaryAdvanceModalPaper(_activeAdvDocEmpId);
+  showToast('คืนค่าข้อความเริ่มต้นเรียบร้อยแล้ว', 'info');
+}
+
+function printSalaryAdvanceDoc() {
+  printDocCenterModal('printing-salary-advance');
+}
+
+// ==============================================================================
+// STAFF LOAN AGREEMENT CONTROLLER (A4 EDITABLE)
+// ==============================================================================
+var _activeLoanDocEmpId = null;
+var _activeLoanSchedules = null;
+
+function openStaffLoanDocModal(targetEmpId, prefill) {
+  var picked = getDocCenterSelectedEmployee(targetEmpId || (prefill && prefill.empId));
+  if (!picked) return;
+  _activeLoanDocEmpId = picked.emp.empId;
+
+  var p = prefill || {};
+  _activeLoanSchedules = Array.isArray(p.schedules) && p.schedules.length > 0 ? p.schedules : null;
+
+  var todayIso = p.date || new Date().toISOString().substring(0, 10);
+  var ym = todayIso.replace(/-/g, '').substring(0, 6);
+
+  var refEl = document.getElementById('modalLoanRefCode');
+  if (refEl) refEl.value = p.refCode || ('LOAN-' + ym + '-001');
+
+  var dateEl = document.getElementById('modalLoanDate');
+  if (dateEl) dateEl.value = todayIso;
+
+  var amtEl = document.getElementById('modalLoanAmount');
+  if (amtEl) amtEl.value = (p.amount !== undefined && p.amount > 0) ? p.amount : 10000;
+
+  var intEl = document.getElementById('modalLoanInterest');
+  if (intEl) intEl.value = 0;
+
+  var instEl = document.getElementById('modalLoanInstallments');
+  if (instEl) instEl.value = (p.installments && p.installments > 0) ? p.installments : 5;
+
+  var startEl = document.getElementById('modalLoanStartPeriod');
+  if (startEl) startEl.value = p.startPeriod || (State && State.period) || '';
+
+  var gNameEl = document.getElementById('modalLoanGuarantorName');
+  if (gNameEl) gNameEl.value = '';
+  var gInfoEl = document.getElementById('modalLoanGuarantorInfo');
+  if (gInfoEl) gInfoEl.value = '';
+
+  var signEl = document.getElementById('modalLoanSignName');
+  if (signEl) signEl.value = State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง';
+
+  renderStaffLoanModalPaper(_activeLoanDocEmpId);
+  openModal('staffLoanModal');
+}
+
+function renderStaffLoanModalPaper(targetEmpId) {
+  var paper = document.getElementById('staffLoanPaper');
+  if (!paper) return;
+  var picked = getDocCenterSelectedEmployee(targetEmpId || _activeLoanDocEmpId);
+  if (!picked) return;
+  var emp = picked.emp;
+
+  var compName = State.company.companyName || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var compAddress = State.company.address || '';
+  var compPhone = State.company.phone || '';
+  var compTax = State.company.taxId || '';
+
+  var refCode = (document.getElementById('modalLoanRefCode')?.value || '').trim() || '-';
+  var dateIso = document.getElementById('modalLoanDate')?.value || new Date().toISOString().substring(0, 10);
+  var principal = Math.max(0, Number(document.getElementById('modalLoanAmount')?.value) || 0);
+  var interestPct = Math.max(0, Number(document.getElementById('modalLoanInterest')?.value) || 0);
+  var installments = Math.max(1, parseInt(document.getElementById('modalLoanInstallments')?.value || '1', 10));
+  var startPeriod = (document.getElementById('modalLoanStartPeriod')?.value || '').trim() || (State && State.period) || '-';
+  var guarantorName = (document.getElementById('modalLoanGuarantorName')?.value || '').trim();
+  var guarantorInfo = (document.getElementById('modalLoanGuarantorInfo')?.value || '').trim();
+  var signName = (document.getElementById('modalLoanSignName')?.value || '').trim() || (State.company.signatoryName || 'ผู้มีอำนาจลงนาม');
+  var signTitle = State.company.signatoryTitle || 'ผู้จัดการ / ผู้มีอำนาจลงนาม';
+
+  var totalInterest = Math.round((principal * (interestPct / 100)) * 100) / 100;
+  var totalRepay = Math.round((principal + totalInterest) * 100) / 100;
+  var perInstallment = Math.floor((totalRepay / installments) * 100) / 100;
+  var lastInstallment = Math.round((totalRepay - (perInstallment * (installments - 1))) * 100) / 100;
+
+  var dateTh = formatDocThaiFullDate(dateIso);
+  var fmt2 = function(n) { return (Number(n) || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  var principalWords = (typeof bahtText === 'function') ? bahtText(principal) : '';
+  var totalRepayWords = (typeof bahtText === 'function') ? bahtText(totalRepay) : '';
+
+  // Build installment schedule rows
+  var schedRowsHtml = '';
+  var curP = startPeriod;
+  for (var idx = 0; idx < installments; idx++) {
+    var rowPeriod = (_activeLoanSchedules && _activeLoanSchedules[idx] && _activeLoanSchedules[idx].target_period)
+      ? _activeLoanSchedules[idx].target_period
+      : curP;
+    var rowAmt = (idx === installments - 1) ? lastInstallment : perInstallment;
+    schedRowsHtml += '<tr>' +
+      '<td style="border:1px solid #cbd5e1;padding:4px 8px;text-align:center">งวดที่ ' + (idx + 1) + '</td>' +
+      '<td style="border:1px solid #cbd5e1;padding:4px 8px">' + esc(rowPeriod || ('งวดที่ ' + (idx + 1))) + '</td>' +
+      '<td style="border:1px solid #cbd5e1;padding:4px 8px;text-align:right;font-family:monospace;font-weight:700">' + fmt2(rowAmt) + '</td>' +
+    '</tr>';
+    if (typeof getNextPeriodStr === 'function' && curP && curP !== '-') {
+      curP = getNextPeriodStr(curP);
+    } else {
+      curP = 'งวดถัดไป #' + (idx + 2);
+    }
+  }
+
+  var interestClause = interestPct > 0
+    ? 'โดยคิดอัตราดอกเบี้ยร้อยละ <strong>' + interestPct + '%</strong> รวมดอกเบี้ย <strong>฿' + fmt2(totalInterest) + ' บาท</strong> รวมยอดชำระคืนทั้งสิ้น <strong>฿' + fmt2(totalRepay) + ' บาท (' + esc(totalRepayWords) + ')</strong>'
+    : 'โดยเป็นสวัสดิการพนักงาน <strong>ปลอดดอกเบี้ย (อัตราดอกเบี้ย 0%)</strong>';
+
+  var guarantorClause = guarantorName
+    ? '<p style="margin:6px 0"><strong>ข้อ 4. การค้ำประกัน:</strong> โดยมี <strong>' + esc(guarantorName) + '</strong>' + (guarantorInfo ? ' (' + esc(guarantorInfo) + ')' : '') + ' ตกลงเข้าเป็นผู้ค้ำประกันการชำระหนี้ตามสัญญานี้ร่วมกับผู้กู้อย่างลูกหนี้ร่วมจนกว่าจะชำระหนี้ครบถ้วน</p>'
+    : '';
+
+  var guarantorSignBox = guarantorName
+    ? '<div style="margin-top:24px;display:flex;justify-content:center;page-break-inside:avoid">' +
+        '<div style="text-align:center;min-width:260px">' +
+          '<div style="height:38px;border-bottom:1px solid #475569;margin-bottom:5px"></div>' +
+          '<div contenteditable="true" spellcheck="false">ลงชื่อ ( <strong>' + esc(guarantorName) + '</strong> )</div>' +
+          '<div style="font-size:11px;color:#64748b">ผู้ค้ำประกัน • วันที่ ......../......../........</div>' +
+        '</div>' +
+      '</div>'
+    : '';
+
+  paper.innerHTML = '' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:14px">' +
+      '<div>' +
+        '<div style="font-size:16.5px;font-weight:800;color:#0f172a">' + esc(compName) + '</div>' +
+        (compAddress ? '<div style="font-size:10.5px;color:#475569;margin-top:2px">' + esc(compAddress) + '</div>' : '') +
+        '<div style="font-size:10.5px;color:#475569">' + (compTax ? 'เลขผู้เสียภาษี: ' + esc(compTax) : '') + (compPhone ? ' | โทร: ' + esc(compPhone) : '') + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;font-size:11px;color:#334155">' +
+        '<div>เลขที่สัญญา: <strong style="font-family:monospace">' + esc(refCode) + '</strong></div>' +
+        '<div>วันที่ทำสัญญา: <strong>' + esc(dateTh) + '</strong></div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div style="text-align:center;margin:8px 0 14px">' +
+      '<h2 contenteditable="true" spellcheck="false" style="font-size:17px;font-weight:800;color:#0f172a;margin:0">สัญญากู้ยืมเงินสวัสดิการพนักงาน และหนังสือยินยอมหักค่าจ้าง</h2>' +
+      '<div style="font-size:11px;color:#64748b">(Employee Welfare Loan Agreement &amp; Payroll Deduction Consent)</div>' +
+    '</div>' +
+
+    '<div id="staffLoanPaperBody" contenteditable="true" spellcheck="false" style="font-size:12.8px;line-height:1.8;color:#1e293b;text-align:justify">' +
+      '<p style="text-indent:2rem;margin:4px 0">' +
+        'สัญญาฉบับนี้ทำขึ้น ณ <strong>' + esc(compName) + '</strong> เมื่อวันที่ <strong>' + esc(dateTh) + '</strong> ระหว่าง <strong>' + esc(compName) + '</strong> ' +
+        'ซึ่งต่อไปในสัญญานี้เรียกว่า <strong>"ผู้ให้กู้"</strong> ฝ่ายหนึ่ง กับ <strong>' + esc(emp.fullName) + '</strong> (รหัสพนักงาน <strong style="font-family:monospace">' + esc(emp.empId) + '</strong>) ' +
+        'เลขประจำตัวประชาชน <strong style="font-family:monospace">' + esc(emp.citizenId || '-') + '</strong> ตำแหน่ง <strong>' + esc(emp.position || '-') + '</strong> แผนก <strong>' + esc(emp.department || '-') + '</strong> ' +
+        'ที่อยู่ ' + esc(emp.address || '-') + ' โทร <strong style="font-family:monospace">' + esc(emp.phone || '-') + '</strong> ซึ่งต่อไปในสัญญานี้เรียกว่า <strong>"ผู้กู้"</strong> อีกฝ่ายหนึ่ง ทั้งสองฝ่ายตกลงทำสัญญากันดังนี้' +
+      '</p>' +
+      '<p style="margin:6px 0"><strong>ข้อ 1. วงเงินกู้และดอกเบี้ย:</strong> ผู้กู้ตกลงกู้ยืมเงินและได้รับเงินจากผู้ให้กู้ครบถ้วนแล้วเป็นจำนวนเงินต้น <strong style="font-family:monospace">฿' + fmt2(principal) + ' บาท</strong> (<strong>' + esc(principalWords) + '</strong>) ' + interestClause + '</p>' +
+      '<p style="margin:6px 0"><strong>ข้อ 2. การผ่อนชำระคืนและคำยินยอมหักค่าจ้าง (มาตรา 76):</strong> ผู้กู้ตกลงชำระหนี้คืนด้วยการยินยอมให้ผู้ให้กู้หักจากเงินเดือน/ค่าจ้างประจำงวด จำนวน <strong>' + installments + ' งวด</strong> งวดละประมาณ <strong style="font-family:monospace">฿' + fmt2(perInstallment) + ' บาท</strong> เริ่มหักตั้งแต่งวดเดือน <strong>' + esc(startPeriod) + '</strong> ตามตารางด้านล่างนี้:</p>' +
+
+      '<table style="width:100%;border-collapse:collapse;font-size:11.5px;margin:8px 0 10px">' +
+        '<thead><tr style="background:#f1f5f9">' +
+          '<th style="border:1px solid #cbd5e1;padding:5px 8px;width:90px">งวดที่</th>' +
+          '<th style="border:1px solid #cbd5e1;padding:5px 8px;text-align:left">งวดเงินเดือนที่หักชำระ</th>' +
+          '<th style="border:1px solid #cbd5e1;padding:5px 8px;text-align:right;width:140px">ยอดหัก (บาท)</th>' +
+        '</tr></thead>' +
+        '<tbody>' + schedRowsHtml + '</tbody>' +
+        '<tfoot><tr style="background:#f8fafc;font-weight:800">' +
+          '<td colspan="2" style="border:1px solid #cbd5e1;padding:5px 8px;text-align:right">รวมยอดชำระคืนทั้งสิ้น</td>' +
+          '<td style="border:1px solid #cbd5e1;padding:5px 8px;text-align:right;font-family:monospace">฿' + fmt2(totalRepay) + '</td>' +
+        '</tr></tfoot>' +
+      '</table>' +
+
+      '<p style="margin:6px 0"><strong>ข้อ 3. กรณีพ้นสภาพการเป็นพนักงาน:</strong> หากผู้กู้ลาออก เลิกจ้าง หรือพ้นสภาพการเป็นพนักงานไม่ว่าด้วยเหตุใดก่อนชำระหนี้ครบถ้วน หนี้ที่คงค้างอยู่ทั้งหมดให้ถือเป็นอันถึงกำหนดชำระทันที และผู้กู้ยินยอมให้ผู้ให้กู้หักชดใช้จากค่าจ้างค้างจ่าย เงินโบนัส หรือเงินอื่นใดที่ผู้กู้พึงได้รับจากบริษัทฯ ได้ทันที หากยังไม่เพียงพอผู้กู้ตกลงชำระส่วนที่เหลือภายใน 15 วัน</p>' +
+      guarantorClause +
+      '<p style="margin:6px 0 0;font-size:12px">สัญญานี้ทำขึ้นเป็นสองฉบับมีข้อความถูกต้องตรงกัน ทั้งสองฝ่ายได้อ่านและเข้าใจข้อความโดยตลอดแล้ว จึงลงลายมือชื่อไว้เป็นหลักฐานต่อหน้าพยาน</p>' +
+    '</div>' +
+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:26px;text-align:center;font-size:12px;page-break-inside:avoid">' +
+      '<div>' +
+        '<div style="height:40px;border-bottom:1px solid #475569;margin-bottom:5px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ ( <strong>' + esc(emp.fullName) + '</strong> )</div>' +
+        '<div style="font-size:11px;color:#64748b">ผู้กู้ / ผู้รับเงิน • วันที่ ......../......../........</div>' +
+      '</div>' +
+      '<div>' +
+        '<div style="height:40px;border-bottom:1px solid #475569;margin-bottom:5px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ ( <strong>' + esc(signName) + '</strong> )</div>' +
+        '<div style="font-size:11px;color:#64748b">' + esc(signTitle) + ' (ผู้ให้กู้) • วันที่ ......../......../........</div>' +
+      '</div>' +
+    '</div>' +
+    guarantorSignBox +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:20px;text-align:center;font-size:11.5px;color:#475569;page-break-inside:avoid">' +
+      '<div>ลงชื่อ .................................................... พยาน</div>' +
+      '<div>ลงชื่อ .................................................... พยาน</div>' +
+    '</div>';
+}
+
+function resetStaffLoanModalPaper() {
+  if (!confirm('ต้องการคืนค่าข้อความสัญญากู้ยืมเงินกลับเป็นค่าเริ่มต้นใช่หรือไม่?')) return;
+  renderStaffLoanModalPaper(_activeLoanDocEmpId);
+  showToast('คืนค่าข้อความเริ่มต้นเรียบร้อยแล้ว', 'info');
+}
+
+function printStaffLoanDoc() {
+  printDocCenterModal('printing-staff-loan');
+}
+
 // ==========================================
