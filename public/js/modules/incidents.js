@@ -214,9 +214,32 @@ function renderIncidentsTable(list) {
     var perPerson = Math.round((netAmt / empCount) * 100) / 100;
     var instCount = (i.schedules && i.schedules[0] && i.schedules[0].total_installments) || 1;
 
-    var staffListHtml = (i.involvedEmployeesList || []).map(function(emp) {
-      return '<span style="display:inline-block;background:#f8fafc;border:1px solid #cbd5e1;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;color:#1e293b;white-space:nowrap">' + emp + '</span>';
-    }).join('');
+    var staffListHtml = '';
+    if (Array.isArray(i.schedules) && i.schedules.length > 0) {
+      var seenIds = new Set();
+      var uniqueScheds = [];
+      i.schedules.forEach(function(s) {
+        if (!seenIds.has(s.emp_id)) {
+          seenIds.add(s.emp_id);
+          uniqueScheds.push(s);
+        }
+      });
+      staffListHtml = uniqueScheds.map(function(s) {
+        var empObj = (State.employees || []).find(function(e) { return (e.empId || e.emp_id) === s.emp_id; });
+        var isRes = (s.emp_status === 'Resigned' || s.emp_status === 'RESIGNED') || 
+                    (empObj && String(empObj.status || '').trim().toUpperCase() === 'RESIGNED');
+        var name = s.full_name || (empObj && (empObj.fullName || empObj.name)) || s.emp_id;
+        var nick = s.nickname || (empObj && empObj.nickname);
+        var nickStr = nick ? ' (' + nick + ')' : '';
+        var resBadge = isRes ? ' <span style="background:#fee2e2;color:#991b1b;font-size:9.5px;padding:1px 5px;border-radius:4px;font-weight:700;border:1px solid #fecaca;margin-left:3px">พ้นสภาพ</span>' : '';
+        return '<span style="display:inline-block;' + (isRes ? 'background:#fff1f2;border:1px solid #fecaca;' : 'background:#f8fafc;border:1px solid #cbd5e1;') + 'padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;color:#1e293b;white-space:nowrap">[' + s.emp_id + '] ' + name + nickStr + resBadge + '</span>';
+      }).join('');
+    }
+    if (!staffListHtml) {
+      staffListHtml = (i.involvedEmployeesList || []).map(function(emp) {
+        return '<span style="display:inline-block;background:#f8fafc;border:1px solid #cbd5e1;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;color:#1e293b;white-space:nowrap">' + emp + '</span>';
+      }).join('');
+    }
     if (!staffListHtml) staffListHtml = '<span style="color:#64748b;font-size:11.5px">' + (i.involvedEmployeesText || '-') + '</span>';
 
     if (i.evidence_photo_url) {
@@ -281,6 +304,46 @@ function renderIncidentsTable(list) {
 // ==============================================================================
 // 2. CREATE / EDIT INCIDENT MODAL (BY ADMIN / HR)
 // ==============================================================================
+function renderAdminIncStaffChecklist(checkedIds) {
+  var staffContainer = document.getElementById('adminIncStaffChecklist');
+  if (!staffContainer || !Array.isArray(State.employees)) return;
+
+  var showResigned = Boolean(document.getElementById('adminIncShowResignedStaff') && document.getElementById('adminIncShowResignedStaff').checked);
+
+  // If checkedIds is not provided, read currently checked boxes from DOM
+  if (!checkedIds) {
+    checkedIds = new Set();
+    document.querySelectorAll('input[name="adminIncEmpCheckbox"]:checked').forEach(function(cb) {
+      checkedIds.add(cb.value);
+    });
+  }
+
+  var sorted = State.employees.slice().sort(function(a, b) {
+    return (a.fullName || a.name || '').localeCompare(b.fullName || b.name || '', 'th');
+  });
+
+  var filtered = sorted.filter(function(emp) {
+    var isRes = String(emp.status || '').trim().toUpperCase() === 'RESIGNED';
+    if (showResigned || (checkedIds && checkedIds.has(emp.empId))) return true;
+    return !isRes;
+  });
+
+  staffContainer.innerHTML = filtered.map(function(emp) {
+    var empName = emp.fullName || emp.name || emp.full_name || emp.empId;
+    var nick = emp.nickname ? ' (' + emp.nickname + ')' : '';
+    var isRes = String(emp.status || '').trim().toUpperCase() === 'RESIGNED';
+    var resBadge = isRes ? ' <span style="background:#fee2e2;color:#991b1b;font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700;border:1px solid #fecaca;margin-left:2px">พ้นสภาพ</span>' : '';
+    var isChecked = checkedIds && checkedIds.has(emp.empId);
+    return (
+      '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;' + (isRes ? 'background:#fff1f2;' : 'background:#f8fafc;') + 'border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">' +
+        '<input type="checkbox" name="adminIncEmpCheckbox" value="' + emp.empId + '" onchange="updateAdminIncLiveSplit()"' + (isChecked ? ' checked' : '') + ' style="width:16px;height:16px">' +
+        '<span>[' + emp.empId + '] ' + empName + nick + resBadge + ' - <span style="color:#64748b">' + (emp.department || '-') + '</span></span>' +
+      '</label>'
+    );
+  }).join('');
+}
+window.renderAdminIncStaffChecklist = renderAdminIncStaffChecklist;
+
 function openCreateIncidentModal(existingId) {
   existingId = existingId || null;
   activeCreatingIncidentId = existingId;
@@ -297,22 +360,24 @@ function openCreateIncidentModal(existingId) {
   }
 
   // Populate staff checklist
-  var staffContainer = document.getElementById('adminIncStaffChecklist');
-  if (staffContainer && Array.isArray(State.employees)) {
-    var sorted = State.employees.slice().sort(function(a, b) {
-      return (a.fullName || a.name || '').localeCompare(b.fullName || b.name || '', 'th');
-    });
-    staffContainer.innerHTML = sorted.map(function(emp) {
-      var empName = emp.fullName || emp.name || emp.full_name || emp.empId;
-      var nick = emp.nickname ? ' (' + emp.nickname + ')' : '';
-      return (
-        '<label style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600">' +
-          '<input type="checkbox" name="adminIncEmpCheckbox" value="' + emp.empId + '" onchange="updateAdminIncLiveSplit()" style="width:16px;height:16px">' +
-          '<span>[' + emp.empId + '] ' + empName + nick + ' - <span style="color:#64748b">' + (emp.department || '-') + '</span></span>' +
-        '</label>'
-      );
-    }).join('');
+  var involvedIds = new Set();
+  if (existingId) {
+    var existing = cachedIncidents.find(function(i) { return i.id === existingId; });
+    if (existing) {
+      involvedIds = new Set((existing.schedules || []).map(function(s) { return s.emp_id; }));
+      var hasResignedInvolved = (existing.schedules || []).some(function(s) {
+        var empObj = (State.employees || []).find(function(e) { return (e.empId || e.emp_id) === s.emp_id; });
+        return (s.emp_status === 'Resigned' || s.emp_status === 'RESIGNED') || (empObj && String(empObj.status || '').trim().toUpperCase() === 'RESIGNED');
+      });
+      var checkRes = document.getElementById('adminIncShowResignedStaff');
+      if (checkRes) checkRes.checked = Boolean(hasResignedInvolved);
+    }
+  } else {
+    var checkRes = document.getElementById('adminIncShowResignedStaff');
+    if (checkRes) checkRes.checked = false;
   }
+
+  renderAdminIncStaffChecklist(involvedIds);
 
   // Fill default values or existing values
   if (existingId) {
@@ -341,7 +406,6 @@ function openCreateIncidentModal(existingId) {
       }
 
       // Check involved staff
-      var involvedIds = new Set((existing.schedules || []).map(function(s) { return s.emp_id; }));
       document.querySelectorAll('input[name="adminIncEmpCheckbox"]').forEach(function(cb) {
         cb.checked = involvedIds.has(cb.value);
       });

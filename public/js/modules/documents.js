@@ -61,13 +61,42 @@ function onHistoryYearChanged() {
 function renderHistoryTab(silent) {
   initHistoryYearDropdown();
   var sel = document.getElementById('histEmpSelect');
+  var showResigned = Boolean(document.getElementById('histShowResignedCheck') && document.getElementById('histShowResignedCheck').checked);
+
   if (sel) {
     var curVal = sel.value;
     var h = '<option value="">-- เลือกพนักงาน --</option>';
+
+    var activeEmps = [];
+    var resignedEmps = [];
+
     (State.employees || []).forEach(function(e) {
+      var isRes = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      if (isRes) {
+        resignedEmps.push(e);
+      } else {
+        activeEmps.push(e);
+      }
+    });
+
+    activeEmps.forEach(function(e) {
       var nick = e.nickname ? ' (' + e.nickname + ')' : '';
       h += '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nick + '</option>';
     });
+
+    if (showResigned && resignedEmps.length > 0) {
+      h += '<optgroup label="--- พนักงานพ้นสภาพ / ลาออกแล้ว ---">';
+      resignedEmps.forEach(function(e) {
+        var nick = e.nickname ? ' (' + e.nickname + ')' : '';
+        h += '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + nick + ' [พ้นสภาพ]</option>';
+      });
+      h += '</optgroup>';
+    } else if (curVal && resignedEmps.some(function(e) { return e.empId === curVal; })) {
+      var rEmp = resignedEmps.find(function(e) { return e.empId === curVal; });
+      var rNick = rEmp.nickname ? ' (' + rEmp.nickname + ')' : '';
+      h += '<option value="' + esc(rEmp.empId) + '">' + esc(rEmp.empId) + ' - ' + esc(rEmp.fullName) + rNick + ' [พ้นสภาพ]</option>';
+    }
+
     sel.innerHTML = h;
     if (curVal) sel.value = curVal;
   }
@@ -960,11 +989,26 @@ function renderDocumentsTab(silent) {
   var empSel = document.getElementById('docCertEmpSelect');
   if (empSel) {
     var curVal = empSel.value;
-    var opts = '';
+    var activeOpts = '';
+    var resignedOpts = '';
     (State.employees || []).forEach(function(e) {
-      opts += '<option value="' + esc(e.empId) + '">' + esc(e.empId) + ' - ' + esc(e.fullName) + (e.nickname ? ' (' + esc(e.nickname) + ')' : '') + ' [' + esc(e.department || '-') + ']</option>';
+      var isRes = String(e.status || '').trim().toUpperCase() === 'RESIGNED';
+      var id = e.empId || e.emp_id || '';
+      var name = e.fullName || e.full_name || e.name || '';
+      var nick = e.nickname ? ' (' + esc(e.nickname) + ')' : '';
+      var dept = e.department ? ' [' + esc(e.department) + ']' : '';
+      var opt = '<option value="' + esc(id) + '">' + esc(id) + ' - ' + esc(name) + nick + dept + (isRes ? ' [พ้นสภาพ]' : '') + '</option>';
+      if (isRes) {
+        resignedOpts += opt;
+      } else {
+        activeOpts += opt;
+      }
     });
-    empSel.innerHTML = opts || '<option value="">ไม่มีข้อมูลพนักงาน</option>';
+    var finalOpts = activeOpts;
+    if (resignedOpts) {
+      finalOpts += '<optgroup label="--- พนักงานพ้นสภาพ / ลาออกแล้ว ---">' + resignedOpts + '</optgroup>';
+    }
+    empSel.innerHTML = finalOpts || '<option value="">ไม่มีข้อมูลพนักงาน</option>';
     if (curVal) empSel.value = curVal;
   }
 
@@ -2034,7 +2078,8 @@ function exportKtbPayrollTxt() {
 // ==============================================================================
 // SHARED HELPERS FOR EMPLOYMENT CONTRACT & RESIGNATION LETTER
 // ==============================================================================
-function getDocCenterSelectedEmployee(targetEmpId) {
+function getDocCenterSelectedEmployee(targetEmpId, opts) {
+  opts = opts || {};
   if (!hasPermission('view_salary') && !hasPermission('view_documents') && !hasPermission('all') && !isSuperAdmin()) {
     showToast('คุณไม่มีสิทธิ์ออกเอกสารบุคคล', 'warning');
     return null;
@@ -2053,7 +2098,12 @@ function getDocCenterSelectedEmployee(targetEmpId) {
     showToast('ไม่พบข้อมูลพนักงานรหัส ' + empId, 'error');
     return null;
   }
-  return { empId: empId, emp: emp };
+  var isRes = String(emp.status || '').trim().toUpperCase() === 'RESIGNED';
+  if (isRes && opts.allowResigned === false) {
+    showToast('พนักงานรหัส ' + empId + ' พ้นสภาพแล้ว ไม่สามารถสร้างเอกสารประเภทนี้ได้', 'warning');
+    return null;
+  }
+  return { empId: empId, emp: emp, isResigned: isRes };
 }
 
 function formatDocThaiFullDate(isoStr) {
@@ -2362,7 +2412,7 @@ function printResignationLetter() {
 var _activeAdvDocEmpId = null;
 
 function openSalaryAdvanceDocModal(targetEmpId, prefill) {
-  var picked = getDocCenterSelectedEmployee(targetEmpId || (prefill && prefill.empId));
+  var picked = getDocCenterSelectedEmployee(targetEmpId || (prefill && prefill.empId), { allowResigned: false });
   if (!picked) return;
   _activeAdvDocEmpId = picked.emp.empId;
 
@@ -2491,7 +2541,7 @@ var _activeLoanDocEmpId = null;
 var _activeLoanSchedules = null;
 
 function openStaffLoanDocModal(targetEmpId, prefill) {
-  var picked = getDocCenterSelectedEmployee(targetEmpId || (prefill && prefill.empId));
+  var picked = getDocCenterSelectedEmployee(targetEmpId || (prefill && prefill.empId), { allowResigned: false });
   if (!picked) return;
   _activeLoanDocEmpId = picked.emp.empId;
 
@@ -2676,5 +2726,192 @@ function resetStaffLoanModalPaper() {
 function printStaffLoanDoc() {
   printDocCenterModal('printing-staff-loan');
 }
+
+// ==============================================================================
+// 7. DISCIPLINARY WARNING LETTER CONTROLLER (A4 EDITABLE)
+// ==============================================================================
+var _activeWarnDocEmpId = null;
+
+function openDisciplinaryWarningModal(targetEmpId, prefill) {
+  var picked = getDocCenterSelectedEmployee(targetEmpId || (prefill && prefill.empId), { allowResigned: false });
+  if (!picked) return;
+  _activeWarnDocEmpId = picked.emp.empId;
+
+  var p = prefill || {};
+  var todayIso = p.date || new Date().toISOString().substring(0, 10);
+  var ym = todayIso.replace(/-/g, '').substring(0, 6);
+
+  var refEl = document.getElementById('modalWarnRefCode');
+  if (refEl) refEl.value = p.refCode || ('WARN-' + ym + '-001');
+
+  var dateEl = document.getElementById('modalWarnDate');
+  if (dateEl) dateEl.value = todayIso;
+
+  var incDateEl = document.getElementById('modalWarnIncidentDate');
+  if (incDateEl) incDateEl.value = p.incidentDate || todayIso;
+
+  var levelEl = document.getElementById('modalWarnLevel');
+  if (levelEl) levelEl.value = p.level || 'FIRST';
+
+  var catEl = document.getElementById('modalWarnCategory');
+  if (catEl) catEl.value = p.category || 'ATTENDANCE';
+
+  var signEl = document.getElementById('modalWarnSignName');
+  if (signEl) signEl.value = State.company.signatoryName || 'นางสาวประภัสสร เกียรติดำรง';
+
+  var titleEl = document.getElementById('modalWarnSignTitle');
+  if (titleEl) titleEl.value = State.company.signatoryTitle || 'ผู้จัดการฝ่ายทรัพยากรบุคคล';
+
+  var witnessEl = document.getElementById('modalWarnWitnessName');
+  if (witnessEl) witnessEl.value = p.witnessName || '';
+
+  renderWarningLetterModalPaper(_activeWarnDocEmpId);
+  openModal('warningLetterModal');
+}
+
+function onWarningLetterParamChanged() {
+  if (_activeWarnDocEmpId) {
+    renderWarningLetterModalPaper(_activeWarnDocEmpId);
+  }
+}
+
+function onWarningLetterCategoryChanged() {
+  if (_activeWarnDocEmpId) {
+    renderWarningLetterModalPaper(_activeWarnDocEmpId);
+  }
+}
+
+function renderWarningLetterModalPaper(empId) {
+  var paper = document.getElementById('warningLetterPaper');
+  if (!paper) return;
+
+  var emp = (State.employees || []).find(function(e) { return e.empId === empId; });
+  if (!emp) return;
+
+  var refCode = (document.getElementById('modalWarnRefCode')?.value || 'WARN-001').trim();
+  var warnDateIso = (document.getElementById('modalWarnDate')?.value || new Date().toISOString().substring(0, 10));
+  var incDateIso = (document.getElementById('modalWarnIncidentDate')?.value || warnDateIso);
+  var warnLevel = (document.getElementById('modalWarnLevel')?.value || 'FIRST');
+  var warnCategory = (document.getElementById('modalWarnCategory')?.value || 'ATTENDANCE');
+  var signName = (document.getElementById('modalWarnSignName')?.value || 'ผู้มีอำนาจลงนาม').trim();
+  var signTitle = (document.getElementById('modalWarnSignTitle')?.value || 'ผู้จัดการฝ่ายทรัพยากรบุคคล').trim();
+  var witnessName = (document.getElementById('modalWarnWitnessName')?.value || '').trim();
+
+  var compName = State.company.name || 'บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด';
+  var compAddress = State.company.address || '919/30 หมู่ที่ 10 ตำบลนครสวรรค์ตก อำเภอเมืองนครสวรรค์ จังหวัดนครสวรรค์ 60000';
+  var compTaxId = State.company.taxId || '0605556001337';
+
+  var branchLabel = '-';
+  if (emp.branchId && Array.isArray(State.branches)) {
+    var b = State.branches.find(function(x) { return (x.branch_id || x.branchId) === emp.branchId; });
+    if (b) branchLabel = b.branch_name || b.name || b.branch_id;
+  }
+
+  var warnLevelLabels = {
+    FIRST: 'ครั้งที่ ๑ (ตักเตือนเป็นลายลักษณ์อักษร)',
+    SECOND: 'ครั้งที่ ๒ (ตักเตือนเป็นลายลักษณ์อักษร)',
+    FINAL: 'ครั้งสุดท้าย / ภาคทัณฑ์ (Final Written Warning)'
+  };
+  var warnLevelText = warnLevelLabels[warnLevel] || warnLevelLabels.FIRST;
+
+  var defaultDescriptions = {
+    ATTENDANCE: 'ขาดงานโดยไม่ได้รับอนุญาต / ละทิ้งหน้าที่การงานในเวลาทำงานติดต่อกันโดยไม่มีเหตุผลอันสมควร หรือมาปฏิบัติงานสายเป็นประจำเกินกว่าเกณฑ์ที่บริษัทฯ กำหนด ซึ่งส่งผลกระทบต่อการบริหารจัดการและสร้างความเสียหายต่อการดำเนินงานของบริษัทฯ',
+    DISCIPLINE: 'ไม่ปฏิบัติตามคำสั่งที่ชอบด้วยกฎหมายและชอบด้วยธรรมของผู้บังคับบัญชา / ก่อความไม่สงบเรียบร้อย หรือประพฤติตนไม่เหมาะสมในสถานที่ทำงาน',
+    PERFORMANCE: 'ปฏิบัติหน้าที่ด้วยความประมาทเลินเล่อ ไม่ปฏิบัติตามขั้นตอนการทำงานและมาตรฐานความปลอดภัย จนเป็นเหตุให้ทรัพย์สินหรือสินค้าของบริษัทฯ ได้รับความเสียหาย',
+    OTHER: 'ฝ่าฝืนระเบียบข้อบังคับเกี่ยวกับการทำงานของบริษัทฯ ในเรื่องการปฏิบัติหน้าที่และความประพฤติ'
+  };
+  var descText = defaultDescriptions[warnCategory] || defaultDescriptions.ATTENDANCE;
+
+  var witnessLine = witnessName
+    ? '<div><div style="height:40px;border-bottom:1px solid #475569;margin-bottom:5px"></div><div contenteditable="true" spellcheck="false">ลงชื่อ ( <strong>' + esc(witnessName) + '</strong> )</div><div style="font-size:11px;color:#64748b">พยาน</div></div>'
+    : '<div><div style="height:40px;border-bottom:1px dashed #647489;margin-bottom:5px"></div><div contenteditable="true" spellcheck="false">ลงชื่อ ( .................................................... )</div><div style="font-size:11px;color:#64748b">พยาน</div></div>';
+
+  paper.innerHTML =
+    '<!-- HEADER -->' +
+    '<div style="text-align:center;border-bottom:2px solid #0f172a;padding-bottom:14px;margin-bottom:18px">' +
+      '<div style="font-size:20px;font-weight:900;color:#0f172a;letter-spacing:0.5px">' + esc(compName) + '</div>' +
+      '<div style="font-size:12px;color:#475569;margin-top:3px">' + esc(compAddress) + '</div>' +
+      '<div style="font-size:11.5px;color:#64748b;margin-top:2px">เลขประจำตัวผู้เสียภาษีอากร: <strong style="font-family:monospace">' + esc(compTaxId) + '</strong></div>' +
+    '</div>' +
+
+    '<div style="text-align:center;font-size:17px;font-weight:900;color:#0f172a;margin:12px 0 16px;text-decoration:underline">' +
+      'หนังสือตักเตือนการกระทำความผิดทางวินัย' +
+    '</div>' +
+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;font-size:13px">' +
+      '<div>' +
+        '<strong>ที่:</strong> <span style="font-family:monospace;font-weight:700">' + esc(refCode) + '</span><br>' +
+        '<strong>ระดับการตักเตือน:</strong> <span style="font-weight:800;color:#b45309">' + esc(warnLevelText) + '</span>' +
+      '</div>' +
+      '<div style="text-align:right">' +
+        '<strong>วันที่ออกหนังสือ:</strong> ' + formatDocThaiFullDate(warnDateIso) +
+      '</div>' +
+    '</div>' +
+
+    '<div style="font-size:13px;line-height:1.75;margin-bottom:14px">' +
+      '<div style="margin-bottom:6px"><strong>เรื่อง:</strong> ตักเตือนการกระทำความผิดทางวินัยพนักงาน (' + esc(warnLevelText) + ')</div>' +
+      '<div style="margin-bottom:8px"><strong>เรียน:</strong> ' + esc(emp.fullName) + ' &nbsp;&nbsp;(รหัสพนักงาน: <span style="font-family:monospace;font-weight:700">' + esc(emp.empId) + '</span>)</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 14px;padding:6px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;margin-bottom:12px">' +
+        '<div><strong>ตำแหน่ง:</strong> ' + esc(emp.position || '-') + '</div>' +
+        '<div><strong>แผนก:</strong> ' + esc(emp.department || '-') + '</div>' +
+        '<div><strong>ประจำสาขา:</strong> ' + esc(branchLabel) + '</div>' +
+        '<div><strong>วันที่กระทำความผิด:</strong> ' + formatDocThaiFullDate(incDateIso) + '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div contenteditable="true" spellcheck="false" style="font-size:13px;line-height:1.8;text-align:justify">' +
+      '<p style="text-indent:2.2rem;margin:8px 0">' +
+        'ตามที่ท่านเป็นพนักงานของ <strong>' + esc(compName) + '</strong> ตำแหน่ง <strong>' + esc(emp.position || '-') + '</strong> แผนก <strong>' + esc(emp.department || '-') + '</strong> ได้ปรากฏข้อเท็จจริงว่า เมื่อวันที่ <strong>' + formatDocThaiFullDate(incDateIso) + '</strong> ท่านได้กระทำความผิดต่อระเบียบข้อบังคับเกี่ยวกับการทำงานของบริษัทฯ กรณี: ' +
+        '<span style="background:#fffbeb;padding:2px 4px;border-bottom:1.5px dashed #d97706">' + esc(descText) + '</span>' +
+      '</p>' +
+
+      '<p style="text-indent:2.2rem;margin:8px 0">' +
+        'การกระทำดังกล่าวของท่าน ถือเป็นการฝ่าฝืนระเบียบข้อบังคับเกี่ยวกับการทำงานของบริษัทฯ หมวดวินัยและโทษทางวินัยอย่างชัดเจน สร้างผลกระทบต่อประสิทธิภาพการปฏิบัติงานของส่วนรวม บริษัทฯ จึงออกหนังสือตักเตือนฉบับนี้ไว้เป็นลายลักษณ์อักษร เพื่อให้ท่านปรับปรุงแก้ไขความประพฤติและทัศนคติในการทำงานให้ถูกต้องตามมาตรฐาน และปฏิบัติตามกฎระเบียบของบริษัทฯ อย่างเคร่งครัดต่อไป' +
+      '</p>' +
+
+      '<div style="margin:14px 0;padding:12px 16px;background:#fef2f2;border:1.5px solid #fecaca;border-radius:6px;font-size:12.5px;line-height:1.8">' +
+        '<div style="font-weight:800;color:#991b1b;margin-bottom:4px">⚠️ คำเตือนทางกฎหมายแรงงาน (ตามพระราชบัญญัติคุ้มครองแรงงาน พ.ศ. ๒๕๔๑ มาตรา ๑๑๙ (๔))</div>' +
+        '<div style="color:#7f1d1d">' +
+          'อนึ่ง บริษัทฯ ขอแจ้งเตือนให้ท่านทราบว่า หากท่านยังคงกระทำความผิดซ้ำคำเตือนในเรื่องเดียวกันนี้อีก หรือฝ่าฝืนข้อบังคับเกี่ยวกับการทำงาน ระเบียบ หรือคำสั่งอันชอบด้วยกฎหมายของบริษัทฯ ภายในกำหนดระยะเวลา <strong>๑ (หนึ่ง) ปี</strong> นับแต่วันที่ท่านได้กระทำความผิด บริษัทฯ มีความจำเป็นต้องดำเนินการลงโทษทางวินัยขั้นเด็ดขาด โดยการ <strong>เลิกจ้างท่านโดยไม่ต้องบอกกล่าวล่วงหน้า และไม่ต้องจ่ายค่าชดเชยใดๆ ทั้งสิ้น</strong>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<!-- SIGNATURES -->' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:28px;text-align:center;font-size:12px;page-break-inside:avoid">' +
+      '<div>' +
+        '<div style="height:40px;border-bottom:1px solid #475569;margin-bottom:5px"></div>' +
+        '<div contenteditable="true" spellcheck="false">ลงชื่อ ( <strong>' + esc(signName) + '</strong> )</div>' +
+        '<div style="font-size:11px;color:#64748b">' + esc(signTitle) + '</div>' +
+        '<div style="font-size:10.5px;color:#94a3b8;margin-top:2px">ผู้มีอำนาจออกหนังสือตักเตือน • วันที่ ......../......../........</div>' +
+      '</div>' +
+      witnessLine +
+    '</div>' +
+
+    '<div style="margin-top:22px;padding:12px 14px;border:1.5px solid #cbd5e1;border-radius:6px;background:#f8fafc;font-size:11.5px;line-height:1.7;page-break-inside:avoid">' +
+      '<div style="font-weight:800;color:#0f172a;margin-bottom:4px">ส่วนสำหรับพนักงานผู้รับหนังสือตักเตือน (Acknowledgement)</div>' +
+      '<div>ข้าพเจ้าได้รับทราบและเข้าใจข้อความในหนังสือตักเตือนฉบับนี้โดยตลอดแล้ว และยินดีปรับปรุงแก้ไขการทำงานต่อไป</div>' +
+      '<div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:20px;align-items:center;margin-top:14px">' +
+        '<div>ลงชื่อ ( <strong>' + esc(emp.fullName) + '</strong> ) พนักงานผู้รับทราบ &nbsp;&nbsp; วันที่ ......../......../........</div>' +
+        '<div style="font-size:10.5px;color:#64748b;text-align:right">(กรณีพนักงานปฏิเสธไม่ยอมลงนาม ให้พยานอย่างน้อย 2 คนลงลายมือชื่อยืนยันว่าได้ส่งมอบคำเตือนแล้ว)</div>' +
+      '</div>' +
+    '</div>';
+}
+
+function resetWarningLetterModalPaper() {
+  if (!confirm('ต้องการคืนค่าข้อความหนังสือตักเตือนกลับเป็นค่าเริ่มต้นใช่หรือไม่?')) return;
+  renderWarningLetterModalPaper(_activeWarnDocEmpId);
+  showToast('คืนค่าข้อความเริ่มต้นเรียบร้อยแล้ว', 'info');
+}
+
+function printWarningLetterDoc() {
+  printDocCenterModal('printing-warning-letter');
+}
+
+window.openDisciplinaryWarningModal = openDisciplinaryWarningModal;
+window.onWarningLetterParamChanged = onWarningLetterParamChanged;
+window.onWarningLetterCategoryChanged = onWarningLetterCategoryChanged;
+window.resetWarningLetterModalPaper = resetWarningLetterModalPaper;
+window.printWarningLetterDoc = printWarningLetterDoc;
 
 // ==========================================

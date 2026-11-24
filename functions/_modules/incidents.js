@@ -44,7 +44,7 @@ export const incidentHandlers = {
       const incIds = incidents.map(i => i.id);
       const placeholders = incIds.map(() => '?').join(',');
       const schedulesRes = await db.prepare(`
-        SELECT s.*, e.full_name, e.nickname, e.department
+        SELECT s.*, e.full_name, e.nickname, e.department, e.status as emp_status
         FROM incident_deduction_schedules s
         LEFT JOIN employees e ON s.emp_id = e.emp_id
         WHERE s.incident_id IN (${placeholders})
@@ -53,7 +53,7 @@ export const incidentHandlers = {
       schedulesRows = schedulesRes.results || [];
     } else if (incidents.length > 100) {
       const schedulesRes = await db.prepare(`
-        SELECT s.*, e.full_name, e.nickname, e.department
+        SELECT s.*, e.full_name, e.nickname, e.department, e.status as emp_status
         FROM incident_deduction_schedules s
         LEFT JOIN employees e ON s.emp_id = e.emp_id
         ORDER BY s.incident_id DESC, s.installment_no ASC

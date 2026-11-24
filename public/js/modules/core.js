@@ -14,6 +14,7 @@ var ALL_PRINT_CLASSES = [
   'printing-resignation-letter',
   'printing-salary-advance',
   'printing-staff-loan',
+  'printing-warning-letter',
   'printing-50twi',
   'printing-payroll-summary',
   'printing-history',
