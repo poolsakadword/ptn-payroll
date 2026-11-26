@@ -841,6 +841,11 @@ function renderAllViews() {
   try { renderCompanySettings(); } catch(e) { console.error('renderCompanySettings error:', e); }
   try { renderUsersTable(); } catch(e) { console.error('renderUsersTable error:', e); }
   try { refreshAllEmployeeSelects(); } catch(e) { console.error('refreshAllEmployeeSelects error:', e); }
+  try {
+    if (typeof updateAttendancePeriodFromState === 'function') {
+      updateAttendancePeriodFromState();
+    }
+  } catch(e) { console.error('updateAttendancePeriodFromState error:', e); }
 }
 
 // 1. DASHBOARD RENDERER

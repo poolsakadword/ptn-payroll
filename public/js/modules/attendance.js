@@ -189,6 +189,14 @@ var _currentAttendanceIsIndividual = false;
 var _currentAttendanceSelectedEmpInfo = null;
 
 function getActiveCutoffPeriodString() {
+  // If active payroll State.period exists (e.g. 'พฤศจิกายน 2569'), use it so attendance syncs with payroll period
+  if (typeof State !== 'undefined' && State && State.period && typeof getAttendanceCutoffDatesClient === 'function') {
+    var pInfo = getAttendanceCutoffDatesClient(State.period);
+    if (pInfo && pInfo.yearCE && pInfo.month) {
+      return pInfo.yearCE + '-' + String(pInfo.month).padStart(2, '0');
+    }
+  }
+
   var nowUtc = new Date();
   var bkk = new Date(nowUtc.getTime() + (7 * 3600 * 1000));
   var curY = bkk.getFullYear();
@@ -197,7 +205,7 @@ function getActiveCutoffPeriodString() {
   var cutDay = 25;
   if (_currentAttendanceSettings && _currentAttendanceSettings.cutoff_day) {
     cutDay = Number(_currentAttendanceSettings.cutoff_day);
-  } else if (State.settings && State.settings.cutoff_day) {
+  } else if (typeof State !== 'undefined' && State && State.settings && State.settings.cutoff_day) {
     cutDay = Number(State.settings.cutoff_day);
   } else {
     var cutEl = document.getElementById('attSetCutoffDay');
@@ -214,6 +222,27 @@ function getActiveCutoffPeriodString() {
   }
   return curY + '-' + String(curM).padStart(2, '0');
 }
+
+function updateAttendancePeriodFromState() {
+  if (typeof State === 'undefined' || !State || !State.period) return;
+  var pStr = getActiveCutoffPeriodString();
+  var pInput = document.getElementById('attFilterPeriod');
+  if (pInput) {
+    pInput.value = pStr;
+    _currentAttendancePeriod = pStr;
+  }
+  var pReqInput = document.getElementById('attReqPeriod');
+  if (pReqInput) {
+    pReqInput.value = pStr;
+  }
+  if (typeof updateAttendancePeriodBadge === 'function') updateAttendancePeriodBadge();
+  if (typeof updateAttendanceReqPeriodBadge === 'function') updateAttendanceReqPeriodBadge();
+  var periodLbl = document.getElementById('expAttPeriodLabel');
+  if (periodLbl) {
+    periodLbl.textContent = State.period;
+  }
+}
+window.updateAttendancePeriodFromState = updateAttendancePeriodFromState;
 
 function getAttendanceCutoffDatesClient(periodStr, customCutDay) {
   var cutDay = customCutDay;
@@ -7876,9 +7905,19 @@ function setExportAttendancePreset(preset) {
   var currentMonth = now.getMonth() + 1; // 1-12
   var currentDate = now.getDate();
 
+  var targetYear = currentYear;
+  var targetMonth = currentMonth;
+  if (typeof State !== 'undefined' && State && State.period && typeof getAttendanceCutoffDatesClient === 'function') {
+    var pDates = getAttendanceCutoffDatesClient(State.period, cutDay);
+    if (pDates && pDates.yearCE && pDates.month) {
+      targetYear = pDates.yearCE;
+      targetMonth = pDates.month;
+    }
+  }
+
   if (preset === 'cutoff') {
-    // 1. Calculate cutoff dates matching the active period
-    var activePeriodStr = (typeof getActiveCutoffPeriodString === 'function') ? getActiveCutoffPeriodString() : (State.period || '');
+    // 1. Calculate cutoff dates matching the active period (prioritize State.period)
+    var activePeriodStr = (typeof State !== 'undefined' && State && State.period) ? State.period : ((typeof getActiveCutoffPeriodString === 'function') ? getActiveCutoffPeriodString() : '');
     if (activePeriodStr && typeof getAttendanceCutoffDatesClient === 'function') {
       var periodDates = getAttendanceCutoffDatesClient(activePeriodStr, cutDay);
       if (periodDates && periodDates.startDate && periodDates.endDate) {
@@ -7920,32 +7959,32 @@ function setExportAttendancePreset(preset) {
     endInput.value = endYear + '-' + String(endMonth).padStart(2, '0') + '-' + String(endDayNum).padStart(2, '0');
   } else if (preset === 'last_cutoff') {
     // Previous cutoff period
-    var targetMonth = currentMonth - 1;
-    var targetYear = currentYear;
-    if (targetMonth < 1) {
-      targetMonth = 12;
-      targetYear -= 1;
+    var prevCutMonth = targetMonth - 1;
+    var prevCutYear = targetYear;
+    if (prevCutMonth < 1) {
+      prevCutMonth = 12;
+      prevCutYear -= 1;
     }
     if (State.period && typeof getAttendanceCutoffDatesClient === 'function') {
       var curDates = getAttendanceCutoffDatesClient(State.period, cutDay);
       if (curDates && curDates.endDate) {
         var eM = parseInt(curDates.endDate.split('-')[1], 10);
         var eY = parseInt(curDates.endDate.split('-')[0], 10);
-        targetMonth = eM - 1;
-        targetYear = eY;
-        if (targetMonth < 1) {
-          targetMonth = 12;
-          targetYear -= 1;
+        prevCutMonth = eM - 1;
+        prevCutYear = eY;
+        if (prevCutMonth < 1) {
+          prevCutMonth = 12;
+          prevCutYear -= 1;
         }
       }
     }
 
-    var pEndYear = targetYear;
-    var pEndMonth = targetMonth;
+    var pEndYear = prevCutYear;
+    var pEndMonth = prevCutMonth;
     var pEndDay = cutDay;
 
-    var pStartMonth = targetMonth - 1;
-    var pStartYear = targetYear;
+    var pStartMonth = prevCutMonth - 1;
+    var pStartYear = prevCutYear;
     if (pStartMonth < 1) {
       pStartMonth = 12;
       pStartYear -= 1;
@@ -7961,12 +8000,12 @@ function setExportAttendancePreset(preset) {
     startInput.value = pStartYear + '-' + String(pStartMonth).padStart(2, '0') + '-' + String(pStartDay).padStart(2, '0');
     endInput.value = pEndYear + '-' + String(pEndMonth).padStart(2, '0') + '-' + String(pEndDay).padStart(2, '0');
   } else if (preset === 'this_month') {
-    var lastDay = new Date(currentYear, currentMonth, 0).getDate();
-    startInput.value = currentYear + '-' + String(currentMonth).padStart(2, '0') + '-01';
-    endInput.value = currentYear + '-' + String(currentMonth).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
+    var lastDay = new Date(targetYear, targetMonth, 0).getDate();
+    startInput.value = targetYear + '-' + String(targetMonth).padStart(2, '0') + '-01';
+    endInput.value = targetYear + '-' + String(targetMonth).padStart(2, '0') + '-' + String(lastDay).padStart(2, '0');
   } else if (preset === 'last_month') {
-    var prevMonth = currentMonth - 1;
-    var prevYear = currentYear;
+    var prevMonth = targetMonth - 1;
+    var prevYear = targetYear;
     if (prevMonth < 1) {
       prevMonth = 12;
       prevYear -= 1;
