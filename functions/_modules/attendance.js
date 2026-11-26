@@ -25,6 +25,62 @@ async function getOtRoundingMode(db) {
   return (row && row.value) ? String(row.value) : 'HALF_HOUR';
 }
 
+function computeEffectiveLateMinutesWithLeave(log, leaveInfo, branch) {
+  const rawLate = Number(log && log.late_minutes) || 0;
+  if (!leaveInfo || String(leaveInfo.status || '').toUpperCase() !== 'APPROVED') {
+    return rawLate;
+  }
+  const leaveDays = Number(leaveInfo.days_count) || 1;
+  const leaveSlot = String(leaveInfo.time_slot || 'FULL').toUpperCase();
+  const sessions = getBranchShiftSessions(branch);
+  const inMin = timeStringToMinutes(log && log.clock_in);
+
+  let coversMorning = (leaveSlot === 'FULL' && leaveDays >= 1.0) || leaveSlot === 'MORNING';
+  if (!coversMorning && leaveSlot !== 'AFTERNOON' && leaveDays > 0 && leaveDays < 1.0 && inMin !== null && inMin >= sessions.lunchStartMin) {
+    coversMorning = true;
+  }
+  if (!coversMorning) return rawLate;
+
+  if (inMin !== null && inMin >= sessions.lunchStartMin) {
+    const graceMin = branch ? Number(branch.grace_minutes || 0) : 0;
+    return (sessions.lunchEndMin && inMin > (sessions.lunchEndMin + graceMin))
+      ? (inMin - sessions.lunchEndMin)
+      : 0;
+  }
+  return 0;
+}
+
+async function recalculateTimeLogsForApprovedLeave(db, empId, startDate, endDate, leaveDays, timeSlot) {
+  if (!empId || !startDate || !endDate) return;
+  const sD = String(startDate).substring(0, 10);
+  const eD = String(endDate).substring(0, 10);
+  const logsRes = await db.prepare('SELECT * FROM time_logs WHERE emp_id = ? AND date >= ? AND date <= ?')
+    .bind(empId, sD, eD).all().catch(() => ({ results: [] }));
+  const logs = logsRes.results || [];
+  if (logs.length === 0) return;
+
+  const empRow = await db.prepare('SELECT branch_id FROM employees WHERE emp_id = ?').bind(empId).first().catch(() => null);
+  const branchRows = await db.prepare('SELECT * FROM branches').all().catch(() => ({ results: [] }));
+  const branchMap = {};
+  for (const b of (branchRows.results || [])) branchMap[b.branch_id] = b;
+
+  for (const log of logs) {
+    const branch = branchMap[log.branch_id || (empRow && empRow.branch_id)] || null;
+    const newLate = computeEffectiveLateMinutesWithLeave(log, {
+      status: 'APPROVED',
+      days_count: leaveDays,
+      time_slot: timeSlot
+    }, branch);
+    if (newLate !== (Number(log.late_minutes) || 0)) {
+      const newStatus = (newLate === 0 && (Number(log.overbreak_minutes) || 0) === 0 && log.status === 'LATE')
+        ? 'NORMAL'
+        : log.status;
+      await db.prepare('UPDATE time_logs SET late_minutes = ?, status = ? WHERE id = ?')
+        .bind(newLate, newStatus, log.id).run().catch(() => {});
+    }
+  }
+}
+
 export function categorizeLeaveType(leaveType, medicalCertUrl) {
   const raw = String(leaveType || '').trim();
   const rawUpper = raw.toUpperCase();
@@ -1636,6 +1692,10 @@ export const attendanceHandlers = {
           leaveOnTargetDateMap[lr.emp_id] = lr;
         }
       }
+      // 5. KPI & Attendance Breakdown for All 5 Cards
+      const branchMap = {};
+      for (const b of branches) branchMap[b.branch_id] = b;
+
       for (const l of logsToday) {
         const lEmp = String(l.emp_id || '').trim();
         const lDate = String(l.date || targetDate).substring(0, 10);
@@ -1654,12 +1714,35 @@ export const attendanceHandlers = {
             status: matchedLr.status,
             reason: matchedLr.reason || ''
           };
+          if (String(matchedLr.status || '').toUpperCase() === 'APPROVED') {
+            const bInfo = branchMap[l.branch_id || l.emp_branch_id] || null;
+            const adjLate = computeEffectiveLateMinutesWithLeave(l, matchedLr, bInfo);
+            if (adjLate !== (Number(l.late_minutes) || 0)) {
+              l.late_minutes = adjLate;
+              if (adjLate === 0 && (Number(l.overbreak_minutes) || 0) === 0 && l.status === 'LATE') {
+                l.status = 'NORMAL';
+              }
+            }
+          }
         }
       }
 
-      // 5. KPI & Attendance Breakdown for All 5 Cards
-      const branchMap = {};
-      for (const b of branches) branchMap[b.branch_id] = b;
+      // Sync empSummary late counts with leave-adjusted logsToday
+      if (empSummary) {
+        let adjLateCount = 0;
+        let adjTotalLateMinutes = 0;
+        for (const l of logsToday) {
+          const morningLate = Number(l.late_minutes || 0);
+          const overbreakLate = countOverbreakAsLate ? Number(l.overbreak_minutes || 0) : 0;
+          if (morningLate > 0) adjLateCount++;
+          if (overbreakLate > 0) adjLateCount++;
+          if (morningLate + overbreakLate > 0) {
+            adjTotalLateMinutes += (morningLate + overbreakLate);
+          }
+        }
+        empSummary.lateCount = adjLateCount;
+        empSummary.totalLateMinutes = adjTotalLateMinutes;
+      }
 
       // Active employees on targetDate for daily attendance KPI & breakdown (exclude employees who resigned before targetDate)
       const activeEmps = (branchFilter && branchFilter !== 'ALL')
@@ -2716,7 +2799,7 @@ export const attendanceHandlers = {
       let targetEmpId = null;
       let reqDesc = '';
       if (type === 'leave') {
-        const row = await db.prepare('SELECT emp_id, leave_type, days_count FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
+        const row = await db.prepare('SELECT emp_id, leave_type, days_count, start_date, end_date, time_slot FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
         if (row) { targetEmpId = row.emp_id; reqDesc = `ขอลางาน (${row.leave_type || ''}) ${row.days_count || 1} วัน`; }
       } else if (type === 'ot') {
         const row = await db.prepare('SELECT emp_id, planned_hours, date FROM ot_requests WHERE id = ?').bind(id).first().catch(() => null);
@@ -2732,6 +2815,12 @@ export const attendanceHandlers = {
           SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours'), rejection_reason = ?
           WHERE id = ?
         `).bind(status, approverId, status === 'REJECTED' ? (rejectionReason || '') : '', id).run();
+        if (status === 'APPROVED') {
+          const lvRow = await db.prepare('SELECT emp_id, start_date, end_date, days_count, time_slot FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
+          if (lvRow) {
+            await recalculateTimeLogsForApprovedLeave(db, lvRow.emp_id, lvRow.start_date, lvRow.end_date, lvRow.days_count, lvRow.time_slot);
+          }
+        }
       } else if (type === 'ot') {
         await db.prepare(`
           UPDATE ot_requests 
@@ -2801,13 +2890,16 @@ export const attendanceHandlers = {
         let targetEmpId = null;
         let reqDesc = '';
         if (type === 'leave') {
-          const row = await db.prepare('SELECT emp_id, leave_type, days_count FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
+          const row = await db.prepare('SELECT emp_id, leave_type, days_count, start_date, end_date, time_slot FROM leave_requests WHERE id = ?').bind(id).first().catch(() => null);
           if (row) { targetEmpId = row.emp_id; reqDesc = `ขอลางาน (${row.leave_type || ''}) ${row.days_count || 1} วัน`; }
           await db.prepare(`
             UPDATE leave_requests 
             SET status = ?, approver_id = ?, approved_at = datetime('now', '+7 hours'), rejection_reason = ?
             WHERE id = ?
           `).bind(status, approverId, status === 'REJECTED' ? rejectionReason : '', id).run();
+          if (status === 'APPROVED' && row) {
+            await recalculateTimeLogsForApprovedLeave(db, row.emp_id, row.start_date, row.end_date, row.days_count, row.time_slot);
+          }
           processedCount++;
         } else if (type === 'ot') {
           const row = await db.prepare('SELECT emp_id, planned_hours, date FROM ot_requests WHERE id = ?').bind(id).first().catch(() => null);
@@ -3154,6 +3246,10 @@ export const attendanceHandlers = {
 
       const rangeLogs = query.results || [];
       const rangeLeaves = leavesQuery.results || [];
+      const rangeBranches = await db.prepare('SELECT * FROM branches').all().catch(() => ({ results: [] }));
+      const rangeBranchMap = {};
+      for (const b of (rangeBranches.results || [])) rangeBranchMap[b.branch_id] = b;
+
       for (const l of rangeLogs) {
         const lEmp = String(l.emp_id || '').trim();
         const lDate = String(l.date || '').substring(0, 10);
@@ -3172,6 +3268,14 @@ export const attendanceHandlers = {
             status: matchedLr.status,
             reason: matchedLr.reason || ''
           };
+          const bInfo = rangeBranchMap[l.branch_id || l.emp_branch_id] || null;
+          const adjLate = computeEffectiveLateMinutesWithLeave(l, matchedLr, bInfo);
+          if (adjLate !== (Number(l.late_minutes) || 0)) {
+            l.late_minutes = adjLate;
+            if (adjLate === 0 && (Number(l.overbreak_minutes) || 0) === 0 && l.status === 'LATE') {
+              l.status = 'NORMAL';
+            }
+          }
         }
       }
 
