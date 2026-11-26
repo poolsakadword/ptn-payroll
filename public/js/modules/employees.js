@@ -1067,6 +1067,8 @@ function openAddEmployeeModal() {
   updateProbEndDateThaiHint();
   updateResignDateThaiHint();
   setEmpModalHrFields(null);
+  var salHistSec = document.getElementById('empSalaryHistorySection');
+  if (salHistSec) salHistSec.style.display = 'none';
   switchEmpModalTab('basic');
   openModal('empModal');
 }
@@ -1170,9 +1172,105 @@ function openEditEmployeeModal(empId) {
     document.getElementById('mDiligenceAllowance').value = (e.diligenceAllowance !== undefined && e.diligenceAllowance !== null) ? e.diligenceAllowance : '';
   }
   setEmpModalHrFields(e);
+  var salHistSec = document.getElementById('empSalaryHistorySection');
+  if (salHistSec) {
+    if (typeof hasPermission === 'function' && hasPermission('view_salary')) {
+      salHistSec.style.display = 'block';
+      loadEmployeeSalaryHistory(e.empId, 'empSalaryHistoryList');
+    } else {
+      salHistSec.style.display = 'none';
+    }
+  }
   switchEmpModalTab('basic');
   openModal('empModal');
 }
+
+function formatThaiDateTimeShort(dtStr) {
+  if (!dtStr) return '-';
+  var s = String(dtStr).trim().replace('T', ' ');
+  var datePart = s.substring(0, 10);
+  var timePart = s.length >= 16 ? s.substring(11, 16) : '';
+  var parts = datePart.split('-');
+  if (parts.length !== 3) return s;
+  var thMonths = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  var mIdx = parseInt(parts[1], 10) - 1;
+  var thYear = parseInt(parts[0], 10) + 543;
+  return parseInt(parts[2], 10) + ' ' + (thMonths[mIdx] || parts[1]) + ' ' + thYear + (timePart ? ' ' + timePart + ' น.' : '');
+}
+
+function loadEmployeeSalaryHistory(empId, containerId) {
+  var el = document.getElementById(containerId);
+  if (!el || !empId) return;
+  if (typeof hasPermission === 'function' && !hasPermission('view_salary')) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = '<div style="font-size:12px;color:#64748b;padding:8px 0"><i class="fa-solid fa-spinner fa-spin"></i> กำลังโหลดประวัติการปรับเงินเดือน...</div>';
+  callApi('getSalaryHistory', { empId: empId, username: (State.currentUser && State.currentUser.username) || '' })
+    .then(function(r) {
+      if (!r || !r.success) {
+        el.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:6px 0">ไม่สามารถโหลดประวัติได้</div>';
+        return;
+      }
+      var list = r.history || [];
+      if (list.length === 0) {
+        el.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:6px 0;text-align:center">ยังไม่มีประวัติการปรับเงินเดือน</div>';
+        return;
+      }
+      var canDel = Boolean(r.canDelete);
+      var html = '<table class="data-table" style="font-size:12px;margin:0;width:100%">' +
+        '<thead><tr style="background:#f1f5f9">' +
+          '<th style="padding:6px 8px">วันที่ปรับ</th>' +
+          '<th class="text-right" style="padding:6px 8px">เงินเดือนเดิม</th>' +
+          '<th class="text-right" style="padding:6px 8px">เงินเดือนใหม่</th>' +
+          '<th class="text-right" style="padding:6px 8px">ส่วนต่าง</th>' +
+          '<th style="padding:6px 8px">รายการ</th>' +
+          '<th style="padding:6px 8px">ผู้แก้ไข</th>' +
+          (canDel ? '<th class="text-center no-print-col" style="padding:6px 8px;width:44px">ลบ</th>' : '') +
+        '</tr></thead><tbody>';
+      list.forEach(function(row) {
+        var diff = Number(row.diff_amount) || 0;
+        var pct = Number(row.diff_percent) || 0;
+        var isUp = diff >= 0;
+        var diffColor = isUp ? '#059669' : '#dc2626';
+        var sign = isUp ? '+' : '';
+        var pctStr = pct !== 0 ? ' (' + sign + pct + '%)' : '';
+        html += '<tr>' +
+          '<td style="padding:6px 8px;white-space:nowrap">' + esc(formatThaiDateTimeShort(row.changed_at)) + '</td>' +
+          '<td class="text-right font-mono" style="padding:6px 8px;color:#64748b">' + fmt(row.old_salary) + '</td>' +
+          '<td class="text-right font-mono font-bold" style="padding:6px 8px;color:#1e3a8a">' + fmt(row.new_salary) + '</td>' +
+          '<td class="text-right font-mono font-bold" style="padding:6px 8px;color:' + diffColor + '">' + sign + fmt(diff) + pctStr + '</td>' +
+          '<td style="padding:6px 8px"><span style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600">' + esc(row.change_type || 'ปรับฐานเงินเดือน') + '</span></td>' +
+          '<td style="padding:6px 8px;color:#475569">' + esc(row.changed_by || '-') + '</td>' +
+          (canDel ? '<td class="text-center no-print-col" style="padding:6px 8px"><button type="button" class="btn btn-sm" onclick="deleteSalaryHistoryItem(' + Number(row.id) + ', \'' + esc(empId) + '\', \'' + esc(containerId) + '\')" style="padding:2px 6px;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:4px" title="ลบรายการที่พิมพ์ผิด"><i class="fa-solid fa-trash-can"></i></button></td>' : '') +
+        '</tr>';
+      });
+      html += '</tbody></table>';
+      el.innerHTML = html;
+    })
+    .catch(function() {
+      el.innerHTML = '<div style="font-size:12px;color:#94a3b8;padding:6px 0">เกิดข้อผิดพลาดในการโหลดประวัติ</div>';
+    });
+}
+window.loadEmployeeSalaryHistory = loadEmployeeSalaryHistory;
+
+function deleteSalaryHistoryItem(id, empId, containerId) {
+  if (!confirm('ยืนยันการลบรายการประวัติการปรับเงินเดือนนี้? (ใช้สำหรับลบรายการที่เกิดจากการพิมพ์ผิด)')) return;
+  callApi('deleteSalaryHistory', { id: id, username: (State.currentUser && State.currentUser.username) || '' })
+    .then(function(r) {
+      if (!r || !r.success) {
+        showToast((r && r.message) || 'ไม่สามารถลบรายการได้', 'error');
+        return;
+      }
+      showToast(r.message || 'ลบรายการเรียบร้อยแล้ว', 'success');
+      if (containerId) loadEmployeeSalaryHistory(empId, containerId);
+      // Sync the other container if visible
+      var otherId = (containerId === 'empSalaryHistoryList') ? 'histSalaryHistoryBody' : 'empSalaryHistoryList';
+      if (document.getElementById(otherId)) loadEmployeeSalaryHistory(empId, otherId);
+    })
+    .catch(function(err) { showToast(err.message, 'error'); });
+}
+window.deleteSalaryHistoryItem = deleteSalaryHistoryItem;
 
 function saveEmployeeForm(e, openPayslipAfter) {
   if (e && e.preventDefault) e.preventDefault();

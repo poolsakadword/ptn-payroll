@@ -449,6 +449,16 @@ function filterHistoryTable() {
 
   // Update YTD Top Square KPI Tiles
   var canViewSalary = hasPermission('view_salary');
+  var salHistCard = document.getElementById('histSalaryHistoryCard');
+  var histEmpId = document.getElementById('histEmpSelect') ? document.getElementById('histEmpSelect').value : '';
+  if (salHistCard) {
+    if (canViewSalary && histEmpId && typeof loadEmployeeSalaryHistory === 'function') {
+      salHistCard.style.display = 'block';
+      loadEmployeeSalaryHistory(histEmpId, 'histSalaryHistoryBody');
+    } else {
+      salHistCard.style.display = 'none';
+    }
+  }
   if (document.getElementById('histYtdGross')) document.getElementById('histYtdGross').textContent = canViewSalary ? fmt(sumGross) : '฿***';
   if (document.getElementById('histYtdPf')) document.getElementById('histYtdPf').textContent = canViewSalary ? fmt(sumPf) : '฿***';
   if (document.getElementById('histYtdAttendance')) document.getElementById('histYtdAttendance').textContent = 'ขาด ' + sumAbsent + ' | ลา ' + (sumLeave + sumSick) + ' | OT ' + sumOtHours + ' ชม.';

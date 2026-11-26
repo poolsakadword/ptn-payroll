@@ -2589,6 +2589,17 @@
               </table>
             </div>
 
+            <!-- Salary Adjustment History Card (Individual History View) -->
+            <div id="histSalaryHistoryCard" style="display:none;margin-top:18px;background:#ffffff;border:1.5px solid #e2e8f0;border-radius:var(--radius-lg);padding:16px 18px;box-shadow:0 1px 3px rgba(15,23,42,0.06)">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+                <div style="font-size:13.5px;font-weight:800;color:#1e3a8a;display:flex;align-items:center;gap:8px">
+                  <i class="fa-solid fa-money-bill-trend-up" style="color:#059669"></i> ประวัติการปรับฐานเงินเดือน (Salary Adjustment History)
+                </div>
+                <span style="font-size:11px;color:#64748b">แสดงประวัติการปรับเพิ่ม-ลดฐานเงินเดือนย้อนหลัง</span>
+              </div>
+              <div id="histSalaryHistoryBody"></div>
+            </div>
+
             <!-- Print Signatures for Individual Report (A4 Landscape) -->
             <div id="individualPrintSignatures" style="display:none;grid-template-columns:repeat(3,1fr);gap:36px;margin-top:12px;text-align:center;font-size:9.5px;page-break-inside:avoid">
               <div>
@@ -4238,6 +4249,17 @@
                 <label><i class="fa-solid fa-comment-dots" style="color:#64748b"></i> หมายเหตุ</label>
                 <input type="text" id="mRemark" placeholder="ระบุหมายเหตุ (ถ้ามี)">
               </div>
+            </div>
+
+            <!-- Salary Adjustment History (Shown on Edit when permitted) -->
+            <div id="empSalaryHistorySection" style="display:none;margin-top:14px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:10px;padding:12px 14px">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                <span style="font-size:12.5px;font-weight:700;color:#1e3a8a;display:flex;align-items:center;gap:6px">
+                  <i class="fa-solid fa-clock-rotate-left" style="color:#2563eb"></i> ประวัติการปรับเงินเดือน
+                </span>
+                <span style="font-size:11px;color:#64748b">บันทึกอัตโนมัติเมื่อมีการเปลี่ยนแปลงฐานเงินเดือน</span>
+              </div>
+              <div id="empSalaryHistoryList" style="max-height:180px;overflow-y:auto"></div>
             </div>
           </div>
           </div><!-- /#empModalTabBasic -->
@@ -7653,17 +7675,17 @@
     <div class="ins-actions-footer" id="ifeFooter" style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:#f8fafc;border-top:1px solid #e2e8f0"></div>
   </aside>
 
-  <script src="js/config.js?v=11.08"></script>
-  <script src="js/modules/core.js?v=11.08"></script>
-  <script src="js/modules/auth.js?v=11.08"></script>
-  <script src="js/modules/branches-holidays.js?v=11.08"></script>
-  <script src="js/modules/payroll.js?v=11.08"></script>
-  <script src="js/modules/employees.js?v=11.08"></script>
-  <script src="js/modules/attendance.js?v=11.08"></script>
-  <script src="js/modules/documents.js?v=11.08"></script>
-  <script src="js/modules/ai-backup.js?v=11.08"></script>
-  <script src="js/modules/notifications.js?v=11.08"></script>
-  <script src="js/modules/incidents.js?v=11.08"></script>
-  <script src="js/app.js?v=11.08"></script>
+  <script src="js/config.js?v=11.09"></script>
+  <script src="js/modules/core.js?v=11.09"></script>
+  <script src="js/modules/auth.js?v=11.09"></script>
+  <script src="js/modules/branches-holidays.js?v=11.09"></script>
+  <script src="js/modules/payroll.js?v=11.09"></script>
+  <script src="js/modules/employees.js?v=11.09"></script>
+  <script src="js/modules/attendance.js?v=11.09"></script>
+  <script src="js/modules/documents.js?v=11.09"></script>
+  <script src="js/modules/ai-backup.js?v=11.09"></script>
+  <script src="js/modules/notifications.js?v=11.09"></script>
+  <script src="js/modules/incidents.js?v=11.09"></script>
+  <script src="js/app.js?v=11.09"></script>
 </body>
 </html>

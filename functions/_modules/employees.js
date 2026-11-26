@@ -6,6 +6,37 @@ import { isUserSuperAdmin, userHasPermission } from './security.js';
 import { normalizeDateToIso, isPeriodLocked } from './date-utils.js';
 import { calculateAndSavePayroll } from './payroll.js';
 
+async function recordSalaryHistory(db, empId, oldSalary, newSalary, changeType, changedBy, note) {
+  const oldVal = Number(oldSalary) || 0;
+  const newVal = Number(newSalary) || 0;
+  if (!empId || oldVal === newVal) return;
+  const diffAmt = Math.round((newVal - oldVal) * 100) / 100;
+  const diffPct = oldVal > 0 ? Math.round(((newVal - oldVal) / oldVal) * 10000) / 100 : 0;
+  try {
+    await db.prepare(`
+      INSERT INTO salary_history (emp_id, old_salary, new_salary, diff_amount, diff_percent, change_type, changed_by, changed_at, note)
+      VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '+7 hours'), ?)
+    `).bind(
+      String(empId).trim(),
+      oldVal,
+      newVal,
+      diffAmt,
+      diffPct,
+      changeType || 'ปรับฐานเงินเดือน',
+      changedBy || 'Admin',
+      note || ''
+    ).run();
+    await logSystemActivity(
+      db,
+      changedBy || 'Admin',
+      'SALARY_CHANGE',
+      `ปรับเงินเดือน [${empId}]: ${oldVal.toLocaleString()} -> ${newVal.toLocaleString()} บาท (${changeType || 'ปรับฐานเงินเดือน'})`
+    );
+  } catch (e) {
+    console.warn('recordSalaryHistory note:', e);
+  }
+}
+
 export const employeeHandlers = {
   batchImportEmployees: async (db, params) => {
     let period = params.period;
@@ -62,6 +93,10 @@ export const employeeHandlers = {
       const emp = params.employee || {};
       const origId = params.origId;
       if (!emp.empId || !emp.fullName) return { success: false, message: 'กรุณากรอกรหัสและชื่อพนักงาน' };
+
+      const prevEmpRow = (origId || emp.empId)
+        ? await db.prepare('SELECT base_salary FROM employees WHERE emp_id = ?').bind(origId || emp.empId).first().catch(() => null)
+        : null;
 
       if (origId && origId !== emp.empId) {
         await db.prepare('DELETE FROM employees WHERE emp_id = ?').bind(origId).run();
@@ -165,6 +200,14 @@ export const employeeHandlers = {
         String(emp.bloodType || '').trim(),
         String(emp.medicalNotes || '').trim()
       ).run();
+
+      // Record salary adjustment history if existing employee's base_salary changed
+      if (prevEmpRow && canEditSalary) {
+        const prevSal = Number(prevEmpRow.base_salary) || 0;
+        if (prevSal !== baseSalaryVal) {
+          await recordSalaryHistory(db, emp.empId, prevSal, baseSalaryVal, 'ปรับฐานเงินเดือน', callerUser || 'Admin', '');
+        }
+      }
 
       // Immediately sync changes to current period monthly_inputs if employee exists in current period and period is not locked
       const targetEmpId = origId || emp.empId;
@@ -283,6 +326,10 @@ export const employeeHandlers = {
         WHERE emp_id = ?
       `).bind(newStatus, newJoinDate, probationDays, probationEndDate, newBaseSalary, newRemark, empId).run();
 
+      if (Number(emp.base_salary || 0) !== Number(newBaseSalary || 0)) {
+        await recordSalaryHistory(db, empId, Number(emp.base_salary || 0), Number(newBaseSalary || 0), 'รับกลับเข้าทำงาน', callerUser || 'Admin', '');
+      }
+
       await logSystemActivity(db, callerUser || 'Admin', 'REHIRE_EMPLOYEE', `รับพนักงานกลับเข้าทำงาน: ${empId} (${emp.full_name}) สถานะ: ${newStatus}, เริ่มงานรอบใหม่: ${newJoinDate}`);
 
       return {
@@ -358,5 +405,56 @@ export const employeeHandlers = {
       if (r.emp_id && r.photo_url) photos[r.emp_id] = r.photo_url;
     }
     return { success: true, photos };
+  },
+
+  getSalaryHistory: async (db, params) => {
+    const callerUser = params.username || '';
+    const canViewSalary = (await userHasPermission(db, callerUser, 'view_salary')) || (await isUserSuperAdmin(db, callerUser));
+    if (!canViewSalary) {
+      return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์ดูข้อมูลเงินเดือน' };
+    }
+    const empId = String(params.empId || '').trim();
+    if (!empId) return { success: false, message: 'กรุณาระบุรหัสพนักงาน' };
+
+    const isSuper = await isUserSuperAdmin(db, callerUser);
+    const empRow = await db.prepare('SELECT is_confidential FROM employees WHERE emp_id = ?').bind(empId).first().catch(() => null);
+    if (empRow && (empRow.is_confidential === 1 || empRow.is_confidential === '1') && !isSuper) {
+      return { success: false, message: 'สิทธิ์ไม่เพียงพอ: บัญชีของคุณไม่ได้รับสิทธิ์เข้าถึงพนักงานกลุ่มความลับ' };
+    }
+
+    const rows = await db.prepare(`
+      SELECT id, emp_id, old_salary, new_salary, diff_amount, diff_percent, change_type, changed_by, changed_at, note
+      FROM salary_history
+      WHERE emp_id = ?
+      ORDER BY changed_at DESC, id DESC
+    `).bind(empId).all().catch(() => ({ results: [] }));
+
+    return {
+      success: true,
+      history: rows.results || [],
+      canDelete: isSuper
+    };
+  },
+
+  deleteSalaryHistory: async (db, params) => {
+    const callerUser = params.username || '';
+    const isSuper = await isUserSuperAdmin(db, callerUser);
+    if (!isSuper) {
+      return { success: false, message: 'สิทธิ์ไม่เพียงพอ: เฉพาะ Admin / Super Admin เท่านั้นที่ลบประวัติการปรับเงินเดือนได้' };
+    }
+    const id = Number(params.id);
+    if (!id) return { success: false, message: 'ไม่พบรหัสรายการที่ต้องการลบ' };
+
+    const row = await db.prepare('SELECT * FROM salary_history WHERE id = ?').bind(id).first().catch(() => null);
+    if (!row) return { success: false, message: 'ไม่พบรายการประวัติที่ต้องการลบ' };
+
+    await db.prepare('DELETE FROM salary_history WHERE id = ?').bind(id).run();
+    await logSystemActivity(
+      db,
+      callerUser || 'Admin',
+      'DELETE_SALARY_HISTORY',
+      `ลบประวัติการปรับเงินเดือน ID:${id} (${row.emp_id}: ${row.old_salary} -> ${row.new_salary})`
+    );
+    return { success: true, message: 'ลบรายการประวัติการปรับเงินเดือนเรียบร้อยแล้ว' };
   }
 };

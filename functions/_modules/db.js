@@ -248,6 +248,22 @@ export async function ensureGlobalSchemas(db) {
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp ON activity_logs(timestamp)").run().catch(() => {});
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status)").run().catch(() => {});
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_employees_branch ON employees(branch_id)").run().catch(() => {});
+
+    await db.prepare(`
+      CREATE TABLE IF NOT EXISTS salary_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        emp_id TEXT NOT NULL,
+        old_salary REAL NOT NULL DEFAULT 0,
+        new_salary REAL NOT NULL DEFAULT 0,
+        diff_amount REAL NOT NULL DEFAULT 0,
+        diff_percent REAL NOT NULL DEFAULT 0,
+        change_type TEXT DEFAULT 'ปรับฐานเงินเดือน',
+        changed_by TEXT DEFAULT 'Admin',
+        changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        note TEXT DEFAULT ''
+      )
+    `).run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_salary_history_emp ON salary_history(emp_id, changed_at DESC)").run().catch(() => {});
   } catch(e) {
     console.warn('ensureGlobalSchemas note:', e);
   }
