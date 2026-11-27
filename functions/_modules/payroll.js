@@ -23,6 +23,8 @@ export const EMPLOYEE_LIST_COLS = `
   emergency_contact_name, emergency_contact_relation, emergency_contact_phone,
   license_type, license_number, license_expiry,
   email, sso_hospital, blood_type, medical_notes,
+  COALESCE(prior_sick_days, 0) AS prior_sick_days,
+  COALESCE(prior_sick_year, 0) AS prior_sick_year,
   CASE WHEN photo_url IS NOT NULL AND photo_url != '' THEN 1 ELSE 0 END AS has_photo
 `;
 
@@ -101,16 +103,24 @@ export async function calculateAndSavePayroll(db, period, explicitWorkDays) {
   }
   if (!workDays || workDays <= 0) workDays = 26;
 
-  const empQuery = await db.prepare('SELECT emp_id, full_name, nickname, department, position, branch_id, bank_name, bank_account, base_salary, pf_rate, default_sso, default_tax, join_date, resign_date, status FROM employees').all();
+  const empQuery = await db.prepare('SELECT emp_id, full_name, nickname, department, position, branch_id, bank_name, bank_account, base_salary, pf_rate, default_sso, default_tax, join_date, resign_date, status, COALESCE(prior_sick_days, 0) as prior_sick_days, COALESCE(prior_sick_year, 0) as prior_sick_year FROM employees').all();
   const empMap = {};
   for (const emp of empQuery.results || []) empMap[emp.emp_id] = emp;
 
   // Calendar year & month parsing for sick leave annual quota tracking (resets every January)
   const parsedPeriod = parsePeriodYearMonth(period);
   const targetYearBE = parsedPeriod.yearBE;
+  const targetYearCE = parsedPeriod.yearCE;
   const targetMonth = parsedPeriod.month;
 
   const priorSickMap = {};
+  // Include opening prior sick days recorded on employee profile for this calendar year (auto-resets next year)
+  for (const emp of empQuery.results || []) {
+    if (Number(emp.prior_sick_year) === targetYearCE && Number(emp.prior_sick_days) > 0) {
+      const eid = String(emp.emp_id || '').trim();
+      priorSickMap[eid] = (priorSickMap[eid] || 0) + Number(emp.prior_sick_days);
+    }
+  }
   if (targetMonth > 1) {
     // Only query prior periods of the same year (January is month 1, resets quota completely)
     const priorInputsQuery = await db.prepare(`
@@ -389,6 +399,8 @@ export const payrollHandlers = {
         bloodType: e.blood_type || '',
         medicalNotes: e.medical_notes || '',
         diligenceAllowance: canViewSalary ? ((e.diligence_allowance !== null && e.diligence_allowance !== undefined && !isNaN(Number(e.diligence_allowance))) ? Number(e.diligence_allowance) : null) : null,
+        priorSickDays: Number(e.prior_sick_days) || 0,
+        priorSickYear: Number(e.prior_sick_year) || 0,
         isDeviceBound: !!deviceMap[e.emp_id],
         boundDevice: deviceMap[e.emp_id] || null
       }));
@@ -630,9 +642,17 @@ export const payrollHandlers = {
         missingBreakPenaltyMode: getSetStr('MissingBreakPenaltyMode', 'ALERT_ONLY')
       };
 
+      const { yearCE: initYearCE } = parsePeriodYearMonth(period);
+      const { map: sickUsageObj } = await getAnnualSickUsageMap(db, String(initYearCE));
+      const annualSickMap = {};
+      for (const [eid, info] of Object.entries(sickUsageObj || {})) {
+        annualSickMap[eid] = info.withCert || 0;
+      }
+
       return {
         success: true,
         period: period,
+        annualSickMap: annualSickMap,
         latestActivePeriod: latestActivePeriod,
         workingDays: workingDays,
         isMidPeriod: isMidPeriod,

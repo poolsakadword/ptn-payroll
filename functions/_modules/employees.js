@@ -209,6 +209,15 @@ export const employeeHandlers = {
         }
       }
 
+      // Save opening / prior sick leave days (used before adopting PTN Payroll in current year)
+      if (emp.priorSickDays !== undefined && emp.priorSickDays !== null) {
+        const priorSickVal = Math.max(0, Number(emp.priorSickDays) || 0);
+        const curBkkYear = new Date(Date.now() + (7 * 3600 * 1000)).getFullYear();
+        const priorYearVal = priorSickVal > 0 ? (Number(emp.priorSickYear) || curBkkYear) : 0;
+        await db.prepare('UPDATE employees SET prior_sick_days = ?, prior_sick_year = ? WHERE emp_id = ?')
+          .bind(priorSickVal, priorYearVal, emp.empId).run().catch(() => {});
+      }
+
       // Immediately sync changes to current period monthly_inputs if employee exists in current period and period is not locked
       const targetEmpId = origId || emp.empId;
       const isCurPeriodLocked = await isPeriodLocked(db, period);

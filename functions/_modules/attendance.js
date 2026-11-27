@@ -277,6 +277,26 @@ export async function getAnnualSickUsageMap(db, yearStr, targetEmpId = null) {
     // Only SICK_WITH_CERT consumes the paid sick leave quota (SICK_NO_CERT is unpaid and does not deduct quota)
     map[eid].remaining = Math.max(0, Math.round((quota - map[eid].withCert) * 100) / 100);
   }
+
+  // Merge opening prior_sick_days recorded for this calendar year (before adopting PTN Payroll)
+  let priorSql = "SELECT emp_id, COALESCE(prior_sick_days, 0) as prior_sick_days, COALESCE(prior_sick_year, 0) as prior_sick_year FROM employees WHERE COALESCE(prior_sick_days, 0) > 0 AND COALESCE(prior_sick_year, 0) = ?";
+  const priorBinds = [Number(yr)];
+  if (targetEmpId) {
+    priorSql += " AND emp_id = ?";
+    priorBinds.push(String(targetEmpId).trim());
+  }
+  const priorRows = await db.prepare(priorSql).bind(...priorBinds).all().catch(() => ({ results: [] }));
+  for (const pr of (priorRows.results || [])) {
+    const eid = String(pr.emp_id || '').trim();
+    const pDays = Number(pr.prior_sick_days) || 0;
+    if (!eid || pDays <= 0) continue;
+    if (!map[eid]) map[eid] = { withCert: 0, noCert: 0, total: 0, quota, remaining: quota };
+    map[eid].priorDays = pDays;
+    map[eid].withCert = Math.round((map[eid].withCert + pDays) * 100) / 100;
+    map[eid].total = Math.round((map[eid].withCert + map[eid].noCert) * 100) / 100;
+    map[eid].remaining = Math.max(0, Math.round((quota - map[eid].withCert) * 100) / 100);
+  }
+
   return { quota, map };
 }
 

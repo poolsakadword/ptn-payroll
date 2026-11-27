@@ -1067,6 +1067,7 @@ function openAddEmployeeModal() {
   updateProbEndDateThaiHint();
   updateResignDateThaiHint();
   setEmpModalHrFields(null);
+  if (document.getElementById('mPriorSickDays')) document.getElementById('mPriorSickDays').value = '0';
   var salHistSec = document.getElementById('empSalaryHistorySection');
   if (salHistSec) salHistSec.style.display = 'none';
   switchEmpModalTab('basic');
@@ -1170,6 +1171,11 @@ function openEditEmployeeModal(empId) {
   document.getElementById('mDefaultTax').value = (e.defaultTax || 0);
   if (document.getElementById('mDiligenceAllowance')) {
     document.getElementById('mDiligenceAllowance').value = (e.diligenceAllowance !== undefined && e.diligenceAllowance !== null) ? e.diligenceAllowance : '';
+  }
+  if (document.getElementById('mPriorSickDays')) {
+    var curYrCE = new Date().getFullYear();
+    var pSick = (Number(e.priorSickYear) === curYrCE && Number(e.priorSickDays) > 0) ? Number(e.priorSickDays) : 0;
+    document.getElementById('mPriorSickDays').value = pSick;
   }
   setEmpModalHrFields(e);
   var salHistSec = document.getElementById('empSalaryHistorySection');
@@ -1327,6 +1333,8 @@ function saveEmployeeForm(e, openPayslipAfter) {
     defaultSso: ssoVal,
     defaultTax: taxVal,
     diligenceAllowance: diligenceVal,
+    priorSickDays: (document.getElementById('mPriorSickDays') ? (Number(document.getElementById('mPriorSickDays').value) || 0) : 0),
+    priorSickYear: new Date().getFullYear(),
     educationLevel: (document.getElementById('mEducationLevel') ? document.getElementById('mEducationLevel').value.trim() : ''),
     educationDegree: (document.getElementById('mEducationDegree') ? document.getElementById('mEducationDegree').value.trim() : ''),
     educationInstitution: (document.getElementById('mEducationInstitution') ? document.getElementById('mEducationInstitution').value.trim() : ''),

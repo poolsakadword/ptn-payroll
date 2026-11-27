@@ -248,6 +248,8 @@ export async function ensureGlobalSchemas(db) {
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_activity_logs_timestamp ON activity_logs(timestamp)").run().catch(() => {});
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status)").run().catch(() => {});
     await db.prepare("CREATE INDEX IF NOT EXISTS idx_employees_branch ON employees(branch_id)").run().catch(() => {});
+    await db.prepare("ALTER TABLE employees ADD COLUMN prior_sick_days REAL DEFAULT 0").run().catch(() => {});
+    await db.prepare("ALTER TABLE employees ADD COLUMN prior_sick_year INTEGER DEFAULT 0").run().catch(() => {});
 
     await db.prepare(`
       CREATE TABLE IF NOT EXISTS salary_history (
