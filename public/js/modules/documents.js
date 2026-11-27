@@ -340,9 +340,9 @@ function onHistoryEmpChanged(silent) {
         if (r.ytdSickSummary) {
           var sq = r.ytdSickSummary;
           sickBadgeEl.style.display = 'inline-block';
-          sickBadgeEl.textContent = '🩺 ลาป่วยปีนี้: ' + sq.total + '/' + sq.quota + ' วัน (เหลือ ' + sq.remaining + ' วัน)';
-          sickBadgeEl.style.background = sq.total >= sq.quota ? 'rgba(220,38,38,0.35)' : 'rgba(14,165,233,0.25)';
-          sickBadgeEl.style.borderColor = sq.total >= sq.quota ? 'rgba(248,113,113,0.5)' : 'rgba(56,189,248,0.4)';
+          sickBadgeEl.textContent = '🩺 โควตาลาป่วย (มีใบฯ) ปีนี้: ' + sq.withCert + '/' + sq.quota + ' วัน (เหลือ ' + sq.remaining + ' วัน' + (sq.noCert > 0 ? ' | ไม่มีใบ ' + sq.noCert + ' วัน' : '') + ')';
+          sickBadgeEl.style.background = sq.withCert >= sq.quota ? 'rgba(220,38,38,0.35)' : 'rgba(14,165,233,0.25)';
+          sickBadgeEl.style.borderColor = sq.withCert >= sq.quota ? 'rgba(248,113,113,0.5)' : 'rgba(56,189,248,0.4)';
         } else {
           sickBadgeEl.style.display = 'none';
         }

@@ -274,7 +274,8 @@ export async function getAnnualSickUsageMap(db, yearStr, targetEmpId = null) {
     map[eid].total = Math.round((map[eid].withCert + map[eid].noCert) * 100) / 100;
     map[eid].withCert = Math.round(map[eid].withCert * 100) / 100;
     map[eid].noCert = Math.round(map[eid].noCert * 100) / 100;
-    map[eid].remaining = Math.max(0, Math.round((quota - map[eid].total) * 100) / 100);
+    // Only SICK_WITH_CERT consumes the paid sick leave quota (SICK_NO_CERT is unpaid and does not deduct quota)
+    map[eid].remaining = Math.max(0, Math.round((quota - map[eid].withCert) * 100) / 100);
   }
   return { quota, map };
 }

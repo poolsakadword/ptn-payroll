@@ -1914,12 +1914,13 @@ function renderAttendancePeriodSummary(data) {
         var sncDays = Math.round((Number(r.sickNoCertDays) || 0) * 100) / 100;
         var bDays = Math.round((Number(r.businessLeaveDays) || 0) * 100) / 100;
 
-        var ytdUsed = Math.round((Number(r.ytdSickTotal) || 0) * 100) / 100;
+        var ytdCert = Math.round((Number(r.ytdSickWithCert) || 0) * 100) / 100;
+        var ytdNoCert = Math.round((Number(r.ytdSickNoCert) || 0) * 100) / 100;
         var ytdQuota = Number(r.sickLeaveQuota) || 10;
-        var ytdRem = Math.max(0, Math.round((ytdQuota - ytdUsed) * 100) / 100);
-        var ytdBg = ytdUsed >= ytdQuota ? '#fef2f2' : (ytdUsed > (ytdQuota * 0.5) ? '#fffbeb' : '#f0fdfa');
-        var ytdColor = ytdUsed >= ytdQuota ? '#dc2626' : (ytdUsed > (ytdQuota * 0.5) ? '#b45309' : '#0f766e');
-        var ytdTitle = 'มีใบ: ' + (r.ytdSickWithCert || 0) + ' วัน | ไม่มีใบ: ' + (r.ytdSickNoCert || 0) + ' วัน';
+        var ytdRem = Math.max(0, Math.round((ytdQuota - ytdCert) * 100) / 100);
+        var ytdBg = ytdCert >= ytdQuota ? '#fef2f2' : (ytdCert > (ytdQuota * 0.5) ? '#fffbeb' : '#f0fdfa');
+        var ytdColor = ytdCert >= ytdQuota ? '#dc2626' : (ytdCert > (ytdQuota * 0.5) ? '#b45309' : '#0f766e');
+        var ytdTitle = 'หักโควตา (มีใบฯ): ' + ytdCert + ' วัน | ไม่หักโควตา (ไม่มีใบฯ): ' + ytdNoCert + ' วัน';
 
         var isResigned = (r.status === 'Resigned' || String(r.status).toUpperCase() === 'RESIGNED' || (State.employees || []).some(function(x) { return (x.empId || x.emp_id) === r.empId && String(x.status).toUpperCase() === 'RESIGNED'; }));
         var resBadge = isResigned ? ' <span style="background:#fee2e2;color:#b91c1c;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:700">ลาออก</span>' : '';
@@ -1933,7 +1934,7 @@ function renderAttendancePeriodSummary(data) {
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fef2f2;color:' + (aDays > 0 ? '#b91c1c;font-weight:700' : '#64748b') + '">' + (aDays > 0 ? (aDays + ' วัน (' + r.absentTimes + ' ครั้ง)') : '-') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#f0f9ff;color:' + (scDays > 0 ? '#0369a1;font-weight:700' : '#64748b') + '">' + (scDays > 0 ? (scDays + ' วัน (' + r.sickWithCertTimes + ' ครั้ง)') : '-') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fffbeb;color:' + (sncDays > 0 ? '#b45309;font-weight:700' : '#64748b') + '">' + (sncDays > 0 ? (sncDays + ' วัน (' + r.sickNoCertTimes + ' ครั้ง)') : '-') + '</td>';
-        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:' + ytdBg + ';color:' + ytdColor + ';font-weight:700;white-space:nowrap" title="' + esc(ytdTitle) + '">' + ytdUsed + ' / ' + ytdQuota + ' <span style="font-size:10.5px;font-weight:500;opacity:0.85">(เหลือ ' + ytdRem + ')</span></td>';
+        html += '<td style="border:1px solid #cbd5e1;padding:6px;background:' + ytdBg + ';color:' + ytdColor + ';font-weight:700;white-space:nowrap" title="' + esc(ytdTitle) + '">' + ytdCert + ' / ' + ytdQuota + ' <span style="font-size:10.5px;font-weight:500;opacity:0.85">(เหลือ ' + ytdRem + ')</span>' + (ytdNoCert > 0 ? '<div style="font-size:10px;color:#b45309;font-weight:600">ไม่มีใบ ' + ytdNoCert + ' ว.</div>' : '') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#faf5ff;color:' + (bDays > 0 ? '#6d28d9;font-weight:700' : '#64748b') + '">' + (bDays > 0 ? (bDays + ' วัน (' + r.businessLeaveTimes + ' ครั้ง)') : '-') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#fff7ed;color:' + (r.lateTimes > 0 ? '#c2410c;font-weight:800' : '#64748b') + '">' + (r.lateTimes > 0 ? (r.lateTimes + ' ครั้ง (' + r.lateMinutes + ' น.)') : '-') + '</td>';
         html += '<td style="border:1px solid #cbd5e1;padding:6px;background:#eef2ff;color:' + (r.otHours > 0 ? '#4338ca;font-weight:800' : '#64748b') + '">' + (r.otHours > 0 ? (r.otHours + ' ชม.') : '-') + '</td>';
@@ -4801,7 +4802,7 @@ function renderTimeAttendanceApprovals(leaves, ots, advances) {
       '</div>' +
       '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:2px">' + esc(formatEmpNameWithNick(item.full_name, item.emp_id, item.nickname)) + ' <span style="font-size:11px;font-weight:400;color:#64748b">(' + (item.department || '-') + ')</span></div>' +
       '<div style="font-size:12px;color:#334155;margin-bottom:4px"><i class="fa-regular fa-calendar text-blue"></i> วันที่ลา: <b>' + formatDateThaiBE(item.start_date) + '</b> ถึง <b>' + formatDateThaiBE(item.end_date) + '</b> (' + (item.days_count || 1) + ' วัน' + (item.time_slot === 'MORNING' ? ' <span style="font-size:10.5px;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:4px;font-weight:700">🌅 ครึ่งวันเช้า</span>' : (item.time_slot === 'AFTERNOON' ? ' <span style="font-size:10.5px;color:#1d4ed8;background:#dbeafe;padding:1px 6px;border-radius:4px;font-weight:700">🌆 ครึ่งวันบ่าย</span>' : '')) + ')</div>' +
-      (item.ytdSickInfo ? '<div style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;margin-bottom:6px;background:' + (item.ytdSickInfo.total >= item.ytdSickInfo.quota ? '#fef2f2;color:#dc2626;border:1px solid #fecaca' : '#f0fdfa;color:#0f766e;border:1px solid #99f6e4') + '">🩺 ปีนี้ใช้ลาป่วยแล้ว ' + item.ytdSickInfo.total + '/' + item.ytdSickInfo.quota + ' วัน (คงเหลือ ' + item.ytdSickInfo.remaining + ' วัน | มีใบ ' + item.ytdSickInfo.withCert + ', ไม่มีใบ ' + item.ytdSickInfo.noCert + ')</div>' : '') +
+      (item.ytdSickInfo ? '<div style="display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:6px;margin-bottom:6px;background:' + (item.ytdSickInfo.withCert >= item.ytdSickInfo.quota ? '#fef2f2;color:#dc2626;border:1px solid #fecaca' : '#f0fdfa;color:#0f766e;border:1px solid #99f6e4') + '">🩺 โควตาลาป่วย (มีใบฯ) ปีนี้: ใช้ ' + item.ytdSickInfo.withCert + '/' + item.ytdSickInfo.quota + ' วัน (เหลือ ' + item.ytdSickInfo.remaining + ' วัน' + (item.ytdSickInfo.noCert > 0 ? ' | ไม่มีใบ ' + item.ytdSickInfo.noCert + ' วัน' : '') + ')</div>' : '') +
       (item.reason ? '<div style="font-size:11.5px;color:#475569;background:#fff;padding:6px 8px;border-radius:6px;border:1px dashed #cbd5e1;margin-bottom:8px">เหตุผล: ' + item.reason + '</div>' : '') +
       ((item.medical_cert_url || item.has_medical_cert) ? 
         '<div style="margin:8px 0;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:8px 12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">' +
