@@ -335,6 +335,18 @@ function onHistoryEmpChanged(silent) {
       }
       if (document.getElementById('histEmpIdBadge')) document.getElementById('histEmpIdBadge').textContent = emp.empId || 'EMP---';
       if (document.getElementById('histEmpNicknameBadge')) document.getElementById('histEmpNicknameBadge').textContent = 'ชื่อเล่น: ' + (emp.nickname || '-');
+      var sickBadgeEl = document.getElementById('histEmpSickQuotaBadge');
+      if (sickBadgeEl) {
+        if (r.ytdSickSummary) {
+          var sq = r.ytdSickSummary;
+          sickBadgeEl.style.display = 'inline-block';
+          sickBadgeEl.textContent = '🩺 ลาป่วยปีนี้: ' + sq.total + '/' + sq.quota + ' วัน (เหลือ ' + sq.remaining + ' วัน)';
+          sickBadgeEl.style.background = sq.total >= sq.quota ? 'rgba(220,38,38,0.35)' : 'rgba(14,165,233,0.25)';
+          sickBadgeEl.style.borderColor = sq.total >= sq.quota ? 'rgba(248,113,113,0.5)' : 'rgba(56,189,248,0.4)';
+        } else {
+          sickBadgeEl.style.display = 'none';
+        }
+      }
       
       var st = emp.status || 'Active';
       var stBadgeEl = document.getElementById('histEmpStatusBadge');

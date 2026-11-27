@@ -4,6 +4,7 @@
 import { ensureBranchTables, ensureTimeAttendanceTables, logSystemActivity, executeBatch } from './db.js';
 import { isUserSuperAdmin, userHasPermission, getDefaultRolePermissions } from './security.js';
 import { getBranchShiftSessions } from './branches.js';
+import { getAnnualSickUsageMap } from './attendance.js';
 import {
   getDefaultPeriod, parsePeriodYearMonth, getPreviousPeriodStr, getNextPeriodStr,
   getCutoffDatesForPeriod, getActualWorkingDaysInCutoff, calculatePeriodProRataRatio,
@@ -1266,8 +1267,13 @@ export const payrollHandlers = {
       const historyList = (calcs.results || []).map(c => mapPayrollCalcHistoryRecord(c, inputMap, empMap));
       historyList.sort((a, b) => getPeriodSortKey(a.period) - getPeriodSortKey(b.period));
 
+      const bkkYearCE = new Date(Date.now() + (7 * 3600 * 1000)).getFullYear();
+      const { quota: sickQuota, map: sickMap } = await getAnnualSickUsageMap(db, String(bkkYearCE), empId);
+      const ytdSickSummary = sickMap[String(empId).trim()] || { withCert: 0, noCert: 0, total: 0, quota: sickQuota, remaining: sickQuota };
+
       return {
         success: true,
+        ytdSickSummary,
         employee: {
           empId: emp.emp_id,
           fullName: emp.full_name,

@@ -244,6 +244,41 @@ export function buildAttendanceRequestFilters(params, reqCutoff) {
   };
 }
 
+export async function getAnnualSickUsageMap(db, yearStr, targetEmpId = null) {
+  const yr = String(yearStr || new Date().getFullYear()).trim();
+  const quotaRow = await db.prepare("SELECT value FROM settings WHERE key = 'SickLeaveQuota'").first().catch(() => null);
+  const quota = (quotaRow && !isNaN(Number(quotaRow.value))) ? Number(quotaRow.value) : 10;
+
+  let sql = `
+    SELECT emp_id, leave_type, days_count, medical_cert_url
+    FROM leave_requests
+    WHERE UPPER(TRIM(status)) = 'APPROVED'
+      AND substr(start_date, 1, 4) = ?
+  `;
+  const binds = [yr];
+  if (targetEmpId) {
+    sql += ` AND emp_id = ?`;
+    binds.push(String(targetEmpId).trim());
+  }
+  const rows = await db.prepare(sql).bind(...binds).all().catch(() => ({ results: [] }));
+  const map = {};
+  for (const r of (rows.results || [])) {
+    const cat = categorizeLeaveType(r.leave_type, r.medical_cert_url);
+    if (cat !== 'SICK_WITH_CERT' && cat !== 'SICK_NO_CERT') continue;
+    const eid = String(r.emp_id || '').trim();
+    if (!eid) continue;
+    if (!map[eid]) map[eid] = { withCert: 0, noCert: 0, total: 0, quota, remaining: quota };
+    const days = Number(r.days_count) || 1;
+    if (cat === 'SICK_WITH_CERT') map[eid].withCert += days;
+    else map[eid].noCert += days;
+    map[eid].total = Math.round((map[eid].withCert + map[eid].noCert) * 100) / 100;
+    map[eid].withCert = Math.round(map[eid].withCert * 100) / 100;
+    map[eid].noCert = Math.round(map[eid].noCert * 100) / 100;
+    map[eid].remaining = Math.max(0, Math.round((quota - map[eid].total) * 100) / 100);
+  }
+  return { quota, map };
+}
+
 export async function fetchAttendanceRequests(db, filterObj, customLimit) {
   const { reqType, reqLimit, leaveWhere, leaveBinds, otWhere, otBinds, advWhere, advBinds } = filterObj;
   const limit = customLimit || reqLimit || 150;
@@ -269,8 +304,22 @@ export async function fetchAttendanceRequests(db, filterObj, customLimit) {
       : Promise.resolve({ results: [] })
   ]);
 
+  const pendingLeaves = leavesQuery.results || [];
+  if (pendingLeaves.length > 0) {
+    const bkkYr = new Date(Date.now() + (7 * 3600 * 1000)).getFullYear();
+    const { quota, map: sickMap } = await getAnnualSickUsageMap(db, String(bkkYr));
+    for (const lv of pendingLeaves) {
+      const cat = categorizeLeaveType(lv.leave_type, lv.has_medical_cert);
+      if (cat === 'SICK_WITH_CERT' || cat === 'SICK_NO_CERT') {
+        const eid = String(lv.emp_id || '').trim();
+        const info = sickMap[eid] || { withCert: 0, noCert: 0, total: 0, quota, remaining: quota };
+        lv.ytdSickInfo = info;
+      }
+    }
+  }
+
   return {
-    pendingLeaves: leavesQuery.results || [],
+    pendingLeaves,
     pendingOts: otsQuery.results || [],
     pendingAdvances: advQuery.results || []
   };
@@ -2100,6 +2149,9 @@ export const attendanceHandlers = {
         }
       }
 
+      const summaryYearCE = String((startDate || today || '').substring(0, 4)) || String(bangkokTime.getFullYear());
+      const { quota: sickQuota, map: ytdSickMap } = await getAnnualSickUsageMap(db, summaryYearCE);
+
       const summaryList = [];
       const grandTotals = {
         totalEmployees: employees.length,
@@ -2706,6 +2758,11 @@ export const attendanceHandlers = {
           sickWithCertTimes,
           sickNoCertDays: Math.round(sickNoCertDays * 100) / 100,
           sickNoCertTimes,
+          ytdSickWithCert: (ytdSickMap[emp.emp_id]?.withCert) || 0,
+          ytdSickNoCert: (ytdSickMap[emp.emp_id]?.noCert) || 0,
+          ytdSickTotal: (ytdSickMap[emp.emp_id]?.total) || 0,
+          sickLeaveQuota: sickQuota,
+          ytdSickRemaining: (ytdSickMap[emp.emp_id]?.remaining !== undefined) ? ytdSickMap[emp.emp_id].remaining : sickQuota,
           businessLeaveDays: Math.round(businessLeaveDays * 100) / 100,
           businessLeaveTimes,
           lateTimes,
