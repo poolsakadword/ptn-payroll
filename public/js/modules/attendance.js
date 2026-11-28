@@ -8067,6 +8067,61 @@ function getLeaveSlotLabel(slot) {
   return ' (เต็มวัน)';
 }
 
+function getTimeCardBranchShiftFractions(emp) {
+  var bId = getEmpBranchId(emp);
+  var branches = (State && Array.isArray(State.branches)) ? State.branches : [];
+  var branch = branches.find(function(b) { return b.branch_id === bId; }) || null;
+  var start = (branch && branch.work_start_time) || '09:30';
+  var end = (branch && branch.work_end_time) || '19:00';
+  var lunchStart = (branch && branch.lunch_start_time) || '13:00';
+  var lunchEnd = (branch && branch.lunch_end_time) || '14:00';
+  var toM = function(s) {
+    var p = String(s).split(':').map(Number);
+    return (p.length >= 2 && !isNaN(p[0]) && !isNaN(p[1])) ? (p[0] * 60 + p[1]) : 0;
+  };
+  var sMin = toM(start), eMin = toM(end), lsMin = toM(lunchStart), leMin = toM(lunchEnd);
+  var mHours = (lsMin - sMin) > 0 ? Math.round(((lsMin - sMin) / 60) * 100) / 100 : 3.5;
+  var aHours = (eMin - leMin) > 0 ? Math.round(((eMin - leMin) / 60) * 100) / 100 : 5.0;
+  var totHours = Math.round((mHours + aHours) * 100) / 100 || 8.5;
+  return {
+    morningFraction: Math.round((mHours / totHours) * 1000) / 1000,
+    afternoonFraction: Math.round((aHours / totHours) * 1000) / 1000,
+    lunchStartMin: lsMin
+  };
+}
+
+function addTimeCardLeaveFraction(matchingLeave, logRow, shiftFractions, counters) {
+  if (!matchingLeave) return;
+  var slot = String(matchingLeave.time_slot || 'FULL').toUpperCase();
+  var rawDays = Number(matchingLeave.days_count);
+  var lvVal = 1;
+  if (slot === 'MORNING') {
+    lvVal = shiftFractions.morningFraction;
+  } else if (slot === 'AFTERNOON') {
+    lvVal = shiftFractions.afternoonFraction;
+  } else if (rawDays === 0.5) {
+    if (logRow && logRow.clock_in) {
+      var p = String(logRow.clock_in).split(':').map(Number);
+      var inMin = (p.length >= 2) ? (p[0] * 60 + p[1]) : 0;
+      lvVal = (inMin >= shiftFractions.lunchStartMin) ? shiftFractions.morningFraction : shiftFractions.afternoonFraction;
+    } else {
+      lvVal = 0.5;
+    }
+  } else if (!isNaN(rawDays) && rawDays > 0 && rawDays < 1) {
+    lvVal = rawDays;
+  }
+
+  var rawType = String(matchingLeave.leave_type || '').trim().toUpperCase();
+  var hasCert = Boolean(matchingLeave.has_medical_cert || matchingLeave.medical_cert_url);
+  if (rawType === 'SICK_WITH_CERT' || rawType.indexOf('มีใบ') >= 0 || (rawType.indexOf('SICK') >= 0 && hasCert)) {
+    counters.sickWithCert += lvVal;
+  } else if (rawType === 'SICK_NO_CERT' || rawType.indexOf('ไม่มีใบ') >= 0 || rawType.indexOf('SICK') >= 0 || rawType.indexOf('ป่วย') >= 0) {
+    counters.sickNoCert += lvVal;
+  } else {
+    counters.businessLeave += lvVal;
+  }
+}
+
 // Build Classic Time Card HTML for a single employee sheet
 function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pageNum, totalPages, holidayMap, empLeaves, empAdvances) {
   var thaiDays = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
@@ -8075,7 +8130,8 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
   var totalOtHours = 0;
   var lateCount = 0;
   var totalLateMinutes = 0;
-  var leaveCount = 0;
+  var leaveCounters = { businessLeave: 0, sickWithCert: 0, sickNoCert: 0 };
+  var shiftFractions = getTimeCardBranchShiftFractions(emp);
   var absentCount = 0;
   var holidayCount = 0;
   empLeaves = empLeaves || [];
@@ -8162,8 +8218,7 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
       if (matchingLeave) {
         var lvTypeName = getLeaveTypeName(matchingLeave.leave_type);
         var lvSlotName = getLeaveSlotLabel(matchingLeave.time_slot);
-        var lvVal = (matchingLeave.time_slot === 'MORNING' || matchingLeave.time_slot === 'AFTERNOON') ? 0.5 : 1;
-        leaveCount += lvVal;
+        addTimeCardLeaveFraction(matchingLeave, l, shiftFractions, leaveCounters);
         var reasonText = matchingLeave.reason ? (' • ' + matchingLeave.reason) : '';
         notes.push('📝 ' + lvTypeName + lvSlotName + reasonText);
       }
@@ -8214,8 +8269,7 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
         // Approved Leave Day Row
         var lvTypeName = getLeaveTypeName(matchingLeave.leave_type);
         var lvSlotName = getLeaveSlotLabel(matchingLeave.time_slot);
-        var lvVal = (matchingLeave.time_slot === 'MORNING' || matchingLeave.time_slot === 'AFTERNOON') ? 0.5 : 1;
-        leaveCount += lvVal;
+        addTimeCardLeaveFraction(matchingLeave, null, shiftFractions, leaveCounters);
         var reasonText = matchingLeave.reason ? (' • ' + matchingLeave.reason) : '';
         var leaveFullText = '📝 ' + lvTypeName + lvSlotName + reasonText;
         if (dayAdvances.length > 0) {
@@ -8374,15 +8428,17 @@ function generateSingleTimeCardSheetHtml(emp, dateList, logsMap, periodText, pag
       '</tbody>' +
     '</table>' +
 
-    '<!-- Summary 7 Box -->' +
-    '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 6px; border: 1.5px solid #92400e; background: #fefce8; padding: 5px; text-align: center; font-size: 11px;">' +
-      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">วันทำงานจริง</div><div style="font-size: 12.5px; font-weight: 800; color: #166534;">' + daysWorked + ' วัน</div></div>' +
-      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">วันลาที่อนุมัติ</div><div style="font-size: 12.5px; font-weight: 800; color: #6d28d9;">' + leaveCount + ' วัน</div></div>' +
-      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">ขาดงาน</div><div style="font-size: 12.5px; font-weight: 800; color: ' + (absentCount > 0 ? '#dc2626;' : '#64748b;') + '">' + absentCount + ' วัน</div></div>' +
-      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">ชม. งานปกติ</div><div style="font-size: 12.5px; font-weight: 800; color: #1e40af;">' + totalWorkHours.toFixed(1) + ' ชม.</div></div>' +
-      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">รวมล่วงเวลา (OT)</div><div style="font-size: 12.5px; font-weight: 800; color: #78350f;">' + totalOtHours.toFixed(1) + ' ชม.</div></div>' +
-      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">มาสายรวม</div><div style="font-size: 12.5px; font-weight: 800; color: #b91c1c;">' + lateCount + ' ครั้ง (' + totalLateMinutes + ' น.)</div></div>' +
-      '<div><div style="font-size: 9px; color: #92400e; font-weight: 700;">วันหยุดบริษัท</div><div style="font-size: 12.5px; font-weight: 800; color: #b45309;">' + holidayCount + ' วัน</div></div>' +
+    '<!-- Summary 9 Box -->' +
+    '<div style="display: grid; grid-template-columns: repeat(9, 1fr); gap: 3px; margin-top: 6px; border: 1.5px solid #92400e; background: #fefce8; padding: 5px 4px; text-align: center; font-size: 10.5px;">' +
+      '<div><div style="font-size: 8.5px; color: #92400e; font-weight: 700;">วันทำงานจริง</div><div style="font-size: 11.5px; font-weight: 800; color: #166534;">' + daysWorked + ' วัน</div></div>' +
+      '<div style="border-left: 1px dashed #d97706;"><div style="font-size: 8.5px; color: #6b21a8; font-weight: 700;">ลากิจ</div><div style="font-size: 11.5px; font-weight: 800; color: #6b21a8;">' + (Math.round(leaveCounters.businessLeave * 1000) / 1000) + ' วัน</div></div>' +
+      '<div><div style="font-size: 8.5px; color: #0369a1; font-weight: 700;">ป่วย (มีใบ)</div><div style="font-size: 11.5px; font-weight: 800; color: #0369a1;">' + (Math.round(leaveCounters.sickWithCert * 1000) / 1000) + ' วัน</div></div>' +
+      '<div style="border-right: 1px dashed #d97706;"><div style="font-size: 8.5px; color: #b45309; font-weight: 700;">ป่วย (ไม่มีใบ)</div><div style="font-size: 11.5px; font-weight: 800; color: #b45309;">' + (Math.round(leaveCounters.sickNoCert * 1000) / 1000) + ' วัน</div></div>' +
+      '<div><div style="font-size: 8.5px; color: #92400e; font-weight: 700;">ขาดงาน</div><div style="font-size: 11.5px; font-weight: 800; color: ' + (absentCount > 0 ? '#dc2626;' : '#64748b;') + '">' + absentCount + ' วัน</div></div>' +
+      '<div><div style="font-size: 8.5px; color: #92400e; font-weight: 700;">ชม. ปกติ</div><div style="font-size: 11.5px; font-weight: 800; color: #1e40af;">' + totalWorkHours.toFixed(1) + ' ชม.</div></div>' +
+      '<div><div style="font-size: 8.5px; color: #92400e; font-weight: 700;">รวม OT</div><div style="font-size: 11.5px; font-weight: 800; color: #78350f;">' + totalOtHours.toFixed(1) + ' ชม.</div></div>' +
+      '<div><div style="font-size: 8.5px; color: #92400e; font-weight: 700;">มาสายรวม</div><div style="font-size: 11px; font-weight: 800; color: #b91c1c;">' + lateCount + ' ครั้ง (' + totalLateMinutes + ' น.)</div></div>' +
+      '<div><div style="font-size: 8.5px; color: #92400e; font-weight: 700;">วันหยุด</div><div style="font-size: 11.5px; font-weight: 800; color: #b45309;">' + holidayCount + ' วัน</div></div>' +
     '</div>' +
 
     '<!-- Advance Payment Summary Banner -->' +
