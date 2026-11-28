@@ -1751,6 +1751,8 @@ function switchAttendanceSummaryView(viewMode) {
     if (boxSingle) boxSingle.style.display = 'none';
     if (singlePicker) singlePicker.style.display = 'none';
     if (printBtnText) printBtnText.textContent = 'พิมพ์สรุปรวม (A4)';
+    var btnPrintAllSingle = document.getElementById('btnPrintAllIndividualSheets');
+    if (btnPrintAllSingle) btnPrintAllSingle.style.display = 'none';
   } else {
     if (btnAll) {
       btnAll.style.background = 'transparent';
@@ -1768,6 +1770,8 @@ function switchAttendanceSummaryView(viewMode) {
     if (boxSingle) boxSingle.style.display = 'block';
     if (singlePicker) singlePicker.style.display = 'inline-block';
     if (printBtnText) printBtnText.textContent = 'พิมพ์รายบุคคล (A4)';
+    var btnPrintAllSingle2 = document.getElementById('btnPrintAllIndividualSheets');
+    if (btnPrintAllSingle2) btnPrintAllSingle2.style.display = 'inline-flex';
 
     if (State.attendancePeriodSummaryData && State.attendancePeriodSummaryData.summaryList && State.attendancePeriodSummaryData.summaryList.length) {
       if (!State.activeAttendanceSummarySingleEmpId) {
@@ -2173,6 +2177,115 @@ function exportAttendanceSummaryCsv() {
   showToast('ดาวน์โหลดไฟล์ Excel (CSV) เรียบร้อยแล้ว', 'success');
 }
 
+function buildIndividualAttendanceSheetPrintHtml(emp, cutoff, includePageBreak) {
+  var pageBreakStyle = includePageBreak ? 'page-break-after:always;break-after:page;' : '';
+  var sHtml = '<div style="font-family:\'Sarabun\',sans-serif;color:#0f172a;padding:4mm;max-width:760px;margin:0 auto;' + pageBreakStyle + '">';
+  sHtml += '<div style="border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:12px;text-align:center">';
+  sHtml += '<h2 style="font-size:18px;font-weight:800;margin:0 0 3px 0">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>';
+  sHtml += '<h3 style="font-size:14px;font-weight:700;color:#1e40af;margin:0 0 3px 0">ใบสรุปเวลาทำงานและประวัติการขาด ลา มาสาย ประจำงวด (รายบุคคล)</h3>';
+  sHtml += '<div style="font-size:12px;color:#475569">รอบงวด: <strong>' + esc(cutoff.startDate) + ' ถึง ' + esc(cutoff.endDate) + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)</div>';
+  sHtml += '</div>';
+
+  // Emp Info Box
+  sHtml += '<div style="border:1px solid #cbd5e1;background:#f8fafc;padding:10px 14px;margin-bottom:12px;display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;font-size:12px">';
+  sHtml += '<div><span style="color:#64748b">รหัสพนักงาน:</span> <strong style="font-family:monospace;font-size:13px">' + esc(emp.empId) + '</strong></div>';
+  sHtml += '<div><span style="color:#64748b">ชื่อ-นามสกุล:</span> <strong>' + esc(emp.fullName) + '</strong></div>';
+  sHtml += '<div><span style="color:#64748b">ชื่อเล่น:</span> <strong>' + esc(emp.nickname) + '</strong></div>';
+  sHtml += '<div><span style="color:#64748b">สาขา:</span> <strong>' + esc(emp.branchName) + '</strong></div>';
+  sHtml += '</div>';
+
+  // Stat boxes
+  sHtml += '<table style="width:100%;border-collapse:collapse;text-align:center;font-size:11.5px;margin-bottom:12px;border:1px solid #94a3b8">';
+  sHtml += '<tr style="background:#f1f5f9;font-weight:700">';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">มาทำงาน</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ขาดงาน</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ป่วยมีใบ</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ป่วยไม่มีใบ</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ลากิจ</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">มาสาย</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">OT รวม</td>';
+  sHtml += '</tr>';
+  sHtml += '<tr style="font-weight:800;font-size:13px;height:34px">';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#1e40af">' + (Math.round((Number(emp.presentDays) || 0) * 100) / 100) + ' / ' + emp.expectedWorkDays + ' วัน</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#991b1b">' + (Math.round((Number(emp.absentDays) || 0) * 100) / 100) + ' วัน (' + emp.absentTimes + ' ครั้ง)</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#0369a1">' + (Math.round((Number(emp.sickWithCertDays) || 0) * 100) / 100) + ' วัน (' + emp.sickWithCertTimes + ' ครั้ง)</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#b45309">' + (Math.round((Number(emp.sickNoCertDays) || 0) * 100) / 100) + ' วัน (' + emp.sickNoCertTimes + ' ครั้ง)</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#6d28d9">' + (Math.round((Number(emp.businessLeaveDays) || 0) * 100) / 100) + ' วัน (' + emp.businessLeaveTimes + ' ครั้ง)</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#c2410c">' + emp.lateTimes + ' ครั้ง (' + emp.lateMinutes + ' น.)</td>';
+  sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#3730a3">' + (Math.round((Number(emp.otHours) || 0) * 100) / 100) + ' ชม.</td>';
+  sHtml += '</tr></table>';
+
+  // Daily Logs Table
+  sHtml += '<table style="width:100%;border-collapse:collapse;font-size:11px;text-align:center;border:1px solid #94a3b8;margin-bottom:20px">';
+  sHtml += '<thead><tr style="background:#f1f5f9;font-weight:700">';
+  sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">วันที่</th>';
+  sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:40px">วัน</th>';
+  sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">เวลาเข้า</th>';
+  sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">เวลาออก</th>';
+  sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:65px">สาย (นาที)</th>';
+  sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:60px">OT (ชม.)</th>';
+  sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;text-align:left">สถานะการทำงาน / การลา</th>';
+  sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;text-align:left">หมายเหตุ</th>';
+  sHtml += '</tr></thead><tbody>';
+
+  (emp.dailyRecords || []).forEach(function(r) {
+    var dayColor = (r.dayOfWeek === 'อา.' || r.dayOfWeek === 'Sun') ? '#dc2626' : '#1e293b';
+    var clockInText = (r.clockIn && r.clockIn !== '-') ? r.clockIn : '-';
+    var clockOutText = (r.clockOut && r.clockOut !== '-') ? r.clockOut : '-';
+    var clockInColor = (clockInText !== '-') ? '#0f172a' : '#94a3b8';
+    var clockOutColor = (clockOutText !== '-') ? '#0f172a' : '#94a3b8';
+
+    sHtml += '<tr style="border-bottom:1px solid #cbd5e1;height:24px;color:#0f172a">';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:#0f172a">' + r.date.substring(5) + '</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-weight:700;color:' + dayColor + '">' + r.dayOfWeek + '</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:' + clockInColor + '">' + esc(clockInText) + '</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:' + clockOutColor + '">' + esc(clockOutText) + '</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;color:' + (r.lateMinutes > 0 ? '#c2410c;font-weight:800' : '#64748b') + ';font-family:monospace">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;color:' + (r.otHours > 0 ? '#4338ca;font-weight:800' : '#64748b') + ';font-family:monospace">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-weight:600;color:' + r.statusColor + '">' + esc(r.statusText) + '</td>';
+    sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-size:10px;color:#334155">' + esc(r.remark || '-') + '</td>';
+    sHtml += '</tr>';
+  });
+  sHtml += '</tbody></table>';
+
+  // Signatures
+  sHtml += '<div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center;font-size:12px">';
+  sHtml += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................ ผู้ขอรับรอง</p><p style="font-weight:700">( ' + esc(emp.fullName) + ' )</p><p style="font-size:11px;color:#64748b;margin-top:2px">พนักงานผู้ลงเวลา</p></div>';
+  sHtml += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................ ผู้ตรวจสอบ</p><p style="font-weight:700">( ................................................................ )</p><p style="font-size:11px;color:#64748b;margin-top:2px">เจ้าหน้าที่ฝ่ายบุคคล / หัวหน้างาน</p></div>';
+  sHtml += '</div></div>';
+  return sHtml;
+}
+
+function printAllIndividualAttendanceSheets() {
+  if (!State.attendancePeriodSummaryData || !State.attendancePeriodSummaryData.summaryList) {
+    showToast('กรุณารอโหลดข้อมูลให้เสร็จสิ้นก่อนสั่งพิมพ์', 'warning');
+    return;
+  }
+  var printContainer = document.getElementById('attendancePrintContainer');
+  if (!printContainer) return;
+  var data = State.attendancePeriodSummaryData;
+  var cutoff = data.cutoffInfo || {};
+  var list = data.summaryList || [];
+  if (list.length === 0) {
+    showToast('ไม่พบข้อมูลพนักงานสำหรับสั่งพิมพ์', 'warning');
+    return;
+  }
+
+  var allHtml = '';
+  list.forEach(function(emp, idx) {
+    allHtml += buildIndividualAttendanceSheetPrintHtml(emp, cutoff, idx < list.length - 1);
+  });
+
+  printContainer.innerHTML = allHtml;
+  document.body.classList.add('printing-attendance-individual');
+  window.print();
+  setTimeout(function() {
+    document.body.classList.remove('printing-attendance-individual');
+    printContainer.innerHTML = '';
+  }, 600);
+}
+window.printAllIndividualAttendanceSheets = printAllIndividualAttendanceSheets;
+
 function printAttendanceSummaryReport() {
   if (!State.attendancePeriodSummaryData) {
     showToast('กรุณารอโหลดข้อมูลให้เสร็จสิ้นก่อนสั่งพิมพ์', 'warning');
@@ -2280,82 +2393,7 @@ function printAttendanceSummaryReport() {
     if (!emp && list.length) emp = list[0];
     if (!emp) return;
 
-    var sHtml = '<div style="font-family:\'Sarabun\',sans-serif;color:#0f172a;padding:4mm;max-width:760px;margin:0 auto">';
-    sHtml += '<div style="border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:12px;text-align:center">';
-    sHtml += '<h2 style="font-size:18px;font-weight:800;margin:0 0 3px 0">บริษัท พีทีเอ็น ฟาร์มาเซ็นเตอร์ จำกัด</h2>';
-    sHtml += '<h3 style="font-size:14px;font-weight:700;color:#1e40af;margin:0 0 3px 0">ใบสรุปเวลาทำงานและประวัติการขาด ลา มาสาย ประจำงวด (รายบุคคล)</h3>';
-    sHtml += '<div style="font-size:12px;color:#475569">รอบงวด: <strong>' + esc(cutoff.startDate) + ' ถึง ' + esc(cutoff.endDate) + '</strong> (วันทำงานตามเกณฑ์ ' + (cutoff.totalExpectedWorkDays || 26) + ' วัน)</div>';
-    sHtml += '</div>';
-
-    // Emp Info Box
-    sHtml += '<div style="border:1px solid #cbd5e1;background:#f8fafc;padding:10px 14px;margin-bottom:12px;display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;font-size:12px">';
-    sHtml += '<div><span style="color:#64748b">รหัสพนักงาน:</span> <strong style="font-family:monospace;font-size:13px">' + esc(emp.empId) + '</strong></div>';
-    sHtml += '<div><span style="color:#64748b">ชื่อ-นามสกุล:</span> <strong>' + esc(emp.fullName) + '</strong></div>';
-    sHtml += '<div><span style="color:#64748b">ชื่อเล่น:</span> <strong>' + esc(emp.nickname) + '</strong></div>';
-    sHtml += '<div><span style="color:#64748b">สาขา:</span> <strong>' + esc(emp.branchName) + '</strong></div>';
-    sHtml += '</div>';
-
-    // Stat boxes
-    sHtml += '<table style="width:100%;border-collapse:collapse;text-align:center;font-size:11.5px;margin-bottom:12px;border:1px solid #94a3b8">';
-    sHtml += '<tr style="background:#f1f5f9;font-weight:700">';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">มาทำงาน</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ขาดงาน</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ป่วยมีใบ</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ป่วยไม่มีใบ</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">ลากิจ</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">มาสาย</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px">OT รวม</td>';
-    sHtml += '</tr>';
-    sHtml += '<tr style="font-weight:800;font-size:13px;height:34px">';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#1e40af">' + (Math.round((Number(emp.presentDays) || 0) * 100) / 100) + ' / ' + emp.expectedWorkDays + ' วัน</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#991b1b">' + (Math.round((Number(emp.absentDays) || 0) * 100) / 100) + ' วัน (' + emp.absentTimes + ' ครั้ง)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#0369a1">' + (Math.round((Number(emp.sickWithCertDays) || 0) * 100) / 100) + ' วัน (' + emp.sickWithCertTimes + ' ครั้ง)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#b45309">' + (Math.round((Number(emp.sickNoCertDays) || 0) * 100) / 100) + ' วัน (' + emp.sickNoCertTimes + ' ครั้ง)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#6d28d9">' + (Math.round((Number(emp.businessLeaveDays) || 0) * 100) / 100) + ' วัน (' + emp.businessLeaveTimes + ' ครั้ง)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#c2410c">' + emp.lateTimes + ' ครั้ง (' + emp.lateMinutes + ' น.)</td>';
-    sHtml += '<td style="border:1px solid #cbd5e1;padding:5px;color:#3730a3">' + (Math.round((Number(emp.otHours) || 0) * 100) / 100) + ' ชม.</td>';
-    sHtml += '</tr></table>';
-
-    // Daily Logs Table
-    sHtml += '<table style="width:100%;border-collapse:collapse;font-size:11px;text-align:center;border:1px solid #94a3b8;margin-bottom:20px">';
-    sHtml += '<thead><tr style="background:#f1f5f9;font-weight:700">';
-    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">วันที่</th>';
-    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:40px">วัน</th>';
-    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">เวลาเข้า</th>';
-    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:70px">เวลาออก</th>';
-    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:65px">สาย (นาที)</th>';
-    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;width:60px">OT (ชม.)</th>';
-    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;text-align:left">สถานะการทำงาน / การลา</th>';
-    sHtml += '<th style="border:1px solid #cbd5e1;padding:4px;text-align:left">หมายเหตุ</th>';
-    sHtml += '</tr></thead><tbody>';
-
-    (emp.dailyRecords || []).forEach(function(r) {
-      var dayColor = (r.dayOfWeek === 'อา.' || r.dayOfWeek === 'Sun') ? '#dc2626' : '#1e293b';
-      var clockInText = (r.clockIn && r.clockIn !== '-') ? r.clockIn : '-';
-      var clockOutText = (r.clockOut && r.clockOut !== '-') ? r.clockOut : '-';
-      var clockInColor = (clockInText !== '-') ? '#0f172a' : '#94a3b8';
-      var clockOutColor = (clockOutText !== '-') ? '#0f172a' : '#94a3b8';
-
-      sHtml += '<tr style="border-bottom:1px solid #cbd5e1;height:24px;color:#0f172a">';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:#0f172a">' + r.date.substring(5) + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-weight:700;color:' + dayColor + '">' + r.dayOfWeek + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:' + clockInColor + '">' + esc(clockInText) + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;font-family:monospace;font-weight:700;color:' + clockOutColor + '">' + esc(clockOutText) + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;color:' + (r.lateMinutes > 0 ? '#c2410c;font-weight:800' : '#64748b') + ';font-family:monospace">' + (r.lateMinutes > 0 ? r.lateMinutes : '-') + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;color:' + (r.otHours > 0 ? '#4338ca;font-weight:800' : '#64748b') + ';font-family:monospace">' + (r.otHours > 0 ? r.otHours : '-') + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-weight:600;color:' + r.statusColor + '">' + esc(r.statusText) + '</td>';
-      sHtml += '<td style="border:1px solid #cbd5e1;padding:3px;text-align:left;font-size:10px;color:#334155">' + esc(r.remark || '-') + '</td>';
-      sHtml += '</tr>';
-    });
-    sHtml += '</tbody></table>';
-
-    // Signatures
-    sHtml += '<div style="margin-top:30px;display:grid;grid-template-columns:1fr 1fr;gap:40px;text-align:center;font-size:12px">';
-    sHtml += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................ ผู้ขอรับรอง</p><p style="font-weight:700">( ' + esc(emp.fullName) + ' )</p><p style="font-size:11px;color:#64748b;margin-top:2px">พนักงานผู้ลงเวลา</p></div>';
-    sHtml += '<div><p style="margin-bottom:34px">ลงชื่อ ................................................................ ผู้ตรวจสอบ</p><p style="font-weight:700">( ................................................................ )</p><p style="font-size:11px;color:#64748b;margin-top:2px">เจ้าหน้าที่ฝ่ายบุคคล / หัวหน้างาน</p></div>';
-    sHtml += '</div></div>';
-
-    printContainer.innerHTML = sHtml;
+    printContainer.innerHTML = buildIndividualAttendanceSheetPrintHtml(emp, cutoff, false);
     document.body.classList.add('printing-attendance-individual');
     window.print();
     setTimeout(function() {
